@@ -8,10 +8,9 @@ import prettier from 'eslint-config-prettier';
 // because the root `.eslintrc.cjs` is Element Web's upstream config and
 // requires `eslint-plugin-matrix-org`, which this workspace never installs:
 // every eslintrc-mode lint under packages/ died on that plugin before it
-// looked at a single file. ESLint 8 looks for a flat config by walking up
-// from the working directory, not from each linted file, so
-// `pnpm --filter @blackout/api run lint` (cwd packages/api) finds this one
-// first and never falls back to the root eslintrc.
+// looked at a single file. ESLint 10 looks the config up from each linted
+// file's directory, so files under packages/api find this one, and it has
+// no eslintrc mode, so the root `.eslintrc.cjs` is never read.
 //
 // The versions mirror apps/blackout-client so the lockfile gains no new
 // packages.
@@ -19,6 +18,11 @@ import prettier from 'eslint-config-prettier';
 const tsRecommended = tsPlugin.configs['eslint-recommended'].overrides[0].rules;
 
 export default [
+    // eslint 8 reported unused eslint-disable directives only when asked
+    // (--report-unused-disable-directives); eslint 9+ warns by default, which
+    // would fail --max-warnings=0 on the dead directives already here.
+    // Keep eslint 8's behaviour; removing those directives is its own change.
+    { linterOptions: { reportUnusedDisableDirectives: 'off' } },
     {
         files: ['src/**/*.ts', 'test/**/*.ts'],
         languageOptions: {
@@ -38,6 +42,20 @@ export default [
             ...js.configs.recommended.rules,
             ...tsRecommended,
             ...tsPlugin.configs.recommended.rules,
+            // The rule set eslint 8.29 and typescript-eslint 5.46.1 enforced here.
+            // typescript-eslint 8 dropped these six from `recommended`; they still exist.
+            '@typescript-eslint/adjacent-overload-signatures': 'error',
+            '@typescript-eslint/no-empty-function': 'error',
+            '@typescript-eslint/no-empty-interface': 'error',
+            '@typescript-eslint/no-inferrable-types': 'error',
+            '@typescript-eslint/no-loss-of-precision': 'error',
+            '@typescript-eslint/no-var-requires': 'error',
+            // typescript-eslint 8's eslint-recommended override turns these two off.
+            'no-class-assign': 'error',
+            'no-with': 'error',
+            // eslint 9 added blockScopedFunctions with default "allow", which stops
+            // reporting block-level functions in strict code; eslint 8.29 reported them.
+            'no-inner-declarations': ['error', 'functions', { blockScopedFunctions: 'disallow' }],
             '@typescript-eslint/no-explicit-any': 'off',
             '@typescript-eslint/no-non-null-assertion': 'off',
             '@typescript-eslint/no-unused-vars': [

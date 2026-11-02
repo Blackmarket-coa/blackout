@@ -25,6 +25,11 @@ const noDirectFetchRule = [
 ];
 
 export default [
+    // eslint 8 reported unused eslint-disable directives only when asked
+    // (--report-unused-disable-directives); eslint 9+ warns by default, which
+    // would fail --max-warnings=0 on the dead directives already in src/.
+    // Keep eslint 8's behaviour; removing those directives is its own change.
+    { linterOptions: { reportUnusedDisableDirectives: 'off' } },
     {
         files: ['src/**/*.{ts,tsx}'],
         languageOptions: {
@@ -44,7 +49,9 @@ export default [
             'react-refresh': reactRefresh,
         },
         rules: {
-            ...reactHooks.configs.recommended.rules,
+            // eslint-plugin-react-hooks 4.6.0's recommended set, named: 7.x's
+            // recommended adds the React Compiler rules, which this config never had.
+            'react-hooks/rules-of-hooks': 'error',
             'no-undef': 'off',
             '@typescript-eslint/no-explicit-any': 'off',
             '@typescript-eslint/no-non-null-assertion': 'off',
