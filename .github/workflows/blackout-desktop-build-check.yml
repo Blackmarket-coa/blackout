@@ -27,8 +27,9 @@ on:
         branches: [develop]
         paths:
             # What the Rust build and the bundler read: tauri.conf.json,
-            # Cargo.toml, Cargo.lock, src/, capabilities/, entitlements.plist,
-            # the icon SVG, and package.json (the @tauri-apps/cli range).
+            # Cargo.toml, Cargo.lock, build.rs, src/, capabilities/,
+            # entitlements.plist, the icon SVG, and package.json (the
+            # @tauri-apps/cli range).
             - 'blackout-desktop/**'
             - '.github/workflows/blackout-desktop-build-check.yml'
             # Resolves @tauri-apps/cli, which is the bundler, and every tool
@@ -38,12 +39,28 @@ on:
             # workspace membership that the frontend hook relies on.
             - 'package.json'
             - 'pnpm-workspace.yaml'
+            # Every other workspace member's manifest (blackout-desktop's is
+            # matched above). The install step runs each member's install
+            # scripts (preinstall, install, postinstall, prepare) on all
+            # three runners, and adding one does not change pnpm-lock.yaml.
+            # Today only the root has one (prepare: husky). These also
+            # cover the client's package.json, which holds its build script.
+            - 'apps/*/package.json'
+            - 'packages/*/package.json'
+            - 'legacy/*/package.json'
+            - 'blackout-mobile/package.json'
+            - 'mobile/package.json'
             # The frontend build's own configuration. This job is the only
             # pull-request build of the client on macOS, and the only CI build
-            # of it on Windows, so a path or plugin change here can break only
-            # here. The rest of the client is platform-independent JavaScript,
-            # which ci.yml already builds on every pull request.
-            - 'apps/blackout-client/package.json'
+            # of it on Windows, so a break that shows only on macOS or
+            # Windows is caught only here. ci.yml builds the client on every
+            # pull request, on Linux only. A break outside these paths can
+            # still show only on macOS and Windows: the first run found two
+            # files in one client directory whose names differ only by case
+            # (toolbag.ts beside ToolBag.tsx), so an import without an
+            # extension found a different file on a case-insensitive
+            # filesystem (fixed in 9eab8c9). Nothing checks for that on a
+            # pull request that changes only the rest of the client.
             - 'apps/blackout-client/vite.config.*'
             - 'apps/blackout-client/build.config.ts'
             # The desktop bridge; the release workflow's own filter lists it.
@@ -70,7 +87,10 @@ jobs:
             fail-fast: false
             matrix:
                 # The release job's os and bundle pairs. expect is added: the
-                # bundle paths the last step requires.
+                # bundle paths the last step requires. macos-latest builds
+                # aarch64 only (run 41461856327 made
+                # Blackout_0.1.0_aarch64.dmg); the release job uses the same
+                # runner, so neither builds an x86_64 macOS bundle.
                 include:
                     - os: ubuntu-22.04
                       bundle: 'deb,rpm,appimage'
@@ -82,10 +102,11 @@ jobs:
                       bundle: 'msi,nsis'
                       expect: 'msi/*.msi nsis/*-setup.exe'
         runs-on: ${{ matrix.os }}
-        # A cost bound; the release job has none (GitHub's default, 360). The
-        # local Linux compile took 8.5 minutes with 3 jobs. A leg that runs
-        # past 60 fails, it does not pass. Revisit with the first run's leg
-        # times.
+        # A cost bound; the release job has none (GitHub's default, 360). In
+        # run 41461856327 the slowest leg, windows-latest, took 13 min 16 s
+        # (ubuntu-22.04 8 min 16 s, macos-latest 3 min 13 s); this workflow
+        # caches nothing, so every run starts cold. 60 is over four times
+        # the slowest leg. A leg that runs past 60 fails, it does not pass.
         timeout-minutes: 60
 
         steps:
@@ -106,7 +127,8 @@ jobs:
               with:
                   node-version: 22
 
-            # The release job and the other workflows have pnpm/action-setup@v5.
+            # The release job has pnpm/action-setup@v5, as do the other
+            # workflows, except one use of @v4 in mobile-native-ci.yml.
             # This is the commit v5 (and v5.0.0) names on 2026-11-02, pinned
             # like checkout and setup-node so that a moved tag cannot change
             # what runs here.
@@ -122,11 +144,11 @@ jobs:
 
             # The release job's packages. Because the app registers deep-link
             # schemes, the AppImage bundler also copies /usr/bin/xdg-mime
-            # (xdg-utils) into the image. The runner image should have it: it
-            # installs Google Chrome's deb, which depends on xdg-utils (read
-            # from the image's build scripts, not seen on a runner). If the
-            # AppImage step stops at "xdg-mime binary not found", add
-            # xdg-utils here and in the release job.
+            # (xdg-utils) into the image. The ubuntu-22.04 image has it: run
+            # 41461856327 made the AppImage with only these packages. If a
+            # later image drops it, the AppImage step stops at "xdg-mime
+            # binary not found"; then add xdg-utils here and in the release
+            # job.
             - name: Install Linux deps
               if: runner.os == 'Linux'
               run: |
@@ -157,23 +179,28 @@ jobs:
             # The release reaches the same CLI (2.10.1, from the lockfile)
             # through `npm run tauri build -- --bundles <set>`: tauri-action
             # looks for a pnpm-lock.yaml only in blackout-desktop, and the
-            # workspace's is at the root. This step uses pnpm, the
-            # workspace's package manager. The two set different npm_config_*
-            # variables; the one the CLI reads, npm_config_user_agent, picks
-            # the package manager for its version-mismatch check. On Linux
-            # both ways passed that check, and a probe hook with the same
-            # --filter found the client from blackout-desktop (measured with
-            # a stand-in cargo that stops before the compile). The real client
-            # build has run only this way.
+            # workspace's is at the root. This step keeps pnpm, the
+            # workspace's package manager, on purpose: it is the invocation
+            # that passed on all three runners in run 41461856327, --config
+            # quoting included, and under npm that JSON would go through
+            # npm's own quoting for cmd on Windows, which has not run. The
+            # two set different npm_config_* variables; the one the CLI
+            # reads, npm_config_user_agent, picks the package manager for its
+            # version-mismatch check. On Linux both ways passed that check,
+            # and a probe hook with the same --filter found the client from
+            # blackout-desktop (measured with a stand-in cargo that stops
+            # before the compile). So the release's npm path has not run on
+            # macOS or Windows, and the real client build has run only
+            # through pnpm. tauri-action's tauriScript input set to
+            # `pnpm tauri` in the release job would make the two the same.
             #
             # shell: bash keeps the quoting the same on all three OSes. On
             # Windows that starts the CLI from Git Bash, where tauri-action
             # starts it from node, and pnpm runs the script through cmd with
-            # each argument JSON.stringify'd. That the --config JSON arrives
-            # intact there is unmeasured until the first Windows leg; a
-            # mangled value fails the CLI's JSON parse, it does not pass. If
-            # that leg fails at --config, move the JSON to a file under
-            # blackout-desktop/src-tauri and pass its path.
+            # each argument JSON.stringify'd. The JSON arrives as valid JSON:
+            # the CLI stops on an inline --config that does not parse
+            # (tauri-cli 2.10.1, lib.rs 56-63), and the Windows leg passed in
+            # run 41461856327.
             - name: Build unsigned bundles, no updater artifacts
               working-directory: blackout-desktop
               shell: bash
@@ -186,7 +213,11 @@ jobs:
 
             # The release job has no such step; tauri-action uploads what it
             # builds. This one lists the bundles' names and sizes in the job
-            # summary and uploads nothing.
+            # summary and uploads nothing. tauri build runs cargo build
+            # without --locked, in the release as here, so a Cargo.lock that
+            # no longer matches Cargo.toml would be re-resolved there and the
+            # build would go on. This step fails a leg whose build rewrote
+            # Cargo.lock, so that only the committed lock passes.
             - name: Check the bundles, no updater output, Cargo.lock unchanged
               shell: bash
               env:
