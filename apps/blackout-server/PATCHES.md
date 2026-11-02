@@ -993,3 +993,40 @@ service files, which upstream does not have. Found by the sixth review of
   MSC3861) or is refused at sign-in, with the error text and the fix, and
   the Railway template change, and points at the record. Upstream's
   `docs/upgrade.md` has no such section; keep it through a reconciliation.
+
+## 2026-11-02 Twisted 26.10.0 (seven advisories; zope-interface 8.7)
+
+Edits outside `blackout_runtime/` that lock the Twisted release which fixes
+the four High advisories `.trivyignore` carried against 26.4.0 until this
+change (GHSA-3476-c5c2-fr73, GHSA-53xc-49m8-p798, GHSA-cwm5-jh59-mwxr,
+GHSA-vpp8-g58w-m8mp) and the Moderate and Low ones GHSA-q7qq-6mhp-9rc4,
+GHSA-2qrf-pqgx-qh9v and GHSA-jj36-9pvh-vj5r. Recorded in
+`docs/security/dependency-advisories-twisted-2026-11-02.md` (repository root).
+Upstream element-hq/synapse `develop` at `cc172f7` still locks Twisted 26.4.0
+and zope-interface 8.2, so there was nothing to port; during a reconciliation
+keep whichever Twisted is newer, and keep zope-interface at 8 or above (26.10.0
+requires `zope-interface>=8`).
+
+- `pyproject.toml`: `Twisted = {extras = ["tls"], version = ">=26.10.0"}` (was
+  `>=26.4.0`), and its comment names the seven advisories.
+- `poetry.lock`: `poetry lock --no-update` under poetry 1.3.2. Two packages
+  move and nothing else changes: twisted 26.4.0 to 26.10.0 (its wheel and
+  sdist hashes match PyPI's) and zope-interface 6.0 to 8.7, which 26.10.0's
+  `zope-interface>=8` forces (all 50 file hashes match PyPI's; the
+  `setuptools = "*"` dependency of the 6.0 entry goes, since 8.0.1 removed
+  it; setuptools 84.2.1 stays in the lock for setuptools-rust, zope-event and
+  zope-schema). 151 packages before and after; the image's `--extras all`
+  export differs by those two lines. The fork uses `zope.interface`'s
+  `implementer`, `provider` and `Interface` only.
+- No fork source file changed. 26.10.0's removals and behaviour changes were
+  read against the fork: `tcp.Connection` now ignores a non-None return from
+  `dataReceived` (`synapse/http/connectproxyclient.py` returns the wrapped
+  protocol's own return, which is None, as upstream's file does);
+  `LoggingFile.fileno()` raises `io.UnsupportedOperation` instead of
+  returning -1 (`synapse/app/_base.py` installs `LoggingFile` on stdout and
+  stderr; nothing in the fork calls `fileno()` on them); `SSHSession` accepts
+  one shell, exec or subsystem request per channel (the manhole's
+  `TerminalRealm` uses it; ordinary SSH clients send one); the removed
+  `PotentialZombieWarning`, `_makeGetterFactory`, `ThreadedResolver`,
+  `dns.Message` class attributes and `IProcessProtocol` without
+  `processExited` are not used.
