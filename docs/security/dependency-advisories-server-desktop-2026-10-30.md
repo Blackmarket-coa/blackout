@@ -264,8 +264,13 @@ After the operator's second decision of 2026-11-02 ("remove both"): `d88e884`
 (the Nixpacks path, with its `PATCHES.md` entry), `9493f41` (the hosting
 helpers, their tests and smoke scripts, and two steps of the fork's
 `release-train-gate.yml`), `4243a7a` (dated notes in the fork's documents and
-in `PATCHES.md`), then this version of the record, with the Semgrep triage's
-note ([its section](#2026-11-02-the-nixpacks-path-and-the-hosting-helpers-are-removed)).
+in `PATCHES.md`), then `2199e4c` (this record's section, with the Semgrep
+triage's note). After a review of those four: `c1b9f67` (`PATCHES.md`'s new
+entry counts the four Dockerfiles built with `apps/blackout-server` as the
+context, and four of the fork's notes are corrected), then this version of
+the record (the same count, a note and three more commit-message corrections
+here, and the Semgrep triage's note corrected;
+[its section](#2026-11-02-the-nixpacks-path-and-the-hosting-helpers-are-removed)).
 Also on 2026-11-02, for the desktop build check (#996):
 `6bea1c9` (the two `tauri.conf.json` fixes), `659f6ed` (the desktop build
 check, with `KNOWN_LIMITATIONS.md`), then `ddd4a41` (the record). After a
@@ -2391,7 +2396,8 @@ fix it ([Found outside scope](#found-outside-scope-not-fixed-here), item 5).
     earlier" path and said they waited on the operator's confirmation;
     "earlier" is not known, since all of these files, the template's included,
     arrived in `e0f3065e31`.) (2026-11-02, later: the operator chose removal,
-    and `d88e884` removed all five again, with the six lines and the link;
+    and `d88e884` removed the three files again and took the six lines and
+    the link out of the other two, `.dockerignore` and `README.rst`;
     [the next section](#2026-11-02-the-nixpacks-path-and-the-hosting-helpers-are-removed).)
 -   The test `test_railway_template_leaves_jwt_login_off`, in
     `tests/blackout_runtime/test_jwt_secret_config.py`, with the `_envsubst`
@@ -2547,11 +2553,22 @@ Nixpacks path and the hosting helpers are removed" lists every path. Under
     `!nixpacks.toml`, `!railway.json`, `!scripts-dev`, `!.nixpacks/**` and
     `!scripts-dev/**`). `.dockerignore` and `README.rst` are as `42f68f2` left
     them. `!services` and `!services/**` stay for the `services/blackout-api`
-    build in `infra/single-server-baseline/deploy.sh`. Neither Dockerfile
-    built with `apps/blackout-server` as the context copies a file those six
-    lines let in: `services/blackout-api/Dockerfile` and `docker/Dockerfile`,
-    both built by `deploy.sh`, the second also by upstream's
-    `contrib/docker/docker-compose.yml`.
+    build in `infra/single-server-baseline/deploy.sh`. The tree builds four
+    Dockerfiles with `apps/blackout-server` as the context, and none of them
+    copies a file those six lines let in: `services/blackout-api/Dockerfile`
+    (`deploy.sh`), `docker/Dockerfile` (`deploy.sh`,
+    `scripts-dev/complement.sh` and upstream's
+    `contrib/docker/docker-compose.yml`), and `docker/Dockerfile-workers` and
+    `docker/editable.Dockerfile` (`scripts-dev/complement.sh`). Their `COPY`
+    lines name only `services/blackout-api/`, files under `docker/`,
+    `synapse`, `rust` and the root build files (`pyproject.toml`,
+    `poetry.lock`, `README.rst`, `build_rust.py`, `Cargo.toml`,
+    `Cargo.lock`). That `.dockerignore` governs no other build:
+    `scripts-dev/build_debian_packages.py` builds
+    `docker/Dockerfile-dhvirtualenv` with `docker/` as the context,
+    `complement.sh` builds `docker/complement/Dockerfile` with
+    `docker/complement/`, and builds with the repository root as the context
+    use the root's `.dockerignore`.
 -   `9493f41` removed the helpers the removed `entrypoint.sh` called,
     `synapse/util/blackout_profiles.py`, `synapse/util/managed_hosting.py` and
     `synapse/util/hosting_smoke.py`, and the three scripts that call them,
@@ -2613,8 +2630,17 @@ Nixpacks path and the hosting helpers are removed" lists every path. Under
     passages of `PATCHES.md`; the new entry lists them. The notes in the
     release-train checklist and changelog name `9493f41` without backticks, as
     those for `42f68f2` do, so the changelog's 40-digit placeholder is still
-    what meets the release gate's backticked-hash check. This version adds the
+    what meets the release gate's backticked-hash check. `2199e4c` added the
     notes above in this record and in `semgrep-triage-2026-10-11.md`.
+    `c1b9f67` corrects four of `4243a7a`'s notes. The RC1 rollout page's says
+    its commands fail when run from `apps/blackout-server/`, where it said
+    "this directory", the page's own. `docs/upgrade.md`'s managed-preflight
+    note says nothing in the tree reads `BLACKOUT_MANAGED_READINESS_CHECKS` or
+    the hook variables and nothing on the server reads `BLACKOUT_PROFILE`,
+    where it said nothing reads any of them. Two in `PATCHES.md`'s entry for
+    #997 name what `d88e884` took out of `.dockerignore` and `README.rst`, the
+    six lines and the link, where one said "their Blackout lines" and the
+    other that it removed all five files.
 
 `THREAT_MODEL.md`, `TRUST.md` and `KNOWN_LIMITATIONS.md` were checked and need
 no change: none describes these files, `BLACKOUT_PROFILE`, Nixpacks or the
@@ -2638,10 +2664,24 @@ if its settings force a Nixpacks build or name `start.sh` as its start command,
 and the tree points to neither: `infra/railway/README.md` gives
 `pnpm --filter @blackout/server start`, which starts `@blackout/api`.
 
-A correction to this branch's commit messages, which are not amended:
-`d88e884` calls the workflow steps "the release-train-gate.yml steps that ran
-two of the scripts". They were written to run them, and never ran in this
-repository (above).
+Corrections to this branch's commit messages, which are not amended:
+
+-   `d88e884` calls the workflow steps "the release-train-gate.yml steps that
+    ran two of the scripts". They were written to run them, and never ran in
+    this repository (above).
+-   `d88e884` also calls `docker/Dockerfile` "the other one with this
+    directory as the context", as if there were two such Dockerfiles. There
+    are four, the two `scripts-dev/complement.sh` builds included (above);
+    none copies the files the six lines let in, so its conclusion holds.
+-   `2199e4c` says that in `semgrep-triage-2026-10-11.md` "the
+    dynamic-urllib-use-detected row for managed_hosting.py and its nosemgrep
+    went with the file". The finding the row records and its `nosemgrep`
+    went with the file; the row stays in that document's table as the record
+    of the 2026-10-11 pass. That document's note said the row itself was
+    removed, and then that it is kept; the commit after `c1b9f67` corrects
+    the note.
+-   `c1b9f67`'s subject says three notes are corrected. It corrects four,
+    two of them in `PATCHES.md` (above).
 
 Run before, on `0367abdd69` (`develop` with #997), with Python 3.11.17 and the
 lock above: trial `tests.util.test_blackout_profiles`, `test_managed_hosting`
@@ -2668,4 +2708,16 @@ changed against `origin/develop`, none on a risky path) and
 `validate_tracker_evidence.sh` passed; `release-train-gate.yml` parses as YAML;
 and `pnpm guard:feature-registry` (24 features),
 `node tools/ci/check-deployment-readiness.mjs` and `pnpm guard:ops-artifacts`
-passed.
+passed. On `c1b9f67`, with this record's corrections in the working tree
+(documents only): trial `tests.util`, 229 run, 228 passed and the same 1
+skipped; trial `tests.config`, 103 passed; trial `test_release_train`, 5
+passed; trial `tests.blackout_runtime`, 51 passed; trial
+`tests.rest.client.test_versions`, 3 passed;
+`pytest -q blackout_runtime_tests`, 85 passed. The release-train gate, the
+divergence markers, `validate_tracker_evidence.sh` and the protocol smoke
+passed; `release-train-gate.yml` parses as YAML;
+`pnpm guard:feature-registry` (24 features),
+`node tools/ci/check-deployment-readiness.mjs` and `pnpm guard:ops-artifacts`
+passed; gitleaks 8.21.2 found no leaks in the branch's commits; and `git grep`
+finds the removed paths and module names only in documents, each of which has
+a dated note.
