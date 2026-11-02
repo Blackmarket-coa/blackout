@@ -586,6 +586,7 @@ section) rather than renewing a false reason or letting every PR go red.
     - Until then, every OSV scan prints the false "No fixed version exists"
       `reason` for both entries, as it printed react-router's until this
       change.
+    - Resolved on 2026-11-02 (`dependency-advisories-image-size-2026-11-02.md`).
 
 ## Corrected after review
 
