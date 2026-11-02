@@ -1018,10 +1018,12 @@ requires `zope-interface>=8`).
   `zope-interface>=8` forces (all 50 file hashes match PyPI's; the
   `setuptools = "*"` dependency of the 6.0 entry goes, since 8.0.1 removed
   it; setuptools 84.2.1 stays in the lock for setuptools-rust, zope-event and
-  zope-schema). 151 packages before and after; the image's `--extras all`
-  export differs by the `twisted`, `twisted[tls]` and `zope-interface` lines
-  (two packages, three lines). The fork uses `zope.interface`'s
-  `implementer`, `provider` and `Interface` only.
+  zope-schema). 151 packages before and after. The hashless export,
+  `poetry export --extras all --without-hashes`, differs in three
+  requirement entries, `twisted`, `twisted[tls]` and `zope-interface` (two
+  packages); the image's export, which carries hashes, also changes those
+  entries' `--hash` lines (94 changed lines in all). The fork uses
+  `zope.interface`'s `implementer`, `provider` and `Interface` only.
 - No fork code changed for the bump itself; one fork comment did (the next
   bullet). 26.10.0's removals and behaviour changes were read against the
   fork: `tcp.Connection` now ignores
@@ -1033,7 +1035,12 @@ requires `zope-interface>=8`).
   accepts one shell, exec or subsystem request per channel (the manhole's
   `TerminalRealm` uses it; probed on a running homeserver from this branch, a
   second shell request on one channel is refused and logged under 26.10.0
-  and accepted under 26.4.0; ordinary SSH clients send one); the removed
+  and accepted under 26.4.0; ordinary SSH clients send one); the manhole's
+  SSH server now offers the hybrid post-quantum key exchange
+  `mlkem768x25519-sha256` first (#12520), which OpenSSH clients use by
+  default since 10.0 (Twisted's own client, used by the tests, does not offer
+  it; asyncssh offering only that algorithm got a manhole shell under
+  26.10.0, and 26.4.0 does not offer it); the removed
   `PotentialZombieWarning`, `_makeGetterFactory`, `ThreadedResolver`,
   `dns.Message` class attributes and `IProcessProtocol` without
   `processExited` are not used.
