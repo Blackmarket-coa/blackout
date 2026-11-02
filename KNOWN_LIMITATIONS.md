@@ -325,9 +325,11 @@ For the source-of-truth triage with tier/owner detail see
     and linked services, and cancels and erases your unsent scheduled messages.
     It cancels your dead-man switches that have not fired and removes what you
     put in them, a release switch's sealed copies included (where the server
-    runs as more than one process, a switch that fired in the moment before
-    your deletion reached a process that had not yet heard of it is
-    cancelled and emptied with the rest). A release switch
+    runs as more than one process, a switch that fired on another process in
+    the moments before your deletion reached one that had not yet been told
+    of it is cancelled and emptied with the rest; a firing is announced to
+    the other processes once the database confirms it, a late-confirmed one
+    when it settles). A release switch
     that has already fired stays readable to the people it named, with the
     public release key it was signed with, until at least 365 days after it
     fired (it is removed at the server's first sweep after that); a switch
@@ -513,8 +515,10 @@ For the source-of-truth triage with tier/owner detail see
     code could read the message as it is typed; the desktop and mobile apps
     carry their own copy. Without the comparison, a key the server planted in
     the directory would let it read the message from arming on, and the API
-    cannot tell. An outage delays a release by its own length plus up to 72
-    hours (below). [`THREAT_MODEL.md`](THREAT_MODEL.md), R12.
+    cannot tell. An outage of the server's background work or of its
+    database delays a release by its own length plus up to 72 hours (below);
+    while the database does not answer, check-ins are refused too.
+    [`THREAT_MODEL.md`](THREAT_MODEL.md), R12.
 -   **Retention.** At its first sweep pass on or after 365 days after a
     release switch fired, Blackout removes the encrypted message, the owner's
     public key kept with it and every sealed copy from its database (a
@@ -524,12 +528,15 @@ For the source-of-truth triage with tier/owner detail see
     and attempts, and its room until that person deletes their account; the
     switch stays in the owner's list as fired, with how many notices were
     sent. Save the message before then if you need it after. Cancelling a
-    release switch removes its encrypted message and every copy; backups keep
-    them until they expire. Where the API runs as several replicas, a re-seal
-    the owner's device makes on another replica in the moment the cancel is
-    reaching it can leave one sealed copy on the cancelled switch, given to
-    nobody (a cancelled switch is never released), until it is cancelled
-    again.
+    release switch removes its encrypted message and every copy (a cancel the
+    database confirms only after the server has answered 503 removes the
+    copies when it does, and the switch then shows cancelled; the sweep's
+    pass also removes any copy still held on a cancelled release switch);
+    backups keep them until they expire. Where the API runs as several
+    replicas, a re-seal the owner's device makes on another replica in the
+    moment the cancel is reaching it can leave one sealed copy on the
+    cancelled switch, given to nobody (a cancelled switch is never released),
+    until the next sweep pass removes it.
 -   **Bounds.** One account can have at most 20 release switches whose
     content the server still holds (armed, in grace, or fired until the
     removal), about 7 MiB of encrypted headers and up to about 2.3 MiB of
@@ -547,39 +554,64 @@ For the source-of-truth triage with tier/owner detail see
     per person named (account id, key fingerprint, timestamps) for good, so
     arming and cancelling at the rate adds up to 10 switch rows and 650 copy
     rows a day to the database.
--   **Durability.** In Postgres mode the API answers before its writes commit
-    (a write-behind queue, drained on shutdown), so a crash in that window can
-    lose the newest rows. Arming writes a switch's sealed copies first and the
-    switch last, so what such a crash leaves is copies no switch names, which
-    nothing lists or serves, rather than a switch that fires with copies
-    missing; nothing detects the orphaned copies. A copy's write that fails
-    twice is dropped (`db_write_behind_failed` in the logs) while the switch's
-    may succeed, which leaves a switch missing that copy with no crash;
-    nothing detects that either. The API process that made the write still
-    holds the copy in memory, and serves it to that person when their request
-    reaches that process, until it restarts; no other process has it. The bot
-    reads each copy from the database before it makes a room, invites or
-    sends, so that person is not sent a notice: where the bot runs in that
-    same process the notice is recorded as failed with `copy_unavailable`,
-    and where it runs in a separate worker, which never had the copy, no
-    notice is written for them at all. A switch whose own write is dropped
-    the same way is in that process's memory only, so no other process lists
-    it; where that process runs the sweep, the sweep writes it whole to the
-    database when it fires it (`deadman_switch_row_restored` in the logs),
-    so it still fires.
+-   **Durability.** In Postgres mode the API answers most writes before they
+    commit (a write-behind queue, drained on shutdown), so a crash in that
+    window can lose the newest rows. Arming is the exception: it is answered
+    201 only once the database holds the switch and its sealed copies, written
+    in one call in that order, so a stop between them leaves copies no switch
+    names, which nothing lists or serves and the named person's account
+    deletion removes like any other, and never a switch that fires with copies
+    missing; an arm whose write the database refuses or fails is answered 500
+    with nothing armed anywhere, and one the database does not confirm within
+    30 seconds 503, in which case it may still land, and the switch then
+    appears in your list (arming the same message again is then refused as
+    already taken). A re-seal's copy is still a write-behind write: one that
+    fails twice is dropped (`db_write_behind_failed` in the logs), and the API
+    process that made it alone holds the new copy, serving it to that person
+    when their request reaches that process, until it restarts. The bot reads
+    each copy from the database before it makes a room, invites or sends, so a
+    person whose copy is missing there is not sent a notice: where the bot
+    runs in that same process the notice is recorded as failed with
+    `copy_unavailable`, and where it runs in a separate worker, which never
+    had the copy, no notice is written for them at all. A switch armed before
+    this change whose write was dropped is in the arming process's memory
+    only: where that process runs the sweep, the sweep writes it whole to the
+    database when it fires it (`deadman_switch_row_restored` in the logs); in
+    the deployed layout, where the sweep runs in another process, such a
+    switch never fired and no process but the arming one listed it, which is
+    why arming now waits for the database.
 -   **Check-ins and cancels are checked against the database.** Where the
     API runs as more than one process, the one your check-in or cancel
     reaches may not yet have heard that your switch fired; the write is made
     only if the database still has the switch as that process read it, so
     one that comes after the switch fired is refused (409
-    `switch_triggered`) rather than setting the switch back to armed while
-    its release stays out. One the database does not confirm within 30
+    `switch_triggered`, on whichever attempt finds it so) rather than setting
+    the switch back to armed while its release stays out, and one after a
+    cancel 409 `switch_cancelled`. The write waits for that process's own
+    earlier writes to the same switch and for the database, not for its
+    writes to other tables; one the database does not confirm within 30
     seconds is answered 503 (`switch_write_unanswered`): it may or may not
-    have been recorded, and doing it again is safe. The server's own move of
-    a switch (into grace, or firing it) is checked the same way and reaches
-    the process's memory only once the database has it, so nothing is
-    served or sent for a firing the database refused; one the database does
-    not confirm within 30 seconds is tried again at the next pass.
+    have been recorded, and doing it again is safe. While such a write stands
+    unconfirmed, every further check-in and cancel on that process is
+    answered 503 at once, without being sent, so those were certainly not
+    recorded, until it settles; a cancel the database confirms late takes
+    effect then (the switch shows cancelled and its copies are removed), and
+    a check-in confirmed late counts. The server's own move of a switch
+    (into grace, or firing it) is checked the same way and reaches the
+    process's memory only once the database has it, so nothing is served or
+    sent for a firing the database refused; one the database does not
+    confirm is tried at the first pass after the database answers, and while
+    one stands unconfirmed no switch moves on that process. A database that
+    does not answer is treated as an outage of the sweep: a switch due while
+    its statements stood unanswered, or whose check-in or cancel was refused
+    that way on the process that runs the sweep, gets the backlog window
+    (below) at the first pass after it rather than firing, within the 15
+    minutes or not. Where the API and the sweep are separate processes
+    (`deploy/docker/production`), the sweep knows only its own process's
+    stalls: a check-in refused on an API process during a database outage
+    that the worker's sweep did not itself meet (no switch of its own was due
+    then) does not hold the switch back, and it fires at its deadline if the
+    database answers within the 15 minutes.
 -   The switches that exist were armed through the API before this. Their
     payload is whatever was sent: the server never decrypts it and cannot
     tell whether it is ciphertext. Recipients named by Blackout account id
@@ -601,8 +633,12 @@ For the source-of-truth triage with tier/owner detail see
 -   If the server reaches your switch more than 15 minutes (by default) after
     it was due, because its background loops were down, it does not fire the
     switch then: the switch goes to grace with at least 72 hours left from
-    that moment, once per missed check-in, and a check-in ends that as usual.
-    So an outage can delay a release by its own length plus up to 72 hours.
+    that moment, once per missed check-in, and a check-in ends that as usual;
+    the same window is given, within the 15 minutes or not, when the
+    database did not answer the sweep's own process at some moment since the
+    switch was due (above). So an outage of the server's background work or
+    of its database can delay a release by its own length plus up to 72
+    hours.
     The grace and triggered events the sweep records stay in the memory of
     the process that ran it, so where that is a separate worker
     (`deploy/docker/production`) the event feed does not list them; the

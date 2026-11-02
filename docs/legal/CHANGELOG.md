@@ -116,10 +116,24 @@ each correction.
     each with their own sealed copy and the owner's public key at arming, under
     `deadmanReleases` (`account.deadmanReleases` in the self-service export).
     [`TRUST.md`](../../TRUST.md) §2 says so.
+-   **Arming, checking in and cancelling are confirmed by the database** where
+    the server keeps its data in one: an arm is answered only once the
+    database holds the switch and its copies (otherwise an error, and nothing
+    is armed), and a check-in or cancel only once the database has applied it
+    to the switch as that server process read it, so one made after the
+    switch fired is refused rather than taking the release back. One the
+    database does not confirm within 30 seconds is answered as unconfirmed;
+    a cancel confirmed late removes the copies when it is. While the database
+    does not answer, check-ins are refused, and the server treats that time
+    as an outage of its own for the switches it kept from moving: one due
+    then gets the 72-hour grace window instead of firing, in the process that
+    runs the sweep
+    ([`KNOWN_LIMITATIONS.md`](../../KNOWN_LIMITATIONS.md)).
 -   **Deleting an account** removes the sealed copies of its unfired release
     switches with their content (across the API and worker processes, also of
-    one that fired in the moment before the deletion reached the API process,
-    which had not yet heard of it); a fired one keeps its content, the copies for
+    one that fired elsewhere in the moments before the deletion reached the
+    API process, which had not yet been told of it); a fired one keeps its
+    content, the copies for
     the people it named and the public key it was signed with, until they are
     removed at the first sweep 365 days or more after it fired, and only the
     owner's own copy and the label go, so that what was
