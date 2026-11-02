@@ -160,6 +160,21 @@ jobs:
               with:
                   node-version: 22
             - run: node tools/ci/check-deployment-readiness.mjs
+            # Two tracked files in one directory whose names, without the last
+            # extension, differ only by case (toolbag.ts beside ToolBag.tsx)
+            # make an import without an extension find the wrong file on a
+            # case-insensitive filesystem: the client build failed that way on
+            # the macOS and Windows runners (desktop build check run
+            # 41461043012; fixed in 9eab8c9) while Linux CI built it.
+            # The script also keeps its whole-path and route-literal checks,
+            # and needs only git and node. !cancelled(): a failure in one
+            # step does not hide the others.
+            - name: File names that collide on a case-insensitive filesystem
+              if: ${{ !cancelled() }}
+              run: node tools/ci/check-duplicate-paths.mjs
+            - name: File name collision rule (tests)
+              if: ${{ !cancelled() }}
+              run: node --test tools/ci/check-duplicate-paths.test.mjs
 
     production-compose-image-policy:
         name: Production compose image policy

@@ -86,18 +86,21 @@ For the source-of-truth triage with tier/owner detail see
     bundles on Linux, macOS and Windows for `develop` pull requests that
     change the desktop app, the lockfile, the workspace manifests, the
     client's build configuration or its desktop bridge
-    (`apps/blackout-client/src/platform`). Its first run found that the
-    client did not build on the macOS and Windows runners, because two
-    files in one directory had names that, without the extension, differed
-    only by case (`toolbag.ts` beside `ToolBag.tsx`; fixed in `9eab8c9`).
-    So it would not have built on a developer machine with a
-    case-insensitive filesystem either (Windows, and macOS by default),
-    though none was tried. The next run, 41461856327, passed on all three.
-    The bundles were built, not started, and the macOS leg builds aarch64
-    only. A pull request that changes the client anywhere else is built
-    only on Linux (by `ci.yml`), so a break that shows only in the desktop
-    shell or on a case-insensitive filesystem can still land unseen until
-    a release.
+    (`apps/blackout-client/src/platform`). Its first run, 41461043012,
+    found that the client did not build on the macOS and Windows runners,
+    because two files in one directory had names that, without the
+    extension, differed only by case (`toolbag.ts` beside `ToolBag.tsx`;
+    fixed in `9eab8c9`). So it would not have built on a developer machine
+    with a case-insensitive filesystem either (Windows, and macOS by
+    default), though none was tried. The next run, 41461856327, passed on
+    all three. The bundles were built, not started, and the macOS leg
+    builds aarch64 only. Since 2026-11-02 `ci.yml`'s deployment-readiness
+    job also fails on any pull request whose tree has two such names
+    (`tools/ci/check-duplicate-paths.mjs` compares names without the last
+    extension, ignoring case). A pull request that changes the client
+    anywhere else is still built only on Linux (by `ci.yml`), so any other
+    break that shows only in the desktop shell or on a case-insensitive
+    filesystem can still land unseen until a release.
 -   **Placeholder integrations:** Blamazon, MayhemMarketplaze, AntinAmazon
     (`packages/api/src/integrations/marketplace/{blamazon,mayhemMarketplaze,antinAmazon}.ts`).
     -   These are wired as registered providers but return empty catalogs,

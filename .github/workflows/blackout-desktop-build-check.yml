@@ -55,16 +55,18 @@ on:
             # of it on Windows, so a break that shows only on macOS or
             # Windows is caught only here. ci.yml builds the client on every
             # pull request, on Linux only. A break outside these paths can
-            # still show only on macOS and Windows: the first run found two
-            # files in one client directory whose names without the
-            # extension differed only by case (toolbag.ts beside
-            # ToolBag.tsx), so an import without an extension found the
-            # other file on a case-insensitive filesystem (fixed in
-            # 9eab8c9). Nothing checks for that on a pull request that
-            # changes only the rest of the client: pnpm guard:duplicate-paths
-            # compares whole paths, which did not collide here, and no
-            # workflow runs it. A guard was asked for on 2026-11-02 and is
-            # not built yet.
+            # still show only on macOS and Windows: the first run
+            # (41461043012) found two files in one client directory whose
+            # names without the extension differed only by case (toolbag.ts
+            # beside ToolBag.tsx), so an import without an extension found
+            # the other file on a case-insensitive filesystem (fixed in
+            # 9eab8c9). That kind of name is now caught on every pull
+            # request: ci.yml's deployment-readiness job runs
+            # tools/ci/check-duplicate-paths.mjs (pnpm guard:duplicate-paths),
+            # which compares names without the last extension as well as
+            # whole paths. Any other break that shows only on macOS or
+            # Windows, in a change to the rest of the client, is still built
+            # on Linux only.
             - 'apps/blackout-client/vite.config.*'
             - 'apps/blackout-client/build.config.ts'
             # The desktop bridge; the release workflow's own filter lists it.

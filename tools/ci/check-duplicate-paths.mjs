@@ -1,19 +1,59 @@
 #!/usr/bin/env node
+/**
+ * File-name guard: tracked paths that a case-insensitive filesystem (Windows,
+ * and macOS by default) cannot tell apart, and route path literals declared in
+ * more than one file. Linux, where most of CI builds, is case-sensitive, so the
+ * first two build there and break only where the filesystem is not: the macOS
+ * and Windows runners, and developer machines.
+ *
+ * Three checks, each reported on its own:
+ *
+ *   1. Whole paths that are equal ignoring case (`src/Foo.ts` beside
+ *      `src/foo.ts`, or `a.TS` beside `a.ts`). A case-insensitive checkout
+ *      can hold only one of them.
+ *   2. Names that, once the last extension is removed, are equal ignoring case
+ *      but not exactly (`toolbag.ts` beside `ToolBag.tsx`). Both files check
+ *      out, but an import without an extension (`./toolbag/ToolBag`) is tried
+ *      as `ToolBag.ts` before `ToolBag.tsx`, and a case-insensitive filesystem
+ *      answers with `toolbag.ts`. That pair stopped the client build on the
+ *      macOS and Windows runners (desktop build check run 41461043012; fixed
+ *      in 9eab8c9) while Linux CI built it. The directory part is compared
+ *      ignoring case too, since `src/Foo/` and `src/foo/` are one directory
+ *      there. Only the last extension is removed, so `ToolBag.tsx` beside
+ *      `ToolBag.css.ts` or `toolbag.css.ts` passes (`ToolBag` against
+ *      `ToolBag.css`), and names whose stems are exactly equal (`index.ts`
+ *      beside `index.css`) pass, because every filesystem resolves them alike.
+ *   3. Absolute route path literals (`path: '/x'`) declared in more than one
+ *      source file.
+ *
+ * Not covered: a file against a sibling directory (`Foo.ts` beside `foo/`),
+ * Unicode case folding beyond String.prototype.toLowerCase, and the NFC/NFD
+ * normalization that APFS ignores. There is no allowlist: rename one file of
+ * a group instead.
+ *
+ * Run: pnpm guard:duplicate-paths (ci.yml, deployment-readiness job)
+ * Test: pnpm test:guard:duplicate-paths
+ */
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
-import { extname } from 'node:path';
+import { extname, posix } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 const textExtensions = new Set(['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs']);
 
-function getTrackedFiles() {
-    const out = execFileSync('git', ['ls-files'], { encoding: 'utf8' });
-    return out
-        .split('\n')
-        .map((line) => line.trim())
-        .filter(Boolean);
+export function getTrackedFiles(cwd = process.cwd()) {
+    // -z: without it git quotes a path that has a non-ASCII byte, in octal
+    // (core.quotePath), and the quoted forms no longer compare by case.
+    // maxBuffer: the list is about 390 KB today; the default is 1 MiB.
+    const out = execFileSync('git', ['ls-files', '-z'], {
+        cwd,
+        encoding: 'utf8',
+        maxBuffer: 64 * 1024 * 1024,
+    });
+    return out.split('\0').filter(Boolean);
 }
 
-function checkCaseInsensitivePathCollisions(files) {
+export function checkCaseInsensitivePathCollisions(files) {
     const byLower = new Map();
     for (const file of files) {
         const key = file.toLowerCase();
@@ -23,6 +63,31 @@ function checkCaseInsensitivePathCollisions(files) {
     }
 
     return [...byLower.values()].filter((group) => group.length > 1);
+}
+
+// `ToolBag.css.ts` -> `ToolBag.css`, `.eslintrc.cjs` -> `.eslintrc`,
+// `.eslintrc` and `Makefile` unchanged (Node's extname).
+export function nameWithoutLastExtension(name) {
+    const ext = posix.extname(name);
+    return ext ? name.slice(0, -ext.length) : name;
+}
+
+// Check 2 above. Each group lists every file whose directory and stem match
+// ignoring case, when at least two of them do not match exactly.
+export function findCaseOnlyNameCollisions(files) {
+    const groups = new Map();
+    for (const file of files) {
+        const stemPath = `${posix.dirname(file)}/${nameWithoutLastExtension(posix.basename(file))}`;
+        const key = stemPath.toLowerCase();
+        const group = groups.get(key) ?? { stemPaths: new Set(), files: [] };
+        group.stemPaths.add(stemPath);
+        group.files.push(file);
+        groups.set(key, group);
+    }
+
+    return [...groups.values()]
+        .filter((group) => group.stemPaths.size > 1)
+        .map((group) => [...group.files].sort());
 }
 
 function isTestLikeFile(file) {
@@ -80,32 +145,54 @@ function printOk(message) {
     console.log(`✅ ${message}`);
 }
 
-const files = getTrackedFiles();
+export function runCli() {
+    const files = getTrackedFiles();
 
-const pathCollisions = checkCaseInsensitivePathCollisions(files);
-const duplicateRoutePaths = collectRoutePathLiterals(files);
+    const pathCollisions = checkCaseInsensitivePathCollisions(files);
+    const nameCollisions = findCaseOnlyNameCollisions(files);
+    const duplicateRoutePaths = collectRoutePathLiterals(files);
 
-if (pathCollisions.length === 0) {
-    printOk('No case-insensitive file path collisions found.');
-} else {
-    printError('Case-insensitive file path collisions found:');
-    for (const group of pathCollisions) {
-        console.error(`  - ${group.join('  <->  ')}`);
-    }
-}
-
-if (duplicateRoutePaths.length === 0) {
-    printOk('No duplicate absolute route path literals found.');
-} else {
-    printError('Duplicate absolute route path literals found:');
-    for (const { path, occurrences } of duplicateRoutePaths) {
-        console.error(`  - ${path}`);
-        for (const file of occurrences) {
-            console.error(`      • ${file}`);
+    if (pathCollisions.length === 0) {
+        printOk('No case-insensitive file path collisions found.');
+    } else {
+        printError('Case-insensitive file path collisions found:');
+        for (const group of pathCollisions) {
+            console.error(`  - ${group.join('  <->  ')}`);
         }
     }
+
+    if (nameCollisions.length === 0) {
+        printOk('No case-only file name collisions found.');
+    } else {
+        printError(
+            'File names that differ only by case once the last extension is removed ' +
+                '(an import without an extension can find the wrong one on macOS or Windows):'
+        );
+        for (const group of nameCollisions) {
+            console.error(`  - ${group.join('  <->  ')}`);
+        }
+        console.error('  Rename one file of each group; there is no allowlist.');
+    }
+
+    if (duplicateRoutePaths.length === 0) {
+        printOk('No duplicate absolute route path literals found.');
+    } else {
+        printError('Duplicate absolute route path literals found:');
+        for (const { path, occurrences } of duplicateRoutePaths) {
+            console.error(`  - ${path}`);
+            for (const file of occurrences) {
+                console.error(`      • ${file}`);
+            }
+        }
+    }
+
+    if (pathCollisions.length > 0 || nameCollisions.length > 0 || duplicateRoutePaths.length > 0) {
+        process.exit(1);
+    }
 }
 
-if (pathCollisions.length > 0 || duplicateRoutePaths.length > 0) {
-    process.exit(1);
+// Only run the repository-wide scan when invoked directly, so the test can
+// import the pure functions without triggering it.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+    runCli();
 }
