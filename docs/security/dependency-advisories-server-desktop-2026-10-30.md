@@ -236,8 +236,11 @@ with one sentence of `PATCHES.md` corrected (below). After the operator's
 decision of 2026-11-02: `42f68f2` (the template's removal, with its
 `PATCHES.md` entry), `b39883a` (dated notes in the fork's documents),
 `91ea92a` (this record's notes), `bacd26c` (notes in four more of the
-fork's documents, and corrections to the `PATCHES.md` entry), then a
-commit that corrects this record's notes
+fork's documents, and corrections to the `PATCHES.md` entry), `c83dc9b`
+(corrections to this record's notes), `d1936c9` (the Nixpacks files, which
+are not the template, restored), `d1f1589` (two notes corrected, and dated
+notes in the RC1 release-train changelog and checklist), then a commit that
+brings this record's 2026-11-02 section up to date
 ([the 2026-11-02 section](#2026-11-02-the-railway-template-is-removed)).
 
 ## What the review changed
@@ -2031,14 +2034,17 @@ fix it ([Found outside scope](#found-outside-scope-not-fixed-here), item 5).
     `release/train/image_provenance.json` names it as the builder of the RC1
     image; that is the RC1 record's statement, not evidence of a run.
 -   `scripts-dev/railway/start.sh`, `nixpacks.toml` and
-    `docs/railway_deploy.md`, with `README.rst`'s link to that how-to and the
-    `.dockerignore` lines for Nixpacks and `railway.json`. These are an
-    earlier Synapse-on-Railway path, not the template: `start.sh` generates
-    its own config and patches its listener, and reads neither the template
-    nor `railway.toml`, and nothing in the tree runs either file. They were
-    removed with the template as the same deploy surface. That goes beyond the
-    decision as given, so it waits on the operator's confirmation; without it,
-    they are restored from `42f68f2^`.
+    `docs/railway_deploy.md`, with `README.rst`'s link to that how-to and six
+    `.dockerignore` lines (`!.nixpacks`, `!nixpacks.toml`, `!railway.json`,
+    `!scripts-dev`, `!.nixpacks/**` and `!scripts-dev/**`). (2026-11-02:
+    restored in `d1936c9`, so all five files are as on `develop`. They are a
+    separate Synapse-on-Railway path, not the template: `start.sh` generates
+    its own config and patches its listener, reads neither the template nor
+    `railway.toml`, and nothing in the tree runs it. Removing them went beyond
+    the decision as given. Until that commit this bullet called them "an
+    earlier" path and said they waited on the operator's confirmation;
+    "earlier" is not known, since all of these files, the template's included,
+    arrived in `e0f3065e31`.)
 -   The test `test_railway_template_leaves_jwt_login_off`, in
     `tests/blackout_runtime/test_jwt_secret_config.py`, with the `_envsubst`
     helper that only it used. Its only subject was the template. The module
@@ -2052,16 +2058,17 @@ was fixed; they went with the files. The `jwt_config` fault had been fixed in
 `48ab32d`.
 
 The passages above that describe the template are kept as written, each with
-a dated note in it or beside it. `b39883a` and `bacd26c` add the same kind of note to the fork's
-documents that described the template, its image or what its entrypoint ran:
-`docs/upgrade.md`, four ops pages (among them the RC1 rollout and rollback of
-`ghcr.io/blackmarket-coa/blackout-server`), the deployment checklist review
-and its copy, two trackers, the Railway hardening guide, the BMC server
-execution plan, the week 3 report, and the product-fork execution plan and
-prompts. The RC1
-release-train artifacts under `release/train/`, which the release gate reads,
-stay as written as the RC1 record. `PATCHES.md`'s 2026-11-02 entry lists each
-of these. Outside the fork, the 2026-08-10 encryption audit
+a dated note in it or beside it. `b39883a`, `bacd26c` and `d1f1589` add the
+same kind of note to the fork's documents that described the template, its
+image or what its entrypoint ran: `docs/upgrade.md`, four ops pages (among
+them the RC1 rollout and rollback of `ghcr.io/blackmarket-coa/blackout-server`),
+the deployment checklist review and its copy, two trackers, the Railway
+hardening guide, the BMC server execution plan, the week 3 report, the
+product-fork execution plan and prompts, and the RC1 release-train
+changelog and checklist. `release/train/image_provenance.json`, which the
+release gate reads as JSON, stays as written as the RC1 record.
+`PATCHES.md`'s 2026-11-02 entry lists each of these. Outside the fork, the
+2026-08-10 encryption audit
 (`docs/audits/2026-08-10-encryption-audit.md`) counted this template among
 the three that set `encryption_enabled_by_default_for_room_type: invite`; it
 has a dated note, and two templates carry that setting now. The 2026-05-10
@@ -2071,20 +2078,52 @@ template. `KNOWN_LIMITATIONS.md` says the encryption backstop is in "both
 in-repo homeserver templates"; the Railway one was a third, so that is exact
 now.
 
-Not this template, and left in place: the client's `railway.json` and
-`README.md`'s "Deploy to Railway", the "Deploy to Railway" step in
-`.github/workflows/deploy-web.yml`, `infra/railway/`, the Railway section of
-`docs/deployment/production.md`, and `services/blackout-api/railway.toml`
-(the legacy FastAPI service). None of them names a removed file.
-`infra/railway/README.md` and `docs/deployment/production.md` put a Railway
-service at `apps/blackout-server`, where `railway.toml` and `nixpacks.toml`
-were; whether a live Railway service read its config file from there, or
-built with Nixpacks there, is that service's settings, which are not in the
-tree, and was not checked. Nor were `synapse/util/blackout_profiles.py`,
-`managed_hosting.py` and `hosting_smoke.py` removed: `entrypoint.sh` was the
+Not this template, and left in place: the restored Nixpacks files above, the
+client's `railway.json` and `README.md`'s "Deploy to Railway", the "Deploy to
+Railway" step in `.github/workflows/deploy-web.yml`, `infra/railway/`, the
+Railway section of `docs/deployment/production.md`, and
+`services/blackout-api/railway.toml` (the legacy FastAPI service). None of
+them names a removed file. `infra/railway/README.md` and
+`docs/deployment/production.md` put a Railway service at
+`apps/blackout-server`, where `railway.toml` was and `nixpacks.toml` still
+is. Whether a live Railway service read its config file from there, or
+builds with Nixpacks there, is that service's settings, which are not in the
+tree, and was not checked. A service that read `railway.toml` would build by
+its own settings now; if those choose Nixpacks, it would read
+`nixpacks.toml`, which has no start command. Nor were
+`synapse/util/blackout_profiles.py`, `managed_hosting.py` and
+`hosting_smoke.py` removed: `entrypoint.sh` was the
 only caller of the first two at startup, and their tests, `hosting_smoke.py`
 and the smoke scripts still call them. Whether they go is the operator's
 call.
+
+Corrections of 2026-11-02 to what this branch's commit messages said, since
+they are not amended:
+
+-   `42f68f2` dropped the `!scripts-dev` lines because only the removed
+    `Dockerfile` copied `scripts-dev`. Of the Dockerfiles in the tree that is
+    true, but the six lines are one whitelist for a Nixpacks build. Nixpacks'
+    source (`main` at `144b4f9ab1`) copies the app directory with no ignore
+    filters and runs `docker build` on the copy, so Docker applies this
+    `.dockerignore`, whose first line is `*`; without `!scripts-dev`, a
+    Nixpacks build would leave `start.sh` out. `d1936c9` restores all six.
+    Whether Railway builds with that version of Nixpacks was not checked.
+    `42f68f2`, `bacd26c` and `c83dc9b` also call the Nixpacks files the
+    "earlier" Synapse-on-Railway path, which is not known (above).
+-   `b39883a` said all four of FR-002's evidence targets were gone and that
+    no Railway path for the Synapse homeserver remained. Two of the four are
+    the restored Nixpacks files, and `d1936c9` corrects the four notes that
+    said so.
+-   `bacd26c` said the RC1 rollout page's `scripts-dev/` smoke commands could
+    run inside the removed image only because its `Dockerfile` copied
+    `scripts-dev`. They could not have run in it: that `Dockerfile` copied
+    `scripts-dev` only into its build stage, the runtime image took
+    `/usr/local` from that stage with the entrypoint and the template, and
+    `pyproject.toml` puts `scripts-dev` and `tests` in the sdist only, so
+    `pip install .` installed neither. `d1f1589` corrects the page's note.
+    `bacd26c` also said the `PATCHES.md` entry then said only what the
+    checklist review says; the review's "consolidated to `railway.toml`"
+    names no `railway.json`, and the entry quotes it now.
 
 Run on this branch, with Python 3.11.17 and the lock above:
 `test_jwt_secret_config` under trial, 15 tests passed before the removal and
@@ -2094,8 +2133,13 @@ Run on this branch, with Python 3.11.17 and the lock above:
 `pytest -q blackout_runtime_tests`, 85 passed; and the release-train gate,
 `ci_hosting_smoke.py` and `validate_tracker_evidence.sh` passed. No image was
 built: none of the remaining ones reads the removed files. Run again on
-`bacd26c`, after which only documents change: `test_jwt_secret_config`, 14
+`bacd26c`, after which no Python code or test changes: `test_jwt_secret_config`, 14
 passed; trial `tests.blackout_runtime`, 51 passed; the same five trial
 modules, 121 passed; `pytest -q blackout_runtime_tests`, 85 passed; and the
 release-train gate, `ci_hosting_smoke.py` and `validate_tracker_evidence.sh`
-passed.
+passed. Run again on `d1f1589`, after the restore (a shell script, a
+Nixpacks file, `.dockerignore` and two documents, none of which these runs
+read) and the release-train notes, which the release-train gate reads: `test_jwt_secret_config`, 14 passed; trial
+`tests.blackout_runtime`, 51 passed; the same five trial modules, 121 passed;
+`pytest -q blackout_runtime_tests`, 85 passed; and the release-train gate,
+`ci_hosting_smoke.py` and `validate_tracker_evidence.sh` passed.
