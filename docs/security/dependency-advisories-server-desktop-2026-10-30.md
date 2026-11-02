@@ -175,15 +175,20 @@ false. It also found five smaller gaps. The answers to both reviews are in
     nothing was built for Windows, where zip is compiled, or macOS. No CI
     job builds the desktop app before a release tag, so the release job's
     own build is still the first on ubuntu-22.04 and the other platforms;
-    see [Before merge or release](#before-merge-or-release).
+    see [Before merge or release](#before-merge-or-release). On 2026-11-02
+    a build-only check was set up to build it on pull requests (its first
+    run is pending), and two `tauri.conf.json` faults were fixed, one of
+    which, the bundle category, stopped every `tauri build` that bundles
+    (same section).
 -   **The two id_token gaps are now in `KNOWN_LIMITATIONS.md`** ("OIDC sign-in
     checks") and in `THREAT_MODEL.md`'s OIDC tokens row, which said only "OIDC
     sigs". Since the fourth review the same `KNOWN_LIMITATIONS.md` section
     also says what the bump refuses: an id_token whose `sub` or `jti` is not
     a string, or whose `aud` has a non-string member.
 -   **Found outside scope, not fixed here:** the desktop updater's public key
-    in `tauri.conf.json` is a literal `${TAURI_UPDATER_PUBKEY}` placeholder; no
-    PR job compiles the desktop crate; and two older ignores rested on reasons
+    in `tauri.conf.json` is a literal `${TAURI_UPDATER_PUBKEY}` placeholder;
+    until 2026-11-02 no PR job was set up to compile the desktop crate (item
+    2); and two older ignores rested on reasons
     the advisory data no longer supports. The `-v47` branch (PR #994) fixes
     the react-router one (react-router 7.18.2, `71548f0350`) and corrects
     `.trivyignore`'s header (`26e6ce5`). The plan is to merge this branch
@@ -195,7 +200,10 @@ false. It also found five smaller gaps. The answers to both reviews are in
     GHSA-rated Moderate and Low advisories, and every other
     `${VAR:-default}` in the Railway template: the listener port, the
     database name, user and port, the Redis port and TURN render as text,
-    so that service cannot start as rendered. See
+    so that service cannot start as rendered. On 2026-11-02 it also has
+    the desktop release workflow, which is configured to publish a public
+    release named after whatever ref runs it once its build passes
+    (item 6). See
     [Found outside scope](#found-outside-scope-not-fixed-here).
 
 Commits, on top of `ff7d08b`: `21c9591` (authlib, with the `PATCHES.md`
@@ -222,7 +230,15 @@ type, with the authlib `PATCHES.md` entry), then `05dfc10` (the record).
 After the sixth review: `48ab32d` (`jwt_config.enabled` must be a boolean,
 and the Railway template's JWT login is off, with `PATCHES.md`), `ae70358`
 (the operator notes in `docs/upgrade.md`), then this version of the record,
-with one sentence of `PATCHES.md` corrected (below).
+with one sentence of `PATCHES.md` corrected (below). On 2026-11-02:
+`6bea1c9` (the two `tauri.conf.json` fixes), `659f6ed` (the desktop build
+check, with `KNOWN_LIMITATIONS.md`), then `ddd4a41` (the record). After a
+review of those three: `b5f4398` (the check's comments and
+`KNOWN_LIMITATIONS.md` corrected), then `a29c3bf` (the record). After a
+second review: `1296b78` (the check's comments), then this version of the
+record. The two versions since `ddd4a41` also correct what this branch's
+commit messages got wrong
+([Before merge or release](#before-merge-or-release), last bullet).
 
 ## What the review changed
 
@@ -1371,7 +1387,8 @@ The effective minimum Rust becomes 1.90, from 1.88 before. `Cargo.toml` says
 
 ### Before merge or release
 
-No CI job builds this lock before a release does.
+Until 2026-11-02 no CI job was set up to build this lock before a release
+does (the dated bullets below; the build check's first run is pending).
 `blackout-desktop-tauri.yml` runs on pull requests to `main` only, and only
 its toolchain-free notification harness; its `build` job has
 `if: github.event_name != 'pull_request'` and runs on pushes to `main`, on
@@ -1390,8 +1407,9 @@ job. They have been linked once outside CI, after the third review, on Ubuntu
     when both are installed. `blackout-desktop/package.json` has only
     `@tauri-apps/cli`, and `pnpm-lock.yaml` has no `@tauri-apps/api` or
     plugin package, so the check has nothing to compare and does not stop
-    the build. The 2.10.1 CLI and the 2.12.5 crate have still never been
-    built together.
+    the build. The 2.10.1 CLI and the 2.12.5 crate had never been built
+    together until 2026-11-02, when they were, on Ubuntu 24.04 only (the
+    2026-11-02 bullets below).
 -   **What to run.** An unsigned build on ubuntu-22.04 with the workflow's apt
     packages (`libwebkit2gtk-4.1-dev libxdo-dev libssl-dev
 libayatana-appindicator3-dev librsvg2-dev`):
@@ -1402,8 +1420,9 @@ libayatana-appindicator3-dev librsvg2-dev`):
 -   **What not to run.** Do not start `workflow_dispatch` on
     `blackout-desktop-tauri.yml` from this branch. Its `tauri-action` step has
     `tagName: ${{ github.ref_name }}`, `releaseDraft: false` and
-    `prerelease: false`, so it would publish a release named after the
-    branch.
+    `prerelease: false`, so once its build passes it would publish a
+    release named after the branch (item 6 of
+    [Found outside scope](#found-outside-scope-not-fixed-here)).
 -   **Done here, after the third review: the Linux half of the Rust build**
     (see [Verification](#verification)), on Ubuntu 24.04 rather than 22.04,
     with a placeholder frontend and without `tauri build`'s bundling. The
@@ -1411,6 +1430,212 @@ libayatana-appindicator3-dev librsvg2-dev`):
     `@tauri-apps/cli` was not moved to 2.12.x: the mismatch check does
     not require it, and `pnpm-lock.yaml` belongs to the `-v47` branch's
     change. Moving it with the build above is reasonable.
+-   **2026-11-02: the three-platform build is set up to run on pull
+    requests (`659f6ed`, its comments corrected in `b5f4398` and
+    `1296b78`).** `.github/workflows/blackout-desktop-build-check.yml`
+    builds the release job's bundles on its three runners with its setup,
+    unsigned (`--no-sign`) and with `createUpdaterArtifacts` off in the
+    CLI's bundler settings (tauri-cli 2.10.1, `interface/rust.rs` 837), and
+    fails a leg that produces an updater artifact or changes `Cargo.lock`.
+    The override does not change the compiled app on that point: the app
+    embeds `createUpdaterArtifacts` at its default whatever the config says
+    (tauri-utils 2.10.2, `config.rs` 4548), as the release's does. It runs
+    on pull requests to `develop` that touch the desktop app, the lockfile,
+    the root manifests, the client's build configuration or its desktop
+    bridge (`src/platform`), and on `workflow_dispatch`, which, once the
+    workflow is on `develop`, builds the head of any branch or tag that has
+    it. It has `contents: read`, references no secret and publishes
+    nothing: no release, no tag, no uploaded bundle (its job summary lists
+    the bundles' names and sizes). Where its triggers, permissions,
+    concurrency, steps or step settings differ from the release job's, the
+    file says why. The release reaches the same CLI through
+    `npm run tauri build -- --bundles <set>`, because tauri-action (v0.6.2,
+    `src/runner.ts` 23-67) looks for a `pnpm-lock.yaml` only in
+    `blackout-desktop`, while the check runs `pnpm tauri build`. The two
+    set different `npm_config_*` variables; the one tauri-cli reads,
+    `npm_config_user_agent`, picks the package manager for its
+    version-mismatch check. On Linux both passed that check, and a probe
+    hook with the same `--filter` found the client from `blackout-desktop`
+    (measured in review, with a stand-in cargo that stops before the
+    compile); the real client build has run only through pnpm. On Windows
+    the check starts the CLI from Git Bash, where tauri-action starts it
+    from node, and pnpm 9.15.4 runs the script through `cmd` with each
+    argument `JSON.stringify`'d; that the `--config` JSON arrives intact
+    there is unmeasured until the first Windows leg, and a mangled value
+    fails the CLI's parse rather than passing. The check also pins
+    setup-node v6.2.0 where the release has `@v4` (both install Node 22,
+    neither caches), pins pnpm/action-setup to the commit `v5` names on
+    2026-11-02 where the release has `@v5`, passes `--ci`, which the
+    release gets from `CI=true`, cancels a superseded run on the same ref,
+    caps a leg at 60 minutes where the release has GitHub's default of
+    360, and does not persist the checkout's credentials.
+    First run: pending.
+-   **2026-11-02: two `tauri.conf.json` faults, one of which, the bundle
+    category, stopped every `tauri build` that bundles, so it would also
+    have stopped the release job, which has never run (`6bea1c9`).**
+    `bundle.category` "Network" is not a Tauri category, and the bundler
+    stopped after the compile with "invalid category" (measured on Linux;
+    tauri-cli parses the category with no platform gate, so macOS and
+    Windows would stop the same way, read, not run). It is now "Social
+    Networking", which Tauri maps to the freedesktop `Network;` category
+    that "Network" meant, and on macOS to
+    `public.app-category.social-networking`.
+
+    The CLI runs the frontend hooks in `blackout-desktop`, so their
+    `cd ../..` left the checkout, and what the hook then built depended on
+    what lies above the checkout. With a pnpm workspace above it, as for
+    this machine's worktrees, the filter matched that workspace's client,
+    another checkout's, not this one's. With none, pnpm finds no workspace
+    file and scans the directories below: on a GitHub runner, where
+    `/home/runner/work/blackout` lies above the checkout, that probably
+    matched this checkout's own client and built it, so only the category
+    stopped the release legs. Both were measured in review only as
+    `pnpm --filter @blackout/client exec pwd` (pnpm 9.15.4), the runner case
+    in a tree rebuilt from the tracked `package.json` files and
+    `pnpm-workspace.yaml`, not on a runner. The earlier measurement, in
+    which pnpm matched no project, exited 0, and `tauri build` stopped
+    before the compile at "Unable to find your web assets", was taken in an
+    export (`hooktest/repo`) whose `apps/blackout-client` was an empty
+    directory, a layout no checkout has. Both hooks now run
+    `pnpm --filter @blackout/client` from `blackout-desktop`, a workspace
+    member, so they build this checkout's client wherever it lies.
+
+    The fixes also change what the release workflow does, although its file is
+    unchanged. Before `6bea1c9` every leg of a dispatch, of a push to a future
+    `main` or of a `release-*` or `v*` tag stopped, at the latest, at the
+    bundle category after the compile, well before tauri-action creates the
+    release. After it the
+    Linux leg, which signs nothing but the updater, gets through the build and
+    bundling (given xdg-utils on the runner, inferred below) and stops only at
+    the CLI's updater signing, which cannot decode the placeholder pubkey (or,
+    with the signing-key secret unset, the key before it). The Windows leg stops
+    earlier, at signtool with the literal thumbprint; the macOS leg's Apple
+    signing was not analysed. So on the Linux leg the placeholder pubkey is now
+    the only barrier between a dispatch from `develop` and a public release that
+    becomes latest and serves `latest.json` (item 6 of
+    [Found outside scope](#found-outside-scope-not-fixed-here)). Item 6's
+    proposal, tags only and `releaseDraft: true`, needs to land before or with
+    any pubkey fix. Read from tauri-cli 2.10.1 (`bundle.rs` 226-292) and
+    tauri-action v0.6.2 (`src/index.ts`), not run.
+
+    Run here on Ubuntu 24.04 (not 22.04), with rustc 1.97.0 (the runner's
+    stable is 1.99.1 on 2026-11-02) and the release job's apt packages,
+    after `pnpm install --frozen-lockfile` and the icon step, the Linux
+    leg's command (`--bundles 'deb,rpm,appimage'`, own target directory,
+    3 jobs) ran the fixed hook, which built the real client; the compile
+    took 8 m 30 s. The AppImage step then stopped at "xdg-mime binary not
+    found": because the app registers deep-link schemes, the AppImage
+    bundler copies the host's `/usr/bin/xdg-mime` into the image, and this
+    host had no xdg-utils. The ubuntu-22.04 runner image installs Google
+    Chrome's deb with apt, and that deb depends on xdg-utils (read from the
+    image's install script and Chrome's package index, not seen on a
+    runner), so the workflow keeps the release job's package list. With
+    xdg-utils installed here the same command gave rc 0 in 231 s:
+    `Blackout_0.1.0_amd64.deb` (18,595,514 bytes),
+    `Blackout-0.1.0-1.x86_64.rpm` (18,595,795) and
+    `Blackout_0.1.0_amd64.AppImage` (94,054,904). The deb's desktop entry
+    has `Categories=Network;`. No `.sig`, updater archive or `latest.json`
+    was made, no signing key was asked for, `Cargo.lock` and
+    `pnpm-lock.yaml` were unchanged, and the workflow's own check step,
+    run on that output, passed. The one Rust build warning is
+    "STATIC_VCRUNTIME is deprecated", from the 2.10.1 CLI against
+    tauri-build 2.7.4. The log's other warnings are the CLI's notice that
+    `--no-sign` skips signing and the client build's Vite and Rolldown
+    notices (the deprecated `inlineDynamicImports` option,
+    `PREFER_BUILTIN_FEATURE` and `INEFFECTIVE_DYNAMIC_IMPORT`).
+
+    Run again after the review, from an empty target directory, at
+    `ddd4a41` (the build reads nothing `b5f4398` changed), with the same
+    host, compiler and xdg-utils: the same command gave rc 0 in 592 s, the
+    compile 7 m 33 s, and made `Blackout_0.1.0_amd64.deb` (18,595,430
+    bytes), `Blackout-0.1.0-1.x86_64.rpm` (18,595,700) and
+    `Blackout_0.1.0_amd64.AppImage` (94,054,904). The deb's desktop entry
+    has `Categories=Network;` and the `matrix` and `blackout` scheme
+    handlers. The workflow's check step, taken from the workflow file and
+    run on that output, passed: every expected bundle, no `.sig`, updater
+    archive or `latest.json`, and `Cargo.lock` unchanged (`pnpm-lock.yaml`
+    too, by checksum).
+
+    Run a third time after the second review, from an empty target
+    directory, at `a29c3bf` (the build reads nothing `1296b78` or this
+    version of the record changed), with the same host, compiler and
+    xdg-utils. The load was under 3.5 when it started and rose above it
+    while the build ran, from other work on the host. The same command
+    gave rc 0 in 548 s, the compile 6 m 45 s, with the hook building the
+    real client from this checkout, and made `Blackout_0.1.0_amd64.deb`
+    (18,595,426 bytes), `Blackout-0.1.0-1.x86_64.rpm` (18,595,700) and
+    `Blackout_0.1.0_amd64.AppImage` (94,054,904). The deb's desktop entry
+    has `Categories=Network;` and the two scheme handlers, and the binary
+    links WebKitGTK 4.1, GTK 3, libsoup 3 and libdbus. The check step,
+    taken from `1296b78`'s workflow file and run on that output, passed,
+    with the same three names and sizes in its summary; no updater
+    artifact was made, and `Cargo.lock` and `pnpm-lock.yaml` were unchanged
+    by checksum. The build also wrote `blackout-desktop/src-tauri/gen/schemas`,
+    which is neither tracked nor gitignored; it was removed here, and the
+    check step does not look at it. Not done here: the macOS and Windows
+    legs, ubuntu-22.04 itself, and a run of the app.
+
+-   **2026-11-02: what this branch's commit messages got wrong.** History
+    is not rewritten here, so the corrections are recorded instead.
+    -   `ddd4a41` says restricting the release job to `release-*` and `v*`
+        tags with `releaseDraft: true` "is written down as the operator's
+        decision". It is a proposal for the operator to decide (item 6 of
+        [Found outside scope](#found-outside-scope-not-fixed-here)), and the
+        operator has not decided it. It also says the release job "would
+        publish" a public, non-draft release that becomes latest and serves
+        `latest.json`, with no condition: it is configured to once its build
+        passes, and today the build fails first. And it says the record's
+        notes say the check "runs it on pull requests": they say it is set
+        up to, and its first run is pending.
+    -   `6bea1c9` says "No desktop build could finish", and `ddd4a41` that
+        the two faults "stopped every build". The category stopped every
+        `tauri build` that bundles; `cargo build --release --locked`
+        finished (third review). `a29c3bf`, and that version of this bullet,
+        add "and, on a fresh checkout, any `tauri build`", and `a29c3bf`
+        says that before `6bea1c9` the release legs stopped "at the frontend
+        hook or the bundle category". On a runner the old hook probably
+        built this checkout's client and did not stop the build (the
+        bullet above). `6bea1c9`'s account of the hook, that pnpm "matched
+        no project and exited 0, and on a fresh checkout `tauri build` then
+        stopped at 'Unable to find your web assets'", was measured only in
+        the scout's export, a layout no checkout has, and its "The build
+        check in the next commit needs both" holds for the category; the
+        hook fix makes the hook independent of what lies above the checkout.
+        `6bea1c9` says the bundler stopped with "invalid category" "on
+        Linux, macOS and Windows alike": only Linux was run, and macOS and
+        Windows were read from the code. It also presents the release-job
+        fix only as a benefit, though it takes the release job past its
+        build to updater signing (the bullet above), and says xdg-utils is
+        on the runner, which was inferred from the runner image's build
+        scripts, not seen.
+    -   `659f6ed` says a dispatch of the release workflow "would publish" a
+        release: it is configured to once its build passes, and today the
+        build fails first. It calls the check "the only CI build of the
+        client on macOS and Windows": it is the only pull-request build of
+        the client on macOS (`release.yml`, `blackout-mobile.yml` and
+        `mobile-native-ci.yml` build it there for iOS, on tags, dispatch and
+        pushes to `main`) and the only CI build of it on Windows. It says
+        `workflow_dispatch` "builds any other commit": once the workflow is
+        on `develop`, it builds the head of a branch or tag that has it. It
+        says the `--config` merge turns updater artifacts off "for the app
+        and the bundler alike": it changes the CLI's bundler settings, and
+        the compiled app embeds `createUpdaterArtifacts` at its default
+        either way (tauri-utils 2.10.2, `config.rs` 4548).
+    -   `b5f4398` says the release build fails first at "updater signing on
+        the placeholder pubkey on every leg, signtool on Windows". The
+        Windows leg stops earlier, at signtool during bundling, before
+        updater signing (tauri-bundler 2.8.1 runs `try_sign` while bundling,
+        and tauri-cli 2.10.1 runs `sign_updaters` after `bundle_project`
+        returns, `bundle.rs` 219-221), and the macOS leg's
+        Apple signing was not analysed. `b5f4398` and `a29c3bf` give the
+        release's command as `npm run tauri --`; tauri-action builds
+        `npm run tauri build -- <args>`. `b5f4398` says the npm and pnpm
+        paths "differ in `npm_config_user_agent` and were measured to behave
+        the same on Linux for the version-mismatch check and the hook": they
+        set different `npm_config_*` variables, of which
+        `npm_config_user_agent` is the one the CLI reads, and the hook was
+        checked on the npm path with a probe using the same `--filter`, not
+        with the client build.
 
 ## The gate
 
@@ -1733,14 +1958,19 @@ The record's own commit changes no file Trivy reads.
     nothing else substitutes it, the shipped key is the literal string, which
     is not base64 minisign. Every update would then fail verification: closed,
     not open. Not verified against a release build.
-2.  **No PR job compiles the desktop crate.** `blackout-desktop-tauri.yml`
+2.  **Until 2026-11-02, no PR job was set up to compile the desktop
+    crate.** `blackout-desktop-tauri.yml`
     runs a toolchain-free harness on pull requests to `main`. It runs the
     bundle build only on pushes to `main` and on tags, and the default branch
     is `develop`. The stub-library `cargo check` above found no compile error
     from this update, but in CI one would first show on a release build.
     For this change, see [Before merge or release](#before-merge-or-release).
     Making the workflow build on pull requests to `develop` is the lasting
-    fix, and is left to whoever owns that workflow. Until the fourth review
+    fix, and is left to whoever owns that workflow. Since 2026-11-02 a
+    separate build-only workflow, `blackout-desktop-build-check.yml`, is set
+    up to build the desktop app on pull requests to `develop` that touch it
+    ([Before merge or release](#before-merge-or-release)); the release
+    workflow's own settings are item 6. Until the fourth review
     no PR job scanned the desktop lock either: `security.yml`'s paths filter
     did not list `blackout-desktop/**`. It does now (`b3cd1b3`), with
     `services/**` and `.trivyignore`.
@@ -1921,12 +2151,99 @@ The record's own commit changes no file Trivy reads.
     `apps/blackout-server`, rendered by hand as their README says, and were
     not analysed here.
 
+6.  **The desktop release workflow is configured to publish a public,
+    non-draft release named after whatever ref runs it, once its build
+    passes (2026-11-02).** Nothing was run, dispatched or changed in that
+    workflow. `blackout-desktop-tauri.yml`'s `build` job runs
+    `tauri-apps/tauri-action@v0` with
+    `tagName: ${{ github.ref_name }}`, a `releaseName` of "Blackout
+    Desktop" and the ref name, `releaseDraft: false`, `prerelease: false` and
+    `includeUpdaterJson: true`, with the signing secrets, on pushes to
+    `main`, on `release-*` and `v*` tags, and on `workflow_dispatch` from
+    any branch. The app's updater endpoint is
+    `https://github.com/blackmarket-coa/blackout/releases/latest/download/latest.json`.
+
+    -   **The repository today.** From the GitHub API on 2026-11-02: the
+        repository is public and its default branch is `develop`; there is
+        no `main` branch, there are 0 tags and 0 releases
+        (`/releases/latest` is 404); `blackout-desktop-tauri.yml`,
+        `release.yml` and `release-drafter.yml` have 0 runs each, and
+        nothing in the repository has run on `workflow_dispatch`.
+    -   **What tauri-action does with those settings.** Read at `v0`, which
+        is v0.6.2 (commit `84b9d35b5f`). It builds first and creates the
+        release after (`src/index.ts` 99-111, then 193). With
+        `releaseDraft: false` it looks the release up by tag; on a 404 it
+        creates one with `tag_name` the ref name, `draft: false`,
+        `prerelease: false`, `target_commitish` the run's commit, and no
+        `make_latest` (`src/create-release.ts` 86-115). GitHub's REST docs
+        say `make_latest` defaults to true for a newly published release,
+        and that the latest release is the newest non-draft, non-prerelease
+        one by `created_at`.
+    -   **A dispatch from `develop`**, once the build passes, would create a tag
+        `develop` at the run's commit and a public release "Blackout Desktop
+        develop". It would become latest and carry `latest.json`, which the
+        updater endpoint would then serve. A dispatch from any other branch does
+        the same under that branch's name. A tag named like a branch makes the
+        name ambiguous, and git resolves the tag first: in a scratch repository
+        `git rev-parse develop` printed the tag's commit, with a "refname
+        'develop' is ambiguous" warning, so `git log`, `git merge` and
+        `git diff` against `develop` would read the frozen tag (`origin/develop`
+        is unaffected).
+    -   **A push to `main`** cannot run it today, because `main` does not
+        exist. If `main` is created, its first push makes tag and release
+        "main" (latest). Later pushes find that release by tag, replace its
+        same-named assets (`src/upload-release-assets.ts` 56-73; the version
+        is fixed at 0.1.0, so the names repeat) and re-merge `latest.json`,
+        while the tag stays on the first commit. `turborepo-ci.yml`'s
+        `release-tag` job pushes its `release-*` tag with `GITHUB_TOKEN`, so
+        that tag starts no workflow.
+    -   **A tag pushed by a person.** A `release-*` tag makes a desktop-only
+        release that becomes latest. A `v*` tag also runs `release.yml`, on
+        the same tag's release.
+    -   The three legs can race to create the release, and a leg that loses
+        can get a 422 (read from the code, not run).
+    -   **What stops an update today is accidental.** There are no releases,
+        so no installed desktops from this repository; nothing calls the
+        updater (`main.rs` only registers it); and the pubkey is the
+        placeholder of item 1, so any verification fails closed. As
+        written, the release job also fails before it publishes anything,
+        because tauri-action builds before it creates the release. Until
+        `6bea1c9` it failed after the compile at the bundle category; on a
+        runner the old frontend hook probably built this checkout's client
+        and did not stop it
+        ([Before merge or release](#before-merge-or-release)). This branch
+        fixes the category, which the build check needs, and the hook, so
+        that it builds this checkout's client wherever the checkout lies. What is
+        left is the CLI's updater signing (`sign_updaters`, tauri-cli
+        2.10.1 `bundle.rs` 254-292, read, not run), which cannot decode the
+        placeholder pubkey (or, if the signing-key secret is unset, stops at
+        the key before it), and on Windows signtool, which would get `/sha1`
+        with the literal `${WINDOWS_CERTIFICATE_THUMBPRINT}`
+        (`certificate.pfx` is written but never imported). Neither is a
+        control, and a real release has to fix both. Since `6bea1c9` the
+        Linux leg stops only at the pubkey, so with the signing-key secret
+        set, fixing the pubkey alone would let a dispatch from `develop`
+        publish a release that becomes latest and serves `latest.json`.
+
+    **Proposed, for the operator to decide; not done here, and not decided as of
+    2026-11-02:** run the release job only on `release-*` and `v*` tags (drop
+    the `push` to `main` and the `workflow_dispatch` paths), and set
+    `releaseDraft: true`, so that a person publishes each release and
+    `latest.json` reaches installed desktops only then. Change these before
+    anyone fixes the pubkey. Building a commit to test it needs none of this:
+    `blackout-desktop-build-check.yml` does that without publishing.
+
 ## Not verified
 
 -   A desktop build on Windows, macOS or ubuntu-22.04, a bundle, a build with
     the real client, a run on any platform, and the updater against a real
     release. Only the Linux release build above ran. See
-    [Before merge or release](#before-merge-or-release).
+    [Before merge or release](#before-merge-or-release). 2026-11-02: the
+    ubuntu-22.04, macOS and Windows builds, with their bundles and the real
+    client, are set up to run in `blackout-desktop-build-check.yml` on pull
+    requests, and the Linux bundles were built here with the real client,
+    on Ubuntu 24.04 (same section). First run: pending. A run of the app and the
+    updater against a real release are still not verified.
 -   That libdbus-1-dev is installed on the runner was read from jammy's
     package dependencies, not from a run of the job.
 -   A Docker build of the fork image, and Synapse against a real OIDC provider.
