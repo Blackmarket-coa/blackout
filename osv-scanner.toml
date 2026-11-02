@@ -20,32 +20,48 @@
 # one minimatch version is left in that advisory's range
 # (GHSA-g3hv-75wg-m249), triaged in its entry below.
 
-# image-size infinite-loop DoS, two advisories of the same class: crafted
-# JXL/HEIF box-types (GHSA-5p2g-fcmc-qvqq) and a zero-length ICNS entry
-# (GHSA-w3rx-r6r6-pgpr) each hang the parser and block the event loop.
+# image-size 1.2.1 infinite-loop DoS, two advisories of the same class: crafted
+# JXL/HEIF box-types (GHSA-5p2g-fcmc-qvqq, 1.2.0 and later) and a zero-length
+# ICNS entry (GHSA-w3rx-r6r6-pgpr, 0.6.3 and later) each hang the parser and
+# block the event loop.
 #
-# There is nothing to bump to: OSV lists EVERY version through 2.0.2 as
-# affected, including the whole 2.x line, and neither advisory names a fixed
-# version. This is the one case the "bump it instead" rule cannot cover.
+# A fix exists and is not taken. OSV and GitHub list both as fixed in 2.0.3
+# (npm, 2026-09-14); the 1.x line has no fixed release (1.2.1 is its newest,
+# npm's `legacy` tag). The one consumer, metro 0.83.5, requires image-size
+# ^1.0.2 and passes a file path to imageSize() in getAssetData; 2.x's
+# imageSize() takes a Uint8Array only (file reads moved to the async
+# image-size/fromFile), so a pnpm override to 2.x would break metro's asset
+# pipeline rather than fix it. metro 0.83.8 (the 0.83-stable tag, 2026-08-19)
+# dropped image-size for a parser of its own and is inside
+# @react-native/community-cli-plugin 0.82.1's ^0.83.1, so a metro update
+# within range removes the package and both entries. That update re-resolves
+# the React Native toolchain and is its own change, planned before
+# ignoreUntil. Until 2026-11-02 this block and both reasons said no fixed
+# version existed; that had been false since 2026-09-14.
 #
 # Does not apply to our usage. image-size is reached only through
 # metro -> @react-native/community-cli-plugin, i.e. React Native's build-time
-# bundler; it never ships in a runtime bundle, on device or on the web. The
-# images it parses are the asset files committed in this repo at bundle time,
-# not remote or user-supplied input, so the "remote attacker supplies a crafted
-# buffer" precondition has no path here.
+# bundler, under react-native 0.82.1 in packages/ui and legacy/blackout-web;
+# no tracked file imports it, and no metro config, script or workflow in this
+# repository runs metro. The images it would parse are the asset files
+# committed in this repo at bundle time, not remote or user-supplied input, so
+# the "remote attacker supplies a crafted buffer" precondition has no path
+# here.
 #
-# ignoreUntil forces a re-check for an upstream fix (or a metro release that
-# drops the dependency) rather than silencing this indefinitely.
+# ignoreUntil is the deadline for the metro update; it stops applying at
+# 2026-11-30T00:00Z on CI. Mirrored in .trivyignore (exp:2026-11-30) and
+# pnpm.auditConfig.ignoreGhsas. Records:
+# docs/security/dependency-advisories-2026-10-30.md and
+# docs/security/dependency-advisories-twisted-2026-11-02.md.
 [[IgnoredVulns]]
 id = "GHSA-5p2g-fcmc-qvqq"
 ignoreUntil = 2026-11-30
-reason = "No fixed version exists (all versions <=2.0.2 affected). Build-time only: metro's asset pipeline parses repo-committed images, never remote input."
+reason = "Fixed in 2.0.3; not taken because the one consumer, metro 0.83.5, requires ^1.0.2 and passes a file path, which 2.x's imageSize() no longer accepts. metro 0.83.8 drops image-size; that update is planned before ignoreUntil. Build-time only: metro's asset pipeline parses repo-committed images, never remote input, and nothing here runs metro."
 
 [[IgnoredVulns]]
 id = "GHSA-w3rx-r6r6-pgpr"
 ignoreUntil = 2026-11-30
-reason = "No fixed version exists (all versions <=2.0.2 affected). Build-time only: metro's asset pipeline parses repo-committed images, never remote input."
+reason = "Fixed in 2.0.3; not taken because the one consumer, metro 0.83.5, requires ^1.0.2 and passes a file path, which 2.x's imageSize() no longer accepts. metro 0.83.8 drops image-size; that update is planned before ignoreUntil. Build-time only: metro's asset pipeline parses repo-committed images, never remote input, and nothing here runs metro."
 
 # deepmerge prototype poisoning (GHSA-gcqx-w48m-w2h4 / CVE-2026-93753): when a
 # source object has an own `__proto__` key (as JSON.parse produces) and the

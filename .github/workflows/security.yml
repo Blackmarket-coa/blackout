@@ -177,10 +177,12 @@ jobs:
                   # poetry.lock and Cargo.lock are what infra/single-server-baseline
                   # builds into the blackout-synapse image, and nothing else
                   # gates them (upstream-advisories.yml lists element-hq/synapse's
-                  # own advisories, not advisories against its dependencies). The
-                  # four Twisted advisories fixed in 26.10.0 (final since
-                  # 2026-10-30, not yet locked) are explained in .trivyignore,
-                  # where they expire on 2026-11-30. Nothing is skipped: the legacy
+                  # own advisories, not advisories against its dependencies).
+                  # Since 2026-11-02 the fork locks Twisted 26.10.0, and
+                  # .trivyignore no longer holds any poetry.lock entry; its
+                  # four Twisted 26.4.0 entries left with that bump
+                  # (docs/security/dependency-advisories-twisted-2026-11-02.md).
+                  # Nothing is skipped: the legacy
                   # FastAPI service under the fork directory
                   # (services/blackout-api, built by deploy.sh as
                   # blackout-api:stable though that stack runs the Hono API) was

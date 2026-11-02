@@ -2,7 +2,7 @@
 # An advisory accepted in osv-scanner.toml is mirrored here, and in
 # pnpm.auditConfig.ignoreGhsas (package.json), only where Trivy or pnpm audit
 # would otherwise report it. Keep the rationale in sync wherever an entry
-# appears. The lists differ on purpose, as of 2026-10-31:
+# appears. The lists differ on purpose, as of 2026-11-02:
 #   - deepmerge GHSA-gcqx-w48m-w2h4 is in osv-scanner.toml only. GitHub rates
 #     it Low, below this scan's CRITICAL/HIGH and below both levels the repo
 #     runs pnpm audit at (high in security.yml, moderate in guard:audit-clean).
@@ -10,8 +10,6 @@
 #     only. GitHub rates it Moderate, below this scan's CRITICAL/HIGH;
 #     guard:audit-clean (moderate) reports it, so pnpm.auditConfig needs the
 #     mirror.
-#   - The Twisted entries below are here only: the OSV gates and pnpm audit
-#     read pnpm-lock.yaml, not poetry.lock.
 #   - brace-expansion GHSA-mh99-v99m-4gvg is here and in pnpm.auditConfig, but
 #     osv-scanner.toml dropped it once the overrides cleared it. Neither Trivy
 #     nor pnpm audit reports it without these entries (checked 2026-10-30), so
@@ -19,8 +17,13 @@
 #     a regression below the override pins from Trivy and pnpm audit (only the
 #     OSV gates would catch it), and the comment below names versions the
 #     lockfile no longer has.
-# Records: docs/security/dependency-advisories-2026-10-30.md and
-# docs/security/dependency-advisories-2026-10-31.md.
+# Every entry below is against pnpm-lock.yaml. This file is also the only one
+# of the three that covers apps/blackout-server/poetry.lock (the OSV gates and
+# pnpm audit read pnpm-lock.yaml alone); the four Twisted 26.4.0 entries it
+# held for that lock left on 2026-11-02, when Twisted 26.10.0 was locked.
+# Records: docs/security/dependency-advisories-2026-10-30.md,
+# docs/security/dependency-advisories-2026-10-31.md and
+# docs/security/dependency-advisories-twisted-2026-11-02.md.
 
 # brace-expansion ReDoS. The tree resolves to 1.1.16/2.1.2/5.0.8, all at or
 # above the maintainer's per-line security patches (1.1.12/2.0.2/5.0.8); OSV's
@@ -30,53 +33,31 @@
 GHSA-mh99-v99m-4gvg
 CVE-2026-14257
 
-# image-size infinite-loop DoS (crafted JXL/HEIF box-types, and a zero-length
-# ICNS entry). No fixed version exists — OSV lists every version through 2.0.2
-# as affected, including the whole 2.x line — so there is nothing to bump to.
-# Reached only via metro -> @react-native/community-cli-plugin, React Native's
-# build-time bundler; the images parsed are this repo's committed assets, not
-# remote input. Mirrored in osv-scanner.toml with an ignoreUntil of 2026-11-30.
-# CVE aliases listed alongside the GHSAs because Trivy matches by CVE.
-GHSA-5p2g-fcmc-qvqq
-CVE-2025-71329
-GHSA-w3rx-r6r6-pgpr
-CVE-2025-71330
-
-# Twisted 26.4.0 (apps/blackout-server/poetry.lock): three HIGH denial-of-service
-# advisories, fixed in the 26.10.0rc1 pre-release (2026-10-22) and in 26.10.0
-# final (published 2026-10-30), neither of which is locked yet. Each is in a
-# protocol implementation Synapse never imports: twisted.words.xish (XMPP XML
-# stream), twisted.words.protocols.irc, and twisted.conch.telnet; the manhole
-# uses twisted.conch.manhole_ssh, not telnet. Remove these three entries, with
-# the HTTP/2 one below, when Twisted 26.10.0 is locked. Since 2026-10-30 they
-# expire on 2026-11-30 with it, so all four come back together; before that
-# they had only a prose review date (2026-12-31). CVE aliases listed because
-# Trivy matches by CVE. The four Twisted entries are kept in this file only,
-# not in osv-scanner.toml or pnpm.auditConfig as the header suggests: both of
-# those cover pnpm-lock.yaml, never poetry.lock. Records:
-# docs/security/synapse-dependencies-triage-2026-10-25.md and
-# docs/security/dependency-advisories-server-desktop-2026-10-30.md.
-GHSA-3476-c5c2-fr73 exp:2026-11-30
-CVE-2026-115775 exp:2026-11-30
-GHSA-53xc-49m8-p798 exp:2026-11-30
-CVE-2026-115776 exp:2026-11-30
-GHSA-cwm5-jh59-mwxr exp:2026-11-30
-CVE-2026-115778 exp:2026-11-30
-
-# Twisted 26.4.0: HTTP/2 "rapid reset" CPU exhaustion in twisted.web._http2
-# (published 2026-10-29, no CVE). Fixed in 26.10.0rc1; 26.10.0 final was
-# published on 2026-10-30 and is not locked yet. No Blackout listener can speak
-# HTTP/2: Twisted switches to H2Connection only when TLS ALPN negotiates "h2"
-# and the h2 and priority packages import, and neither package is in
-# poetry.lock or the image (twisted.web.http.H2_ENABLED is False there).
-# Synapse's TLS context sets no ALPN, so a tls: true listener stays on
-# HTTP/1.1 too; the image's built-in config has one on 8448 unless
-# SYNAPSE_NO_TLS is set. infra/single-server-baseline, the stack that runs
-# this image, mounts its own config with tls: false on 8008, and nginx reaches
-# Synapse with proxy_pass http:// (Twisted has no cleartext HTTP/2). The
-# deploy/docker/blackout-backend stack runs the upstream image, not this
-# poetry.lock. Remove this entry, with the three above, when Twisted 26.10.0 is
-# locked; it expires on 2026-11-30 so the gate fails again if that has not
-# happened. Record:
-# docs/security/dependency-advisories-server-desktop-2026-10-30.md.
-GHSA-vpp8-g58w-m8mp exp:2026-11-30
+# image-size 1.2.1 (pnpm-lock.yaml): infinite-loop DoS, two advisories of one
+# class: crafted JXL/HEIF box types (GHSA-5p2g-fcmc-qvqq, 1.2.0 and later) and
+# a zero-length ICNS entry (GHSA-w3rx-r6r6-pgpr, 0.6.3 and later). Both are
+# fixed in 2.0.3 (npm, 2026-09-14), which OSV and GitHub list as the fix; the
+# 1.x line has no fixed release (1.2.1 is its newest, npm's `legacy` tag).
+# Not taken: the one consumer, metro 0.83.5 (React Native's bundler, reached
+# through react-native 0.82.1 -> @react-native/community-cli-plugin 0.82.1 in
+# packages/ui and legacy/blackout-web), requires image-size ^1.0.2, and its
+# getAssetData passes a file path to imageSize(), which 2.x no longer accepts
+# (imageSize() takes a Uint8Array only; file reads moved to the async
+# image-size/fromFile), so an override to 2.x would break metro's asset
+# pipeline. metro 0.83.8 (the 0.83-stable tag, 2026-08-19) dropped image-size
+# for its own parser and is inside the plugin's ^0.83.1, so a metro update
+# within range removes the package and these entries; that is a React Native
+# toolchain refresh of its own, not done here. Build-time only: no metro
+# config, script or workflow in this repository runs metro, and the images it
+# would parse are this repo's committed assets, not remote input. Mirrored in
+# osv-scanner.toml (ignoreUntil 2026-11-30) and pnpm.auditConfig.ignoreGhsas
+# (no expiry there). Here each line carries exp:2026-11-30, which Trivy
+# honours. Until 2026-11-02 this comment said no fixed version existed; that
+# had been false since 2026-09-14. CVE aliases listed alongside the GHSAs
+# because Trivy matches by CVE. Records:
+# docs/security/dependency-advisories-2026-10-30.md and
+# docs/security/dependency-advisories-twisted-2026-11-02.md.
+GHSA-5p2g-fcmc-qvqq exp:2026-11-30
+CVE-2025-71329 exp:2026-11-30
+GHSA-w3rx-r6r6-pgpr exp:2026-11-30
+CVE-2025-71330 exp:2026-11-30
