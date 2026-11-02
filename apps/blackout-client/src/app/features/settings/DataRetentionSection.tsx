@@ -252,27 +252,29 @@ export const DataRetentionSection: React.FC = () => {
                     them is removed from Blackout&apos;s database (whether a switch has fired is
                     decided on the database&apos;s own record of it, so one that fired on another
                     server process moments before your deletion stays released even if the process
-                    handling your deletion had not yet been told; only if the database does not
-                    answer in time does the deletion go by what that process knew). A release switch
-                    that has already fired stays readable to the people it named until at least 365
-                    days after it fired (it is removed at the server&apos;s first sweep after that);
-                    a switch armed before Blackout could release messages (every switch that exists
-                    today) keeps what you put in it for the people it named, with no removal date.
-                    Copies of other people&apos;s releases sealed to you are removed (where the
-                    server runs as several replicas, one sealed to you in the moment your deletion
-                    is still reaching another replica can stay until that release is cancelled or
-                    removed), and a notice still owed to you is dropped once your deletion is
-                    confirmed (one the bot was already sending can still arrive, and so can the
-                    invitation to your notices room it was already making; where the server keeps
-                    its data in a database, the confirmation waits until the server has tried to
-                    write the deletion there, and where it also runs its background work separately
-                    the bot can still send you a notice until then, and after it too if the
-                    server&apos;s write removing your copy fails, which it logs, before the
-                    deletion&apos;s last step has run). The public half of your release keys is
-                    removed from Blackout&apos;s database, except the copy kept with a release
-                    switch of yours that has already fired, which goes with that release; copies in
-                    any backups the operator keeps are not removed; the private keys on your devices
-                    and in your recovery files stay there until you remove them.
+                    handling your deletion had not yet been told; if the database does not answer in
+                    time the question is asked again before your deletion is confirmed, and only if
+                    the database fails it twice is that switch left as it was there, so one that had
+                    not fired could still fire). A release switch that has already fired stays
+                    readable to the people it named until at least 365 days after it fired (it is
+                    removed at the server&apos;s first sweep after that); a switch armed before
+                    Blackout could release messages (every switch that exists today) keeps what you
+                    put in it for the people it named, with no removal date. Copies of other
+                    people&apos;s releases sealed to you are removed (where the server runs as
+                    several replicas, one sealed to you in the moment your deletion is still
+                    reaching another replica can stay until that release is cancelled or removed),
+                    and a notice still owed to you is dropped once your deletion is confirmed (one
+                    the bot was already sending can still arrive, and so can the invitation to your
+                    notices room it was already making; where the server keeps its data in a
+                    database, the confirmation waits until the server has tried to write the
+                    deletion there, and where it also runs its background work separately the bot
+                    can still send you a notice until then, and after it too if the server&apos;s
+                    write removing your copy fails, which it logs, before the deletion&apos;s last
+                    step has run). The public half of your release keys is removed from
+                    Blackout&apos;s database, except the copy kept with a release switch of yours
+                    that has already fired, which goes with that release; copies in any backups the
+                    operator keeps are not removed; the private keys on your devices and in your
+                    recovery files stay there until you remove them.
                 </small>
                 {deleteStage === 'idle' && (
                     <div>

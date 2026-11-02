@@ -324,14 +324,19 @@ For the source-of-truth triage with tier/owner detail see
 -   **State:** Deleting your Blackout account removes the account, its sessions
     and linked services, and cancels and erases your unsent scheduled messages.
     It cancels your dead-man switches that have not fired and removes what you
-    put in them, a release switch's sealed copies included. Whether a switch
+    put in them, a release switch's sealed copies included (not the copies
+    an arm that failed left behind, which no switch names: see Durability
+    below). Whether a switch
     has fired is decided on the row the database holds, not on what the
     process handling your deletion knew: where the server runs as more than
     one process, a switch that fired on another process moments before your
     deletion reached one that had not yet been told stays fired, and is
-    erased as a fired switch is (below); only where the database does not
-    answer that question in time, or fails it, does the deletion go by what
-    that process knew, which it logs. A release switch
+    erased as a fired switch is (below). Where the database does not answer
+    that question in time, or fails it, the question is asked again, queued,
+    and the deletion is not answered until it has been; if the database
+    fails it a second time too, that switch is left as the database had it
+    (logged), so one that had not fired is still armed there and can fire at
+    its deadline. A release switch
     that has already fired stays readable to the people it named, with the
     public release key it was signed with, until at least 365 days after it
     fired (it is removed at the server's first sweep after that); a switch
@@ -571,14 +576,23 @@ For the source-of-truth triage with tier/owner detail see
     failed arm, or two servers arming the same message at once leave at most
     copies no switch names, which nothing lists, serves or counts, which the
     named person's account deletion removes like any other and which arming
-    the same message again writes over, and never a switch that fires with
+    the same message again writes over (your own account deletion removes
+    only your own copy among them: the others stay, sealed, until each
+    person named deletes their account), and never a switch that fires with
     copies missing. An arm whose statement the database fails is looked up
-    again: if the switch is there (the connection can drop after the database
-    committed it), it is answered 201 and listed; if it is not, 500 with
+    again: if your switch is there (the connection can drop after the
+    database committed it), it is answered 201 and listed (a switch of
+    someone else's with the same id is refused as already taken); if it is
+    not, 500 with
     nothing armed (except that a statement the database was still running
     when it lost its client can commit after that look, in which case arming
     the same message again is refused as already taken and the switch then
-    appears in your list); if the look-up fails too, 503. One the database
+    appears in your list; if you do not arm it again, the switch is in the
+    database but none of the server's running processes knows of it, so it
+    is neither listed nor fired until one of them restarts and reads it, and
+    is then handled as any switch is, a late one as below); if the look-up
+    fails too, 503, and a switch the database did record is in the same
+    position. One the database
     does not confirm within 30 seconds is 503, in which case it may still
     land, and the switch then appears in your list (arming the same message
     again is then refused as already taken); one sent while an earlier write

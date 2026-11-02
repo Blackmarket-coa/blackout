@@ -117,13 +117,21 @@ each correction.
     `deadmanReleases` (`account.deadmanReleases` in the self-service export).
     [`TRUST.md`](../../TRUST.md) §2 says so.
 -   **Arming, checking in and cancelling are confirmed by the database** where
-    the server keeps its data in one: an arm is answered only once the
-    database holds the switch and its copies (otherwise an error, and nothing
-    is armed), and a check-in or cancel only once the database has applied it
-    to the switch as that server process read it, so one made after the
-    switch fired is refused rather than taking the release back. One the
-    database does not confirm within 30 seconds is answered as unconfirmed;
-    a cancel confirmed late removes the copies when it is. While the database
+    the server keeps its data in one: an arm is answered as armed only once
+    the database holds the switch and its copies; otherwise it is answered
+    with an error, after which the server finds nothing armed, or, where the
+    database does not confirm it within 30 seconds or the server cannot
+    look, as unconfirmed, in which case that arm may still be recorded and
+    then appears in your list. Either way, arming the same message again is
+    refused as already taken if the first was recorded (a write the
+    database was still finishing when the error was given can be recorded
+    after it), and the switch then appears in your list. A check-in or
+    cancel is answered only once the database has applied it to the switch
+    as that server process read it, so one made after the switch fired is
+    refused rather than taking the release back; one the database does not
+    confirm within 30 seconds is answered as unconfirmed, and a cancel
+    confirmed late removes the copies when it is, while the server process
+    that sent it is still running. While the database
     does not answer, check-ins are refused, and the server treats that time
     as an outage of its own for the switches it kept from moving: one due
     then gets the 72-hour grace window instead of firing, in the process that
@@ -133,8 +141,10 @@ each correction.
     switches with their content (whether a switch has fired is decided on
     the database's row, so one that fired on another process stays released
     even where the process handling the deletion had not yet been told of
-    it; only where the database does not answer that question in time does
-    the deletion go by what that process knew); a fired one keeps its
+    it; where the database does not answer that question in time it is
+    asked again, queued, before the deletion is answered, and only if the
+    database fails it twice is that switch left as the database had it,
+    so one that had not fired could still fire); a fired one keeps its
     content, the copies for
     the people it named and the public key it was signed with, until they are
     removed at the first sweep 365 days or more after it fired, and only the
