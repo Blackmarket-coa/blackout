@@ -1008,7 +1008,8 @@ template is removed" below.
 ## 2026-11-02 the Railway template is removed
 
 The operator chose on 2026-11-02 to remove the Railway service template
-rather than fix it. Its image could not start: `entrypoint.sh` rendered
+rather than fix it. In its `managed` profile, the one that renders the
+template, its image could not start: `entrypoint.sh` rendered
 `homeserver.yaml.template` with plain `envsubst`, which leaves every
 `${VAR:-default}` as text, so the listener port rendered as `${PORT:-8008}`
 and Synapse refused the config; and the image exported the lock without
@@ -1024,8 +1025,10 @@ Nixpacks path below). Record:
 "2026-11-02: the Railway template is removed". Outside this directory,
 where an upstream sync does not reach, the branch also changes that record
 and adds dated notes to `docs/audits/2026-08-10-encryption-audit.md` and
-`docs/operations/evidence/2026-05-10-secrets-manager-inventory.md`; the
-record's section names both.
+`docs/operations/evidence/2026-05-10-secrets-manager-inventory.md` (where
+`lint-staged`'s Prettier also re-padded every list marker and table row:
+the file was not Prettier-clean on `develop`, and only the note changes its
+content); the record's section names both.
 
 - Removed:
   - `railway.toml`: the Railway service (Dockerfile builder,
@@ -1038,7 +1041,8 @@ record's section names both.
     written to build `services/blackout-server/Dockerfile` into
     `ghcr.io/<owner>/blackout-server`. GitHub registers workflows only from
     the repository root's `.github/workflows/`, and the repository's list
-    (33 workflows, read on 2026-11-02) has none under `apps/`, so it never
+    (read on 2026-11-02, before and after a new workflow was registered
+    that day) has none under `apps/`, so it never
     ran in this repository. Nor could this version have run anywhere: it
     does not parse as YAML (`ScannerError` at line 23, where a heredoc's body
     starts at column 1 inside a `run: |` block), and it was byte-identical
@@ -1143,7 +1147,10 @@ record's section names both.
   a Dockerfile if it finds one". By those pages, a service rooted here with
   no `railway.toml` builds this directory's `Dockerfile` unless its settings
   name another (`RAILWAY_DOCKERFILE_PATH`), as it already did before the
-  removal if it never read `railway.toml`. That `Dockerfile` is the
+  removal if it never read `railway.toml`. The pages do not say where the
+  default config-file lookup happens; if it is the repository root, such a
+  service may read the root `railway.json` (the client's) instead. Not
+  checked. That `Dockerfile` is the
   `@blackout/api` Node image, written for the repository root as its
   context: its first `COPY` names `pnpm-lock.yaml`, `pnpm-workspace.yaml`
   and `turbo.json`, and none of them is in this directory. `nixpacks.toml`

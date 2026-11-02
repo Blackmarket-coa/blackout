@@ -235,9 +235,11 @@ and the Railway template's JWT login is off, with `PATCHES.md`), `ae70358`
 with one sentence of `PATCHES.md` corrected (below). After the operator's
 decision of 2026-11-02: `42f68f2` (the template's removal, with its
 `PATCHES.md` entry), `b39883a` (dated notes in the fork's documents),
-`91ea92a` (this record's notes), `bacd26c` (notes in four more of the
+`91ea92a` (this record's notes, the section name that `PATCHES.md`'s entry
+cites, and the secrets-manager inventory's note, with `lint-staged`'s Prettier
+re-padding of that file), `bacd26c` (notes in four more of the
 fork's documents, and corrections to the `PATCHES.md` entry), `c83dc9b`
-(corrections to this record's notes), `d1936c9` (the Nixpacks files, which
+(corrections to this record's notes, and the encryption audit's note), `d1936c9` (the Nixpacks files, which
 are not the template, restored), `d1f1589` (two notes corrected, and dated
 notes in the RC1 release-train changelog and checklist), `4d60ec0` (this
 record's 2026-11-02 section brought up to date), then a commit that corrects
@@ -2028,8 +2030,9 @@ fix it ([Found outside scope](#found-outside-scope-not-fixed-here), item 5).
     `services/blackout-api/` stays.
 -   `.github/workflows/blackout-image-lifecycle.yml`, whose one job was
     written to build that `Dockerfile`. GitHub reads workflows only from the
-    repository root's `.github/workflows/`, and the repository's 33
-    registered workflows (read on 2026-11-02) are all there, so it never ran
+    repository root's `.github/workflows/`, and every workflow the
+    repository registers (read on 2026-11-02, before and after a new one was
+    registered that day) is there, so it never ran
     in this repository. Nor could this version have run anywhere: it does not
     parse as YAML (`ScannerError` at line 23, where a heredoc's body starts at
     column 1 inside a `run: |` block), and it was byte-identical from the
@@ -2086,10 +2089,15 @@ release gate reads as JSON, stays as written as the RC1 record.
 the three that set `encryption_enabled_by_default_for_room_type: invite`; it
 has a dated note, and two templates carry that setting now. The 2026-05-10
 secrets-manager inventory walked the template's `.env.example`; that line has
-a dated note (`91ea92a`). `THREAT_MODEL.md` and `TRUST.md` never described the
+a dated note (`91ea92a`), and Prettier re-padded the rest of that file when
+the note was staged (it was not Prettier-clean on `develop`; no other content
+changed). `THREAT_MODEL.md` and `TRUST.md` never described the
 template. `KNOWN_LIMITATIONS.md` says the encryption backstop is in "both
-in-repo homeserver templates"; the Railway one was a third, so that is exact
-now.
+in-repo homeserver templates". The audit checked four rendered templates;
+with the Railway one gone three remain, and two of them carry the setting.
+The third, `apps/blackout-server/docker/conf/`'s `homeserver.yaml` (the
+`blackout-synapse` image's), does not, so "both" is exact only for the two
+that set it, as it was before.
 
 Not this template, and left in place: the restored Nixpacks files above, the
 client's `railway.json` and `README.md`'s "Deploy to Railway", the "Deploy to
@@ -2107,7 +2115,9 @@ directory; and that it "will always build with a Dockerfile if it finds
 one". By those pages, a service rooted there with no `railway.toml` builds
 `apps/blackout-server/Dockerfile` unless its settings name another
 (`RAILWAY_DOCKERFILE_PATH`), as it already did before the removal if it
-never read `railway.toml`. That `Dockerfile` is the `@blackout/api` Node
+never read `railway.toml`. The pages do not say where the default
+config-file lookup happens; if it is the repository root, such a service may
+read the root `railway.json` (the client's) instead. Not checked. That `Dockerfile` is the `@blackout/api` Node
 image, written for the repository root as its context: its first `COPY`
 names `pnpm-lock.yaml`, `pnpm-workspace.yaml` and `turbo.json`, and none of
 them is in `apps/blackout-server`. `nixpacks.toml` is read only by a
