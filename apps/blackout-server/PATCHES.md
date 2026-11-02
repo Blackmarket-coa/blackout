@@ -478,6 +478,9 @@ of these converge with upstream rather than diverge from it.
   clears its advisories but reformats 207 fork files. Twisted 26.4.0 still has
   three High advisories that only the 26.10.0rc1 pre-release fixes, in
   `twisted.words` and `twisted.conch.telnet`, which Synapse never loads.
+  Superseded on 2026-11-02: Twisted 26.10.0 (final) is locked and fixes those
+  three and the HTTP/2 one (GHSA-vpp8-g58w-m8mp) that the 2026-10-30 record
+  added; see the 2026-11-02 entry below.
 - `tox.ini` (`py311`), `mypy.ini` (`python_version = 3.11`),
   `synapse/__init__.py` (refuses to start below 3.11), `[tool.black]` and
   `[tool.cibuildwheel]` targets, `docker/Dockerfile` (build-arg example),
@@ -1016,10 +1019,12 @@ requires `zope-interface>=8`).
   `setuptools = "*"` dependency of the 6.0 entry goes, since 8.0.1 removed
   it; setuptools 84.2.1 stays in the lock for setuptools-rust, zope-event and
   zope-schema). 151 packages before and after; the image's `--extras all`
-  export differs by those two lines. The fork uses `zope.interface`'s
+  export differs by the `twisted`, `twisted[tls]` and `zope-interface` lines
+  (two packages, three lines). The fork uses `zope.interface`'s
   `implementer`, `provider` and `Interface` only.
-- No fork source file changed for the bump itself. 26.10.0's removals and
-  behaviour changes were read against the fork: `tcp.Connection` now ignores
+- No fork code changed for the bump itself; one fork comment did (the next
+  bullet). 26.10.0's removals and behaviour changes were read against the
+  fork: `tcp.Connection` now ignores
   a non-None return from `dataReceived` (`synapse/http/connectproxyclient.py`
   returns the wrapped protocol's own return, which is None, as upstream's
   file does); `LoggingFile.fileno()` raises `io.UnsupportedOperation` instead
@@ -1032,9 +1037,16 @@ requires `zope-interface>=8`).
   `PotentialZombieWarning`, `_makeGetterFactory`, `ThreadedResolver`,
   `dns.Message` class attributes and `IProcessProtocol` without
   `processExited` are not used.
-- `synapse/util/manhole.py` (`_ephemeral_rsa_key`), found by the second
-  review of this change and fixed in commit `20362e4`, separate from the lock
-  and ignore commits (it also carries the record's second-round corrections):
+- `synapse/handlers/send_email.py`: the comment over the `ESMTPSenderFactory`
+  call said "the minimum Twisted is 26.4.0", fork text from the 2026-10-25
+  relock (upstream's file has no such comment), untrue once the floor is
+  26.10.0. It now says the fork's Twisted floor (`pyproject.toml`) is far
+  above 21.2, without naming a version, so a later bump cannot make it stale.
+  Comment only.
+- `synapse/util/manhole.py` (`_ephemeral_rsa_key`), found by the review of
+  this change's first round and fixed in commit `20362e4`, separate from the
+  lock and ignore commits (it also carries the record's second-round
+  corrections):
   `Key(keyObject)` in
   place of `Key.fromCryptographyKey(...)`, a method
   `twisted.conch.ssh.keys.Key` has never had (26.4.0 and 26.10.0 both offer
