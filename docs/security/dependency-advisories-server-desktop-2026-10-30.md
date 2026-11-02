@@ -240,8 +240,10 @@ type, with its `PATCHES.md` entry), `823530e` (the MSC3861 signer's return
 type, with the authlib `PATCHES.md` entry), then `05dfc10` (the record).
 After the sixth review: `48ab32d` (`jwt_config.enabled` must be a boolean,
 and the Railway template's JWT login is off, with `PATCHES.md`), `ae70358`
-(the operator notes in `docs/upgrade.md`), then this version of the record,
-with one sentence of `PATCHES.md` corrected (below). After the operator's
+(the operator notes in `docs/upgrade.md`), then `00cc3a5` (the record),
+with one sentence of `PATCHES.md` corrected (below). After the seventh
+review: `8d25a4e` (its fixes, with `PATCHES.md`, `docs/upgrade.md` and the
+record). After the operator's
 decision of 2026-11-02: `42f68f2` (the template's removal, with its
 `PATCHES.md` entry), `b39883a` (dated notes in the fork's documents),
 `91ea92a` (this record's notes, the section name that `PATCHES.md`'s entry
@@ -255,19 +257,23 @@ record's 2026-11-02 section brought up to date), then a commit that corrects
 that section's and `PATCHES.md`'s list of commit-message errors and their
 account of a Railway service at `apps/blackout-server`
 ([the 2026-11-02 section](#2026-11-02-the-railway-template-is-removed)).
-Also on 2026-11-02, for the desktop build check (#996):
+Also on 2026-11-02, for the desktop build check (#996, merged at `9eab8c9`):
 `6bea1c9` (the two `tauri.conf.json` fixes), `659f6ed` (the desktop build
 check, with `KNOWN_LIMITATIONS.md`), then `ddd4a41` (the record). After a
 review of those three: `b5f4398` (the check's comments and
 `KNOWN_LIMITATIONS.md` corrected), then `a29c3bf` (the record). After a
 second review: `1296b78` (the check's comments), then `f0b6469` (the
 record). After the check's first run: `9eab8c9` (the tool bag's entries
-module renamed). After a third review and the second run: `9298f9d`
-(the check's comments and path filter, with `KNOWN_LIMITATIONS.md`), then
-`fae2abe` (the record). After a fourth review: `04f8f22` (the path
-filter's comment, with `KNOWN_LIMITATIONS.md`), then this version of the
-record. The versions since `ddd4a41` also correct
-what this branch's commit messages got wrong
+module renamed), the last commit in #996. The commits after it, on the
+same branch, are not in #996: they had not been pushed when it merged.
+After the check's third review and second run: `9298f9d` (the check's
+comments and path filter, with `KNOWN_LIMITATIONS.md`), then `fae2abe`
+(the record). After its fourth review: `04f8f22` (the path filter's
+comment, with `KNOWN_LIMITATIONS.md`), then `d5085f6` (the record). After
+its fifth review: `e51a44d` (`develop` merged in at `0367abd`, which
+brought #997 to this branch), `ea7e92f` (the check's comments), then this
+version of the record. The versions since `ddd4a41` also correct what
+this branch's commit messages got wrong
 ([Before merge or release](#before-merge-or-release), last bullet).
 
 ## What the review changed
@@ -1482,8 +1488,10 @@ libayatana-appindicator3-dev librsvg2-dev`):
     not require it, and `pnpm-lock.yaml` belongs to the `-v47` branch's
     change. Moving it with the build above is reasonable.
 -   **2026-11-02: the three-platform build runs on pull requests, and on
-    `9eab8c9` it passed on all three runners (`659f6ed`, its comments
-    corrected in `b5f4398`, `1296b78` and `9298f9d`).**
+    `9eab8c9` it passed on all three runners (`659f6ed`, on `develop`
+    since #996 merged at `9eab8c9`; its comments corrected in `b5f4398`
+    and `1296b78`, which #996 has, and in `9298f9d`, `04f8f22` and
+    `ea7e92f`, which it does not).**
     `.github/workflows/blackout-desktop-build-check.yml`
     builds the release job's bundles on its three runners with its setup,
     unsigned (`--no-sign`) and with `createUpdaterArtifacts` off in the
@@ -1496,18 +1504,25 @@ libayatana-appindicator3-dev librsvg2-dev`):
     even without the override: the bundler makes an updater archive only
     for `app` (tauri-bundler 2.8.1, `bundle.rs` 195-213), and
     `sign_updaters` returns at `--no-sign` (tauri-cli `bundle.rs`
-    255-258). The macOS leg would make an `.app.tar.gz`, so only its check
-    shows the override took effect (read from the code, not run without
-    it). `tauri build` runs `cargo build` without `--locked`, in the
+    255-258). The macOS leg would make an `.app.tar.gz`. Without the
+    override every leg would also log "Updater signing is skipped due to
+    --no-sign flag.", which tauri-cli prints when the updater settings
+    exist and it made a bundle it treats as updatable (`bundle.rs`
+    231-258; a review's run without the override, on Linux with a stand-in
+    cargo, logged it). No leg of run 41461856327 logged it, though each
+    logged other warnings, so the override took effect on all three; the
+    macOS check also found no `.app.tar.gz`. `tauri build` runs
+    `cargo build` without `--locked`, in the
     release as here, so a `Cargo.lock` that no longer
     matched `Cargo.toml` would be re-resolved in the release and its build
     would go on; the check fails that leg instead, so only the committed
     lock passes. It runs on pull requests to `develop` that touch the
     desktop app, the lockfile, the root manifests, any other workspace
     member's `package.json`, the client's build configuration or its
-    desktop bridge (`src/platform`), and on `workflow_dispatch`, which,
-    once the workflow is on `develop`, builds the head of any branch or tag
-    that has it. The members' manifests were added after the build check's
+    desktop bridge (`src/platform`), and on `workflow_dispatch`, which
+    builds the head of any branch or tag that has the workflow, `develop`
+    among them since #996 merged. The members' manifests were added after
+    the build check's
     third review (`9298f9d`):
     the install step runs every member's install scripts on all three
     runners, and adding one does not change `pnpm-lock.yaml`; only the root
@@ -1567,7 +1582,8 @@ libayatana-appindicator3-dev librsvg2-dev`):
 
     The slowest leg took 13 min 16 s, so the 60-minute cap stays. The
     macOS leg builds aarch64 only, as the dmg's name says; the release job
-    uses the same runner, so neither builds an x86_64 macOS bundle. The
+    uses the same runner, so neither builds an x86_64 macOS bundle (on
+    2026-11-02 the operator chose not to add one yet). The
     ubuntu-22.04 leg made the AppImage with the release job's apt packages
     alone, so that runner has xdg-utils. The Windows leg compiled zip
     9.1.3, which only the Windows target builds, through the updater. None
@@ -1637,7 +1653,8 @@ libayatana-appindicator3-dev librsvg2-dev`):
     the only barrier between a dispatch from `develop` and a public release that
     becomes latest and serves `latest.json` (item 6 of
     [Found outside scope](#found-outside-scope-not-fixed-here)). Item 6's
-    proposal, tags only and `releaseDraft: true`, needs to land before or with
+    change, tags only and `releaseDraft: true`, which the operator approved
+    on 2026-11-02 and which is not built yet, needs to land before or with
     any pubkey fix. Read from tauri-cli 2.10.1 (`bundle.rs` 199-292,
     `interface/rust.rs` 1536-1539), tauri-bundler 2.8.1 (`macos/app.rs`
     107-145, `macos/sign.rs` 19-43 and 96-110, `macos/dmg/mod.rs` 194-200)
@@ -1716,15 +1733,16 @@ libayatana-appindicator3-dev librsvg2-dev`):
     `[MISSING_EXPORT] "default" is not exported by "src/app/features/coalition/toolbag/ToolBag.ts"`,
     and the windows-latest and macos-latest legs of run 41461043012 failed
     in the build step's `beforeBuildCommand`. Both files came in with
-    `be4d8cd` (2026-08-05) and are on `develop` at `f6da7b7`, this
-    branch's base. Every CI build of the client before this check ran on
+    `be4d8cd` (2026-08-05) and were on `develop` at `f6da7b7`, where this
+    branch started. Every CI build of the client before this check ran on
     Linux, whose filesystem is case-sensitive, so none could show it. Three
     other workflows build the client on macOS, for iOS, through
     `blackout-mobile`'s `sync:ios` (`pnpm build:web`, then `cap sync ios`):
     `release.yml`'s `build-mobile-ios` on `v*` tags, `blackout-mobile.yml`'s
     `ios` on `mobile-release-*` tags and dispatch, and
-    `mobile-native-ci.yml`'s `ios-internal` on pushes to `main` and
-    dispatch. Each would have stopped at the same import, at the latest, but
+    `mobile-native-ci.yml`'s `ios-internal` on pushes to `main` that touch
+    `mobile/`, `blackout-mobile/` or that workflow, and on dispatch. Each
+    would have stopped at the same import, at the latest, but
     none of those jobs has run: on 2026-11-02 the API lists no run of
     `release.yml` or `blackout-mobile.yml`, and 41 of `mobile-native-ci.yml`,
     all for pull requests, on which `ios-internal` is skipped. That, and
@@ -1737,6 +1755,16 @@ libayatana-appindicator3-dev librsvg2-dev`):
     the client build in `build-mobile-ios` (`cap sync ios`, an unsigned
     `xcodebuild`) and the workflow's other jobs have never run, so how far
     a tag would now get is not known (read from the workflows, not run).
+    Nor does the client build stop the other two iOS jobs any more. In
+    `blackout-mobile.yml`'s `ios` (which a dispatch from any branch also
+    runs) and in `ios-internal`, `pnpm sync:ios` is followed by
+    `fastlane beta`, whose lane (`blackout-mobile/ios/fastlane/Fastfile`)
+    runs `increment_build_number`, `build_app` and `upload_to_testflight`
+    with the `APP_STORE_CONNECT_*` and `MATCH_PASSWORD` secrets;
+    `ios-internal` first exits if `APP_STORE_CONNECT_API_KEY_CONTENT` is
+    empty. Neither job has run, so how far either would get, for example
+    whether `build_app` can sign, is not known (read from the workflows and
+    the Fastfile, not run).
 
     The fault also broke `vite build` on a Windows or macOS developer
     machine whose filesystem is case-insensitive, the default on both
@@ -1756,25 +1784,33 @@ libayatana-appindicator3-dev librsvg2-dev`):
     41461856327 then built the client on all three runners. Over
     `git ls-files`, no other two files in one directory have names that
     differ only by case, compared whole or without the last extension, and
-    no two directories do (re-run at `9eab8c9` and again for this version
-    of the record: 6,600 files, none; the same script at `f0b6469` finds
-    only the tool-bag pair). A whole-name comparison alone, such as
-    `git ls-files | sort -f | uniq -di`, finds nothing even at `f0b6469`:
-    the two names differ in extension too, and collide only because an
-    import without one is tried as `ToolBag.ts` first. No guard against a
-    recurrence was added: nothing in CI looks for such names, and a pull
-    request that changes the client outside the check's path filter is
-    built on Linux only. A check over `git ls-files` in `ci.yml`, which
-    runs on every pull request, comparing names without the extension, is
-    a follow-up the operator may want.
+    no two directories do (re-run at `9eab8c9`, 6,600 files, and for this
+    version of the record, 6,594 files once `develop`'s removals came in:
+    none; the same script at `f0b6469` finds only the tool-bag pair). A
+    whole-name comparison alone, such as `git ls-files | sort -f | uniq -di`,
+    finds nothing even at `f0b6469`: the two names differ in extension
+    too, and collide only because an import without one is tried as
+    `ToolBag.ts` first. No guard against a recurrence was added here. The
+    repository has one for whole paths: `pnpm guard:duplicate-paths`
+    (`tools/ci/check-duplicate-paths.mjs`) compares every tracked path
+    case-insensitively, but no workflow, `ci:parity`, `smoke:aligned` or
+    the pre-commit hook runs it, and for the same reason it would not have
+    caught this pair (no two of the 6,600 paths at `f0b6469` collide that
+    way). So nothing in CI looks for such names, and a pull request that
+    changes the client outside the check's path filter is built on Linux
+    only. On 2026-11-02 the operator asked for a CI guard against such
+    names; it is not built here. Extending that script to compare names
+    without the last extension, and running it in `ci.yml` on every pull
+    request, is that follow-up.
 
 -   **2026-11-02: what this branch's commit messages got wrong.** History
     is not rewritten here, so the corrections are recorded instead.
     -   `ddd4a41` says restricting the release job to `release-*` and `v*`
         tags with `releaseDraft: true` "is written down as the operator's
-        decision". It is a proposal for the operator to decide (item 6 of
-        [Found outside scope](#found-outside-scope-not-fixed-here)), and the
-        operator has not decided it. It also says the release job "would
+        decision". It was then a proposal for the operator to decide (item 6
+        of [Found outside scope](#found-outside-scope-not-fixed-here)); the
+        operator approved it later on 2026-11-02, and it is not built yet.
+        It also says the release job "would
         publish" a public, non-draft release that becomes latest and serves
         `latest.json`, with no condition: it is configured to once its build
         passes, and today the build fails first. And it says the check "runs
@@ -1810,10 +1846,11 @@ libayatana-appindicator3-dev librsvg2-dev`):
         build fails first. It calls the check "the only CI build of the
         client on macOS and Windows": it is the only pull-request build of
         the client on macOS (`release.yml`, `blackout-mobile.yml` and
-        `mobile-native-ci.yml` build it there for iOS, on tags, dispatch and
-        pushes to `main`) and the only CI build of it on Windows. It says
-        `workflow_dispatch` "builds any other commit": once the workflow is
-        on `develop`, it builds the head of a branch or tag that has it. It
+        `mobile-native-ci.yml` build it there for iOS, on tags, on dispatch
+        and on pushes to `main` that touch the mobile directories) and the
+        only CI build of it on Windows. It says `workflow_dispatch` "builds
+        any other commit": it builds the head of a branch or tag that has
+        the workflow, which `develop` has since #996 merged. It
         says the `--config` merge turns updater artifacts off "for the app
         and the bundler alike": it changes the CLI's bundler settings, and
         the compiled app embeds `createUpdaterArtifacts` at its default
@@ -1858,7 +1895,12 @@ libayatana-appindicator3-dev librsvg2-dev`):
         and Windows" leaves out Linux, where that path has run only as far
         as the version-mismatch check, with a probe hook. Its "broke
         `vite build` on Windows and default macOS developer machines" is
-        inferred in the same way.
+        inferred in the same way. It says only the macOS leg's check shows
+        the `--config` override took effect: every leg's log shows it, by
+        lacking the updater-signing line (the build-check bullet above).
+    -   `d5085f6` says `mobile-native-ci.yml`'s `ios-internal` runs on
+        pushes to `main`: only on those that touch `mobile/`,
+        `blackout-mobile/` or that workflow.
 
 ## The gate
 
@@ -2473,8 +2515,9 @@ The record's own commit changes no file Trivy reads.
         pubkey alone would let a dispatch from `develop` publish a release
         that becomes latest and serves `latest.json`.
 
-    **Proposed, for the operator to decide; not done here, and not decided as of
-    2026-11-02:** run the release job only on `release-*` and `v*` tags (drop
+    **Decided by the operator on 2026-11-02, after this item was written;
+    not done here, and left to a follow-up:** run the release job only on
+    `release-*` and `v*` tags (drop
     the `push` to `main` and the `workflow_dispatch` paths), and set
     `releaseDraft: true`, so that a person publishes each release and
     `latest.json` reaches installed desktops only then. Change these before
