@@ -1,4 +1,3 @@
-/* eslint-disable import/first */
 import './polyfills';
 import { installConsoleCapture } from './app/lib/diagnostics/consoleCapture';
 

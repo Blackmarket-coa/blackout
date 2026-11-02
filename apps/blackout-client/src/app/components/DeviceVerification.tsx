@@ -139,7 +139,6 @@ function CompareEmoji({ sasData }: { sasData: ShowSasCallbacks }) {
             >
                 {sasData.sas.emoji?.map(([emoji, name], index) => (
                     <Box
-                        // eslint-disable-next-line react/no-array-index-key
                         key={`${emoji}${name}${index}`}
                         direction="Column"
                         gap="100"

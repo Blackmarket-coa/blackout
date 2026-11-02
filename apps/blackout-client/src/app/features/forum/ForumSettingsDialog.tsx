@@ -215,7 +215,6 @@ export const ForumSettingsDialog = ({
                     <div style={{ ...labelStyle, marginBottom: 8 }}>Tags</div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                         {settings.tags.map((tag, index) => (
-                            // eslint-disable-next-line react/no-array-index-key
                             <div
                                 key={index}
                                 style={{ display: 'flex', alignItems: 'center', gap: 6 }}

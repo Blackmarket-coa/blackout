@@ -577,7 +577,6 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                                         .reverse()
                                         .map((fileItem, index) => (
                                             <UploadCardRenderer
-                                                // eslint-disable-next-line react/no-array-index-key
                                                 key={index}
                                                 isEncrypted={!!fileItem.encInfo}
                                                 fileItem={fileItem}

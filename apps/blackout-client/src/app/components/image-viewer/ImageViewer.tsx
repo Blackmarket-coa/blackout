@@ -1,4 +1,3 @@
-/* eslint-disable jsx-a11y/no-noninteractive-element-interactions */
 import React from 'react';
 import FileSaver from 'file-saver';
 import classNames from 'classnames';
