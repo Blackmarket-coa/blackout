@@ -15,18 +15,26 @@ queue, and on every PR that touches a path the workflow watches (`apps/**`,
 a docs-only PR starts no run). They are removed here, with the lock that makes
 them unnecessary. The same change corrects the reason the two image-size
 ignores give, which has been false since 2026-09-14. The operator approved the one PR on
-2026-11-02. The review of this change's first round found that the fork's
-manhole could not start on either Twisted version, a fork bug from 2026-09-13
-that the bump neither caused nor changed; it is fixed here as a one-line
-change with tests, in commit `20362e4` (which also carries this record's
-second-round corrections: the pre-commit prettier step's `git add -u` staged
-the record with the fix, and the rules forbid amending). If the approved scope
-is to stay exact, the operator can still split it out: return
-`synapse/util/manhole.py` to `develop`'s, delete
-`tests/blackout_runtime/test_manhole.py`, and drop PATCHES.md's manhole bullet
-and this record's manhole section; a `git revert` of `20362e4` would also take
-back that commit's record corrections
-([The manhole](#the-manhole-could-not-start)).
+2026-11-02. The review of this change's first round found that a
+`type: manhole` listener without a configured key pair stopped the homeserver
+from starting, on either Twisted version, a fork bug from 2026-09-13 that the
+bump neither caused nor changed; a configured key pair worked. It is fixed
+here as a one-line change with tests, in commit `20362e4` (which also carries
+this record's second-round corrections: the pre-commit prettier step's
+`git add -u` staged the record with the fix, and the rules forbid amending).
+If the approved scope is to stay exact, the operator can still split it out:
+return `synapse/util/manhole.py` to `develop`'s, delete
+`tests/blackout_runtime/test_manhole.py`, drop PATCHES.md's manhole bullet and
+the probe clauses of its `SSHSession` sentence, and remove or reword every
+sentence of this record that relies on the fix, not only its manhole section.
+`grep -n -i manhole` on this file lists them: this paragraph, the Result
+bullets, the Method's Tests, Boot and fourth-round bullets, the
+`SSHSession` and key-exchange rows, the targeted, full-suite, Boot, Lint and
+mypy bullets of Validation, "Not verified", the three correction lists and
+the Commit messages note (the GHSA-cwm5 row and the Import bullet name the
+manhole's Twisted modules and stay true either way). A `git revert` of
+`20362e4` would also take back that commit's record corrections
+([The manhole](#the-manhole-without-a-configured-key-pair-could-not-start)).
 
 | Package (lock)         | Advisory                              | Severity | Fixed in               | Outcome                                   |
 | ---------------------- | ------------------------------------- | -------- | ---------------------- | ----------------------------------------- |
@@ -48,14 +56,18 @@ back that commit's record corrections
     the whole reason zope-interface moves; upstream Synapse runs on
     zope-interface 8.2 already. The wheel and sdist hashes in the lock match
     PyPI's. None of the APIs 26.10.0 removed or changed is used by the fork in
-    a way that behaves differently (read against the release notes, run
-    through the suite, and booted). Two fork source files change. One is
-    for a bug that predates the bump: `synapse/util/manhole.py` called a
-    `Key` method Twisted has never had, so a homeserver with a manhole
-    listener and no configured key died at startup under 26.4.0 and 26.10.0
-    alike ([The manhole](#the-manhole-could-not-start)). The other is a
-    comment in `synapse/handlers/send_email.py` that named 26.4.0 as the
-    minimum Twisted; it no longer names a version.
+    a way that behaves differently for a well-behaved peer (read against the
+    release notes, run through the suite, and booted); three hardenings
+    change what a misbehaving peer gets, and the manhole's SSH server now
+    offers a post-quantum key exchange first
+    ([What changed](#what-changed-in-the-modules-the-fork-imports)). Two fork
+    source files change. One is for a bug that predates the bump:
+    `synapse/util/manhole.py` called a `Key` method Twisted has never had, so
+    a homeserver with a manhole listener and no configured key died at
+    startup under 26.4.0 and 26.10.0 alike
+    ([The manhole](#the-manhole-without-a-configured-key-pair-could-not-start)).
+    The other is a comment in `synapse/handlers/send_email.py` that named
+    26.4.0 as the minimum Twisted; it no longer names a version.
 -   **The four Twisted entries leave `.trivyignore`, with their CVE aliases.**
     `.trivyignore` now holds pnpm-lock.yaml entries only; its header,
     `security.yml`'s comment and the `pyproject.toml` comment say so.
@@ -65,17 +77,27 @@ back that commit's record corrections
     cannot take 2.x (it passes a file path, which 2.x's `imageSize()`
     refuses), and the fix path is a metro update within its allowed range,
     which removes image-size altogether. That update is a React Native
-    toolchain refresh of its own and was not approved for this PR; the
-    deadline stays 2026-11-30, and `.trivyignore`'s four image-size lines now
-    carry `exp:2026-11-30` too, where before only the OSV gates enforced the
-    date.
--   **No operator-visible change from the bump.** The suite, compared test
-    by test before and after, has the same outcomes, and a generated-config
-    homeserver boots and answers under both versions. Three hardenings in
-    26.10.0 are visible only to a peer that misbehaves ([Behaviour changes](#what-changed-in-the-modules-the-fork-imports));
-    no `upgrade.md` section was added. The manhole fix is visible in one
-    way: a `type: manhole` listener without `ssh_priv_key_path` now starts
-    instead of killing the homeserver.
+    toolchain refresh of its own and was not approved for this PR, and this
+    change does not schedule it; the deadline stays 2026-11-30
+    ([Before merge or release](#before-merge-or-release)), and
+    `.trivyignore`'s four image-size lines now carry `exp:2026-11-30` too,
+    where before only the OSV gates enforced the date.
+-   **What an operator can see of the bump is the manhole's key exchange
+    and three edge cases.** The suite, compared test by test before and
+    after, has the same outcomes, and a homeserver boots and answers under
+    both versions: on a generated sqlite config, and on Postgres 16 with
+    Redis replication, a metrics listener and the production template's
+    HTTP resources other than `consent` ([Validation](#validation)). The
+    manhole's SSH server
+    offers `mlkem768x25519-sha256` first, which OpenSSH clients use by
+    default since 10.0, and three hardenings are visible only to a peer that
+    misbehaves ([Behaviour changes](#what-changed-in-the-modules-the-fork-imports)).
+    None needs a setting, so no `upgrade.md` section was added. Not booted:
+    the default `bind_addresses` (`['::', '0.0.0.0']`), which production
+    uses, since this sandbox has no IPv6 ([Not verified](#not-verified)).
+    The manhole fix is visible in one way: a `type: manhole` listener
+    without `ssh_priv_key_path` now starts instead of killing the
+    homeserver.
 
 ---
 
@@ -99,8 +121,11 @@ back that commit's record corrections
     that manifest was a newer build, created 07:26 UTC. For the third round
     the cached database was deleted and downloaded again at 11:28 UTC (from
     `mirror.gcr.io/aquasec/trivy-db:2`, Trivy 0.69.3's default):
-    `UpdatedAt` 2026-11-02 07:17 UTC, `NextUpdate` 2026-11-03 07:17 UTC, the
-    one on disk now (its metadata and the `--debug` download log are kept).
+    `UpdatedAt` 2026-11-02 07:17 UTC, `NextUpdate` 2026-11-03 07:17 UTC (its
+    metadata and the `--debug` download log are kept). For the fourth round
+    it was deleted and downloaded again at 12:52 UTC from the same mirror,
+    which still served that build (`UpdatedAt` 07:17 UTC), so the third and
+    fourth rounds' rows share one database, the one on disk now.
     Run with `security.yml`'s flags (`fs`, `--scanners vuln`,
     `--severity CRITICAL,HIGH`, `--ignore-unfixed`,
     `--ignorefile .trivyignore`, `--exit-code 1`) over `git archive` exports
@@ -154,7 +179,10 @@ back that commit's record corrections
     from the after venv. The third round, whose only fork change is a
     comment, ran the targeted modules, the full suite and
     `blackout_runtime_tests` once more from the after venv on `d5fa741`, and
-    one boot with the manhole probe.
+    one boot with the manhole probe. The fourth round, which changes no fork
+    file, ran the targeted modules, the full suite and
+    `blackout_runtime_tests` again from the after venv on `89c1606`, under
+    the same load rule.
 -   **Boot:** `synapse.app.homeserver --generate-config` into a scratch
     directory (sqlite, `localhost`, the 8008 listener on loopback), then the
     homeserver started from each venv, polled on `/health` and
@@ -168,6 +196,29 @@ back that commit's record corrections
     the log lands beside the config, and it adds a loopback `type: manhole`
     listener and a twisted.conch client that authenticates, opens a shell,
     evaluates `1+1` and then sends a second shell request on the same channel.
+-   **The fourth round** changes no fork code and no lock file, only
+    comments (`.trivyignore`, `osv-scanner.toml`, `security.yml`),
+    PATCHES.md and this record. Its checks ran from this branch's tree, first
+    on `PYTHONPATH`, with the scratch directory as working directory, each
+    under both venvs: a manhole boot probed with asyncssh 2.24.1, an SSH
+    implementation independent of Twisted (wheel from PyPI, sha256
+    `fc560b4f…` matching PyPI's JSON, loaded from an unpacked copy, not
+    installed into either venv), offering only `mlkem768x25519-sha256` and
+    then only `curve25519-sha256`; a boot shaped like the production
+    template where this host allows it: psycopg2 with `cp_min` 5 and
+    `cp_max` 15 on a throwaway Postgres 16.15 cluster (psycopg2-binary 2.9.9,
+    the lock's psycopg2 version, whose cp311 manylinux wheel's sha256
+    `977646e0…` matches PyPI's, unpacked the same way), Redis replication on
+    a throwaway redis-server 7.0.15, the template's `x_forwarded` HTTP
+    listener with `client`, `federation`, `media` and `keys` (its `consent`
+    resource needs a `user_consent` section, which a generated config
+    lacks), a metrics listener and `enable_metrics`, all on 127.0.0.1; a
+    second bind on a port already listening; and mypy on the two manhole
+    files, evenly and as the second round ran it. Postgres ran in a user
+    namespace that maps
+    root to the `postgres` uid, since Postgres refuses to run as root and
+    that user cannot enter the scratch directory. OpenSSH's 9.9 and 10.0
+    release notes were read on openssh.com.
 -   **npm:** the registry's JSON for `image-size` (dist-tags, versions,
     publish times); metro 0.83.5's `src/Assets.js` and `package.json` from
     the worktree's `node_modules`; image-size 2.0.4's and metro 0.83.8's
@@ -226,17 +277,18 @@ one by GHSA (the other three by CVE), as the 2026-10-30 record found.
 Every removal, deprecation and behaviour change in 26.10.0's `NEWS.rst`, read
 against `synapse/`, `blackout_runtime/`, `tests/` and `blackout_runtime_tests/`:
 
-| Change (ticket)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | The fork                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `tcp.Connection` no longer honours a non-None return from a protocol's `dataReceived` (deprecated since 11.0) (#12688)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | Four `dataReceived` definitions in `synapse/` (`http/client.py` twice, `http/proxy.py`, `http/connectproxyclient.py`); only `HTTPConnectProxyClient` returns a value: the wrapped protocol's own return, which is None for the HTTP client protocols it wraps. Upstream's file has the same `return` statements. 26.4.0 warned on a non-None value; nothing returns one. `tests.http.test_proxyagent` covers the class.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| `LoggingFile.fileno()` raises `io.UnsupportedOperation` instead of returning -1 (#9638)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | `synapse/app/_base.py`'s `redirect_stdio_to_logs()` installs `LoggingFile` on `sys.stdout` and `sys.stderr`; `homeserver.py` and `generic_worker.py` call it unless `no_redirect_stdio` is set. Nothing in `synapse/`, `blackout_runtime/` or `tests/` calls `fileno()` on them (the one `fileno()` call, in `replication/tcp/protocol.py`, is on a socket handle). The boot check runs this path.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| `conch.ssh.session.SSHSession` allows one shell, exec or subsystem request per channel (#12800)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | The manhole (`synapse/util/manhole.py`, `manhole_ssh.TerminalRealm`) uses it once it starts, which until this change it could not ([The manhole](#the-manhole-could-not-start)). Probed on a running homeserver from this branch: under 26.10.0 a second shell request on the same channel is refused and logged (`multiple session-client requests sent to the same session`); under 26.4.0 it is accepted. Ordinary SSH clients send one.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| `HTTPChannel.headerReceived` rejects a header value with a bare CR or LF (#12754, GHSA-q7qq)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | `synapse/http/site.py` subclasses `Request` and `Site` and overrides neither `headerReceived` nor `lineReceived`. A client sending such a value now gets 400 and the connection closed where the value was parsed before. Hardening, not configuration.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| `DNSDatagramProtocol.query` discards a response from a host other than the one queried (#12696, GHSA-jj36)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | Synapse's SRV lookups. A resolver that answers from a different address than it was queried on now fails those lookups. Hardening, not configuration.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| `AsyncioSelectorReactor.callLater` / `callFromThread` signatures aligned with the interfaces (#12767)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | The asyncio reactor is installed under `SYNAPSE_ASYNC_IO_REACTOR` (`synapse/__init__.py`) and, for the Complement launcher, `SYNAPSE_COMPLEMENT_FORKING_LAUNCHER_ASYNC_IO_REACTOR` (`synapse/app/complement_fork_starter.py`); `synapse/metrics/_reactor_metrics.py` only `isinstance`-checks it. No keyword arguments are passed to `callLater` or `callFromThread`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| `Port.startListening()` closes the socket on `CannotListenError` (#6108); port-range errors on address literals errback (#7798)                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | `_base.py` catches `CannotListenError`; benign.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| HTTP/2 rapid-reset limit (#12705); `Request.write` chunked writes faster (#12729); websocket complete messages (#12885)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | HTTP/2 cannot be negotiated (above); websocket not used.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| Not used: `PotentialZombieWarning` removed (#12744); `IProcessProtocol` must provide `processExited` (#12824); `ssl.protocolNegotiationMechanisms` deprecated (#12868); `web.client._makeGetterFactory` removed (#12721); `names.dns.Message` class attributes removed (#12667); `names.client.ThreadedResolver` removed (#12843); `trial.runner.samefile` deprecated (#12671); `MemoryReactor.removeAll()` returns the list (#12743); `FTPClient` PASV (#12847); telnet buffer bound (#12706); imap4 and words limits (#12763, #12787, #12707, #12770); `SO_REUSEPORT` (#9101); mlkem768x25519 kex (#12520) | No process protocols or `spawnProcess`. From `twisted.internet.ssl`, `synapse/` imports `CertificateOptions`, `ContextFactory`, `TLSVersion` and `platformTrust` (`crypto/context_factory.py`), `optionsForClientTLS` (`handlers/send_email.py`) and, as `ssl.ContextFactory` and `ssl.ClientContextFactory`, the base classes in `http/client.py` and `replication/tcp/context.py`; `config/tls.py` takes `Certificate` and `trustRootFromCertificates` from the private `twisted.internet._sslverify`, and `crypto/context_factory.py` takes `_defaultCurveName` from it (still defined in 26.10.0, `_sslverify.py` line 1819; the private name is the import most likely to break on a future bump). The tests import `Certificate`, `trustRootFromCertificates`, `ContextFactory`, `ClientTLSOptions` and `OpenSSLCertificateOptions`. Neither `protocolNegotiationMechanisms` nor `ProtocolNegotiationSupport` appears anywhere in the fork. The tests use `MemoryReactorClock` without `removeAll()`; the rest are in modules the fork never imports. |
+| Change (ticket)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | The fork                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `tcp.Connection` no longer honours a non-None return from a protocol's `dataReceived` (deprecated since 11.0) (#12688)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | Four `dataReceived` definitions in `synapse/` (`http/client.py` twice, `http/proxy.py`, `http/connectproxyclient.py`); only `HTTPConnectProxyClient` returns a value: the wrapped protocol's own return, which is None for the HTTP client protocols it wraps. Upstream's file has the same `return` statements. 26.4.0 warned on a non-None value; nothing returns one. `tests.http.test_proxyagent` covers the class.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| `LoggingFile.fileno()` raises `io.UnsupportedOperation` instead of returning -1 (#9638)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | `synapse/app/_base.py`'s `redirect_stdio_to_logs()` installs `LoggingFile` on `sys.stdout` and `sys.stderr`; `homeserver.py` and `generic_worker.py` call it unless `no_redirect_stdio` is set. Nothing in `synapse/`, `blackout_runtime/` or `tests/` calls `fileno()` on them (the one `fileno()` call, in `replication/tcp/protocol.py`, is on a socket handle). The boot check runs this path.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `conch.ssh.session.SSHSession` allows one shell, exec or subsystem request per channel (#12800)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | The manhole (`synapse/util/manhole.py`, `manhole_ssh.TerminalRealm`) uses it once it starts, which without a configured key pair it could not until this change ([The manhole](#the-manhole-without-a-configured-key-pair-could-not-start)). Probed on a running homeserver from this branch: under 26.10.0 a second shell request on the same channel is refused and logged (`multiple session-client requests sent to the same session`); under 26.4.0 it is accepted. Ordinary SSH clients send one.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| `SSHServerTransport` supports the hybrid post-quantum key exchange `mlkem768x25519-sha256` (#12520)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | The manhole's transport is an `SSHServerTransport` (`manhole_ssh.ConchFactory`). Under 26.10.0 its `supportedKeyExchanges` starts `mlkem768x25519-sha256`, `curve25519-sha256`; under 26.4.0 it starts `curve25519-sha256`; `SSHClientTransport`'s list does not contain the new algorithm under either. OpenSSH offers it since 9.9 and uses it by default since 10.0 (its release notes), so an OpenSSH 10 client negotiates it with the manhole now. The five tests in `test_manhole.py` and the second and third rounds' probes connect with twisted.conch's client and negotiate `curve25519-sha256`, so they never ran the new server path. Checked with an independent client, asyncssh 2.24.1 (wheel sha256 matching PyPI's) offering only `mlkem768x25519-sha256`, against a homeserver from this branch's tree: under 26.10.0 it opened a manhole shell and `6*7` printed `42`; under 26.4.0 the handshake failed (`KeyExchangeFailed`: no matching key exchange algorithm). Visible only in the algorithm a client reports; no setting.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `HTTPChannel.headerReceived` rejects a header value with a bare CR or LF (#12754, GHSA-q7qq)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | `synapse/http/site.py` subclasses `Request` and `Site` and overrides neither `headerReceived` nor `lineReceived`. A client sending such a value now gets 400 and the connection closed where the value was parsed before. Hardening, not configuration.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| `DNSDatagramProtocol.query` discards a response from a host other than the one queried (#12696, GHSA-jj36)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | Synapse's SRV lookups. A resolver that answers from a different address than it was queried on now fails those lookups. Hardening, not configuration.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `AsyncioSelectorReactor.callLater` / `callFromThread` signatures aligned with the interfaces (#12767)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | The asyncio reactor is installed under `SYNAPSE_ASYNC_IO_REACTOR` (`synapse/__init__.py`) and, for the Complement launcher, `SYNAPSE_COMPLEMENT_FORKING_LAUNCHER_ASYNC_IO_REACTOR` (`synapse/app/complement_fork_starter.py`); `synapse/metrics/_reactor_metrics.py` only `isinstance`-checks it. No keyword arguments are passed to `callLater` or `callFromThread`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `Port.startListening()` closes the socket on `CannotListenError` (#6108); port-range errors on address literals errback (#7798)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | `_base.py` catches `CannotListenError`, and `check_bind_error` lets the `0.0.0.0` failure after `::` pass; benign. The fourth round's probe: 20 failed binds on a listening port leave no descriptor behind under 26.10.0, one under 26.4.0, and the first listener keeps accepting under both.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| HTTP/2 rapid-reset limit (#12705); `Request.write` chunked writes faster (#12729); websocket complete messages (#12885)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | HTTP/2 cannot be negotiated (above); websocket not used.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| Not used: `PotentialZombieWarning` removed (#12744); `IProcessProtocol` must provide `processExited` (#12824); `ssl.protocolNegotiationMechanisms` deprecated (#12868); `web.client._makeGetterFactory` removed (#12721); `names.dns.Message` class attributes removed (#12667); `names.client.ThreadedResolver` removed (#12843); `trial.runner.samefile` deprecated (#12671); `MemoryReactor.removeAll()` returns the list (#12743); `FTPClient` PASV (#12847); telnet buffer bound (#12706); imap4 and words limits (#12763, #12787, #12707, #12770); `SO_REUSEPORT` and `SO_REUSEADDR` settable from user code (#9101) | No process protocols or `spawnProcess`. From `twisted.internet.ssl`, `synapse/` imports `CertificateOptions`, `ContextFactory`, `TLSVersion` and `platformTrust` (`crypto/context_factory.py`), `optionsForClientTLS` (`handlers/send_email.py`) and, as `ssl.ContextFactory` and `ssl.ClientContextFactory`, the base classes in `http/client.py` and `replication/tcp/context.py`; `config/tls.py` takes `Certificate` and `trustRootFromCertificates` from the private `twisted.internet._sslverify`, and `crypto/context_factory.py` takes `_defaultCurveName` from it (still defined in 26.10.0, `_sslverify.py` line 1819; the private name is the import most likely to break on a future bump). The tests import `Certificate`, `trustRootFromCertificates`, `ContextFactory`, `ClientTLSOptions` and `OpenSSLCertificateOptions`. Neither `protocolNegotiationMechanisms` nor `ProtocolNegotiationSupport` appears anywhere in the fork. The tests use `MemoryReactorClock` without `removeAll()`. None of the APIs in the left cell is used in `synapse/`, `blackout_runtime/`, `tests/` or `blackout_runtime_tests/` (grep; the one `telnet` hit is the `--manhole` help string in `synapse/config/server.py`, which calls the SSH manhole a telnet service; upstream `develop`'s says only "twisted manhole"). `dns.Message`'s class attributes, `ThreadedResolver`, `_makeGetterFactory` and the socket options live in modules the fork does import (`twisted.names.dns`, `twisted.names.client`, `twisted.web.client`, `twisted.internet.tcp`) and are not used there; `FTPClient`, telnet, IMAP4 and `twisted.words` are in modules it never imports. |
 
 Checked by import, under each version, from each tree: after importing
 `synapse.app.homeserver` and `synapse.util.manhole`, `sys.modules` holds 173
@@ -270,23 +322,57 @@ is False.
         `setuptools = "*"`, goes with it (8.0.1 removed the run-time
         dependency); setuptools 84.2.1 stays in the lock for setuptools-rust,
         zope-event and zope-schema.
--   `poetry export --extras all` of the old and the new lock, the image's
-    install set, differ by three lines, `twisted`, `twisted[tls]` and
-    `zope-interface` (two packages); with `--with dev` the same.
+-   `poetry export --extras all --without-hashes` of the old and the new
+    lock differ in three requirement entries, `twisted`, `twisted[tls]` and
+    `zope-interface` (two packages); with `--with dev` the same. The image
+    exports with hashes (`docker/Dockerfile` adds `--without-hashes` only
+    under `TEST_ONLY_SKIP_DEP_HASH_VERIFICATION`), and that export (1,434
+    lines from `develop`'s lock, 1,454 from this one) differs in 94 lines:
+    the same three entries on each side plus their `--hash` lines (2 for
+    each twisted entry, 30 for zope-interface 6.0 and 50 for 8.7).
 -   `poetry lock --check`, `check_lockfile.py` and
     `check_locked_deps_have_sdists.py` (151 packages) pass.
 
 ### zope.interface 6.0 → 8.7
 
-Two majors. From the project's changelog (PyPI's description of 8.7): 7.0
-dropped Python 3.7 and moved the C extension to heap types and multi-phase
-module initialisation; 8.0 dropped 3.8 and replaced the `pkg_resources`
-namespace with a PEP 420 one; 8.0.1 removed the run-time setuptools
-dependency; 8.1 dropped 3.9; 8.7 (`requires_python >=3.11`) drops 3.10,
-releases Python 3.15 wheels, removes the C optimisations' code path for static
-types (used only below 3.11), and fixes free-threaded data races in the C
-lookup caches and reference leaks in the C optimisations when the lazy import
-of `zope.interface.declarations` fails partway through. The fork imports
+Two majors. Every entry of the project's changelog (PyPI's description of
+8.7) from 6.1 to 8.7, by kind, apart from those about its own tests, CI and
+documentation build:
+
+-   **Python versions and packaging.** Support for Python 3.12 to 3.15
+    arrives step by step (6.1: 3.12; 6.2 to 7.1.0, with 6.4's adjustment
+    for 3.13b1: 3.13; 7.2 and 8.1: 3.14; 8.6: 3.15); 7.0 drops 3.7, 8.0
+    drops 3.8, 8.1 drops 3.9 and 8.7 (`requires_python >=3.11`) drops 3.10.
+    8.0 replaces the `pkg_resources` namespace with a PEP 420 one; 8.0.1
+    removes the run-time setuptools dependency; 8.2 moves the metadata into
+    `pyproject.toml`; 6.1, 6.4 to 6.4.post2, 8.1.1, 8.4, 8.5 and 8.7 add or
+    fix wheel builds and uploads (Linux for 3.12, Windows, ARM64,
+    free-threaded, 3.15), and 8.0 allows a newer setuptools for the build.
+-   **The C extension's behaviour.** 7.0 moves it to heap types (on 3.11 and
+    later) and multi-phase module initialisation, and 7.0.1 to 7.0.3 fix
+    what that broke (subclassing `ObjectSpecificationDescriptor`, a
+    reference count in module initialisation, an assertion below 3.12); 7.1
+    and 7.1.1 fix segmentation faults on 3.12 and 3.13. 8.3 and 8.5 add
+    free-threading support (`Py_mod_gil_not_used`, strong references in the
+    cache lookups, `PyType_GetDict()` on 3.13 and later). 8.3 also guards four
+    `PyErr_Clear()` calls, so `KeyboardInterrupt`, `MemoryError` and
+    `SystemExit` raised inside `implementedBy` and `providedBy` now
+    propagate instead of being swallowed. 8.5 replaces `PyDict_GetItem()`,
+    so `isOrExtends()` raises `TypeError` for an unhashable object instead
+    of returning `False`. 8.7 removes the code path for static types (used
+    only below 3.11), fixes free-threaded data races in the lookup caches
+    (with a critical section on Python 3.13 and later, GIL builds included;
+    the fork runs 3.11) and fixes
+    reference leaks when the lazy import of `zope.interface.declarations`
+    fails partway through.
+-   **The Python API.** 6.2 accepts `|` for `typing.Union`; 7.2 drops
+    `IByteString` from the `common` interfaces on Python 3.14 and later
+    (the fork is on 3.11); 8.2 ignores 3.14's `__annotate_func__`.
+
+The 8.3 and 8.5 changes are on the `providedBy`/`implementer` paths that
+Twisted calls for the fork; both turn a silently wrong answer into an
+exception, and no test changes outcome under 8.7
+([Validation](#validation)). The fork imports
 `implementer` (19 modules, tests included), `provider` (one,
 `synapse/http/client.py`) and `Interface` (two), and nothing else from the
 package; `zope.schema` 7.0.1 (`>=5.0.0`) and `mypy-zope` 1.0.1
@@ -297,7 +383,7 @@ reports no new error under 8.7 and 26.10.0: two errors fewer and one with a
 changed message, all from Twisted's own types (the third round's mypy bullet
 in [Validation](#validation)).
 
-## The manhole could not start
+## The manhole without a configured key pair could not start
 
 Found by the review of this change's first round, which added a
 `type: manhole` listener to the boot check. Not caused by the bump and not changed by it: the
@@ -378,9 +464,11 @@ and where the `(TCP Port 9777 Closed)` line falls.
 correction. This fix is a third thing, kept to one line plus tests, in a
 commit separate from the lock and the ignore changes (`20362e4`; it also
 carries this record's corrections, see Scope) so it can be dropped from the PR
-if the approved scope is to stay exact; leaving it out would leave a known startup crash in a documented
-security feature with its fix in hand, and would leave this record's and
-PATCHES.md's statements about the manhole describing code that cannot run.
+if the approved scope is to stay exact; leaving it out would leave a known
+startup crash (a manhole listener without a configured key pair) in a
+documented security feature with its fix in hand, and would leave this
+record's and PATCHES.md's statements about the generated host key describing
+a code path that cannot run.
 
 ## image-size: the ignores' reason corrected
 
@@ -391,7 +479,15 @@ PATCHES.md's statements about the manhole describing code that cannot run.
 tracked file imports image-size, no `metro.config.*` exists, and no script or
 workflow runs metro or the React Native CLI (the `build` script of
 `packages/ui` and of `legacy/blackout-web` is `tsc --build`; the latter's
-`build:web`, `dev` and `preview` run vite).
+`build:web`, `dev` and `preview` run vite). If something did run metro, it
+would parse only image files on disk at bundle time: files in this
+repository, of which `packages/ui` and `legacy/blackout-web` track none (no
+image extension among their tracked files, no `require()` or `import` of
+one), and files of installed packages, such as the five LogBox PNGs that
+react-native 0.82.1 ships under `Libraries/LogBox/UI/LogBoxImages/`. None of
+that is remote or user-supplied input. From #878 (2026-08-10) until this
+change's fourth round, both ignore files said the images metro would parse
+were this repository's committed assets; corrected after the third review.
 
 What the two ignore files said: "No fixed version exists (all versions <=2.0.2
 affected)", and the `.trivyignore` comment added "including the whole 2.x
@@ -429,11 +525,14 @@ Why the fix is not taken here:
     newer browserslist, caniuse-lite and lodash added). That
     is a toolchain refresh with its own verification (the client build
     compared byte for byte, `pnpm --filter @blackout/ui lint`, metro's
-    asset functions run on a committed image), not a reason correction, and
-    the operator approved only the correction on 2026-11-02. It is the
-    follow-up, due before the entries lapse.
+    asset functions run on an image file), not a reason correction, and the
+    operator approved only the correction on 2026-11-02. It is the
+    follow-up, due before the entries lapse; this change does not schedule
+    it.
 
-What changed: the `osv-scanner.toml` block and both `reason` strings, the
+What changed: the `osv-scanner.toml` block and both `reason` strings (which
+say "due before ignoreUntil" since the third review; the "planned" of this
+change's first round overstated, since nothing schedules the update), the
 `.trivyignore` comment, and `exp:2026-11-30` on `.trivyignore`'s four
 image-size lines (the GHSA and CVE ids), so that the Trivy gate lapses with
 the OSV gates instead of ignoring them indefinitely. `pnpm.auditConfig.ignoreGhsas`
@@ -449,15 +548,16 @@ desktop `Cargo.lock`, `pnpm-lock.yaml` and
 `services/perturbation/requirements.txt`. The first seven rows are the first
 round's, with the database read at the time as 2026-11-01 19:08 UTC; the next
 four are the second round's, with the database of 2026-11-02 01:14 UTC; the
-last four are the third round's, with the database of 2026-11-02 07:17 UTC
-that is on disk ([Method](#method)).
+next four are the third round's and the last four the fourth round's, both
+with the database of 2026-11-02 07:17 UTC that is on disk
+([Method](#method)).
 
 | Run                                                                                      | High/Critical reported                                                                                                                                                                       | Exit |
 | ---------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
 | `develop` (`f6da7b7`), `git archive`                                                     | none                                                                                                                                                                                         | 0    |
 | `develop`, `--show-suppressed`                                                           | none; suppressed: Twisted 26.4.0 under CVE-2026-115775, CVE-2026-115776, CVE-2026-115778 and GHSA-vpp8-g58w-m8mp, and image-size 1.2.1 under CVE-2025-71329 and CVE-2025-71330 (fixed 2.0.3) | 0    |
-| `develop`, every `exp:` set to 2026-11-02 (the run's own date, at 02:07 UTC)             | the four Twisted ids and the two image-size ids                                                                                                                                              | 1    |
-| `develop`, every `exp:` set to 2026-11-03                                                | none                                                                                                                                                                                         | 0    |
+| `develop`, its entries given `exp:2026-11-02` (the run's own date, at 02:07 UTC)         | the four Twisted ids and the two image-size ids                                                                                                                                              | 1    |
+| `develop`, its entries given `exp:2026-11-03`                                            | none                                                                                                                                                                                         | 0    |
 | this branch's worktree at `6b6d96e` (`node_modules` and `.git` skipped)                  | none                                                                                                                                                                                         | 0    |
 | this branch, `git archive` of `03a426e`                                                  | none                                                                                                                                                                                         | 0    |
 | same, `--show-suppressed`                                                                | none; suppressed: image-size 1.2.1 under CVE-2025-71329 and CVE-2025-71330 (fixed 2.0.3), and nothing else                                                                                   | 0    |
@@ -469,18 +569,28 @@ that is on disk ([Method](#method)).
 | same, `--show-suppressed` (third round)                                                  | none; suppressed: the four Twisted ids and the two image-size ids                                                                                                                            | 0    |
 | this branch, `git archive` of `d5fa741` (third round)                                    | none                                                                                                                                                                                         | 0    |
 | same, `--show-suppressed` (third round)                                                  | none; suppressed: image-size 1.2.1 under CVE-2025-71329 and CVE-2025-71330 (fixed 2.0.3), and nothing else                                                                                   | 0    |
+| `develop` (`f6da7b7`), `git archive`, fourth round (same database)                       | none                                                                                                                                                                                         | 0    |
+| same, `--show-suppressed` (fourth round)                                                 | none; suppressed: the four Twisted ids and the two image-size ids                                                                                                                            | 0    |
+| this branch, `git archive` of `433fc29` (fourth round)                                   | none                                                                                                                                                                                         | 0    |
+| same, `--show-suppressed` (fourth round)                                                 | none; suppressed: image-size 1.2.1 under CVE-2025-71329 and CVE-2025-71330 (fixed 2.0.3), and nothing else                                                                                   | 0    |
 
 So the gate is green on both sides, and on this branch it is green without any
 Twisted entry: Twisted 26.10.0 matches no advisory in any of the three
-databases. The two `exp:` rows show what the date means to Trivy: an entry
+databases. On `develop` only the seven Twisted lines carry `exp:`. The two
+probe rows ran on a copy of its `.trivyignore` whose entries were given that
+date, the image-size ones included, as the image-size ids in the first row
+show (the edited copy was not kept, and the dead brace-expansion entries
+would show nothing either way). The two `exp:` rows show what the date means
+to Trivy: an entry
 dated today was already lapsed at 02:07 UTC, one dated tomorrow still applied, so `exp:2026-11-30`
 stops applying at the start of 2026-11-30 (this host runs on UTC). The
 `develop` run with `--show-suppressed` also shows that Trivy matches image-size
 by CVE, which is why both ignore lists carry the CVE lines.
 
 The record's commits change no file Trivy reads; neither do the manhole
-commit and `d5fa741`, and the second- and third-round rows above are the runs
-on them.
+commit, `d5fa741` and `89c1606` (PATCHES.md). The second- and third-round
+rows above are the runs on them, and the fourth round's are on `433fc29`,
+whose `.trivyignore` change is to comments only.
 
 ## Validation
 
@@ -488,11 +598,14 @@ on them.
     and `scripts-dev/check_locked_deps_have_sdists.py` (151 packages) pass;
     `poetry lock --check` passes again after the comment over `Twisted` was
     rewritten (the `content-hash` does not cover comments), and again in the
-    second and third rounds, which changed no lock file. Every file hash in
+    second, third and fourth rounds, which changed no lock file. Every file
+    hash in
     the two new lock entries matches PyPI's JSON (2 of 2 for twisted, 50 of 50 for
-    zope-interface). `poetry export --extras all`, with and without the dev
-    group, differs from `develop`'s by the `twisted`, `twisted[tls]` and
-    `zope-interface` lines only.
+    zope-interface). `poetry export --extras all --without-hashes`, with and
+    without the dev group, differs from `develop`'s in the `twisted`,
+    `twisted[tls]` and `zope-interface` entries only; the hashed export the
+    image uses differs in those entries and their `--hash` lines, 94 lines
+    ([The lock](#the-lock)).
 -   **The after venv:** `pip install --no-deps --require-hashes` of
     `twisted==26.10.0` and `zope.interface==8.7` with the lock's hashes into
     a copy of the baseline venv; pip would have refused a download with
@@ -516,7 +629,9 @@ on them.
     run of the same modules from the after venv, with the five new manhole
     tests: 765 tests, 673 passing, the same 92 ids with the same outcomes,
     in 26 s; the third round's, on `d5fa741`: the same 765, 673 and 92 ids
-    with the same outcomes, in 42 s. All 40 failures and
+    with the same outcomes, in 42 s; the fourth round's, on `89c1606`: the
+    same again, in 58 s (`build-r4/targeted-compare-vs-r3.txt`). All 40
+    failures and
     errors are in `tests.http`: 18 failures and 1 error in the federation
     agent's module, 13 and 6 in the federation client's, 2 failures in the
     proxy agent's. Those are this sandbox's proxy variables, which the
@@ -532,6 +647,7 @@ on them.
     | after (26.10.0)                                                        | 3,379 | 3,063 | 173     | 110     | 34    | 188 s      |
     | after, second round (26.10.0, with the manhole fix and its five tests) | 3,384 | 3,068 | 173     | 110     | 34    | 192 s      |
     | after, third round (26.10.0, `d5fa741`)                                | 3,384 | 3,068 | 173     | 110     | 34    | 205 s      |
+    | after, fourth round (26.10.0, `89c1606`)                               | 3,384 | 3,068 | 173     | 110     | 34    | 220 s      |
 
     Compared by test id (the ids trial lists under `[FAIL]`, `[ERROR]` and
     `[SKIPPED]`): 110, 34 and 173 on each side, the same ids with the same
@@ -550,7 +666,10 @@ on them.
     `git archive` of the head before the fix. The third round's run, on
     `d5fa741`, has the same 316 non-passing ids with the same outcomes as the
     first round's before run and as the second round's run
-    (`build-r3/full-compare-vs-r1-before.txt`, `full-compare-vs-r2.txt`). Of
+    (`build-r3/full-compare-vs-r1-before.txt`, `full-compare-vs-r2.txt`). The
+    fourth round's, on `89c1606`, has them again, compared with the first
+    round's before run and with the third round's
+    (`build-r4/full-compare-vs-r1-before.txt`, `full-compare-vs-r3.txt`). Of
     the 144 failures
     and errors, 40 are the `tests.http` proxy-variable ones above (39 ids,
     with `test_client_sends_body` counted under both); the other
@@ -564,7 +683,8 @@ on them.
 
 -   **`blackout_runtime_tests`:** 85 passed under each venv (`pytest -q`,
     pytest 8.3.5 added with `--no-deps` as before), and 85 again from the
-    after venv in the second round and in the third. `tests/blackout_runtime`
+    after venv in the second, third and fourth rounds.
+    `tests/blackout_runtime`
     is in the trial suite above.
 -   **Boot, before and after:** `--generate-config` wrote a sqlite config
     with the 8008 listener on `['::1', '127.0.0.1']`, `tls: false`, `client`
@@ -589,39 +709,75 @@ family not supported by protocol`, the same traceback apart from Twisted's
     runs from the scratch directory, with the `::1` address removed before
     the first start, with the same result (a 160-line `homeserver.log` each,
     that one differing line) and added the manhole runs
-    ([The manhole](#the-manhole-could-not-start)). The third round ran the
+    ([The manhole](#the-manhole-without-a-configured-key-pair-could-not-start)). The third round ran the
     manhole boot once more from the after venv on `d5fa741`: `/health`
     answered `OK` within 8 s, `/_matrix/client/versions` with 17 entries,
     the shell opened and printed `2` for `1+1`, the second shell request was
     refused with the same `ERROR` line, the 184-line `homeserver.log` has no
     other `ERROR` but the probe's disconnect and no `Traceback` or
-    `CRITICAL`, and the homeserver exited 0 on SIGTERM.
+    `CRITICAL`, and the homeserver exited 0 on SIGTERM. The fourth round
+    booted twice more under each venv. With a manhole listener and no key
+    pair (sqlite): asyncssh offering only `mlkem768x25519-sha256` opened a
+    shell and `6*7` printed `42` under 26.10.0, and failed under 26.4.0 with
+    `KeyExchangeFailed No matching key exchange algorithm found, sent
+    mlkem768x25519-sha256 and received curve25519-sha256,…`; offering only
+    `curve25519-sha256` it got the shell under both. The only `ERROR` lines
+    are `Got remote error, code 11`, asyncssh's own disconnect
+    (`SSH_DISCONNECT_BY_APPLICATION`), one per completed session. Shaped
+    like production (Postgres, Redis, metrics, the template's resources):
+    under each version `/health` answered `OK` within 2 s,
+    `/_matrix/client/versions` listed 17 versions, `/register` without
+    credentials answered 403, the metrics listener served 947 and 952 lines
+    of `synapse_` samples (26.4.0, then 26.10.0), Redis listed the two
+    replication channels (`localhost`, `localhost/USER_IP`) and the log has
+    `Successfully subscribed to redis stream, sending REPLICATE command` and
+    `REPLICATE successfully sent`, Postgres held 154 tables at schema
+    version 84 with 9 and 8 connections from the homeserver, neither
+    `homeserver.log` nor the Postgres server log has an `ERROR`, `FATAL`,
+    `CRITICAL` or `Traceback` line, and each homeserver exited 0 on
+    SIGTERM. A second `listenTCP` on a port already listening on 0.0.0.0
+    raised `CannotListenError` (`[Errno 98] Address already in use`) under
+    both versions and the first listener kept accepting; over 20 such
+    failures the process's open descriptors went from 9 to 10 under 26.4.0
+    and stayed at 9 under 26.10.0 (#6108). The third review had run a Redis
+    boot and the same bind probe first, with the same results.
 -   **Lint:** the first round changed no Python file, so ruff, black, isort
     and mypy did not run then. The second round's two Python files
     (`synapse/util/manhole.py`, `tests/blackout_runtime/test_manhole.py`)
     pass the locked ruff 0.1.7, black 23.10.1 (after it rewrapped three
     lines of the test) and isort 5.13.1. mypy 1.5.1 with the fork's
-    `mypy.ini` and its plugins on the two files reports one error, in
-    `stubs/txredisapi.pyi` (the one the 2026-10-30 record's first mypy run
-    also saw), and none in the two; mypy first reported 17 typing errors in
+    `mypy.ini` and its plugins reports no error in either file. Run where no
+    venv's path names the tree (a `git archive` copy of this branch), the
+    two files' import graph reports 55 errors in 27 files under Twisted
+    26.4.0 and zope.interface 6.0 and 53 in 26 under 26.10.0 and 8.7, three
+    lines apart (next bullet), none in either manhole file. The second
+    round's "one error, in `stubs/txredisapi.pyi`" came from runs that could
+    report nothing else (next bullet). mypy first reported 17 typing errors in
     the test (conch's `dict[bytes, bytes]` annotation on the key dicts,
     `Optional` channel and transport attributes, override signatures), fixed
     with casts and asserts rather than ignores. The third round's
     `synapse/handlers/send_email.py` (a comment) passes ruff, black and
     isort, and mypy reports no error in it (next bullet).
--   **mypy, before and after, compared evenly only in the third round.** The
+-   **mypy, before and after, compared evenly from the third round on.** The
     second round ran mypy on the two manhole files from both venvs in the
     worktree, got the same single `stubs/txredisapi.pyi` error, and
     concluded that mypy-zope behaved the same under zope.interface 8.7 on
-    that import graph. The comparison was uneven. mypy puts every directory
-    on the venv interpreter's `sys.path` on its package path and silences
-    errors in modules it imports from there (`is_silent_import_module`), and
-    the after venv's editable install puts the worktree's fork directory on
-    that path; so from the after venv only the files named on the command
-    line and `stubs/` could report, while the baseline venv, whose editable
-    install points at another copy, reported everything. The third round
-    showed the effect on `send_email.py` in the worktree: 1 error from the
-    after venv, 52 in 26 files from the baseline venv. Run instead in a
+    that import graph. Neither run could have shown a difference. mypy puts
+    every directory on the interpreter's `sys.path` on its package path and
+    silences errors in modules it finds there (`is_silent_import_module`),
+    so when the tree is on that path only the files named on the command
+    line and `stubs/` can report. The after venv's editable install puts the
+    worktree there; the baseline venv's points at a `git archive` of
+    `develop`, but the second round's runs had the worktree's fork directory
+    on `PYTHONPATH` as well (as its trial runs did; its mypy command line was
+    not kept). The fourth round reproduced the second round's output byte
+    for byte from the baseline venv in the worktree with that `PYTHONPATH`
+    ("Found 1 error in 1 file"), and got "Found 55 errors in 27 files" with
+    it unset, the same as in a `git archive` copy. So both second-round runs
+    were silenced, not one of them, as the third round wrote. The third
+    round's own check of `send_email.py` in the worktree, without
+    `PYTHONPATH`, was the uneven one: 1 error from the after venv, 52 in 26
+    files from the baseline venv. Run instead in a
     `git archive` copy of `d5fa741`, which neither venv's `sys.path` names,
     the fork's whole `mypy.ini` file list (925 source files) reports 311
     errors in 69 files from the baseline venv and 309 in 68 from the after
@@ -637,25 +793,31 @@ family not supported by protocol`, the same traceback apart from Twisted's
     `synapse/util/manhole.py`, `tests/blackout_runtime/test_manhole.py` or
     `synapse/handlers/send_email.py`. `send_email.py`'s own import graph in
     the copy: 52 errors in 26 files before, 50 in 25 after, the same three
-    lines apart.
+    lines apart. The fourth round's run of the two manhole files in a
+    `git archive` copy of this branch: 55 errors in 27 files before, 53 in
+    26 after, the same three lines apart, none in either file.
 -   **OSV:** osv-scanner 2.3.3 on `pnpm-lock.yaml` with `TZ=UTC`,
     `TZ=Etc/GMT-3` and `TZ=Pacific/Kiritimati`: exit 0 each time, "Filtered 4
     vulnerabilities" (deepmerge, the two image-size entries with the new
-    reason printed, minimatch), no unused-ignore line; the second and third
-    rounds re-ran the three on their trees with the same output. On
+    reason printed, minimatch), no unused-ignore line; the second, third and
+    fourth rounds re-ran the three on their trees with the same output (the
+    fourth on a `git archive` of `433fc29`, printing the reasons as that
+    commit words them). On
     `apps/blackout-server/poetry.lock`, which no gate scans this way:
     `develop`'s lock shows the eight Twisted rows (the seven above and
     GHSA-8pqf, `--` for its fix) plus black 23.10.1, pygments 2.15.1 and
     sentry-sdk 1.35.0; this branch's lock shows no Twisted row and the same
-    black, pygments and sentry-sdk rows ([Found outside scope](#found-outside-scope-not-fixed-here)).
+    black, pygments and sentry-sdk rows, 6 in 3 packages
+    ([Found outside scope](#found-outside-scope-not-fixed-here)).
 -   **pnpm audit:** `pnpm audit --prod --audit-level high` and
     `pnpm run guard:audit-clean` exit 0, both reporting "1 low | 1 moderate
-    (1 ignored) | 2 high (2 ignored)", in all three rounds. Unchanged by this
+    (1 ignored) | 2 high (2 ignored)", in all four rounds. Unchanged by this
     PR.
 -   **gitleaks 8.21.2** over `origin/develop..HEAD`: after the first two
     commits, 2 commits scanned, no leaks; after the fourth (`20362e4`), 4
     commits scanned, no leaks; after the sixth (`d5fa741`), 6 commits
-    scanned, no leaks.
+    scanned, no leaks; after the ninth (`89c1606`), 9 commits scanned, no
+    leaks.
 -   **prettier 2.8.1**, the root's version, `--check` on every changed
     Markdown and YAML file: clean. `.trivyignore` and `osv-scanner.toml` are
     skipped by `--ignore-unknown`; `pyproject.toml` and `poetry.lock` are
@@ -687,19 +849,21 @@ tools/ci/check-auth-secrets.mjs`.
     `pip install` of this lock's export happens on the first `deploy.sh` run
     (or hand build) after this merges to `develop`, and a `deploy.sh` run
     also puts Twisted 26.10.0 into the running homeserver. The install set
-    differs from `develop`'s by the three export lines above (two packages),
+    differs from `develop`'s in the three export entries above (two packages),
     and neither package needs a system library the image lacks (twisted's
     wheel is pure Python; zope-interface 8.7 ships cp311 manylinux wheels
     for x86_64 and aarch64). Checking `pip show twisted zope.interface` in
     the built `blackout-synapse:stable` once (26.10.0 and 8.7) is enough.
 -   **The metro update, before 2026-11-30.** The image-size ignores lapse at
     the start of that day in all three places that enforce a date (the two
-    OSV gates through `ignoreUntil`, Trivy through `exp:`). The fix is a
-    within-range metro update that removes image-size from the lock
+    OSV gates through `ignoreUntil`, Trivy through `exp:`). No change for it
+    exists yet, and this one does not schedule it, so it needs queuing. The
+    fix is a within-range metro update that removes image-size from the lock
     ([image-size](#image-size-the-ignores-reason-corrected)); it needs its own
     change with the client build compared byte for byte against `develop`'s,
     `pnpm --filter @blackout/ui lint`, metro's `getAssetSize` and
-    `getAssetData` run on a committed PNG under 0.83.8, and then the removal
+    `getAssetData` run under 0.83.8 on a PNG (the two consumers track no
+    image; react-native's LogBox PNGs serve), and then the removal
     of the three image-size entries (`.trivyignore`, `osv-scanner.toml`,
     `pnpm.auditConfig.ignoreGhsas`). If it is not going to land in time,
     moving the date without it would repeat what this change had to correct;
@@ -707,7 +871,9 @@ tools/ci/check-auth-secrets.mjs`.
 
 ## Found outside scope (not fixed here)
 
-1.  **Two Low advisories in `poetry.lock` that no gate reports.** osv-scanner
+1.  **Advisories in `poetry.lock` that no gate reports: two Lows first
+    noted here, and black's four (dev) as the 2026-10-25 triage left
+    them.** osv-scanner
     on the fork's lock, which neither `security.yml` nor `ci.yml` runs (both
     scan `pnpm-lock.yaml`), lists sentry-sdk 1.35.0 under GHSA-g92j-qhmh-64v2
     (CVE-2024-40647, Low: environment variables passed to subprocesses; the
@@ -718,7 +884,14 @@ tools/ci/check-auth-secrets.mjs`.
     on this one. Trivy's CRITICAL/HIGH threshold passes both. sentry-sdk is in
     the image's `--extras all` install set (the `sentry` extra); pygments is
     dev-only. Both predate this change; neither was looked at further here.
-    black 23.10.1's four rows (dev) are as the 2026-10-25 record left them.
+    In all, osv-scanner prints 6 vulnerabilities in 3 packages for this
+    branch's lock ("1 Critical, 2 High, 1 Medium, 2 Low", by the CVSS it
+    shows). The other four are black 23.10.1's: PYSEC-2026-2120 (CVSS 9.8),
+    GHSA-cg8m-r9f2-5wm2 (8.7), PYSEC-2026-2121 (7.5) and PYSEC-2024-48
+    (5.3). black is a dev dependency, which Trivy's poetry analyzer skips
+    and the image does not install; `synapse-dependencies-triage-2026-10-25.md`
+    ("Black: dev-only, not bumped") triaged all four and left the formatter
+    for a reconciliation with upstream. Unchanged here.
 2.  **The baseline venv's console scripts point at a venv that no longer
     exists.** `venv-r5` under this session's scratch directory was made as a
     copy of `venv-after`, so its `bin/pip`, `bin/trial` and the rest carry
@@ -734,6 +907,14 @@ tools/ci/check-auth-secrets.mjs`.
     not checked, and the update's own change should look at it.
 4.  **`.trivyignore` still carries the dead brace-expansion entries** that the
     2026-10-30 record's item 7 describes. Unchanged here.
+5.  **The `--manhole` help string calls the manhole a telnet service.**
+    `synapse/config/server.py` says "Turn on the twisted telnet manhole
+    service on the given port"; the manhole is SSH
+    (`twisted.conch.manhole_ssh`), and upstream `develop`'s string says
+    "twisted manhole". It understates rather than overstates the transport's
+    protection, but it is still untrue. A fork file outside this change's
+    approved scope; found by the fourth round's grep and left for its own
+    change.
 
 ## Not verified
 
@@ -744,11 +925,32 @@ tools/ci/check-auth-secrets.mjs`.
     either Twisted version. `HTTPS_PROXY` was not unset to run them. A runner
     without those variables would run them; no root workflow runs trial, and
     the fork's own workflows do not run.
--   An IPv6 listener. The sandbox has no IPv6, so the generated config's `::1`
-    address was removed for the boot check; `Port.startListening()` now closes
-    the socket on `CannotListenError` (#6108), which the failed first attempt
-    exercised under both versions with the same result, but a listener that
-    binds `::1` successfully was not started.
+-   An IPv6 listener, and the default `bind_addresses`. The production
+    template (`infra/single-server-baseline/synapse/homeserver.yaml.template`)
+    gives its 8008 listener no `bind_addresses`, so it takes
+    `DEFAULT_BIND_ADDRESSES`, `['::', '0.0.0.0']` (`synapse/config/server.py`):
+    it listens on `::`, which takes IPv4 too, and then expects `0.0.0.0` to
+    fail, which `check_bind_error` in `synapse/app/__init__.py` lets pass.
+    This sandbox has no IPv6
+    (`[Errno 97] Address family not supported by protocol`), so every boot
+    here listened on 127.0.0.1 only, and no listener bound `::` or `::1`.
+    What was checked without IPv6: the failed
+    `::1` start of the first round raised the same `CannotListenError` under
+    both versions, and a failed second bind on 0.0.0.0 raises
+    `CannotListenError` without leaking its socket under 26.10.0 (Boot,
+    above). A `::` listener followed by the `0.0.0.0` failure that
+    `check_bind_error` lets pass was not run.
+-   The production images' own Postgres stack. The fourth round's boot used
+    psycopg2-binary 2.9.9 (a wheel with its own libpq), Ubuntu's Postgres
+    16.15 and redis-server 7.0.15 with an empty database; the image builds
+    psycopg2 2.9.9 from source, and production runs
+    `postgis/postgis:16-3.4-alpine` and `redis:7.2-alpine` with its data.
+    `twisted/enterprise/adbapi.py`, through which Synapse's database pool
+    runs, is byte-identical in the two Twisted versions; `threadpool.py`
+    differs in one comment.
+-   An OpenSSH client against the manhole. None is installed here; asyncssh
+    stood in for one, and OpenSSH's own release notes say 10.0 uses
+    `mlkem768x25519-sha256` by default.
 -   Of the three hardenings against a misbehaving peer, one: a DNS response
     from an address other than the one queried was read in the release notes
     and the fork's code, not sent to a running homeserver. The other two were
@@ -757,14 +959,15 @@ tools/ci/check-auth-secrets.mjs`.
     26.10.0, `200 OK` under 26.4.0 (its logs are under the session's scratch
     directory, `verify-r1-compat/boot-*-nomh.log`). The second round's probe
     sent a second shell request on one manhole channel: refused under
-    26.10.0, accepted under 26.4.0 ([The manhole](#the-manhole-could-not-start)).
+    26.10.0, accepted under 26.4.0 ([The manhole](#the-manhole-without-a-configured-key-pair-could-not-start)).
 -   Whether 26.10.0 fixes GHSA-8pqf-f4m5-798g. The `wildcardToRegexp` change
     was read in the two installed copies; neither OSV, GitHub nor `NEWS.rst`'s
     CVE list says so, and the IMAP4 server is not imported.
 -   Twisted's GitHub release notes for 26.10.0, 26.10.0rc1 and 26.10.0rc2
     (GitHub not reachable from this session); the sdist's `NEWS.rst` was the
     source, and it says the final release has no changes since rc2.
--   metro 0.83.8's own image parser on this repository's committed assets,
+-   metro 0.83.8's own image parser on any image file (the two consumers
+    track none; react-native's LogBox PNGs are what a bundle would read),
     and the client build after the metro update. Only the lockfile-only dry
     run was done; the update is the follow-up.
 -   Trivy's `exp:` cut-off on a host whose local time zone is not UTC. Both
@@ -776,9 +979,10 @@ The first round (commits `6b6d96e`, `03a426e`, `be7bbe2`) was reviewed under
 three lenses: compatibility, gates and advisory facts, and the truth of every
 sentence. Each finding and what changed:
 
-1.  **The manhole could not start on either Twisted version** (medium). Fixed
+1.  **A manhole listener without a configured key pair could not start, on
+    either Twisted version** (medium). Fixed
     in code with tests and a PATCHES.md entry
-    ([The manhole](#the-manhole-could-not-start)); the SSHSession table row
+    ([The manhole](#the-manhole-without-a-configured-key-pair-could-not-start)); the SSHSession table row
     and the "Not verified" item that described the manhole as running are
     reworded, and the live probe was done.
 2.  **The `twisted.internet.ssl` cell understated the surface** (low, under
@@ -840,8 +1044,12 @@ comment and PATCHES.md) and in this record:
     that sentence; the dated text is unchanged.
 3.  **The commit trailers carry a model name** (low, operator visibility). No
     change: the two trailer lines are the session's required attribution,
-    no commit may be amended, and no file in the change names a model. A
-    squash merge would replace the per-commit messages.
+    no commit may be amended, and no file in the change names a model.
+    (Until the third review this item also said "A squash merge would
+    replace the per-commit messages". This repository merges PRs with merge
+    commits: every commit on `develop`'s first-parent line since #901 of
+    2026-09-08, `f6da7b7` among them, has two parents, so the per-commit
+    messages land on `develop` as they are.)
 4.  **The "Before merge or release" bullet named builds that never install
     the lock** (medium). `docker.yml` and `release.yml` build the Node
     backend image; the fork image is `docker/Dockerfile`, which only
@@ -858,9 +1066,11 @@ comment and PATCHES.md) and in this record:
     by two lines, and those sentences stand.
 7.  **"No Python file changed, so mypy did not run"** (low). Rewritten.
     Re-checking it showed the second round's before/after mypy comparison
-    was uneven (the editable install's directory is silenced in the after
-    venv); the even comparison, over the fork's whole `mypy.ini` file list
-    in a `git archive` copy, replaces it ([Validation](#validation)).
+    could not show a difference: both of its runs were silenced, because the
+    tree was on the interpreter's path for both (this item said "uneven"
+    until the third review, see the mypy bullet). The even comparison, over
+    the fork's whole `mypy.ini` file list in a `git archive` copy, replaces
+    it ([Validation](#validation)).
 8.  **The full-suite time column mixed two bases** (low). It now gives
     trial's own `Ran … in` time on every row, as the targeted figures
     already did.
@@ -894,24 +1104,116 @@ Found while making these changes:
     the second round). The full-suite bullet and item 14 above say so and
     name the comparison output that is kept.
 
-### Commit messages
+## Corrected after the third review
+
+The third round (commits `d5fa741`, `ed9c843`) was reviewed under the same
+three lenses. Each finding and what changed, in this record, PATCHES.md
+(commit `89c1606`), and both ignore files and `security.yml` (commit
+`433fc29`, comments and reason strings only); no fork code and no lock file
+changed:
+
+1.  **The `mlkem768x25519-sha256` key exchange (#12520) sat in the "Not
+    used" row** (low). Under 26.10.0 the manhole's SSH server offers it
+    first, and OpenSSH clients use it by default since 10.0; the tests and
+    probes, all on Twisted's own client, never negotiated it. It has its own
+    row in [What changed](#what-changed-in-the-modules-the-fork-imports),
+    with the fourth round's check by an independent client (asyncssh got a
+    shell with it under 26.10.0; 26.4.0 does not offer it), and the Result
+    bullets and PATCHES.md's behaviour-change bullet name it. Found while
+    fixing it: the row's closing clause, "the rest are in modules the fork
+    never imports", was false for `dns.Message`'s class attributes,
+    `ThreadedResolver`, `_makeGetterFactory` and the socket options, whose
+    modules the fork does import; the cell now says which names are unused
+    and which modules are never imported.
+2.  **The zope.interface summary left out 8.3 and 8.5** (low): exceptions
+    in `implementedBy`/`providedBy` no longer swallowed, and `isOrExtends()`
+    raising `TypeError` for an unhashable object. The section now gives
+    every changelog entry from 6.1 to 8.7, by kind, and says that the
+    suite's outcomes are unchanged.
+3.  **"Not verified" did not say that the boots ran unlike production**
+    (low). Production uses Postgres, Redis and the default
+    `['::', '0.0.0.0']`. The fourth round booted on Postgres 16 with Redis
+    replication, a metrics listener and the template's HTTP resources under
+    both versions, and probed a failed second bind
+    ([Validation](#validation), Boot). The default bind addresses and the
+    production images' own Postgres stack are "Not verified" items now, and
+    the Result bullet that said "No operator-visible change" rests on what
+    was run.
+4.  **Both ignore files said the images metro would parse were this
+    repository's committed assets** (low). `packages/ui` and
+    `legacy/blackout-web` track no image; a bundle would parse files on
+    disk, such as react-native's five LogBox PNGs. The two files, the OSV
+    reasons (which now say "if something did it would parse" beside
+    "nothing here runs metro"), the image-size section, "Before merge or
+    release" and "Not verified" say so; the last two had "a committed PNG"
+    and "this repository's committed assets" too.
+5.  **The OSV reasons said the metro update "is planned before
+    ignoreUntil"** (low). Nothing schedules it. The reasons and the block
+    say "due before ignoreUntil", and "Before merge or release" says that it
+    needs queuing.
+6.  **Commit `6b6d96e`'s subject says "the seven advisories against
+    26.4.0"** (low). OSV and GitHub list eight; see
+    [Commit messages](#commit-messages).
+7.  **"Two Low advisories in `poetry.lock` that no gate reports" read as
+    the whole list** (low). Retitled; the item gives osv-scanner's count, 6
+    in 3 packages, with black's four rows and their scores.
+8.  **`security.yml` cited "synapse/util/manhole.py's upstream demo RSA
+    key"** (low, from #878 on 2026-08-10). That key was removed on
+    2026-09-13. The example is now `apps/blackout-server/tests/http/ca.key`
+    and `server.key`, which Trivy 0.69.3's secret scanner reports as private
+    keys (`--scanners secret` over the fork's `tests/`).
+9.  **The third round's account of the second round's mypy runs was
+    false** (low). They were not uneven: both were silenced. The fourth
+    round reproduced that output with the tree on `PYTHONPATH` and the
+    unsilenced figures without it; the Lint bullet gives the even figures
+    for the two manhole files (55 errors in 27 files before, 53 in 26
+    after, none in either file), and item 7 of the previous list is
+    reworded.
+10. **"Three lines" was measured on a hashless export** (low). The image's
+    hashed export differs in 94 lines. Corrected in [The lock](#the-lock),
+    Validation, "Before merge or release", PATCHES.md and the
+    [Commit messages](#commit-messages) note.
+11. **The first Result bullet said no changed API behaves differently**
+    (low). It now says so for a well-behaved peer and names the three
+    hardenings and the key exchange.
+12. **The Scope paragraph and the manhole heading overstated the bug**
+    (low). Both say a manhole listener without a configured key pair now;
+    the heading's anchor changed with it, and every link in this record
+    follows (no other file linked it).
+13. **The instruction for splitting out the manhole fix was incomplete**
+    (low). The Scope paragraph now says to remove or reword every sentence
+    that relies on the fix and lists where `grep -n -i manhole` finds them.
+14. **The `exp:` probe rows did not match what was run** (low). On
+    `develop` only the Twisted lines carry `exp:`; the rows now say the
+    entries were given the date, which the image-size ids show, and that the
+    edited copy was not kept.
+15. **"A squash merge would replace the per-commit messages"** (low).
+    Replaced in item 3 of the previous list: this repository merges PRs
+    with merge commits, which keep them.
+
+## Commit messages
 
 No commit may be amended, so these sentences stand in the branch's history;
 each is superseded as follows.
 
--   `6b6d96e`: "have sat in .trivyignore since 2026-10-25 and 2026-10-30":
+-   `6b6d96e`: the subject's "the seven advisories against 26.4.0": OSV and
+    GitHub list eight against 26.4.0; 26.10.0 fixes the seven that name a
+    fix, and GHSA-8pqf-f4m5-798g names none ([its item](#ghsa-8pqf)).
+    "have sat in .trivyignore since 2026-10-25 and 2026-10-30":
     three entries were committed on 2026-10-26 01:28 UTC, the fourth on
     2026-10-30 20:34 UTC (Scope). "the one advisory reachable through
     twisted.web behind nginx" (GHSA-q7qq): reachable in principle; the
     2026-10-25 triage judged nginx's header rebuild to block it, unverified
     ([The advisories](#the-advisories)). "the image's --extras all export
-    differs by those two lines": three lines, two packages
+    differs by those two lines": three requirement entries for two packages
+    in the hashless export, 94 lines in the image's hashed one
     ([The lock](#the-lock)). "No fork source changes": true of that commit;
     `20362e4` changes `manhole.py` and `d5fa741` a comment in
-    `send_email.py`. "the manhole sends one shell per channel": written when
-    the manhole could not start at all; the later probe shows 26.10.0
+    `send_email.py`. "the manhole sends one shell per channel": written
+    before any run of the manhole (the boot check's listener had no key pair
+    and could not start); the later probe shows 26.10.0
     refusing a second shell request on one channel
-    ([The manhole](#the-manhole-could-not-start)).
+    ([The manhole](#the-manhole-without-a-configured-key-pair-could-not-start)).
 -   `03a426e`: "Trivy 0.69.3 with the database of 2026-11-01 19:08 UTC": that
     timestamp was read during the run and not retained ([Method](#method)).
 -   `be7bbe2`: "with the database of 2026-11-01": the same. "the image is
@@ -920,8 +1222,30 @@ each is superseded as follows.
     ([Before merge or release](#before-merge-or-release)).
 -   `20362e4`: "Found by the second review of the Twisted 26.10.0 change":
     the review of the first round. "mypy (... identical from both venvs)":
-    the output was identical, from an uneven comparison
-    ([Validation](#validation), mypy).
+    identical because both runs were silenced, the tree being on the
+    interpreter's path for each; run evenly, the two files' import graph
+    reports 55 errors in 27 files under 26.4.0 and 53 in 26 under 26.10.0,
+    none in the two files ([Validation](#validation), mypy).
 -   `4089f7f`: the subject's "second review" is that same first-round review,
     which the commit answers; the section it names "Corrected after review"
-    is now headed "Corrected after the first review".
+    is now headed "Corrected after the first review". "the manhole that
+    could not start": only a manhole listener without a configured key pair
+    could not; the same message's "a homeserver with a manhole listener and
+    no configured key died" is the exact statement.
+-   `d5fa741`: "the image's --extras all export differs by three lines
+    (twisted, twisted[tls] and zope-interface), not two": three requirement
+    entries in the hashless export; the image's hashed export differs in 94
+    lines ([The lock](#the-lock)).
+-   `ed9c843`: "the second round's mypy comparison was uneven: ... the after
+    venv's editable install puts the worktree there, so from that venv only
+    the named files could report": both second-round runs were silenced, the
+    worktree being on the interpreter's path for both, so the comparison
+    showed nothing on either side; the third round's own `send_email.py`
+    check in the worktree was the uneven one. "the export differs by three
+    lines (two packages)": as for `d5fa741`. "the zope.interface 8.7
+    changelog is quoted by entry": the third round's list left out the 8.3
+    and 8.5 entries; the section now gives every entry from 6.1 to 8.7.
+-   `89c1606`: "OpenSSH clients use it by default since 10.0, so an
+    operator's ssh negotiates it with the manhole now": an OpenSSH client
+    from 10.0 does by default, and one from 9.9 offers it; an older client
+    or another implementation may not.
