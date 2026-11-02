@@ -12,7 +12,7 @@ import ProjectsTab from '../tabs/ProjectsTab';
 import ResourcesTab from '../tabs/ResourcesTab';
 import { DocumentsTab } from '../../documents/DocumentsTab';
 import AiDenPanel from '../../aiden/AiDenPanel';
-import { resolveToolBag, type ToolBagEntry } from './toolbag';
+import { resolveToolBag, type ToolBagEntry } from './toolBagEntries';
 import * as css from './ToolBag.css';
 
 export interface ToolBagProps {
