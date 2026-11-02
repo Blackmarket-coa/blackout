@@ -248,8 +248,11 @@ rendered; the record lists them.
 >
 > **2026-11-02.** Those commands were removed on 2026-11-02 in `9493f41`, with
 > the smoke scripts that called them; the operator chose removal ("remove
-> both"). Nothing in the tree runs these checks now, by hand or at startup,
-> and nothing reads the variables below.
+> both"). Nothing in the tree runs these checks now, by hand or at startup.
+> Nothing in the tree reads `BLACKOUT_MANAGED_READINESS_CHECKS` or the hook
+> variables below, and nothing on the server reads `BLACKOUT_PROFILE` (the
+> web client reads a variable of that name, `true` or `false`, for its own
+> profile feature; the `BLACKOUT_PROFILE` section below has a note).
 
 When `BLACKOUT_PROFILE=managed`, startup now executes:
 

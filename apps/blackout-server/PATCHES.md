@@ -1022,8 +1022,8 @@ JWT login, which the same render had turned on, was turned off in `48ab32d`
 no upstream counterpart; `docs/upgrade.md` is an upstream file with Blackout
 lines. `.dockerignore` and `README.rst`, also upstream files with Blackout
 lines, were changed in `42f68f2` and are back as on `develop` (the restored
-Nixpacks path below). (2026-11-02: `d88e884` takes their Blackout lines out
-again; the next entry.) Record:
+Nixpacks path below). (2026-11-02: `d88e884` takes the six lines and the
+link out again; the next entry.) Record:
 `docs/security/dependency-advisories-server-desktop-2026-10-30.md`
 (repository root), "Found outside scope", item 5, and the section
 "2026-11-02: the Railway template is removed". Outside this directory,
@@ -1061,7 +1061,8 @@ content); the record's section names both.
   `!scripts-dev`, `!.nixpacks/**`, `!scripts-dev/**`). All five files are as
   on `develop` again, and they are left in place for the operator.
   (2026-11-02: the operator chose removal ("remove both"), and `d88e884`
-  removed them again, with the six lines and the link; the next entry.)
+  removed the three files again and took the six lines and the link out of
+  the other two, `.dockerignore` and `README.rst`; the next entry.)
   - They are a separate Synapse-on-Railway path. `nixpacks.toml` sets
     Nixpacks' setup and install phases, and `start.sh` generates a config
     with `--generate-config` and patches its listener; neither reads the
@@ -1237,11 +1238,21 @@ helpers are removed".
   now as `42f68f2` left them. `!services` and `!services/**` stay:
   `infra/single-server-baseline/deploy.sh` builds
   `services/blackout-api/Dockerfile` with this directory as the context.
-  That build and the other one with this directory as the context,
-  `docker/Dockerfile` (the same script, and upstream's
-  `contrib/docker/docker-compose.yml`), copy none of `scripts-dev`,
-  `.nixpacks`, `nixpacks.toml` or `railway.json`. Builds with the repository
-  root as the context are not governed by this file.
+  The tree builds four Dockerfiles with this directory as the context,
+  and none of them copies `scripts-dev`, `.nixpacks`,
+  `nixpacks.toml` or `railway.json`: `services/blackout-api/Dockerfile`
+  (`deploy.sh`), `docker/Dockerfile` (`deploy.sh`,
+  `scripts-dev/complement.sh` and upstream's
+  `contrib/docker/docker-compose.yml`), and `docker/Dockerfile-workers` and
+  `docker/editable.Dockerfile` (`scripts-dev/complement.sh`). Their `COPY`
+  lines name only `services/blackout-api/`, files under `docker/`,
+  `synapse`, `rust` and the root build files (`pyproject.toml`,
+  `poetry.lock`, `README.rst`, `build_rust.py`, `Cargo.toml`, `Cargo.lock`).
+  This file governs no other build: `scripts-dev/build_debian_packages.py`
+  builds `docker/Dockerfile-dhvirtualenv` with `docker/` as the context,
+  `complement.sh` builds `docker/complement/Dockerfile` with
+  `docker/complement/`, and builds with the repository root as the context
+  use the root's `.dockerignore`.
 - Removed in `9493f41`, the helpers: `synapse/util/blackout_profiles.py`
   (`determine_profile`, `get_missing_managed_env_vars`,
   `apply_profile_overrides` and its `python -m` command),
@@ -1335,3 +1346,8 @@ helpers are removed".
   rooted here changes with this only if its settings force a Nixpacks build
   or name `start.sh` as its start command, and the tree points to neither
   (`infra/railway/README.md` gives `pnpm --filter @blackout/server start`).
+- Corrections to commit messages on this branch, which are not amended:
+  `d88e884` calls `docker/Dockerfile` "the other one with this directory as
+  the context", as if there were two such Dockerfiles. There are four, the
+  two `scripts-dev/complement.sh` builds included (above), and none of them
+  copies the files the six lines let in, so its conclusion holds.

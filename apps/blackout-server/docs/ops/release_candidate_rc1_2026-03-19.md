@@ -24,10 +24,12 @@ Audience: platform operators / SRE / release engineering
 > `scripts-dev/blackout/ci_hosting_smoke.py`, which the pre-promotion checks
 > and the smoke probes below run, were removed on 2026-11-02 in `9493f41`, with
 > the profile and managed-hosting helpers they checked; the operator chose
-> removal ("remove both"). Run from this directory, those commands now fail
-> on a missing file.
-> `scripts-dev/check_release_train_gate.py`, `tests/util/test_release_train.py`
-> and `test_versions_smoke_compatibility` remain.
+> removal ("remove both"). Run from `apps/blackout-server/`, the
+> pre-promotion commands that name them now fail on a missing file; the smoke
+> probes run inside the removed image, where the note above says they could
+> not have run. `scripts-dev/check_release_train_gate.py`,
+> `tests/util/test_release_train.py` and `test_versions_smoke_compatibility`
+> remain.
 
 ## Scope
 
