@@ -5279,7 +5279,8 @@ the mutation table follows round 10's. `origin/develop` is still
     `releasedAt` and the person's held copy, and a refused move (the owner
     checked in on the other process first) publishes once too. The file's
     transport records every announcement from round 11 on, and tests 2, 7
-    and 10 assert on it.
+    and 10 assert on it. Q25 (the verifiers' X1, the publish removed) fails
+    it.
 -   **Unpinned answers (Low; done).** The cancel's 503 is test 10; a
     check-in or cancel refused three times over other check-ins is 409
     `switch_changed` with three attempts made and nothing written (test 12,
@@ -6137,8 +6138,9 @@ W04 failed on the second run, as did W05 and R05 run again with it.
 Round 11's checks, the same way (`fix/mut/spec-round11.py`, run with
 `run7.py` in the worktree, waiting for the machine's load before each,
 every source restored afterwards and `git status` checked; the test numbers
-are the files' after round 11: the switch-writes file 14, the file store's 2).
-Twenty-one mutants, all caught. Five survived their first run, each because
+are the files' after round 11: the switch-writes file 14, the file store's 2;
+Q25 ran on a scratch copy of the head while the gates ran in the worktree).
+Twenty-two mutants, all caught. Five survived their first run, each because
 the test meant to pin the check did not isolate it: Q04 and Q24 because a
 fake-time pass an hour on had already given the switch the window by the
 ordinary tolerance rule (test 9 now makes the real-time pass first, and
@@ -6173,6 +6175,7 @@ the sixth is sent). Each then failed on its second run.
 | Q19: `standsFired` keys on `releasedAt` alone                                        | `deadman-switch-writes-postgres.integration.test.ts` | test 14: the cancelled switch's copy still listed                                             |
 | Q20: the notifier's `processOne` keys on `releasedAt` alone                          | `deadman-switch-writes-postgres.integration.test.ts` | test 14: the notice not ended `release_unavailable`                                           |
 | Q23: the memory and file arm does not refuse a taken id                              | `deadman-releases-file.integration.test.ts`          | test 2: `armed` where `id_taken`                                                              |
+| Q25: the announcement after a conditional switch write removed (the verifiers' X1)   | `deadman-switch-writes-postgres.integration.test.ts` | test 11: no `deadmanSwitches` `u` published for the applied move                              |
 
 ### Still open
 
