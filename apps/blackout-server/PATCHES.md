@@ -828,7 +828,8 @@ sets that `develop` serves.
   `enabled: ${JWT_ENABLED:-false}` as a non-empty string, with the literal
   secret `${JWT_SECRET:-}`, which this check accepts. See "2026-10-31 JWT
   login refuses a non-boolean `enabled`; the Railway template's JWT login is
-  off" below.
+  off" below. (2026-11-02: that template was removed in `42f68f2`; see "2026-11-02
+  the Railway template is removed".)
 - `tests/blackout_runtime/test_jwt_secret_config.py`: eighteen refused
   secrets for each of HS256, HS384 and HS512, among them a JWK mapping and
   JWK JSON text with an empty `k` or a PEM `k`, and key sets with an empty
@@ -935,6 +936,13 @@ service files, which upstream does not have. Found by the sixth review of
 `docs/security/dependency-advisories-server-desktop-2026-10-30.md`
 (repository root), which records the render.
 
+2026-11-02: the template, its `.env.example` and the template test
+(`test_railway_template_leaves_jwt_login_off`) described below were removed in
+`42f68f2`, with the rest of the Railway service; the operator chose removal over
+fixing the template. `JWTConfig._check_enabled` and
+`test_non_boolean_enabled_is_refused` stay. See "2026-11-02 the Railway
+template is removed" below.
+
 - `services/blackout-server/homeserver.yaml.template`: `jwt_config` read
   `enabled: ${JWT_ENABLED:-false}` and `secret: "${JWT_SECRET:-}"`. The
   image `railway.toml` deploys renders this file at every start of the
@@ -996,6 +1004,204 @@ service files, which upstream does not have. Found by the sixth review of
   MSC3861) or is refused at sign-in, with the error text and the fix, and
   the Railway template change, and points at the record. Upstream's
   `docs/upgrade.md` has no such section; keep it through a reconciliation.
+  (2026-11-02: that Railway template section, and the managed-preflight and
+  `BLACKOUT_PROFILE` sections, carry a dated note that the template and its
+  entrypoint were removed in `42f68f2`.)
+
+## 2026-11-02 the Railway template is removed
+
+The operator chose on 2026-11-02 to remove the Railway service template
+rather than fix it. In its `managed` profile, the one that renders the
+template, its image could not start: `entrypoint.sh` rendered
+`homeserver.yaml.template` with plain `envsubst`, which leaves every
+`${VAR:-default}` as text, so the listener port rendered as `${PORT:-8008}`
+and Synapse refused the config; and the image exported the lock without
+extras, so with no authlib `check_requirements("jwt")` stopped it too. Its
+JWT login, which the same render had turned on, was turned off in `48ab32d`
+(the 2026-10-31 entry above). The removed files are Blackout's own and have
+no upstream counterpart; `docs/upgrade.md` is an upstream file with Blackout
+lines. `.dockerignore` and `README.rst`, also upstream files with Blackout
+lines, were changed in `42f68f2` and are back as on `develop` (the restored
+Nixpacks path below). Record:
+`docs/security/dependency-advisories-server-desktop-2026-10-30.md`
+(repository root), "Found outside scope", item 5, and the section
+"2026-11-02: the Railway template is removed". Outside this directory,
+where an upstream sync does not reach, the branch also changes that record
+and adds dated notes to `docs/audits/2026-08-10-encryption-audit.md` and
+`docs/operations/evidence/2026-05-10-secrets-manager-inventory.md` (where
+`lint-staged`'s Prettier also re-padded every list marker and table row:
+the file was not Prettier-clean on `develop`, and only the note changes its
+content); the record's section names both.
+
+- Removed:
+  - `railway.toml`: the Railway service (Dockerfile builder,
+    `startCommand = "/entrypoint.sh"`).
+  - `services/blackout-server/`: `Dockerfile`, `entrypoint.sh` (the
+    `BLACKOUT_PROFILE` selection and the `managed` profile's `envsubst`
+    render), `homeserver.yaml.template` and `.env.example`.
+    `services/blackout-api/` stays.
+  - `.github/workflows/blackout-image-lifecycle.yml`: its one job was
+    written to build `services/blackout-server/Dockerfile` into
+    `ghcr.io/<owner>/blackout-server`. GitHub registers workflows only from
+    the repository root's `.github/workflows/`, and the repository's list
+    (read on 2026-11-02, before and after a new workflow was registered
+    that day) has none under `apps/`, so it never
+    ran in this repository. Nor could this version have run anywhere: it
+    does not parse as YAML (`ScannerError` at line 23, where a heredoc's body
+    starts at column 1 inside a `run: |` block), and it was byte-identical
+    from the fork's arrival in `e0f3065e31` (2026-04-10) to its removal.
+    Whether an earlier version ran in the fork's former repository was not
+    checked.
+- Removed in `42f68f2` and restored in `d1936c9`, because they are not the
+  template and do not exist only to build, deploy, document or test it:
+  `scripts-dev/railway/start.sh`, `nixpacks.toml`, `docs/railway_deploy.md`,
+  `README.rst`'s "Railway deployment" link to that how-to, and six
+  `.dockerignore` lines (`!.nixpacks`, `!nixpacks.toml`, `!railway.json`,
+  `!scripts-dev`, `!.nixpacks/**`, `!scripts-dev/**`). All five files are as
+  on `develop` again, and they are left in place for the operator.
+  - They are a separate Synapse-on-Railway path. `nixpacks.toml` sets
+    Nixpacks' setup and install phases, and `start.sh` generates a config
+    with `--generate-config` and patches its listener; neither reads the
+    template or `railway.toml`. `docs/railway_deploy.md` gives `railway.json`,
+    `nixpacks.toml` and `start.sh` as that path's configuration. No
+    `railway.json` under this directory is in this repository's history, and
+    `nixpacks.toml` has no start command, so nothing in the tree runs
+    `start.sh`.
+  - `DEPLOYMENT_CHECKLIST_REVIEW.md` says a "Railway config conflict" was
+    "resolved (consolidated to `railway.toml`)", without naming the other
+    file. Every one of these files, the template's included, arrived in
+    `e0f3065e31`, so the tree does not say which path came first.
+  - The six `.dockerignore` lines are one whitelist for a Nixpacks build.
+    Nixpacks' source (`main` at `144b4f9ab1`,
+    `src/nixpacks/builder/docker/docker_image_builder.rs` and
+    `src/nixpacks/files.rs`) copies the app directory with no ignore filters
+    and runs `docker build` on the copy, so Docker applies this
+    `.dockerignore`, whose first rule is `*`. Without `!scripts-dev`, a
+    Nixpacks build here would leave `start.sh` out of the image, so the
+    restore brings back all six. Of the Dockerfiles built with this directory
+    as the context, only the removed one copied `scripts-dev`. Four built
+    with the repository root as the context copy all of `apps/`, and this
+    file does not govern them: this directory's `Dockerfile` and, from the
+    repository root, `Dockerfile.blackout`, `deploy/docker/Dockerfile` and
+    `infra/single-server-baseline/Dockerfile.blackout-api-hono`. Whether
+    Railway builds with that version of Nixpacks was not checked.
+- `tests/blackout_runtime/test_jwt_secret_config.py`:
+  `test_railway_template_leaves_jwt_login_off`, whose only subject was the
+  template, is removed with it, and so are `RAILWAY_TEMPLATE`, `_envsubst`
+  and the imports only they used (`re`, `Path`, `Mapping`, `yaml`): 15 tests
+  become 14. `test_non_boolean_enabled_is_refused` stays, with its
+  `${JWT_ENABLED:-false}` case: it pins `JWTConfig._check_enabled`
+  (`synapse/config/jwt.py`), which stays and refuses that text from any
+  template.
+- `.dockerignore` and `README.rst`: as on `develop`, after the restore above.
+  `!services` and `!services/**` were not touched at any point:
+  `infra/single-server-baseline/deploy.sh` builds
+  `services/blackout-api/Dockerfile` with this directory as the context.
+- Dated notes, not rewrites, where a document described the template or what
+  it ran: `docs/upgrade.md` ("The Railway service template", and the
+  managed-preflight and `BLACKOUT_PROFILE` sections),
+  `docs/ops/blackout_profile_startup.md`,
+  `docs/ops/managed_hosting_readiness.md`,
+  `docs/ops/blackout_image_lifecycle.md`, `DEPLOYMENT_CHECKLIST_REVIEW.md` and
+  its copy `docs/DEPLOYMENT_CHECKLIST_REVIEW.md`,
+  `docs/development/phase0_railway_standalone_tracker.md`,
+  `docs/development/blackout_feature_registry_update_tracker.md` (FR-002),
+  `docs/railway_deployment_hardening.md`, `docs/bmc_server_execution_plan.md`,
+  `docs/ops/release_candidate_rc1_2026-03-19.md` (an RC1 rollout of the
+  removed image), `docs/reports/week3_packaging_image_lifecycle_completion_report_2026-03-19.md`,
+  `docs/development/product_fork_execution_plan.md` (Week 3),
+  `docs/development/product_fork_ai_prompts.md` (Phase 1),
+  `release/train/changelog.md` (under "Runtime Defaults") and
+  `release/train/checklist.md` (under "Upstream Diff Review"), and three
+  entries above in this file (the 2026-10-30 JWT secret entry, and the two
+  2026-10-31 entries on the template and the operator notes). The two
+  release-train notes name `42f68f2` without backticks: the release gate
+  (`synapse/util/release_train.py`) passes the changelog if any backticked
+  commit hash is in it, and a backticked hash in the note would satisfy that
+  check on its own. The only one in the changelog now is a 40-digit hash
+  that the changelog itself calls a "placeholder tracking record", so that
+  placeholder is what meets the check.
+- Left in place for the operator to decide: `synapse/util/blackout_profiles.py`,
+  `synapse/util/managed_hosting.py` and `synapse/util/hosting_smoke.py`, their
+  tests under `tests/util/`, and `scripts-dev/blackout/managed_hosting_smoke.sh`,
+  `ci_hosting_smoke.py` and `managed_readiness_integration_smoke.py`.
+  `entrypoint.sh` was the only runtime caller of the first two; the tests,
+  `synapse/util/hosting_smoke.py` and the smoke scripts call them
+  (`ci_hosting_smoke.py` through `hosting_smoke.py`).
+- Kept as written, as records: `release/train/image_provenance.json`, which
+  names the `blackout-image-lifecycle` workflow as the builder of the RC1
+  image (the RC1 record's statement, not evidence of a run; it is JSON, and
+  the release gate reads its fields); and the next-step prompt in
+  `docs/reports/phase6_ci_release_hardening_completion_report_2026-03-19.md`
+  that asked for that workflow.
+- The other Railway paths are not this template and stay: the Nixpacks path
+  above, `services/blackout-api/railway.toml` (the legacy FastAPI service)
+  and, outside this directory, the client's `railway.json`, `README.md`'s
+  "Deploy to Railway", the "Deploy to Railway" step in
+  `.github/workflows/deploy-web.yml`, `infra/railway/`, and the Railway
+  section of `docs/deployment/production.md`. None of them names a removed
+  file. `infra/railway/README.md` and `docs/deployment/production.md` put a
+  Railway service at `apps/blackout-server`, where `railway.toml` was and
+  `nixpacks.toml` and this directory's `Dockerfile` still are. Railway's
+  documentation (read on 2026-11-02) says the config file "does not follow
+  the Root Directory path", so a service rooted here read `railway.toml`
+  only if its settings gave that path; that Railway looks for a `Dockerfile`
+  at the root of the source directory; and that it "will always build with
+  a Dockerfile if it finds one". By those pages, a service rooted here with
+  no `railway.toml` builds this directory's `Dockerfile` unless its settings
+  name another (`RAILWAY_DOCKERFILE_PATH`), as it already did before the
+  removal if it never read `railway.toml`. The pages do not say where the
+  default config-file lookup happens; if it is the repository root, such a
+  service may read the root `railway.json` (the client's) instead. Not
+  checked. That `Dockerfile` is the
+  `@blackout/api` Node image, written for the repository root as its
+  context: its first `COPY` names `pnpm-lock.yaml`, `pnpm-workspace.yaml`
+  and `turbo.json`, and none of them is in this directory. `nixpacks.toml`
+  is read only by a Nixpacks build, and has no start command. Whether a
+  service set to Nixpacks would still take the `Dockerfile` was not checked,
+  and the live service's settings are not in the tree and were not checked.
+- Corrections to commit messages on this branch, which are not amended:
+  - `42f68f2` removes `start.sh` and `nixpacks.toml`, "the earlier
+    Synapse-on-Railway path", with `docs/railway_deploy.md`, its how-to;
+    `d1936c9` restores all three, and "earlier" is not known. It drops
+    `!scripts-dev` because only the removed `Dockerfile` copied
+    `scripts-dev`, which holds only for Dockerfiles built with this
+    directory as the context, and the six lines are one Nixpacks whitelist
+    (above). Its "so it never ran", of the lifecycle workflow, holds for
+    this repository, as `bacd26c` says, and its "whose one job built that
+    Dockerfile" means the job was written to build it.
+  - `b39883a` says all four of FR-002's evidence targets are gone and that
+    no Railway path for the Synapse homeserver remains. Two of the four
+    (`railway.toml`, `services/blackout-server/Dockerfile`) are gone; the
+    other two are the restored Nixpacks path, and `d1936c9` corrects the
+    four notes that said so.
+  - `bacd26c` and `c83dc9b` also call the Nixpacks files "the earlier" and
+    "an earlier" Synapse-on-Railway path. `bacd26c` says the entry "now
+    says only what docs/railway_deploy.md and the checklist review say"; the
+    entry it left read the review's "consolidated to `railway.toml`" as a
+    `railway.json` consolidated away, which the review does not say, and it
+    quotes the review now.
+  - The RC1 rollout page's `scripts-dev/` smoke commands, said to run in
+    the removed image only because its `Dockerfile` copied `scripts-dev`,
+    were in `bacd26c`'s note on that page, not in its message. `d1f1589`
+    corrected the note, which now says why they could not run there. So
+    `d1f1589`'s "bacd26c's message makes the same claim" and "corrects
+    bacd26c's two claims: the RC1 smoke commands", and `4d60ec0`'s
+    "bacd26c: the RC1 smoke commands", are wrong.
+  - `c83dc9b`'s subject says every passage of the record on the template
+    has its dated note. One, the full-suite bullet's sentence on the sixth
+    round under Validation, had none until the commit after `4d60ec0`.
+  - `d1936c9`'s "That holds for the Dockerfiles in the tree" holds only for
+    those built with this directory as the context, and this
+    `.dockerignore` does not start with `*`: its first line is a comment,
+    and `*` is its first rule.
+  - `d1f1589` says the release gate "checks only for files, headings and
+    provenance fields", then two sentences later that it also checks for a
+    backticked commit hash. It also says the image lifecycle note said
+    "never ran" two sentences after "built"; it was the next sentence.
+  - `4d60ec0` says the record now says what a Railway service at
+    `apps/blackout-server` would read. That account left out this
+    directory's `Dockerfile` (above).
 
 ## 2026-11-02 Twisted 26.10.0 (seven advisories; zope-interface 8.7)
 

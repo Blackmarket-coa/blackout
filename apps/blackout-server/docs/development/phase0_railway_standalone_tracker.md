@@ -2,6 +2,12 @@
 
 Updated: 2026-03-17
 
+> **2026-11-02.** Every file this tracker lists was removed with the Railway
+> template in `42f68f2`; the operator chose removal over fixing the template. The
+> open item, a standalone deploy of that template on Railway, will not be done.
+> The fork's separate Nixpacks files for Railway, `nixpacks.toml` and
+> `scripts-dev/railway/start.sh`, which this tracker does not list, stay.
+
 ## Status snapshot
 
 - [x] Create multi-stage Dockerfile (`services/blackout-server/Dockerfile`).
