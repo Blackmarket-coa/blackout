@@ -13,8 +13,8 @@ name: blackout-desktop-build-check
 # test a build: its tauri-action step is configured to publish a public,
 # non-draft release named after the ref, with the updater's latest.json, once
 # its build passes (docs/security/dependency-advisories-server-desktop-2026-10-30.md,
-# Found outside scope, item 6). Dispatch this one instead, once it is on
-# develop. Keep the setup below in step with that workflow's build job.
+# Found outside scope, item 6). Dispatch this one instead. Keep the setup
+# below in step with that workflow's build job.
 # Where this file's triggers, permissions, concurrency, steps or step
 # settings differ from that job's, a comment says why.
 
@@ -61,7 +61,10 @@ on:
             # ToolBag.tsx), so an import without an extension found the
             # other file on a case-insensitive filesystem (fixed in
             # 9eab8c9). Nothing checks for that on a pull request that
-            # changes only the rest of the client.
+            # changes only the rest of the client: pnpm guard:duplicate-paths
+            # compares whole paths, which did not collide here, and no
+            # workflow runs it. A guard was asked for on 2026-11-02 and is
+            # not built yet.
             - 'apps/blackout-client/vite.config.*'
             - 'apps/blackout-client/build.config.ts'
             # The desktop bridge; the release workflow's own filter lists it.
@@ -168,11 +171,16 @@ jobs:
             # --no-sign skips code signing, notarization and updater signing.
             # The --config merge reaches the CLI's bundler settings (tauri-cli
             # 2.10.1, interface/rust.rs 837), so no updater bundle is made and
-            # no updater signing is attempted. It does not change the compiled
-            # app on this point: the app embeds createUpdaterArtifacts at its
-            # default whatever the config says (tauri-utils 2.10.2, config.rs
-            # 4548), as the release's does. --ci is explicit here; the release
-            # gets the same from CI=true, which the CLI reads as --ci.
+            # no updater signing is attempted. Without the override every leg
+            # would log "Updater signing is skipped due to --no-sign flag."
+            # (bundle.rs 231-258: the updater settings exist, and each leg
+            # makes a bundle the CLI treats as updatable). No leg of run
+            # 41461856327 logged it, so the override took effect on all
+            # three. It does not change the compiled app on this point: the
+            # app embeds createUpdaterArtifacts at its default whatever the
+            # config says (tauri-utils 2.10.2, config.rs 4548), as the
+            # release's does. --ci is explicit here; the release gets the
+            # same from CI=true, which the CLI reads as --ci.
             # tauri-action sets TAURI_BUNDLER_DMG_IGNORE_CI on macOS, so the
             # release runs the DMG's Finder layout step; only the macOS DMG
             # bundler reads it.
@@ -198,10 +206,11 @@ jobs:
             # shell: bash keeps the quoting the same on all three OSes. On
             # Windows that starts the CLI from Git Bash, where tauri-action
             # starts it from node, and pnpm runs the script through cmd with
-            # each argument JSON.stringify'd. The JSON arrives as valid JSON:
-            # the CLI stops on an inline --config that does not parse
-            # (tauri-cli 2.10.1, lib.rs 56-63), and the Windows leg passed in
-            # run 41461856327.
+            # each argument JSON.stringify'd. The JSON arrives as valid JSON
+            # and takes effect: the CLI stops on an inline --config that does
+            # not parse (tauri-cli 2.10.1, lib.rs 56-63), and the Windows leg
+            # of run 41461856327 passed without the updater-signing line
+            # above.
             - name: Build unsigned bundles, no updater artifacts
               working-directory: blackout-desktop
               shell: bash
