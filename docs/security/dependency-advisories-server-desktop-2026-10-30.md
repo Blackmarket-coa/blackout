@@ -1137,6 +1137,10 @@ It was not taken here, for three reasons:
 before and after, before 2026-11-30. Then remove all four Twisted entries
 from `.trivyignore`.
 
+Done on 2026-11-02, in `dependency-advisories-twisted-2026-11-02.md`: Twisted
+26.10.0 and zope-interface 8.7 are locked, the four entries are gone, and that
+record has the suite comparison.
+
 ## pyasn1: quadratic decoding
 
 Added after the fourth review. GitHub reviewed these four on 2026-10-30,
@@ -1937,7 +1941,8 @@ The record's own commit changes no file Trivy reads.
     Synapse posts, not a server's acceptance of it. Nor was the startup
     check tried with a JWK exported from Keycloak or Authentik, only with
     keys made in the tests.
--   Twisted 26.10.0 against the trial suite.
+-   Twisted 26.10.0 against the trial suite. Done on 2026-11-02, in
+    `dependency-advisories-twisted-2026-11-02.md`.
 -   The malformed logout tokens under authlib 1.6.12 after `85df7cc`. This
     round measured 1.9.1; the second review measured both versions before it.
 -   A bound on the JWKS refetch, or a rate limit on `/_synapse/client`. Both

@@ -586,6 +586,12 @@ section) rather than renewing a false reason or letting every PR go red.
     - Until then, every OSV scan prints the false "No fixed version exists"
       `reason` for both entries, as it printed react-router's until this
       change.
+    - Corrected on 2026-11-02 (`dependency-advisories-twisted-2026-11-02.md`):
+      both reasons, the `.trivyignore` comment and the `osv-scanner.toml`
+      block now say the fix is 2.0.3 and why it is not taken (metro 0.83.5
+      passes a file path, which 2.x's `imageSize()` refuses). The entries
+      stay until the metro update; a lockfile-only dry run of that update
+      showed image-size leaving the lock.
 
 ## Corrected after review
 
