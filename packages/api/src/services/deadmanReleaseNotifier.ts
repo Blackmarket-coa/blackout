@@ -252,7 +252,7 @@ import { matrixClient } from '../integrations/matrix-client';
 import { log } from '../telemetry/logger';
 import { readAuthRuntimeConfig } from './auth';
 import { trackBackgroundTick } from './backgroundTicks';
-import { isReleaseSwitch, wrapIsHeld, writeReleaseNotices } from './deadmanReleases';
+import { isReleaseSwitch, standsFired, wrapIsHeld, writeReleaseNotices } from './deadmanReleases';
 import { homeserverDomain, matrixUserIdFor } from './userIdentity';
 
 export const DEFAULT_INTERVAL_MS = 30 * 1000;
@@ -1020,7 +1020,7 @@ const awaitsTrigger = (record: DeadmanSwitchRecord | undefined): boolean =>
     isReleaseSwitch(record) &&
     record.status !== 'cancelled' &&
     record.encryptedPayload !== '' &&
-    !record.releasedAt;
+    !standsFired(record);
 
 const processOne = async (
     notice: DeadmanReleaseNoticeRecord,
@@ -1031,10 +1031,12 @@ const processOne = async (
     claim: NoticeClaim
 ): Promise<Step> => {
     const record = db.getDeadmanSwitch(notice.switchId);
-    // Only a release switch that fired has `releasedAt`; an empty payload is
-    // one whose content was removed, which nothing points at any more; a
-    // cancelled switch, or a legacy one, was never released this way.
-    if (!record || !record.releasedAt || record.encryptedPayload === '') {
+    // A release switch that fired and stands fired (`standsFired`: the
+    // owner's deletion over a trigger committed elsewhere leaves one
+    // cancelled with its `releasedAt`); an empty payload is one whose content
+    // was removed, which nothing points at any more; a cancelled switch, or
+    // a legacy one, was never released this way.
+    if (!record || !standsFired(record) || record.encryptedPayload === '') {
         return { kind: 'failed', reason: 'release_unavailable' };
     }
     const releasedAt = Date.parse(record.releasedAt);
@@ -1115,7 +1117,7 @@ export const runDeadmanReleaseNotifier = async (
     // anything is sent (round 7) or attempted at all: a retry Postgres has
     // for later is left for that time (round 8).
     for (const record of db.listAllDeadmanSwitches()) {
-        if (!record.releasedAt || record.encryptedPayload === '') continue;
+        if (!standsFired(record) || record.encryptedPayload === '') continue;
         result.caughtUp += writeReleaseNotices(record, record.releasedAt);
     }
 

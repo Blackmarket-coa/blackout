@@ -84,6 +84,10 @@ export type DeadmanSweepTransition =
     | DeadmanTransition
     | { kind: 'backlog_grace'; record: DeadmanSwitchRecord };
 
+/** When the sweep is due to act on the switch: its check-in deadline while armed, its release in grace. */
+export const sweepDueAtMs = (record: DeadmanSwitchRecord): number =>
+    new Date(record.status === 'armed' ? record.triggerAt : record.releaseAt).getTime();
+
 /**
  * The autonomous sweep's decision for one switch: `evaluateTransition`, except
  * after the sweep was not running.
@@ -101,20 +105,28 @@ export type DeadmanSweepTransition =
  * Once per missed check-in: a switch that had its window follows
  * `evaluateTransition` however late the sweep is, and fires when the window
  * ends; `applyCheckIn` clears the record, so a later lapse gets its own.
+ *
+ * With `outage.stalled`, the sweep was unable to act on this switch for some
+ * of the time since it was due, however short, or the owner's check-in or
+ * cancel was refused unanswered on this process (the database's statements
+ * stood unanswered: no move was made and every owner's check-in on the
+ * process was refused, as in an outage of the sweep's own), and the switch
+ * gets the window whatever the tolerance says (round 11 of part 2's review:
+ * a database stall an hour before a deadline refused the owner's check-in,
+ * and the first pass after it, within the tolerance, fired the switch).
  */
 export const evaluateSweepTransition = (
     record: DeadmanSwitchRecord,
     now: Date,
-    toleranceMs: number
+    toleranceMs: number,
+    outage: { stalled?: boolean } = {}
 ): DeadmanSweepTransition => {
     const transition = evaluateTransition(record, now);
     if (transition.kind === 'none' || record.backlogGraceStartedAt) return transition;
 
     const nowMs = now.getTime();
-    const dueAtMs = new Date(
-        record.status === 'armed' ? record.triggerAt : record.releaseAt
-    ).getTime();
-    if (nowMs - dueAtMs <= toleranceMs) return transition;
+    const dueAtMs = sweepDueAtMs(record);
+    if (nowMs - dueAtMs <= toleranceMs && !outage.stalled) return transition;
 
     const windowEndMs = nowMs + DEADMAN_BACKLOG_GRACE_SECONDS * 1000;
     if (new Date(record.releaseAt).getTime() >= windowEndMs) return transition;

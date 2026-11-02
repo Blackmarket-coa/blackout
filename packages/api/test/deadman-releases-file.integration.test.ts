@@ -175,3 +175,103 @@ test('a release switch, its copies and its notices survive a restart of the file
     assert.equal(blank?.signature, '');
     assert.equal(afterRemoval.getDeadmanReleaseWrap(sw.id, owner)?.sealedKey, 'owner-copy');
 });
+
+test('the owner’s check-in and cancel through the conditional write, the second cancel’s blanking, and arming through the store’s arm method persist across a restart of the file store', async () => {
+    // Round 10 of part 2's review's verifiers: no file-mode test ran a
+    // check-in or a cancel through `updateDeadmanSwitchIf`, so the route's
+    // persistence rested on virtual dispatch alone. Round 11 adds the arm
+    // (`armDeadmanSwitch`), which the file store answers from its own memory.
+    const owner = randomUUID();
+    const bob = randomUUID();
+    const id = randomUUID();
+    const armed = await db.armDeadmanSwitch(
+        {
+            id,
+            ownerId: owner,
+            status: 'armed',
+            checkInIntervalSeconds: 3600,
+            gracePeriodSeconds: 0,
+            lastCheckInAt: '2026-01-01T00:00:00.000Z',
+            triggerAt: '2026-01-01T01:00:00.000Z',
+            releaseAt: '2026-01-01T01:00:00.000Z',
+            recipients: [bob],
+            encryptedPayload: '{"header":{},"ownerIdentity":{}}',
+            releaseFormat: 'release-v1',
+        },
+        [
+            {
+                switchId: id,
+                recipientAccountId: owner,
+                recipientFingerprint: 'ab'.repeat(32),
+                sealedKey: 'owner-copy',
+                signature: 'owner-signature',
+            },
+            {
+                switchId: id,
+                recipientAccountId: bob,
+                recipientFingerprint: 'cd'.repeat(32),
+                sealedKey: 'bob-copy',
+                signature: 'bob-signature',
+            },
+        ]
+    );
+    assert.equal(armed.kind, 'armed');
+    assert.equal(
+        armed.kind === 'armed' && (await db.armDeadmanSwitch({ ...armed.record }, [])).kind,
+        'id_taken'
+    );
+    {
+        const reopened = new FileBackedDb();
+        assert.equal(reopened.getDeadmanSwitch(id)?.status, 'armed', 'the arm persisted');
+        assert.equal(reopened.listDeadmanReleaseWraps(id).length, 2, 'its copies too');
+    }
+
+    // The check-in, as the route makes it.
+    const sw = db.getDeadmanSwitch(id)!;
+    const checkedIn = await db.updateDeadmanSwitchIf(id, sw, {
+        status: 'armed',
+        lastCheckInAt: '2026-01-01T00:30:00.000Z',
+        triggerAt: '2026-01-01T01:30:00.000Z',
+        releaseAt: '2026-01-01T01:30:00.000Z',
+        backlogGraceStartedAt: undefined,
+    });
+    assert.equal(checkedIn.kind, 'applied');
+    {
+        const reopened = new FileBackedDb().getDeadmanSwitch(id);
+        assert.equal(reopened?.status, 'armed');
+        assert.equal(reopened?.lastCheckInAt, '2026-01-01T00:30:00.000Z', 'the check-in persisted');
+        assert.equal(reopened?.triggerAt, '2026-01-01T01:30:00.000Z');
+    }
+    // A stale read is refused against the file store's own memory.
+    const stale = await db.updateDeadmanSwitchIf(id, sw, {
+        lastCheckInAt: '2026-01-01T00:45:00.000Z',
+    });
+    assert.equal(stale.kind, 'refused');
+
+    // The cancel, as the route makes it, and the copies' blanking.
+    const cancelled = await db.updateDeadmanSwitchIf(id, db.getDeadmanSwitch(id)!, {
+        status: 'cancelled',
+        encryptedPayload: '',
+    });
+    assert.equal(cancelled.kind, 'applied');
+    db.eraseDeadmanReleaseWrap(id, owner);
+    db.eraseDeadmanReleaseWrap(id, bob);
+    {
+        const reopened = new FileBackedDb();
+        assert.equal(reopened.getDeadmanSwitch(id)?.status, 'cancelled', 'the cancel persisted');
+        assert.equal(reopened.getDeadmanSwitch(id)?.encryptedPayload, '');
+        assert.deepEqual(
+            reopened.listDeadmanReleaseWraps(id).map((w) => w.sealedKey),
+            ['', ''],
+            'the copies blanked'
+        );
+    }
+    // A cancelled switch that kept its payload (a cancel before this code):
+    // the second cancel's conditional write of the content persists too.
+    db.updateDeadmanSwitch(id, { encryptedPayload: 'kept' });
+    const second = await db.updateDeadmanSwitchIf(id, db.getDeadmanSwitch(id)!, {
+        encryptedPayload: '',
+    });
+    assert.equal(second.kind, 'applied');
+    assert.equal(new FileBackedDb().getDeadmanSwitch(id)?.encryptedPayload, '');
+});

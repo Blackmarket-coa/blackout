@@ -234,22 +234,38 @@ export const releaseContentHeld = (record: DeadmanSwitchRecord): boolean =>
     isReleaseSwitch(record) && record.encryptedPayload !== '';
 
 /**
- * Release switches of one owner whose content is still held. Cancel and the
- * 365-day removal blank the content, so a cancelled switch and a removed
- * release do not count; a fired one does until it is removed. Legacy switches
- * never count: they are not release switches.
+ * The arms this process is writing: each one's rows are counted toward every
+ * bound, and its id is taken, from the moment its checks passed until the
+ * store has answered (round 11 of part 2's review: in Postgres the arm now
+ * awaits its own insert, so between the checks and the row a second arm would
+ * otherwise read the counts without it and both would pass the bound). By
+ * release id; removed when the store answers, whatever it answers.
+ */
+const armsInFlight = new Map<string, { ownerId: string; recipients: string[]; armedAt: number }>();
+
+const armsInFlightOf = (ownerId: string) =>
+    [...armsInFlight.values()].filter((arm) => arm.ownerId === ownerId);
+
+/**
+ * Release switches of one owner whose content is still held, the ones this
+ * process is writing included. Cancel and the 365-day removal blank the
+ * content, so a cancelled switch and a removed release do not count; a fired
+ * one does until it is removed. Legacy switches never count: they are not
+ * release switches.
  */
 export const heldReleaseSwitchCount = (ownerId: string): number =>
-    db.listDeadmanSwitchesForOwner(ownerId).filter(releaseContentHeld).length;
+    db.listDeadmanSwitchesForOwner(ownerId).filter(releaseContentHeld).length +
+    armsInFlightOf(ownerId).length;
 
 const ARM_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 /**
  * Whether one more arm fits the owner's 24-hour window, counting every release
  * switch the owner armed in it (cancelled ones included: the arm happened, and
- * rows are never deleted). When it does not, how long until one does: when the
- * (n − limit + 1)-th oldest arm leaves the window, as the identities
- * directory computes its publish limit (`services/releaseIdentities.ts`).
+ * rows are never deleted) and the ones this process is writing. When it does
+ * not, how long until one does: when the (n − limit + 1)-th oldest arm leaves
+ * the window, as the identities directory computes its publish limit
+ * (`services/releaseIdentities.ts`).
  */
 export const armRateState = (
     ownerId: string,
@@ -260,6 +276,7 @@ export const armRateState = (
         .listDeadmanSwitchesForOwner(ownerId)
         .filter(isReleaseSwitch)
         .map((record) => Date.parse(record.createdAt))
+        .concat(armsInFlightOf(ownerId).map((arm) => arm.armedAt))
         .filter((armedAt) => armedAt > at - ARM_WINDOW_MS)
         .sort((a, b) => a - b);
     if (recent.length < DEADMAN_MAX_ARMS_PER_DAY) return { ok: true };
@@ -270,13 +287,14 @@ export const armRateState = (
 /**
  * How many held releases name `recipientAccountId`: a copy sealed to them on
  * a release switch whose content is held and which they do not own (the
- * owner's own copy names nobody). Per owner (`fromOwner`, whose size is the
- * number of distinct owners naming them), and in all (`total`). Whether
- * the copy itself is still held is not asked: a blanked copy on a switch
- * whose content is held means the recipient deleted their account, and
- * nobody names a deleted account, or a removal half done, whose content goes
- * on the next pass. The copies are listed by recipient through the store's
- * index, so this costs the rows that name the person, not every copy row.
+ * owner's own copy names nobody), the arms this process is writing included.
+ * Per owner (`fromOwner`, whose size is the number of distinct owners naming
+ * them), and in all (`total`). Whether the copy itself is still held is not
+ * asked: a blanked copy on a switch whose content is held means the recipient
+ * deleted their account, and nobody names a deleted account, or a removal
+ * half done, whose content goes on the next pass. The copies are listed by
+ * recipient through the store's index, so this costs the rows that name the
+ * person, not every copy row.
  */
 export const heldReleasesNaming = (
     recipientAccountId: string
@@ -290,6 +308,11 @@ export const heldReleasesNaming = (
         }
         total += 1;
         fromOwner.set(record.ownerId, (fromOwner.get(record.ownerId) ?? 0) + 1);
+    }
+    for (const arm of armsInFlight.values()) {
+        if (!arm.recipients.includes(recipientAccountId)) continue;
+        total += 1;
+        fromOwner.set(arm.ownerId, (fromOwner.get(arm.ownerId) ?? 0) + 1);
     }
     return { fromOwner, total };
 };
@@ -436,6 +459,10 @@ export type ArmReleaseOutcome =
     | { kind: 'rate_limited'; retryAfterSeconds: number }
     | { kind: 'recipient_limit'; recipientAccountId: string }
     | { kind: 'id_taken' }
+    /** The database did not answer the switch's write in time: it may still land (Postgres). */
+    | { kind: 'write_unanswered' }
+    /** The switch's write failed: nothing is armed. */
+    | { kind: 'write_failed' }
     | OwnerIdentityRefusal
     | RecipientRefusal
     | { kind: 'invalid_signature'; recipientAccountId: string };
@@ -512,12 +539,16 @@ export const armReleaseSwitch = async (input: {
         }
     }
 
-    // The signatures awaited; from here to the writes nothing yields, so what
+    // The signatures awaited; from here to the write nothing yields, so what
     // is checked now is what is written against (on one replica): the id is
     // still free, so two arms with one id cannot both write, and every bound
     // still has room, so a burst of arms that all passed the checks above
     // against the same counts is let through one at a time until the bound.
-    if (db.getDeadmanSwitch(envelope.releaseId)) return { kind: 'id_taken' };
+    // An arm this process is still writing counts (`armsInFlight`), since in
+    // Postgres the write below awaits the database.
+    if (db.getDeadmanSwitch(envelope.releaseId) || armsInFlight.has(envelope.releaseId)) {
+        return { kind: 'id_taken' };
+    }
     const boundsAgain = ownerBoundsRefusal(input.ownerId, now);
     if (boundsAgain) return boundsAgain;
     for (const recipientAccountId of recipients) {
@@ -533,36 +564,64 @@ export const armReleaseSwitch = async (input: {
         checkInIntervalSeconds: input.input.checkInIntervalSeconds,
         gracePeriodSeconds: input.input.gracePeriodSeconds,
     });
-    // The copies first, the switch last: in Postgres each is its own
-    // write-behind upsert, in order, so a crash between them leaves copies
-    // that no switch names (listed and served by nothing) and never a switch
-    // without its copies, which would fire and release to nobody.
-    for (const copy of envelope.copies) {
-        db.putDeadmanReleaseWrap({
-            switchId: envelope.releaseId,
-            recipientAccountId: copy.recipientAccountId,
-            recipientFingerprint: copy.recipientFingerprint,
-            sealedKey: copy.sealedKey,
-            signature: copy.signature,
-        });
-    }
-    const record = db.createDeadmanSwitch({
-        id: envelope.releaseId,
+    // One store call writes the copies first and the switch last, insert-only
+    // (`armDeadmanSwitch`): in Postgres on one connection, awaited, so the
+    // switch is in the database before the owner is answered, a stop between
+    // the rows leaves copies that no switch names (listed and served by
+    // nothing) and never a switch without its copies, which would fire and
+    // release to nobody, and a write that fails or is not answered arms
+    // nothing the store lists (round 11 of part 2's review: the owner was
+    // answered 201 before the write-behind upsert ran, and a dropped one left
+    // a switch only that process listed, which in the deployed layout never
+    // fired). Until the store answers, the arm counts toward every bound.
+    armsInFlight.set(envelope.releaseId, {
         ownerId: input.ownerId,
-        // No room: the property is left off, so the Postgres row's room_id is NULL.
-        status: 'armed',
-        checkInIntervalSeconds: input.input.checkInIntervalSeconds,
-        gracePeriodSeconds: input.input.gracePeriodSeconds,
-        lastCheckInAt,
-        triggerAt,
-        releaseAt,
         recipients,
-        encryptedPayload: encodeStoredRelease({ header, ownerIdentity: owner.identity }),
-        ...(input.input.label === undefined ? {} : { headline: input.input.label }),
-        releaseFormat: DEADMAN_RELEASE_FORMAT,
+        armedAt: now.getTime(),
     });
-    return { kind: 'armed', record, envelope };
+    let outcome: Awaited<ReturnType<typeof db.armDeadmanSwitch>>;
+    try {
+        outcome = await db.armDeadmanSwitch(
+            {
+                id: envelope.releaseId,
+                ownerId: input.ownerId,
+                // No room: the property is left off, so the Postgres row's room_id is NULL.
+                status: 'armed',
+                checkInIntervalSeconds: input.input.checkInIntervalSeconds,
+                gracePeriodSeconds: input.input.gracePeriodSeconds,
+                lastCheckInAt,
+                triggerAt,
+                releaseAt,
+                recipients,
+                encryptedPayload: encodeStoredRelease({ header, ownerIdentity: owner.identity }),
+                ...(input.input.label === undefined ? {} : { headline: input.input.label }),
+                releaseFormat: DEADMAN_RELEASE_FORMAT,
+            },
+            envelope.copies.map((copy) => ({
+                switchId: envelope.releaseId,
+                recipientAccountId: copy.recipientAccountId,
+                recipientFingerprint: copy.recipientFingerprint,
+                sealedKey: copy.sealedKey,
+                signature: copy.signature,
+            }))
+        );
+    } finally {
+        armsInFlight.delete(envelope.releaseId);
+    }
+    switch (outcome.kind) {
+        case 'armed':
+            return { kind: 'armed', record: outcome.record, envelope };
+        case 'id_taken':
+            return { kind: 'id_taken' };
+        case 'unanswered':
+            return { kind: 'write_unanswered' };
+        case 'failed':
+            return { kind: 'write_failed' };
+    }
 };
+
+/** For tests: how many arms this process is writing at the moment. */
+export const armsInFlightCount = (): number => armsInFlight.size;
 
 export type ResealReleaseOutcome =
     | { kind: 'resealed'; record: DeadmanSwitchRecord; copy: ReleaseCopy }
@@ -705,19 +764,33 @@ export const ownerReleaseView = (
 };
 
 /**
+ * A release switch that fired and stands fired: `triggered` with the time it
+ * fired. `releasedAt` is written with the trigger, but the owner's deletion
+ * over a trigger another process committed leaves the switch `cancelled` with
+ * `releasedAt` still set (decision 30; round 10's test 13 asserts it), so the
+ * status is checked too (round 11 of part 2's review: the readers keyed on
+ * `releasedAt` alone, and only the emptied content kept such a switch from
+ * being served).
+ */
+export const standsFired = (
+    record: DeadmanSwitchRecord
+): record is DeadmanSwitchRecord & { releasedAt: string } =>
+    record.status === 'triggered' && typeof record.releasedAt === 'string';
+
+/**
  * The releases given to `accountId` (`GET /v1/deadman/releases`): fired
  * release switches that sealed a copy to them, each with their own copy and
  * nothing of anyone else's. Nothing before the trigger, nothing of a switch
- * they own, nothing once the content was removed, newest release first.
+ * they own, nothing of one cancelled since (the owner's deletion over a
+ * trigger committed elsewhere), nothing once the content was removed, newest
+ * release first.
  */
 export const releasedCopiesFor = (accountId: string): DeadmanReleasedCopy[] => {
     const releases: DeadmanReleasedCopy[] = [];
     for (const wrap of db.listDeadmanReleaseWrapsForRecipient(accountId)) {
         if (!wrapIsHeld(wrap)) continue;
         const record = db.getDeadmanSwitch(wrap.switchId);
-        // `releasedAt` is written with the trigger and only then: it is what
-        // says a release switch fired.
-        if (!record || !record.releasedAt || record.ownerId === accountId) continue;
+        if (!record || !standsFired(record) || record.ownerId === accountId) continue;
         const release = storedRelease(record);
         if (!release) continue;
         releases.push({
@@ -791,21 +864,43 @@ export const blankReleaseWraps = (switchId: string): number => {
 /**
  * Remove the content, the owner's identity copy and every sealed copy of
  * each release switch that fired `DEADMAN_RELEASE_RETENTION_DAYS` or more
- * ago (§11, retention). The rows stay: the switch as a record of what it
- * was and when it fired, the copies as a record of whom it was for, the
- * notices as a record that one was sent. Returns how many releases were
- * removed this pass.
+ * ago and stands fired (§11, retention). The rows stay: the switch as a
+ * record of what it was and when it fired, the copies as a record of whom
+ * it was for, the notices as a record that one was sent. The content's
+ * removal is a conditional write of that one column
+ * (`updateDeadmanSwitchIf`, on the switch as read: fired, with its last
+ * check-in), so in Postgres it touches nothing else of the row (round 11 of
+ * part 2's review: as a full-row write from the worker's mirror it could put
+ * back a label the owner's deletion on the API process had just erased); one
+ * the database refuses or does not answer is left for the next pass.
+ *
+ * Each pass also blanks the held copies of any cancelled release switch
+ * (round 11: a cancel the database applied after its bound had passed, or a
+ * re-seal that reached a replica after its cancel, left copies held on a
+ * cancelled switch, served to nobody, until the owner cancelled again, which
+ * nothing told them to). Those count as removed too. Returns how many
+ * releases were removed this pass.
  */
-export const removeExpiredReleases = (now: Date): number => {
+export const removeExpiredReleases = async (now: Date): Promise<number> => {
     let removed = 0;
     const nowMs = now.getTime();
-    for (const record of db.listAllDeadmanSwitches()) {
-        // Only a release switch that fired has `releasedAt`.
-        if (!record.releasedAt) continue;
+    for (const listed of db.listAllDeadmanSwitches()) {
+        const record = db.getDeadmanSwitch(listed.id);
+        if (!record || !isReleaseSwitch(record)) continue;
+        if (record.status === 'cancelled') {
+            if (blankReleaseWraps(record.id) > 0) removed += 1;
+            continue;
+        }
+        if (!standsFired(record)) continue;
         if (Date.parse(record.releasedAt) + DEADMAN_RELEASE_RETENTION_MS > nowMs) continue;
         const held = record.encryptedPayload !== '';
         const blanked = blankReleaseWraps(record.id);
-        if (held) db.updateDeadmanSwitch(record.id, { encryptedPayload: '' });
+        if (held) {
+            const outcome = await db.updateDeadmanSwitchIf(record.id, record, {
+                encryptedPayload: '',
+            });
+            if (outcome.kind !== 'applied') continue;
+        }
         if (held || blanked > 0) removed += 1;
     }
     return removed;

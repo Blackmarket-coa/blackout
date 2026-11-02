@@ -1624,10 +1624,10 @@ test('a release whose content is gone while a copy is still held is not served, 
     // The removal finishes the job once, and then has nothing to do.
     const onTheDay = new Date(firesAt.getTime() + DEADMAN_RELEASE_RETENTION_MS);
     // Other tests' releases expire at this moment too; this one is among them.
-    assert.ok(removeExpiredReleases(onTheDay) >= 1);
+    assert.ok((await removeExpiredReleases(onTheDay)) >= 1);
     assert.equal(db.getDeadmanReleaseWrap(envelope.releaseId, recipient.user.id)?.sealedKey, '');
-    assert.equal(removeExpiredReleases(onTheDay), 0, 'a second pass changes nothing');
-    assert.equal(removeExpiredReleases(new Date(onTheDay.getTime() + 86_400_000)), 0);
+    assert.equal(await removeExpiredReleases(onTheDay), 0, 'a second pass changes nothing');
+    assert.equal(await removeExpiredReleases(new Date(onTheDay.getTime() + 86_400_000)), 0);
 });
 
 test('a legacy switch holds no release whatever its payload looks like, and a fired release outlives its owner without an owner view', async () => {
@@ -1663,7 +1663,7 @@ test('a legacy switch holds no release whatever its payload looks like, and a fi
     assert.equal((await releasesFor(recipient.user)).length, 1, 'the recipient still reads it');
 });
 
-test('the 365-day removal lists each release’s copies by switch: a pass over releases already removed does not scan the copies', () => {
+test('the 365-day removal lists each release’s copies by switch: a pass over releases already removed does not scan the copies', async () => {
     // Fired long ago, removed on the first pass; every later pass must cost
     // one indexed lookup per release, not a scan of every copy row (the
     // independent review's P3b-M4: 8 s a tick at 10,000 removed releases).
@@ -1698,7 +1698,7 @@ test('the 365-day removal lists each release’s copies by switch: a pass over r
         });
     }
     assert.equal(db.listDeadmanReleaseWraps(ids[7]).length, 3, 'listed by switch');
-    assert.ok(removeExpiredReleases(new Date()) >= 1500);
+    assert.ok((await removeExpiredReleases(new Date())) >= 1500);
     assert.ok(db.listDeadmanReleaseWraps(ids[7]).every((w) => w.sealedKey === ''));
 
     // The second pass: nothing to do, and no walk over the copies map; nor
@@ -1725,7 +1725,7 @@ test('the 365-day removal lists each release’s copies by switch: a pass over r
     let counts: ReturnType<typeof noticeCounts>;
     try {
         const started = performance.now();
-        removed = removeExpiredReleases(new Date());
+        removed = await removeExpiredReleases(new Date());
         elapsedMs = performance.now() - started;
         counts = noticeCounts(ids[7]);
     } finally {

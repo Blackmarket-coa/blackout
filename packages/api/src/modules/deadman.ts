@@ -32,7 +32,7 @@ import { deadmanSweepIntervalMs } from '../services/deadmanSweepScheduler';
 import { log } from '../telemetry/logger';
 import { requireAuthenticatedUser, requireDomainCapability } from './authz';
 import { emitDomainEvent, listDomainEvents } from './domain-events';
-import { applyCheckIn, evaluateSweepTransition } from '../services/deadmanScheduler';
+import { applyCheckIn, evaluateSweepTransition, sweepDueAtMs } from '../services/deadmanScheduler';
 import type { FeatureModule } from './types';
 
 /**
@@ -127,17 +127,30 @@ const switchChanged = (c: Context) =>
     );
 
 /**
- * The database did not answer a check-in or a cancel in time
- * (`updateDeadmanSwitchIf`): it may or may not have been recorded. Doing it
- * again is safe, since each is conditional on the switch as it is read.
+ * The database did not answer a check-in, a cancel or an arm in time
+ * (`updateDeadmanSwitchIf`, `armDeadmanSwitch`): it may or may not have been
+ * recorded, and nothing of it is in this process's memory until it is. Doing
+ * a check-in or a cancel again is safe, since each is conditional on the
+ * switch as it is read; an arm done again with the same envelope is refused
+ * `release_id_taken` if the first landed after all.
  */
-const switchWriteUnanswered = (c: Context, what: 'check-in' | 'cancel') =>
+const switchWriteUnanswered = (c: Context, what: 'check-in' | 'cancel' | 'arm') =>
     c.json(
         {
             code: 'switch_write_unanswered',
             message: `The server could not confirm the ${what} in time. It may not have been recorded; try again.`,
         },
         503
+    );
+
+/** The database refused or failed the arm's write: nothing was armed. */
+const switchWriteFailed = (c: Context) =>
+    c.json(
+        {
+            code: 'switch_write_failed',
+            message: 'The server could not record the switch. Nothing was armed; try again.',
+        },
+        500
     );
 
 /**
@@ -244,9 +257,19 @@ const ownedSwitch = (id: string, subject: string): DeadmanSwitchRecord | undefin
  * no event (round 9 of part 2's review). The mirror takes a move only once
  * Postgres has applied it, so nothing here serves, notifies or reports a
  * trigger Postgres then refuses, and a move whose statement fails or does not
- * answer in time is left for the next pass (round 10). Each switch is read
- * from the mirror as it is reached, since a move in Postgres awaits the
- * database.
+ * answer in time is left for the first pass after the database answers
+ * (round 10). Each switch is read from the mirror as it is reached, since a
+ * move in Postgres awaits the database.
+ *
+ * A stall of the database's statements is an outage of this sweep for the
+ * switches it kept from moving, and of every owner's check-in on this
+ * process: a switch due at any moment while they stood (the store keeps
+ * when they began and settled), or whose owner's check-in or cancel was
+ * refused unanswered here and has not checked in since, gets the backlog
+ * window instead of firing, within the tolerance or not, as after an outage
+ * of the sweep's own (round 11 of part 2's review: a stall an hour before a
+ * deadline refused the owner's check-in, and the first pass after it fired
+ * the switch). The sweep in another process knows only its own stalls.
  */
 export async function sweepOverdueDeadmanSwitches(
     now: Date = new Date(),
@@ -257,7 +280,20 @@ export async function sweepOverdueDeadmanSwitches(
     for (const listed of db.listAllDeadmanSwitches()) {
         const record = db.getDeadmanSwitch(listed.id);
         if (!record) continue;
-        const transition = evaluateSweepTransition(record, now, toleranceMs);
+        if (record.status === 'triggered' || record.status === 'cancelled') {
+            db.clearOwnerWriteUnanswered(record.id);
+            continue;
+        }
+        let refused = db.ownerWriteUnansweredAt(record.id);
+        if (refused && refused.lastCheckInAt !== record.lastCheckInAt) {
+            // A check-in landed since, here or elsewhere: the refusal is moot.
+            db.clearOwnerWriteUnanswered(record.id);
+            refused = undefined;
+        }
+        const stalled =
+            refused !== undefined ||
+            db.switchStatementsStalledBetween(sweepDueAtMs(record), now.getTime());
+        const transition = evaluateSweepTransition(record, now, toleranceMs, { stalled });
         if (transition.kind === 'none') continue;
 
         let updated: DeadmanSwitchRecord | undefined;
@@ -302,7 +338,7 @@ export async function sweepOverdueDeadmanSwitches(
             toleranceMs,
         });
     }
-    const removed = removeExpiredReleases(now);
+    const removed = await removeExpiredReleases(now);
     if (removed > 0) log.info('deadman_releases_removed', { releases: removed });
     return processed;
 }
@@ -382,6 +418,10 @@ const armResponse = (c: Context, outcome: ArmReleaseOutcome, subject: string) =>
                 },
                 409
             );
+        case 'write_unanswered':
+            return switchWriteUnanswered(c, 'arm');
+        case 'write_failed':
+            return switchWriteFailed(c);
         default:
             return identityResponse(c, outcome);
     }
@@ -400,6 +440,8 @@ const identityResponse = (
         | { kind: 'rate_limited' }
         | { kind: 'recipient_limit' }
         | { kind: 'id_taken' }
+        | { kind: 'write_unanswered' }
+        | { kind: 'write_failed' }
     >
 ) => {
     switch (outcome.kind) {
@@ -565,7 +607,11 @@ function createDeadmanRouter() {
         // in Postgres too): one the worker fired, or cancelled elsewhere, after
         // this process last heard of it is refused below rather than set back
         // to armed. One another check-in or the sweep's move into grace
-        // changed meanwhile is checked in again over what it now is.
+        // changed meanwhile is checked in again over what it now is. The
+        // switch as the refusal read it is looked at before every attempt,
+        // the last included, so a refusal over a trigger or a cancel is
+        // answered as such on any attempt (round 11 of part 2's review: the
+        // third was answered `switch_changed` whatever the switch had become).
         for (let attempt = 0; ; attempt += 1) {
             if (!existing) return notFound(c);
             if (existing.status === 'triggered') {
@@ -577,11 +623,16 @@ function createDeadmanRouter() {
                 );
             }
             if (existing.status === 'cancelled') {
+                // A cancel this process has just learned of (one answered 503
+                // that landed, or one made elsewhere): any copy still held on
+                // it goes now, as the cancel itself would have taken it.
+                if (isReleaseSwitch(existing)) blankReleaseWraps(id);
                 return c.json(
                     { code: 'switch_cancelled', message: 'Switch has been cancelled' },
                     409
                 );
             }
+            if (attempt >= SWITCH_WRITE_ATTEMPTS) return switchChanged(c);
             const refreshed = applyCheckIn(existing, new Date());
             const outcome = await db.updateDeadmanSwitchIf(id, existing, {
                 status: refreshed.status,
@@ -596,7 +647,6 @@ function createDeadmanRouter() {
                 break;
             }
             if (outcome.kind === 'unanswered') return switchWriteUnanswered(c, 'check-in');
-            if (attempt >= SWITCH_WRITE_ATTEMPTS - 1) return switchChanged(c);
             existing =
                 outcome.current && outcome.current.ownerId === subject
                     ? outcome.current
@@ -626,7 +676,8 @@ function createDeadmanRouter() {
         let updated: DeadmanSwitchRecord | undefined;
         // Conditional as the check-in is: a switch that fired in Postgres
         // after this process last heard of it is not cancelled, since nothing
-        // may take a release back.
+        // may take a release back. As there, the switch as a refusal read it
+        // is looked at before every attempt, the last included.
         for (let attempt = 0; ; attempt += 1) {
             if (!existing) return notFound(c);
             if (existing.status === 'triggered') {
@@ -641,14 +692,25 @@ function createDeadmanRouter() {
             if (existing.status === 'cancelled') {
                 // Cancelled before cancel cleared payloads: a second cancel is
                 // how the owner removes what the store still holds. A
-                // cancelled switch never moves again, so this needs no
-                // condition.
-                const cleared = existing.encryptedPayload
-                    ? db.updateDeadmanSwitch(id, { encryptedPayload: '' }) ?? existing
-                    : existing;
+                // cancelled switch never moves again, so the condition cannot
+                // fail on the status; the write is conditional all the same,
+                // so that in Postgres it touches the content column only and
+                // not the whole row from this mirror (round 11 of part 2's
+                // review). One the database does not answer is 503, as the
+                // cancel itself would be.
+                let cleared = existing;
+                if (existing.encryptedPayload) {
+                    const outcome = await db.updateDeadmanSwitchIf(id, existing, {
+                        encryptedPayload: '',
+                    });
+                    if (outcome.kind === 'unanswered') return switchWriteUnanswered(c, 'cancel');
+                    cleared =
+                        outcome.kind === 'applied' ? outcome.record : outcome.current ?? existing;
+                }
                 if (isReleaseSwitch(existing)) blankReleaseWraps(id);
                 return c.json(envelope(DEADMAN_EVENT_NAMES.cancelled, cleared, subject));
             }
+            if (attempt >= SWITCH_WRITE_ATTEMPTS) return switchChanged(c);
 
             // The payload goes with the cancel, and so do a release switch's
             // sealed copies, the owner's own included, once the cancel has
@@ -664,7 +726,6 @@ function createDeadmanRouter() {
                 break;
             }
             if (outcome.kind === 'unanswered') return switchWriteUnanswered(c, 'cancel');
-            if (attempt >= SWITCH_WRITE_ATTEMPTS - 1) return switchChanged(c);
             existing =
                 outcome.current && outcome.current.ownerId === subject
                     ? outcome.current
