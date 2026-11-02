@@ -1031,11 +1031,11 @@ const processOne = async (
     claim: NoticeClaim
 ): Promise<Step> => {
     const record = db.getDeadmanSwitch(notice.switchId);
-    // A release switch that fired and stands fired (`standsFired`: the
-    // owner's deletion over a trigger committed elsewhere leaves one
-    // cancelled with its `releasedAt`); an empty payload is one whose content
-    // was removed, which nothing points at any more; a cancelled switch, or
-    // a legacy one, was never released this way.
+    // A release switch that fired and stands fired (`standsFired`: until
+    // round 12 the owner's deletion over a trigger committed elsewhere left
+    // one cancelled with its `releasedAt`); an empty payload is one whose
+    // content was removed, which nothing points at any more; a cancelled
+    // switch, or a legacy one, was never released this way.
     if (!record || !standsFired(record) || record.encryptedPayload === '') {
         return { kind: 'failed', reason: 'release_unavailable' };
     }

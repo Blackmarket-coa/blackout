@@ -7,13 +7,7 @@ import type {
 } from '@blackout/protocol';
 import { db } from '../db/store';
 import type { UserRecord } from '../db/types';
-import {
-    blankReleaseWraps,
-    isReleaseSwitch,
-    noticeCounts,
-    releasedCopiesFor,
-    standsFired,
-} from './deadmanReleases';
+import { isReleaseSwitch, noticeCounts, releasedCopiesFor, standsFired } from './deadmanReleases';
 import { log } from '../telemetry/logger';
 import { recordToReleaseIdentity } from './releaseIdentities';
 import { matrixUserIdFor } from './userIdentity';
@@ -272,7 +266,8 @@ export const exportUserData = (userId: string): AccountExport | null => {
         .listDeadmanReleaseNoticesForRecipient(userId)
         .filter((notice) => {
             // A switch that stands fired (`standsFired`), as every reader
-            // asks: one cancelled with its `releasedAt` kept is not listed.
+            // asks: one cancelled with its `releasedAt` kept (a shape only
+            // written before round 12) is not listed.
             const record = db.getDeadmanSwitch(notice.switchId);
             return record !== undefined && standsFired(record);
         })
@@ -493,7 +488,7 @@ export type ConfirmDeletionOutcome =
  * Each switch of the owner's is erased by one statement decided in the
  * database (`eraseDeadmanSwitchUnlessFired`, decision 30, built in round 12
  * of part 2's review): one that has not fired there is cancelled and emptied,
- * and a release switch's sealed copies go with it; one the database shows
+ * and its sealed copies are blanked in the same call; one the database shows
  * fired, on this process or another this process had not heard from, is
  * erased as fired: its label goes, and so does the owner's own copy (below,
  * with every copy sealed to this account), while its content, the owner's
@@ -503,11 +498,13 @@ export type ConfirmDeletionOutcome =
  * is left to open the owner's copy. The same statement erases a legacy
  * switch that fired elsewhere as fired (its payload stays for the people it
  * named, as before; its label goes). Where the database does not answer the
- * statement in time, or fails it, the switch is erased from this process's
- * mirror as before round 12 (`eraseDeadmanSwitch`, a plain write the
- * write-behind queue lands later, which the route's wait covers): in that
- * case alone a trigger another process committed in the same moment can
- * still be written over, and the fallback is logged.
+ * statement in time, is not sent it because another switch statement stands
+ * unanswered, or fails it, the store queues the same statement in the
+ * switch's lane (`queued`, logged), which decides on the database's row when
+ * it runs and which the route's wait for this process's queued writes covers;
+ * nothing writes this process's view of the switch whole over the row
+ * (round 12's check: the fallback did, and cancelled a release that had fired
+ * elsewhere).
  */
 export const confirmAccountDeletion = async (
     presentedToken: string,
@@ -542,18 +539,7 @@ export const confirmAccountDeletion = async (
     // people it named; its label goes (above).
     for (const sw of db.listDeadmanSwitchesForOwner(record.userId)) {
         const outcome = await db.eraseDeadmanSwitchUnlessFired(sw.id);
-        let erased: typeof sw | undefined;
-        if (outcome.kind === 'applied') {
-            erased = outcome.record;
-        } else if (outcome.kind === 'absent') {
-            continue;
-        } else {
-            log.warn('account_deletion_switch_erase_unconfirmed', { outcome: outcome.kind });
-            erased = db.eraseDeadmanSwitch(sw.id);
-        }
-        if (erased && erased.status !== 'triggered' && isReleaseSwitch(erased)) {
-            blankReleaseWraps(sw.id);
-        }
+        if (outcome.kind === 'queued') log.warn('account_deletion_switch_erase_queued', {});
     }
     // Every copy sealed to this account goes, and the notices owed to it
     // end and forget their room (`eraseReleaseCopiesAndNoticesOf`; the route

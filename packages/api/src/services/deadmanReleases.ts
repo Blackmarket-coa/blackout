@@ -774,12 +774,14 @@ export const ownerReleaseView = (
 
 /**
  * A release switch that fired and stands fired: `triggered` with the time it
- * fired. `releasedAt` is written with the trigger, but the owner's deletion
- * over a trigger another process committed leaves the switch `cancelled` with
- * `releasedAt` still set (decision 30; round 10's test 13 asserts it), so the
- * status is checked too (round 11 of part 2's review: the readers keyed on
- * `releasedAt` alone, and only the emptied content kept such a switch from
- * being served).
+ * fired. `releasedAt` is written with the trigger, and until round 12 of part
+ * 2's review the owner's deletion over a trigger another process committed
+ * left the switch `cancelled` with `releasedAt` still set (since then the
+ * deletion is decided in Postgres and erases such a switch as fired, decision
+ * 30, so nothing writes that shape any more), so the status is checked too
+ * (round 11: the readers keyed on `releasedAt` alone, and only the emptied
+ * content kept such a switch from being served); a row of that shape written
+ * before is served to nobody.
  */
 export const standsFired = (
     record: DeadmanSwitchRecord
@@ -790,9 +792,9 @@ export const standsFired = (
  * The releases given to `accountId` (`GET /v1/deadman/releases`): fired
  * release switches that sealed a copy to them, each with their own copy and
  * nothing of anyone else's. Nothing before the trigger, nothing of a switch
- * they own, nothing of one cancelled since (the owner's deletion over a
- * trigger committed elsewhere), nothing once the content was removed, newest
- * release first.
+ * they own, nothing of one cancelled with its `releasedAt` kept (which the
+ * owner's deletion over a trigger committed elsewhere left until round 12),
+ * nothing once the content was removed, newest release first.
  */
 export const releasedCopiesFor = (accountId: string): DeadmanReleasedCopy[] => {
     const releases: DeadmanReleasedCopy[] = [];
