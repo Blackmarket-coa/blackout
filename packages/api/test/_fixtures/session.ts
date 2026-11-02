@@ -16,6 +16,17 @@
  *
  * Pass the store the app under test reads (usually the `db` singleton from
  * `src/db/store`, imported after the test file has set its environment).
+ *
+ * A test file that sets no `BLACKOUT_DB_MODE` runs on the file store, which
+ * saves the seeded row to `.blackout/data/store.json` under the working
+ * directory and loads it again when the next test process boots. So a run
+ * meant to show that a test needs this seeding (the row left out) must start
+ * without that directory: otherwise a row an earlier run saved can still be
+ * there, and the test passes without the seeding.
+ *
+ * A test that signs for an account that is gone on purpose (the route's own
+ * answer to a deleted account is what it checks) signs with `signJwt` and does
+ * not call these.
  */
 import type { UserRecord } from '../../src/db/types';
 import { signJwtWithMeta } from '../../src/services/auth';
@@ -25,7 +36,14 @@ export interface AccountStore {
     createUser(input: Omit<UserRecord, 'createdAt'>): UserRecord;
 }
 
-/** The username a seeded row gets when the caller names none. */
+/**
+ * The username a seeded row gets when the caller names none: `u-` and the id's
+ * first 24 ASCII letters and digits, or `u-user` when it has none. 24 is long
+ * enough that ids sharing a long prefix (`blackout-user-uuid-1` and `-3`; 12
+ * would give both `u-blackoutuser`) still get different names, as Postgres's
+ * UNIQUE `users.username` would need. Every call in the suite passes the
+ * username its token carries, so this is only a fallback.
+ */
 const defaultUsername = (id: string): string =>
     `u-${id.replace(/[^a-z0-9]/gi, '').slice(0, 24) || 'user'}`;
 
