@@ -102,8 +102,9 @@ Include:
 > asked for (`synapse/util/managed_hosting.py`,
 > `scripts-dev/blackout/managed_hosting_smoke.sh` and their tests) were
 > removed on 2026-11-02 in `9493f41`; the operator chose removal ("remove
-> both"). Their only runtime caller, the Railway template's `entrypoint.sh`,
-> was removed in `42f68f2`. The prompt is kept as written.
+> both"). The only runtime caller of the readiness checks and hooks, the
+> Railway template's `entrypoint.sh`, was removed in `42f68f2`; the smoke
+> script had none. The prompt is kept as written.
 
 ```text
 Implement managed-hosting readiness checks and operator controls.
