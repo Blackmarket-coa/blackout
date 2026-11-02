@@ -9,19 +9,24 @@ Scope: the Synapse fork's `apps/blackout-server/poetry.lock` moves from Twisted
 carry `exp:2026-11-30`; on that day the **Trivy filesystem scan** check
 (`security.yml`) would have gone red on every push to `develop`, in the merge
 queue, and on every PR that touches a path the workflow watches (`apps/**`,
-`packages/**`, `infra/**`, `deploy/**`, `blackout-desktop/**`, `services/**`,
-the lockfile, the ignore files and the workflow itself; a docs-only PR starts
-no run). They are removed here, with the lock that makes them unnecessary.
-The same change corrects the reason the two image-size ignores give, which
-has been false since 2026-09-14. The operator approved the one PR on
-2026-11-02. The second review of the change found that the fork's manhole
-could not start on either Twisted version, a fork bug from 2026-09-13 that the
-bump neither caused nor changed; it is fixed here as a one-line change with
-tests, in commit `20362e4` (which also carries this record's second-round
-corrections: the pre-commit prettier step's `git add -u` staged the record
-with the fix, and the rules forbid amending), so the operator can still split
-it out by reverting that commit's three fork files if the approved scope is to
-stay exact ([The manhole](#the-manhole-could-not-start)).
+`packages/**`, `infra/**`, `deploy/**`, `tools/ci/check-embed-proxy-framing*`,
+`blackout-desktop/**`, `services/**`, `.trivyignore`, `pnpm-lock.yaml`,
+`package.json`, the workflow itself, `.gitleaksignore` and `osv-scanner.toml`;
+a docs-only PR starts no run). They are removed here, with the lock that makes
+them unnecessary. The same change corrects the reason the two image-size
+ignores give, which has been false since 2026-09-14. The operator approved the one PR on
+2026-11-02. The review of this change's first round found that the fork's
+manhole could not start on either Twisted version, a fork bug from 2026-09-13
+that the bump neither caused nor changed; it is fixed here as a one-line
+change with tests, in commit `20362e4` (which also carries this record's
+second-round corrections: the pre-commit prettier step's `git add -u` staged
+the record with the fix, and the rules forbid amending). If the approved scope
+is to stay exact, the operator can still split it out: return
+`synapse/util/manhole.py` to `develop`'s, delete
+`tests/blackout_runtime/test_manhole.py`, and drop PATCHES.md's manhole bullet
+and this record's manhole section; a `git revert` of `20362e4` would also take
+back that commit's record corrections
+([The manhole](#the-manhole-could-not-start)).
 
 | Package (lock)         | Advisory                              | Severity | Fixed in               | Outcome                                   |
 | ---------------------- | ------------------------------------- | -------- | ---------------------- | ----------------------------------------- |
@@ -44,11 +49,13 @@ stay exact ([The manhole](#the-manhole-could-not-start)).
     zope-interface 8.2 already. The wheel and sdist hashes in the lock match
     PyPI's. None of the APIs 26.10.0 removed or changed is used by the fork in
     a way that behaves differently (read against the release notes, run
-    through the suite, and booted). One fork source file changes, for a bug
-    that predates the bump: `synapse/util/manhole.py` called a `Key` method
-    Twisted has never had, so a homeserver with a manhole listener and no
-    configured key died at startup under 26.4.0 and 26.10.0 alike
-    ([The manhole](#the-manhole-could-not-start)).
+    through the suite, and booted). Two fork source files change. One is
+    for a bug that predates the bump: `synapse/util/manhole.py` called a
+    `Key` method Twisted has never had, so a homeserver with a manhole
+    listener and no configured key died at startup under 26.4.0 and 26.10.0
+    alike ([The manhole](#the-manhole-could-not-start)). The other is a
+    comment in `synapse/handlers/send_email.py` that named 26.4.0 as the
+    minimum Twisted; it no longer names a version.
 -   **The four Twisted entries leave `.trivyignore`, with their CVE aliases.**
     `.trivyignore` now holds pnpm-lock.yaml entries only; its header,
     `security.yml`'s comment and the `pyproject.toml` comment say so.
@@ -82,14 +89,23 @@ stay exact ([The manhole](#the-manhole-could-not-start)).
     `NextUpdate` 2026-11-02 19:08 UTC quoted for that download were read at
     the time and not retained (the download log holds no metadata line). A
     later download at 02:26 UTC replaced the cache with the database of
-    2026-11-02 01:14 UTC (`NextUpdate` 2026-11-03 01:14 UTC), the one on
-    disk now; the second round's runs used it, and Trivy's own
-    `--download-db-only` at 03:25 UTC found nothing newer and left it. Run
-    with `security.yml`'s flags (`fs`, `--scanners vuln`,
+    2026-11-02 01:14 UTC (`NextUpdate` 2026-11-03 01:14 UTC), and the
+    second round's runs used it. Trivy's `--download-db-only` at 03:25 UTC
+    did not look for a newer one: while the local `NextUpdate` lies ahead it
+    skips the download without contacting the registry (`--debug`: "DB
+    update was skipped because the local DB is the latest"). The second
+    review read ghcr.io's `trivy-db:2` manifest at 03:52 UTC as created
+    2026-11-02 01:21 UTC, which it took to be the 01:14 build; at 11:10 UTC
+    that manifest was a newer build, created 07:26 UTC. For the third round
+    the cached database was deleted and downloaded again at 11:28 UTC (from
+    `mirror.gcr.io/aquasec/trivy-db:2`, Trivy 0.69.3's default):
+    `UpdatedAt` 2026-11-02 07:17 UTC, `NextUpdate` 2026-11-03 07:17 UTC, the
+    one on disk now (its metadata and the `--debug` download log are kept).
+    Run with `security.yml`'s flags (`fs`, `--scanners vuln`,
     `--severity CRITICAL,HIGH`, `--ignore-unfixed`,
     `--ignorefile .trivyignore`, `--exit-code 1`) over `git archive` exports
-    of this branch and of `develop`, plus `--skip-db-update` so every run used
-    that one database, and `--format json` to count.
+    of this branch and of `develop`, plus `--skip-db-update` so that each
+    round's runs used one database, and `--format json` to count.
 -   **Advisory text:** the OSV API (`/v1/vulns/<id>`) and GitHub's own records
     in `github/advisory-database` (`raw.githubusercontent.com`) for all ten
     advisories above; the ranges are identical in both for every one of them.
@@ -135,7 +151,10 @@ stay exact ([The manhole](#the-manhole-could-not-start)).
     the reproduced refusal), and the runs below followed. The second round
     ran the new manhole test module under both venvs with this branch's tree
     first on `PYTHONPATH`, then the targeted modules and the full suite again
-    from the after venv.
+    from the after venv. The third round, whose only fork change is a
+    comment, ran the targeted modules, the full suite and
+    `blackout_runtime_tests` once more from the after venv on `d5fa741`, and
+    one boot with the manhole probe.
 -   **Boot:** `synapse.app.homeserver --generate-config` into a scratch
     directory (sqlite, `localhost`, the 8008 listener on loopback), then the
     homeserver started from each venv, polled on `/health` and
@@ -252,7 +271,8 @@ is False.
         dependency); setuptools 84.2.1 stays in the lock for setuptools-rust,
         zope-event and zope-schema.
 -   `poetry export --extras all` of the old and the new lock, the image's
-    install set, differ by those two lines; with `--with dev` the same.
+    install set, differ by three lines, `twisted`, `twisted[tls]` and
+    `zope-interface` (two packages); with `--with dev` the same.
 -   `poetry lock --check`, `check_lockfile.py` and
     `check_locked_deps_have_sdists.py` (151 packages) pass.
 
@@ -262,20 +282,25 @@ Two majors. From the project's changelog (PyPI's description of 8.7): 7.0
 dropped Python 3.7 and moved the C extension to heap types and multi-phase
 module initialisation; 8.0 dropped 3.8 and replaced the `pkg_resources`
 namespace with a PEP 420 one; 8.0.1 removed the run-time setuptools
-dependency; 8.1 dropped 3.9; 8.7 (`requires_python >=3.11`) adds Python 3.15
-wheels and fixes data races and reference leaks in the C lookup caches. The
-fork imports `implementer`
-(19 modules, tests included), `provider` (one, `synapse/http/client.py`) and
-`Interface` (two), and nothing else from the package; `zope.schema` 7.0.1 (`>=5.0.0`) and
-`mypy-zope` 1.0.1 (`zope.interface = "*"`) do not constrain it. Upstream
+dependency; 8.1 dropped 3.9; 8.7 (`requires_python >=3.11`) drops 3.10,
+releases Python 3.15 wheels, removes the C optimisations' code path for static
+types (used only below 3.11), and fixes free-threaded data races in the C
+lookup caches and reference leaks in the C optimisations when the lazy import
+of `zope.interface.declarations` fails partway through. The fork imports
+`implementer` (19 modules, tests included), `provider` (one,
+`synapse/http/client.py`) and `Interface` (two), and nothing else from the
+package; `zope.schema` 7.0.1 (`>=5.0.0`) and `mypy-zope` 1.0.1
+(`zope.interface = "*"`) do not constrain it. Upstream
 Synapse `develop` already runs on zope-interface 8.2 with Twisted 26.4.0.
-Whether mypy 1.5.1 with mypy-zope 1.0.1 behaves the same under 8.7 was not
-checked: no Python file changed, so mypy did not run.
+mypy 1.5.1 with mypy-zope 1.0.1 over the fork's whole `mypy.ini` file list
+reports no new error under 8.7 and 26.10.0: two errors fewer and one with a
+changed message, all from Twisted's own types (the third round's mypy bullet
+in [Validation](#validation)).
 
 ## The manhole could not start
 
-Found by the second review of this change, which added a `type: manhole`
-listener to the boot check. Not caused by the bump and not changed by it: the
+Found by the review of this change's first round, which added a
+`type: manhole` listener to the boot check. Not caused by the bump and not changed by it: the
 same crash under 26.4.0 and 26.10.0, on `develop` and on this branch's first
 round.
 
@@ -309,7 +334,9 @@ shipped hardcoded one"), were untrue from 2026-09-13 until this change: an
 operator who followed them got a server that would not start. The first round
 of this record and PATCHES.md's first-round entry described the manhole's
 SSHSession behaviour under 26.10.0 as if the manhole ran; both are reworded
-here.
+here. Commit `6b6d96e`'s message did the same ("the manhole sends one shell
+per channel") and cannot be amended
+([Commit messages](#commit-messages)).
 
 **Fix.** `return Key(rsa.generate_private_key(public_exponent=65537,
 key_size=2048))`, with a comment that states the above, in commit `20362e4`.
@@ -343,7 +370,9 @@ session-client requests sent to the same session` (#12800); under 26.4.0 it
 was accepted (two `Getting shell` lines). The one other `ERROR` line in both
 manhole logs, `Got remote error, code 10`, is the probe's own disconnect
 (SSH_DISCONNECT_CONNECTION_LOST). Each manhole run's `homeserver.log` is 184
-lines; normalised, the two differ only in those Twisted session lines.
+lines; normalised, the two differ in six lines: the shell-request lines above
+(26.4.0's two `Getting shell`, 26.10.0's `requesting shell` and the `ERROR`)
+and where the `(TCP Port 9777 Closed)` line falls.
 
 **Scope.** The operator approved the Twisted lock and the image-size
 correction. This fix is a third thing, kept to one line plus tests, in a
@@ -360,8 +389,9 @@ PATCHES.md's statements about the manhole describing code that cannot run.
 ^1.0.2`), reached from `packages/ui` (dependencies `react-native`,
 `lucide-react-native`) and `legacy/blackout-web` (through `@blackout/ui`). No
 tracked file imports image-size, no `metro.config.*` exists, and no script or
-workflow runs metro or the React Native CLI (`packages/ui` builds with `tsc`,
-`legacy/blackout-web` with vite).
+workflow runs metro or the React Native CLI (the `build` script of
+`packages/ui` and of `legacy/blackout-web` is `tsc --build`; the latter's
+`build:web`, `dev` and `preview` run vite).
 
 What the two ignore files said: "No fixed version exists (all versions <=2.0.2
 affected)", and the `.trivyignore` comment added "including the whole 2.x
@@ -417,8 +447,9 @@ Trivy 0.69.3 with `security.yml`'s flags, over six lockfiles: the fork's
 `poetry.lock` and `Cargo.lock`, the legacy API's `requirements.txt`, the
 desktop `Cargo.lock`, `pnpm-lock.yaml` and
 `services/perturbation/requirements.txt`. The first seven rows are the first
-round's, with the database read at the time as 2026-11-01 19:08 UTC; the rows
-after them are the second round's, with the database of 2026-11-02 01:14 UTC
+round's, with the database read at the time as 2026-11-01 19:08 UTC; the next
+four are the second round's, with the database of 2026-11-02 01:14 UTC; the
+last four are the third round's, with the database of 2026-11-02 07:17 UTC
 that is on disk ([Method](#method)).
 
 | Run                                                                                      | High/Critical reported                                                                                                                                                                       | Exit |
@@ -434,17 +465,22 @@ that is on disk ([Method](#method)).
 | same, `--show-suppressed` (second round)                                                 | none; suppressed: image-size 1.2.1 under CVE-2025-71329 and CVE-2025-71330 (fixed 2.0.3), and nothing else                                                                                   | 0    |
 | `develop` (`f6da7b7`), `git archive`, second round, same database                        | none                                                                                                                                                                                         | 0    |
 | same, `--show-suppressed` (second round)                                                 | none; suppressed: the four Twisted ids and the two image-size ids, as in the first round                                                                                                     | 0    |
+| `develop` (`f6da7b7`), `git archive`, third round (database of 2026-11-02 07:17 UTC)     | none                                                                                                                                                                                         | 0    |
+| same, `--show-suppressed` (third round)                                                  | none; suppressed: the four Twisted ids and the two image-size ids                                                                                                                            | 0    |
+| this branch, `git archive` of `d5fa741` (third round)                                    | none                                                                                                                                                                                         | 0    |
+| same, `--show-suppressed` (third round)                                                  | none; suppressed: image-size 1.2.1 under CVE-2025-71329 and CVE-2025-71330 (fixed 2.0.3), and nothing else                                                                                   | 0    |
 
 So the gate is green on both sides, and on this branch it is green without any
-Twisted entry: Twisted 26.10.0 matches no advisory in that database. The two
-`exp:` rows show what the date means to Trivy: an entry dated today was already
-lapsed at 02:07 UTC, one dated tomorrow still applied, so `exp:2026-11-30`
+Twisted entry: Twisted 26.10.0 matches no advisory in any of the three
+databases. The two `exp:` rows show what the date means to Trivy: an entry
+dated today was already lapsed at 02:07 UTC, one dated tomorrow still applied, so `exp:2026-11-30`
 stops applying at the start of 2026-11-30 (this host runs on UTC). The
 `develop` run with `--show-suppressed` also shows that Trivy matches image-size
 by CVE, which is why both ignore lists carry the CVE lines.
 
-The record's commits change no file Trivy reads; the manhole commit changes
-none either, and the second-round rows above are the runs on it.
+The record's commits change no file Trivy reads; neither do the manhole
+commit and `d5fa741`, and the second- and third-round rows above are the runs
+on them.
 
 ## Validation
 
@@ -452,11 +488,11 @@ none either, and the second-round rows above are the runs on it.
     and `scripts-dev/check_locked_deps_have_sdists.py` (151 packages) pass;
     `poetry lock --check` passes again after the comment over `Twisted` was
     rewritten (the `content-hash` does not cover comments), and again in the
-    second round, which changed no lock file. Every file hash in the two new
-    lock entries matches PyPI's JSON (2 of 2 for twisted, 50 of 50 for
+    second and third rounds, which changed no lock file. Every file hash in
+    the two new lock entries matches PyPI's JSON (2 of 2 for twisted, 50 of 50 for
     zope-interface). `poetry export --extras all`, with and without the dev
-    group, differs from `develop`'s by the twisted and zope-interface lines
-    only.
+    group, differs from `develop`'s by the `twisted`, `twisted[tls]` and
+    `zope-interface` lines only.
 -   **The after venv:** `pip install --no-deps --require-hashes` of
     `twisted==26.10.0` and `zope.interface==8.7` with the lock's hashes into
     a copy of the baseline venv; pip would have refused a download with
@@ -474,11 +510,13 @@ none either, and the second-round rows above are the runs on it.
     `tests.crypto`, `tests.federation`, `tests.blackout_runtime` and
     `tests.config`, the modules that touch Twisted's HTTP, TLS, logging,
     reactor and replication surfaces: 760 tests on each side, 668 passing,
-    53 skipped, 33 failures, 7 errors, in 24 s and 25 s. Compared by test id, the 92
-    non-passing ids are the same with the same outcomes. The second round's
+    53 skipped, 33 failures, 7 errors, in 24 s and 25 s (the time trial
+    itself reports, here and in the full-suite table). Compared by test id,
+    the 92 non-passing ids are the same with the same outcomes. The second round's
     run of the same modules from the after venv, with the five new manhole
     tests: 765 tests, 673 passing, the same 92 ids with the same outcomes,
-    in 26 s. All 40 failures and
+    in 26 s; the third round's, on `d5fa741`: the same 765, 673 and 92 ids
+    with the same outcomes, in 42 s. All 40 failures and
     errors are in `tests.http`: 18 failures and 1 error in the federation
     agent's module, 13 and 6 in the federation client's, 2 failures in the
     proxy agent's. Those are this sandbox's proxy variables, which the
@@ -488,25 +526,32 @@ none either, and the second-round rows above are the runs on it.
 -   **The full trial suite, before and after** (`-j2`, from the two trees
     above):
 
-    |                                                                        | Tests | OK    | Skipped | Failure | Error | Wall time |
-    | ---------------------------------------------------------------------- | ----- | ----- | ------- | ------- | ----- | --------- |
-    | before (26.4.0)                                                        | 3,379 | 3,063 | 173     | 110     | 34    | 189 s     |
-    | after (26.10.0)                                                        | 3,379 | 3,063 | 173     | 110     | 34    | 195 s     |
-    | after, second round (26.10.0, with the manhole fix and its five tests) | 3,384 | 3,068 | 173     | 110     | 34    | 192 s     |
+    |                                                                        | Tests | OK    | Skipped | Failure | Error | Trial time |
+    | ---------------------------------------------------------------------- | ----- | ----- | ------- | ------- | ----- | ---------- |
+    | before (26.4.0)                                                        | 3,379 | 3,063 | 173     | 110     | 34    | 183 s      |
+    | after (26.10.0)                                                        | 3,379 | 3,063 | 173     | 110     | 34    | 188 s      |
+    | after, second round (26.10.0, with the manhole fix and its five tests) | 3,384 | 3,068 | 173     | 110     | 34    | 192 s      |
+    | after, third round (26.10.0, `d5fa741`)                                | 3,384 | 3,068 | 173     | 110     | 34    | 205 s      |
 
     Compared by test id (the ids trial lists under `[FAIL]`, `[ERROR]` and
     `[SKIPPED]`): 110, 34 and 173 on each side, the same ids with the same
     outcomes, one of them (`test_client_sends_body`) under both `[FAIL]` and
     `[ERROR]` on both sides, and `tests.test_rust` as a module-level error on
     both. Compared with the 2026-10-31 run of the fourth review (3,374
-    tests, same 173/110/34; its log, `r5/logs/trial-full-r5-final.log`, is
-    kept under the session's scratch directory and the comparison was re-run
-    in the second round), the non-passing ids are the same set, so the
+    tests, same 173/110/34; the second round compared against its log,
+    `v48/r5/logs/trial-full-r5-final.log`, and kept the result,
+    `build-r2/full-compare-vs-1031.txt`; the log itself is no longer in the
+    session's scratch directory, whose `v48` folder last changed at 04:20
+    UTC, after the second round), the non-passing ids are the same set, so the
     five tests added since pass under both versions. The second round's run
     has the same 316 non-passing ids as the two first-round runs and as the
     2026-10-31 run; its five new tests (`tests.blackout_runtime.test_manhole`)
     pass, and the same five error with the `AttributeError` when run against a
-    `git archive` of the head before the fix. Of the 144 failures
+    `git archive` of the head before the fix. The third round's run, on
+    `d5fa741`, has the same 316 non-passing ids with the same outcomes as the
+    first round's before run and as the second round's run
+    (`build-r3/full-compare-vs-r1-before.txt`, `full-compare-vs-r2.txt`). Of
+    the 144 failures
     and errors, 40 are the `tests.http` proxy-variable ones above (39 ids,
     with `test_client_sends_body` counted under both); the other
     104 are the fork's existing ones (the 2026-10-25 record: `synapse_rust`
@@ -519,8 +564,8 @@ none either, and the second-round rows above are the runs on it.
 
 -   **`blackout_runtime_tests`:** 85 passed under each venv (`pytest -q`,
     pytest 8.3.5 added with `--no-deps` as before), and 85 again from the
-    after venv in the second round. `tests/blackout_runtime` is in the trial
-    suite above.
+    after venv in the second round and in the third. `tests/blackout_runtime`
+    is in the trial suite above.
 -   **Boot, before and after:** `--generate-config` wrote a sqlite config
     with the 8008 listener on `['::1', '127.0.0.1']`, `tls: false`, `client`
     and `federation` resources and no `no_redirect_stdio`. This sandbox has
@@ -530,18 +575,27 @@ family not supported by protocol`, the same traceback apart from Twisted's
     line numbers and the version banner's branch suffix. With
     `bind_addresses: ['127.0.0.1']` and nothing else changed, each homeserver
     answered `/health` with `OK` within 3 s and `/_matrix/client/versions`
-    with a 17-entry `versions` list, and exited 0 on SIGTERM. Each run's
-    `homeserver.log` is 160 lines with no `Traceback`, `ERROR` or `CRITICAL`,
-    two `WARNING` lines (the start banner and the version line) and
+    with a 17-entry `versions` list, and exited 0 on SIGTERM. Each first-round
+    `homeserver.log` holds both starts, 350 lines: the failed `::1` start's
+    190 (its `CannotListenError` traceback and one `CRITICAL`), then the
+    successful start's 160, with no `Traceback`, `ERROR` or `CRITICAL`, two
+    `WARNING` lines (the start banner and the version line) and
     `Redirected stdout/stderr to logs`, which is the `LoggingFile` path;
     `boot.log` holds the eight-line trusted-key-server notice only. Stripped
     of timestamps, paths, object addresses and the one request's timing, the
-    two logs differ in one line: the version banner of the run from this
-    branch's worktree carries the git branch suffix (`(b=<branch>,<sha>)`),
+    two successful starts differ in one line: the version banner of the run
+    from this branch's worktree carries the git branch suffix (`(b=<branch>,<sha>)`),
     which a run from a `git archive` lacks. The second round repeated both
-    runs from the scratch directory with the same result (160 lines each,
+    runs from the scratch directory, with the `::1` address removed before
+    the first start, with the same result (a 160-line `homeserver.log` each,
     that one differing line) and added the manhole runs
-    ([The manhole](#the-manhole-could-not-start)).
+    ([The manhole](#the-manhole-could-not-start)). The third round ran the
+    manhole boot once more from the after venv on `d5fa741`: `/health`
+    answered `OK` within 8 s, `/_matrix/client/versions` with 17 entries,
+    the shell opened and printed `2` for `1+1`, the second shell request was
+    refused with the same `ERROR` line, the 184-line `homeserver.log` has no
+    other `ERROR` but the probe's disconnect and no `Traceback` or
+    `CRITICAL`, and the homeserver exited 0 on SIGTERM.
 -   **Lint:** the first round changed no Python file, so ruff, black, isort
     and mypy did not run then. The second round's two Python files
     (`synapse/util/manhole.py`, `tests/blackout_runtime/test_manhole.py`)
@@ -552,15 +606,43 @@ family not supported by protocol`, the same traceback apart from Twisted's
     also saw), and none in the two; mypy first reported 17 typing errors in
     the test (conch's `dict[bytes, bytes]` annotation on the key dicts,
     `Optional` channel and transport attributes, override signatures), fixed
-    with casts and asserts rather than ignores. The same command from the
-    baseline venv (Twisted 26.4.0, zope.interface 6.0) prints the identical
-    line, so mypy-zope 1.0.1 under zope.interface 8.7 behaves the same on
-    this import graph; the wider question is in [Not verified](#not-verified).
+    with casts and asserts rather than ignores. The third round's
+    `synapse/handlers/send_email.py` (a comment) passes ruff, black and
+    isort, and mypy reports no error in it (next bullet).
+-   **mypy, before and after, compared evenly only in the third round.** The
+    second round ran mypy on the two manhole files from both venvs in the
+    worktree, got the same single `stubs/txredisapi.pyi` error, and
+    concluded that mypy-zope behaved the same under zope.interface 8.7 on
+    that import graph. The comparison was uneven. mypy puts every directory
+    on the venv interpreter's `sys.path` on its package path and silences
+    errors in modules it imports from there (`is_silent_import_module`), and
+    the after venv's editable install puts the worktree's fork directory on
+    that path; so from the after venv only the files named on the command
+    line and `stubs/` could report, while the baseline venv, whose editable
+    install points at another copy, reported everything. The third round
+    showed the effect on `send_email.py` in the worktree: 1 error from the
+    after venv, 52 in 26 files from the baseline venv. Run instead in a
+    `git archive` copy of `d5fa741`, which neither venv's `sys.path` names,
+    the fork's whole `mypy.ini` file list (925 source files) reports 311
+    errors in 69 files from the baseline venv and 309 in 68 from the after
+    venv. The difference is three error lines, all from Twisted's own
+    types: the
+    two `unreachable` errors at `synapse/metrics/_reactor_metrics.py:130` and
+    `:132` ("Subclass of `_IReactorCommon` and `AsyncioSelectorReactor`
+    cannot exist") are gone under 26.10.0, whose #12767 aligned that
+    reactor's signatures with the interfaces, and the existing
+    `HostnameEndpoint` error at `synapse/http/proxyagent.py:378` now names
+    Twisted's new `Binding` type among the expected ones. No error is new
+    under 26.10.0 and zope.interface 8.7, and none of the 309 is in
+    `synapse/util/manhole.py`, `tests/blackout_runtime/test_manhole.py` or
+    `synapse/handlers/send_email.py`. `send_email.py`'s own import graph in
+    the copy: 52 errors in 26 files before, 50 in 25 after, the same three
+    lines apart.
 -   **OSV:** osv-scanner 2.3.3 on `pnpm-lock.yaml` with `TZ=UTC`,
     `TZ=Etc/GMT-3` and `TZ=Pacific/Kiritimati`: exit 0 each time, "Filtered 4
     vulnerabilities" (deepmerge, the two image-size entries with the new
-    reason printed, minimatch), no unused-ignore line; the second round re-ran
-    the three on its tree with the same output. On
+    reason printed, minimatch), no unused-ignore line; the second and third
+    rounds re-ran the three on their trees with the same output. On
     `apps/blackout-server/poetry.lock`, which no gate scans this way:
     `develop`'s lock shows the eight Twisted rows (the seven above and
     GHSA-8pqf, `--` for its fix) plus black 23.10.1, pygments 2.15.1 and
@@ -568,10 +650,12 @@ family not supported by protocol`, the same traceback apart from Twisted's
     black, pygments and sentry-sdk rows ([Found outside scope](#found-outside-scope-not-fixed-here)).
 -   **pnpm audit:** `pnpm audit --prod --audit-level high` and
     `pnpm run guard:audit-clean` exit 0, both reporting "1 low | 1 moderate
-    (1 ignored) | 2 high (2 ignored)", in both rounds. Unchanged by this PR.
+    (1 ignored) | 2 high (2 ignored)", in all three rounds. Unchanged by this
+    PR.
 -   **gitleaks 8.21.2** over `origin/develop..HEAD`: after the first two
     commits, 2 commits scanned, no leaks; after the fourth (`20362e4`), 4
-    commits scanned, no leaks.
+    commits scanned, no leaks; after the sixth (`d5fa741`), 6 commits
+    scanned, no leaks.
 -   **prettier 2.8.1**, the root's version, `--check` on every changed
     Markdown and YAML file: clean. `.trivyignore` and `osv-scanner.toml` are
     skipped by `--ignore-unknown`; `pyproject.toml` and `poetry.lock` are
@@ -589,17 +673,25 @@ tools/ci/check-auth-secrets.mjs`.
 ## Before merge or release
 
 -   **The fork image was not built here** (no Docker daemon, as in the
-    earlier records). No PR job builds it either: `docker.yml` builds
-    `apps/blackout-server/Dockerfile` on pushes to `main`, on `v*` tags and
-    on `workflow_dispatch`, and `release.yml` on release tags; PRs here
-    target `develop`. So the first `pip install` of this lock's export
-    (`poetry export --extras all`, the image's install step) happens on the
-    next such build. The install set is what `poetry
-export --extras all` produced here, and it differs from `develop`'s by the
-    two lines above, and neither needs a system package the image lacks
-    (twisted's wheel is pure Python; zope-interface 8.7 ships cp311
-    manylinux wheels for x86_64 and aarch64). Checking the built image's
-    `pip show twisted zope.interface` once is enough.
+    earlier records), and no workflow builds it. The Synapse fork's image
+    comes from `apps/blackout-server/docker/Dockerfile` (poetry 1.3.2,
+    `poetry export --extras all`, then `pip install -r` of the export).
+    `infra/single-server-baseline/deploy.sh` builds it on the server as
+    `blackout-synapse:stable`, after resetting its checkout to
+    `origin/develop`, then recreates the stack's `synapse` service with
+    `docker compose` from its `INFRA_DIR` (the repository's
+    `docker-compose.yml` runs that image for it); `RUNBOOK.md` gives the same
+    build by hand. `docker.yml` and `release.yml` build
+    `apps/blackout-server/Dockerfile`, which is the Node backend API image
+    (`@blackout/api`) and installs nothing from `poetry.lock`. So the first
+    `pip install` of this lock's export happens on the first `deploy.sh` run
+    (or hand build) after this merges to `develop`, and a `deploy.sh` run
+    also puts Twisted 26.10.0 into the running homeserver. The install set
+    differs from `develop`'s by the three export lines above (two packages),
+    and neither package needs a system library the image lacks (twisted's
+    wheel is pure Python; zope-interface 8.7 ships cp311 manylinux wheels
+    for x86_64 and aarch64). Checking `pip show twisted zope.interface` in
+    the built `blackout-synapse:stable` once (26.10.0 and 8.7) is enough.
 -   **The metro update, before 2026-11-30.** The image-size ignores lapse at
     the start of that day in all three places that enforce a date (the two
     OSV gates through `ignoreUntil`, Trivy through `exp:`). The fix is a
@@ -646,13 +738,8 @@ export --extras all` produced here, and it differs from `develop`'s by the
 ## Not verified
 
 -   The fork image with this lock: not built here (no Docker daemon), and no
-    PR job builds it ([Before merge or release](#before-merge-or-release)).
--   mypy 1.5.1 with mypy-zope 1.0.1 under zope.interface 8.7 beyond the
-    import graph of the two manhole files, where it reports the same single
-    `stubs/txredisapi.pyi` error from both venvs. The 2026-10-30 record's
-    56-error baseline came from `config/jwt.py`'s import graph and was not
-    re-run here; the next Python change in that area will show whether it
-    moves.
+    workflow builds it; `deploy.sh` does, on the server
+    ([Before merge or release](#before-merge-or-release)).
 -   The 40 `tests.http` tests that this sandbox's proxy variables stop, under
     either Twisted version. `HTTPS_PROXY` was not unset to run them. A runner
     without those variables would run them; no root workflow runs trial, and
@@ -665,7 +752,7 @@ export --extras all` produced here, and it differs from `develop`'s by the
 -   Of the three hardenings against a misbehaving peer, one: a DNS response
     from an address other than the one queried was read in the release notes
     and the fork's code, not sent to a running homeserver. The other two were
-    observed. The first review's probe sent a header value with a bare CR and
+    observed. The first round's review sent a header value with a bare CR and
     one with a bare LF to a running homeserver: `400 Bad Request` under
     26.10.0, `200 OK` under 26.4.0 (its logs are under the session's scratch
     directory, `verify-r1-compat/boot-*-nomh.log`). The second round's probe
@@ -683,7 +770,7 @@ export --extras all` produced here, and it differs from `develop`'s by the
 -   Trivy's `exp:` cut-off on a host whose local time zone is not UTC. Both
     probe runs were on this UTC host.
 
-## Corrected after review
+## Corrected after the first review
 
 The first round (commits `6b6d96e`, `03a426e`, `be7bbe2`) was reviewed under
 three lenses: compatibility, gates and advisory facts, and the truth of every
@@ -735,3 +822,106 @@ sentence. Each finding and what changed:
     log exists under the session's scratch directory
     (`v48/r5/logs/trial-full-r5-final.log`, 3,374 tests); the comparison was
     re-run against the second round's log: the same 316 non-passing ids.
+    (The log has since been removed from the scratch directory; the
+    comparison's output is kept, `build-r2/full-compare-vs-1031.txt`.)
+
+## Corrected after the second review
+
+The second round (commits `20362e4`, `4089f7f`) was reviewed under the same
+three lenses. Each finding and what changed, in commit `d5fa741` (the fork
+comment and PATCHES.md) and in this record:
+
+1.  **`send_email.py`'s comment named 26.4.0 as the minimum Twisted** (low).
+    Fork text from the 2026-10-25 relock (upstream's file at `cc172f7` has no
+    such comment). It now says the floor is far above 21.2 without naming a
+    version, and PATCHES.md's 2026-11-02 entry has a bullet for it.
+2.  **PATCHES.md's 2026-10-25 entry still said only the rc fixes the three
+    advisories** (low). A one-line "Superseded on 2026-11-02" pointer follows
+    that sentence; the dated text is unchanged.
+3.  **The commit trailers carry a model name** (low, operator visibility). No
+    change: the two trailer lines are the session's required attribution,
+    no commit may be amended, and no file in the change names a model. A
+    squash merge would replace the per-commit messages.
+4.  **The "Before merge or release" bullet named builds that never install
+    the lock** (medium). `docker.yml` and `release.yml` build the Node
+    backend image; the fork image is `docker/Dockerfile`, which only
+    `deploy.sh` builds, on the server. The bullet and the matching "Not
+    verified" item are rewritten.
+5.  **Trivy's `--download-db-only` was said to have found nothing newer**
+    (low). It skips the download without contacting the registry while the
+    local `NextUpdate` lies ahead. The Method says so; the third round
+    deleted the cached database, downloaded a newer one (2026-11-02 07:17
+    UTC) and re-ran the gate rows on it ([The gate](#the-gate)).
+6.  **"Differ by those two lines"** (low). The export changes three lines
+    for two packages; corrected in the Lock section, Validation, "Before
+    merge or release" and PATCHES.md. `pip list --format=freeze` does differ
+    by two lines, and those sentences stand.
+7.  **"No Python file changed, so mypy did not run"** (low). Rewritten.
+    Re-checking it showed the second round's before/after mypy comparison
+    was uneven (the editable install's directory is silenced in the after
+    venv); the even comparison, over the fork's whole `mypy.ini` file list
+    in a `git archive` copy, replaces it ([Validation](#validation)).
+8.  **The full-suite time column mixed two bases** (low). It now gives
+    trial's own `Ran … in` time on every row, as the targeted figures
+    already did.
+9.  **The first round's `homeserver.log` was said to be 160 lines** (low).
+    Each holds both starts, 350 lines; the Boot bullet says so.
+10. **"The two differ only in those Twisted session lines"** (low). Six lines
+    differ, including where the port-closed line falls; corrected.
+11. **The Scope paragraph's watched paths missed `package.json` and the
+    framing-guard script** (low). It now lists `security.yml`'s whole
+    `paths:` filter.
+12. **zope.interface 8.7's reference-leak fix was placed in the lookup
+    caches** (low). Rewritten from the changelog's own entries, with the
+    Python 3.10 drop and the removed static-type code path it also lists.
+13. **"`legacy/blackout-web` with vite"** (low). Its `build` is
+    `tsc --build`; vite runs in `build:web`, `dev` and `preview`.
+14. **Commit-message sentences the record corrected only partly** (low).
+    Listed below.
+
+Found while making these changes:
+
+15. **The review that found the manhole bug was called "the second review"**
+    in the Scope paragraph, the manhole section and PATCHES.md, and "the
+    first review" in "Not verified", for the same review: the one of the
+    first round. All now say the review of the first round.
+16. **"Reverting that commit's three fork files"** would not have split the
+    manhole fix out cleanly: PATCHES.md changed in later commits, and
+    `20362e4` also carries record corrections. The Scope paragraph now says
+    which files to return and what to drop.
+17. **The 2026-10-31 full-suite log the record called "kept" is gone** from
+    the scratch directory (its `v48` folder last changed at 04:20 UTC, after
+    the second round). The full-suite bullet and item 14 above say so and
+    name the comparison output that is kept.
+
+### Commit messages
+
+No commit may be amended, so these sentences stand in the branch's history;
+each is superseded as follows.
+
+-   `6b6d96e`: "have sat in .trivyignore since 2026-10-25 and 2026-10-30":
+    three entries were committed on 2026-10-26 01:28 UTC, the fourth on
+    2026-10-30 20:34 UTC (Scope). "the one advisory reachable through
+    twisted.web behind nginx" (GHSA-q7qq): reachable in principle; the
+    2026-10-25 triage judged nginx's header rebuild to block it, unverified
+    ([The advisories](#the-advisories)). "the image's --extras all export
+    differs by those two lines": three lines, two packages
+    ([The lock](#the-lock)). "No fork source changes": true of that commit;
+    `20362e4` changes `manhole.py` and `d5fa741` a comment in
+    `send_email.py`. "the manhole sends one shell per channel": written when
+    the manhole could not start at all; the later probe shows 26.10.0
+    refusing a second shell request on one channel
+    ([The manhole](#the-manhole-could-not-start)).
+-   `03a426e`: "Trivy 0.69.3 with the database of 2026-11-01 19:08 UTC": that
+    timestamp was read during the run and not retained ([Method](#method)).
+-   `be7bbe2`: "with the database of 2026-11-01": the same. "the image is
+    first built on the next main or tag build": no workflow builds the fork
+    image; `deploy.sh` does, on the server
+    ([Before merge or release](#before-merge-or-release)).
+-   `20362e4`: "Found by the second review of the Twisted 26.10.0 change":
+    the review of the first round. "mypy (... identical from both venvs)":
+    the output was identical, from an uneven comparison
+    ([Validation](#validation), mypy).
+-   `4089f7f`: the subject's "second review" is that same first-round review,
+    which the commit answers; the section it names "Corrected after review"
+    is now headed "Corrected after the first review".
