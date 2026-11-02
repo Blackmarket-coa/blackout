@@ -12,7 +12,7 @@
     "type": "module",
     "packageManager": "pnpm@9.15.4",
     "engines": {
-        "node": ">=22.11"
+        "node": ">=22.13"
     },
     "scripts": {
         "prepare": "husky",

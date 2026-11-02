@@ -62,7 +62,7 @@ free and open-source; the only costs are a server and a domain name.
 
 | Tool      | Version  | Install                                                           |
 | --------- | -------- | ----------------------------------------------------------------- |
-| Node.js   | >= 22.11 | [nodejs.org](https://nodejs.org) or `dnf install nodejs`          |
+| Node.js   | >= 22.13 | [nodejs.org](https://nodejs.org) or `dnf install nodejs`          |
 | pnpm      | 9.15.4   | `corepack enable && corepack prepare pnpm@9.15.4 --activate`      |
 | Rust      | >= 1.77  | `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \| sh` |
 | Tauri CLI | >= 2.1.0 | Installed as a devDependency in `blackout-desktop/package.json`   |

@@ -258,7 +258,7 @@ Operational readiness checklist for bridge deployments:
 
 ### Prerequisites
 
--   Node.js `>=22.11` (matches `engines.node`; `.node-version` and CI both pin major 22)
+-   Node.js `>=22.13` (matches `engines.node`; `.node-version` and CI both pin major 22)
 -   pnpm `9.15.4` (or compatible 9.x)
 
 ### Local setup
