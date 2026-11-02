@@ -8,9 +8,12 @@ name: blackout-desktop-build-check
 # for a release). It references no secret.
 #
 # The release is blackout-desktop-tauri.yml. Do not dispatch that workflow to
-# test a build: its tauri-action step publishes a public, non-draft release
-# named after the ref, with the updater's latest.json. Dispatch this one.
-# Keep the setup below in step with that workflow's build job.
+# test a build: its tauri-action step is configured to publish a public,
+# non-draft release named after the ref, with the updater's latest.json, once
+# its build passes (docs/security/dependency-advisories-server-desktop-2026-10-30.md,
+# Found outside scope, item 6). Dispatch this one instead, once it is on
+# develop. Keep the setup below in step with that workflow's build job; each
+# place where it differs says why.
 
 on:
     pull_request:
@@ -28,11 +31,11 @@ on:
             # workspace membership that the frontend hook relies on.
             - 'package.json'
             - 'pnpm-workspace.yaml'
-            # The frontend build's own configuration. This job is the only CI
-            # build of the client on macOS and Windows, so a path or plugin
-            # change here can break only here. The rest of the client is
-            # platform-independent JavaScript, which ci.yml already builds on
-            # every pull request.
+            # The frontend build's own configuration. This job is the only
+            # pull-request build of the client on macOS, and the only CI build
+            # of it on Windows, so a path or plugin change here can break only
+            # here. The rest of the client is platform-independent JavaScript,
+            # which ci.yml already builds on every pull request.
             - 'apps/blackout-client/package.json'
             - 'apps/blackout-client/vite.config.*'
             - 'apps/blackout-client/build.config.ts'
@@ -64,14 +67,25 @@ jobs:
                       bundle: 'msi,nsis'
                       expect: 'msi/*.msi nsis/*-setup.exe'
         runs-on: ${{ matrix.os }}
+        # A cost bound; the release job has none (GitHub's default, 360). The
+        # local Linux compile took 8.5 minutes with 3 jobs. A leg that runs
+        # past 60 fails, it does not pass. Revisit with the first run's leg
+        # times.
         timeout-minutes: 60
 
         steps:
+            # persist-credentials false is hardening the release job lacks.
+            # Nothing in the build uses the token: Cargo.lock has no git
+            # source and pnpm-lock.yaml no git dependency.
             - name: Checkout
               uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
               with:
                   persist-credentials: false
 
+            # The release job has setup-node@v4. This is v6.2.0, the commit
+            # security.yml and load.yml pin. Both install Node 22, and
+            # neither caches here: there is no cache input, and v6 caches on
+            # its own only when packageManager names npm (it names pnpm).
             - name: Setup Node
               uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6
               with:
@@ -89,8 +103,11 @@ jobs:
 
             # The release job's packages. Because the app registers deep-link
             # schemes, the AppImage bundler also copies /usr/bin/xdg-mime
-            # (xdg-utils) into the image; the runner image has it, as a
-            # dependency of its Google Chrome.
+            # (xdg-utils) into the image. The runner image should have it: it
+            # installs Google Chrome's deb, which depends on xdg-utils (read
+            # from the image's build scripts, not seen on a runner). If the
+            # AppImage step stops at "xdg-mime binary not found", add
+            # xdg-utils here and in the release job.
             - name: Install Linux deps
               if: runner.os == 'Linux'
               run: |
@@ -112,6 +129,17 @@ jobs:
             # tauri-action sets TAURI_BUNDLER_DMG_IGNORE_CI on macOS, so the
             # release runs the DMG's Finder layout step; only the macOS DMG
             # bundler reads it.
+            #
+            # The release reaches the same CLI (2.10.1, from the lockfile)
+            # through `npm run tauri -- build`: tauri-action looks for a
+            # pnpm-lock.yaml only in blackout-desktop, and the workspace's is
+            # at the root. This step uses pnpm, the workspace's package
+            # manager. What differs is npm_config_user_agent, which the CLI
+            # reads to choose the package manager for its version-mismatch
+            # check and which the frontend hook inherits. On Linux both ways
+            # passed the check and ran the hook from blackout-desktop, where
+            # it found the client (measured with a runner that stops before
+            # the compile).
             - name: Build unsigned bundles, no updater artifacts
               working-directory: blackout-desktop
               shell: bash
