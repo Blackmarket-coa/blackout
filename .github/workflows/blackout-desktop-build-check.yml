@@ -2,19 +2,26 @@ name: blackout-desktop-build-check
 
 # Build-only check of the desktop app (blackout-desktop, Tauri 2) on the three
 # runners the release job uses, with the release job's bundles and setup.
-# Unlike the release job it builds unsigned (--no-sign) and makes no updater
-# artifact, and nothing leaves the runner: no release, no tag, no uploaded
-# bundle (an unsigned build downloadable from a public repository can be taken
-# for a release). It references no secret.
+# Unlike the release job it builds unsigned (--no-sign), so it has neither of
+# the release job's signing steps, makes no updater artifact, and no bundle
+# leaves the runner: no release, no tag, no uploaded artifact (an unsigned
+# build downloadable from a public repository can be taken for a release).
+# The job summary lists only the bundles' names and sizes. It references no
+# secret.
 #
 # The release is blackout-desktop-tauri.yml. Do not dispatch that workflow to
 # test a build: its tauri-action step is configured to publish a public,
 # non-draft release named after the ref, with the updater's latest.json, once
 # its build passes (docs/security/dependency-advisories-server-desktop-2026-10-30.md,
 # Found outside scope, item 6). Dispatch this one instead, once it is on
-# develop. Keep the setup below in step with that workflow's build job; each
-# place where it differs says why.
+# develop. Keep the setup below in step with that workflow's build job.
+# Where this file's triggers, permissions, concurrency, steps or step
+# settings differ from that job's, a comment says why.
 
+# The release job runs on pushes to main, on release-* and v* tags and on
+# dispatch, never on a pull request. This check exists to build before any
+# of those, so it runs on pull requests to develop, the default branch, and
+# on dispatch.
 on:
     pull_request:
         branches: [develop]
@@ -43,9 +50,15 @@ on:
             - 'apps/blackout-client/src/platform/**'
     workflow_dispatch:
 
+# The release workflow has contents: write, to create its release. This one
+# only reads the checkout.
 permissions:
     contents: read
 
+# The release workflow has no concurrency block. Here a newer push to the
+# same pull request cancels the running build, whose result would be stale,
+# and so does a later dispatch on the same branch; a cancelled leg shows as
+# cancelled, not as passed.
 concurrency:
     group: blackout-desktop-build-check-${{ github.ref }}
     cancel-in-progress: true
@@ -56,6 +69,8 @@ jobs:
         strategy:
             fail-fast: false
             matrix:
+                # The release job's os and bundle pairs. expect is added: the
+                # bundle paths the last step requires.
                 include:
                     - os: ubuntu-22.04
                       bundle: 'deb,rpm,appimage'
@@ -91,6 +106,10 @@ jobs:
               with:
                   node-version: 22
 
+            # The release job and the other workflows have pnpm/action-setup@v5.
+            # This is the commit v5 (and v5.0.0) names on 2026-11-02, pinned
+            # like checkout and setup-node so that a moved tag cannot change
+            # what runs here.
             - name: Setup pnpm
               uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v5
               with:
@@ -124,22 +143,37 @@ jobs:
               run: pnpm tauri icon src-tauri/icons/blackout.svg --output src-tauri/icons
 
             # --no-sign skips code signing, notarization and updater signing.
-            # The --config merge turns createUpdaterArtifacts off for the
-            # compiled app and the bundler alike, so no updater bundle is made.
+            # The --config merge reaches the CLI's bundler settings (tauri-cli
+            # 2.10.1, interface/rust.rs 837), so no updater bundle is made and
+            # no updater signing is attempted. It does not change the compiled
+            # app on this point: the app embeds createUpdaterArtifacts at its
+            # default whatever the config says (tauri-utils 2.10.2, config.rs
+            # 4548), as the release's does. --ci is explicit here; the release
+            # gets the same from CI=true, which the CLI reads as --ci.
             # tauri-action sets TAURI_BUNDLER_DMG_IGNORE_CI on macOS, so the
             # release runs the DMG's Finder layout step; only the macOS DMG
             # bundler reads it.
             #
             # The release reaches the same CLI (2.10.1, from the lockfile)
-            # through `npm run tauri -- build`: tauri-action looks for a
-            # pnpm-lock.yaml only in blackout-desktop, and the workspace's is
-            # at the root. This step uses pnpm, the workspace's package
-            # manager. What differs is npm_config_user_agent, which the CLI
-            # reads to choose the package manager for its version-mismatch
-            # check and which the frontend hook inherits. On Linux both ways
-            # passed the check and ran the hook from blackout-desktop, where
-            # it found the client (measured with a runner that stops before
-            # the compile).
+            # through `npm run tauri build -- --bundles <set>`: tauri-action
+            # looks for a pnpm-lock.yaml only in blackout-desktop, and the
+            # workspace's is at the root. This step uses pnpm, the
+            # workspace's package manager. The two set different npm_config_*
+            # variables; the one the CLI reads, npm_config_user_agent, picks
+            # the package manager for its version-mismatch check. On Linux
+            # both ways passed that check, and a probe hook with the same
+            # --filter found the client from blackout-desktop (measured with
+            # a stand-in cargo that stops before the compile). The real client
+            # build has run only this way.
+            #
+            # shell: bash keeps the quoting the same on all three OSes. On
+            # Windows that starts the CLI from Git Bash, where tauri-action
+            # starts it from node, and pnpm runs the script through cmd with
+            # each argument JSON.stringify'd. That the --config JSON arrives
+            # intact there is unmeasured until the first Windows leg; a
+            # mangled value fails the CLI's JSON parse, it does not pass. If
+            # that leg fails at --config, move the JSON to a file under
+            # blackout-desktop/src-tauri and pass its path.
             - name: Build unsigned bundles, no updater artifacts
               working-directory: blackout-desktop
               shell: bash
@@ -150,7 +184,9 @@ jobs:
                   pnpm tauri build --ci --no-sign --bundles "$BUNDLES" \
                       --config '{"bundle":{"createUpdaterArtifacts":false}}'
 
-            # Lists the bundles in the job summary. They are not uploaded.
+            # The release job has no such step; tauri-action uploads what it
+            # builds. This one lists the bundles' names and sizes in the job
+            # summary and uploads nothing.
             - name: Check the bundles, no updater output, Cargo.lock unchanged
               shell: bash
               env:
