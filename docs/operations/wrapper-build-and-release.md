@@ -54,9 +54,52 @@ pnpm bundle              # produce real installers → src-tauri/target/release/
     `https://github.com/blackmarket-coa/blackout/releases/...`.
 
 **CI / release:** `.github/workflows/blackout-desktop-tauri.yml` is the sole owner
-of desktop bundles. It builds + signs all three OSes via `tauri-action`, attaches
-installers and the updater JSON to the release, and triggers on `main`,
-`release-*`, and `v*` tags.
+of desktop bundles. Since 2026-11-02 it runs only when a `release-*` or `v*` tag is
+pushed: there is no branch trigger and no `workflow_dispatch`. Its `create-release`
+job makes one **draft** GitHub release for the tag, or reuses the tag's oldest
+draft, and stops if the tag already has a published release. Its three build legs
+(ubuntu-22.04, macos-latest, windows-latest) sign their bundles with `tauri-action`
+and upload them, with the updater's `latest.json`, into that draft. Nothing in CI
+publishes it. A person does, and only then can installed desktops see it, because
+the updater endpoint is `releases/latest/download/latest.json`. None of this has
+run yet; until the updater public key in `tauri.conf.json` (today the literal
+`${TAURI_UPDATER_PUBKEY}`) and the Windows certificate thumbprint are set up, the
+legs stop at updater signing and at signtool
+(`docs/security/dependency-advisories-server-desktop-2026-10-30.md`, Found outside
+scope, items 1 and 6).
+
+To release:
+
+1. Push the tag, for example `git push origin release-<name>` after tagging the
+   commit. Do not create the tag from GitHub's release form: publishing from the
+   form creates the tag and a published release together, and `create-release`
+   then refuses to upload into it.
+2. Wait for the three build legs. GitHub shows a draft only to people with write
+   access to the repository (from GitHub's documentation, not tried here); the tag
+   and the run's logs are public, because the repository is.
+3. Check the draft before publishing:
+    - `latest.json` is attached and has `linux-x86_64`, `darwin-aarch64` and
+      `windows-x86_64` under `platforms`. There is no Intel macOS
+      (`darwin-x86_64`) build: on 2026-11-02 the operator chose not to add one yet.
+      Each leg merges its own entry into the one file, and two legs that finish
+      together can lose one; if a platform is missing, re-run all jobs for the tag
+      (`create-release` reuses the draft, and each leg replaces its own files).
+    - Every `url` in it names `/releases/download/<this tag>/`, and every
+      `signature` is non-empty.
+    - The installers are signed (`blackout-desktop/docs/signing-verification.md`).
+4. Publish. Leave "Set as the latest release" ticked only if the release carries
+   `latest.json`: the updater reads whichever release is latest, and a latest
+   release without it makes the endpoint 404, so updates fail closed.
+
+The app's version is 0.1.0 in `tauri.conf.json`, `Cargo.toml` and `package.json`,
+and the tag does not change it. Tauri's updater installs only a higher version, so
+a release reaches no installed desktop until the version is raised.
+
+To test a build, dispatch `.github/workflows/blackout-desktop-build-check.yml`
+(it also runs on pull requests to `develop` that touch the desktop app): it builds
+the same bundles unsigned and uploads nothing. A signed test build means pushing a
+`release-*` tag, which makes a draft; to discard it, delete the draft and then the
+tag (deleting a draft leaves its tag).
 
 ## 2. Mobile Android (Capacitor)
 
@@ -145,7 +188,7 @@ the exact id.
 
 | Workflow                     | Trigger                    | Owns                                                                                      |
 | ---------------------------- | -------------------------- | ----------------------------------------------------------------------------------------- |
-| `blackout-desktop-tauri.yml` | `main`, `release-*`, `v*`  | Signed desktop bundles (all OSes) + updater JSON                                          |
+| `blackout-desktop-tauri.yml` | `release-*`, `v*` tags     | Signed desktop bundles (all OSes) + updater JSON, in a draft release a person publishes   |
 | `mobile-native-ci.yml`       | PR + `main` (mobile paths) | Mobile contract checks; internal-track AAB → Play, IPA → TestFlight                       |
 | `blackout-mobile.yml`        | `mobile-release-*` tags    | Signed beta/production AAB+APK and TestFlight                                             |
 | `release.yml`                | `v*` tags                  | Web SBOM artifact, Docker image, GitHub release aggregation, unsigned mobile proof builds |

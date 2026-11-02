@@ -1,21 +1,38 @@
 name: blackout-desktop-tauri
 
+# The signed desktop release. A pushed release-* or v* tag gets one draft
+# GitHub release (create-release), and the three build legs sign their
+# bundles and upload them, with the updater's latest.json, into that draft
+# (build). Nothing here publishes: a person checks the draft and publishes
+# it, and only then can the updater endpoint in tauri.conf.json
+# (releases/latest/download/latest.json) serve it. Operator decision of
+# 2026-11-02; docs/security/dependency-advisories-server-desktop-2026-10-30.md,
+# Found outside scope, item 6, and docs/operations/wrapper-build-and-release.md
+# (what to check before publishing).
+# To test a build, dispatch blackout-desktop-build-check.yml: it builds the
+# same bundles unsigned and uploads nothing. A signed test build means
+# pushing a release-* tag; discard it by deleting the draft, then the tag.
 on:
+    # The notification harness only. No main branch exists, so in practice
+    # this does not run.
     pull_request:
         branches: [main]
         paths:
             - 'blackout-desktop/**'
             - 'apps/blackout-client/src/platform/**'
             - '.github/workflows/blackout-desktop-tauri.yml'
+    # Tags only: with no `branches` under push, a branch push does not start
+    # this workflow, and there is no workflow_dispatch. Push the tag; do not
+    # create it from GitHub's release form, which publishes the release
+    # first, so create-release would refuse it.
     push:
-        branches: [main]
         tags:
             - 'release-*'
             - 'v*'
-    workflow_dispatch:
 
+# Each job asks for what it needs; only the two release jobs can write.
 permissions:
-    contents: write
+    contents: read
 
 jobs:
     # Fast, toolchain-free gate: proves a desktop notification / deep link routes
@@ -47,9 +64,80 @@ jobs:
             - name: Run notification-routing harness (Tauri)
               run: pnpm --filter blackout-desktop test:unit
 
+    create-release:
+        name: Draft release for the tag
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+        runs-on: ubuntu-latest
+        permissions:
+            contents: write
+        outputs:
+            release_id: ${{ steps.draft.outputs.release_id }}
+        steps:
+            # tauri-action's documented matrix pattern (examples/publish-to-
+            # manual-release.yml at v0.6.2) without its publish-release job.
+            # The draft is made here, once, before the legs start: a leg with
+            # no releaseId looks for the tag's draft only after its build, so
+            # legs that finish together would each create one.
+            # The tag comes from context.ref, never from an Actions
+            # expression in the script: whoever pushes a tag chooses its name,
+            # and an interpolated name would become script source.
+            - name: Find or create this tag's draft release
+              id: draft
+              uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+              with:
+                  script: |
+                      const { owner, repo } = context.repo;
+                      const tag = context.ref.replace(/^refs\/tags\//, '');
+                      // A published release would serve whatever the legs
+                      // upload, latest.json included, with no person in
+                      // between, so refuse one.
+                      try {
+                          const { data } = await github.rest.repos.getReleaseByTag({ owner, repo, tag });
+                          core.setFailed(
+                              `${tag} already has a published release (${data.html_url}); ` +
+                                  'the desktop build uploads only into a draft.'
+                          );
+                          return;
+                      } catch (error) {
+                          if (error.status !== 404) throw error;
+                      }
+                      // getReleaseByTag never returns a draft. Reuse the
+                      // oldest draft for this tag: a re-run's, or on a v* tag
+                      // release.yml's, which adopts the oldest draft too.
+                      const releases = await github.paginate(github.rest.repos.listReleases, {
+                          owner,
+                          repo,
+                          per_page: 100,
+                      });
+                      const drafts = releases
+                          .filter((r) => r.draft && r.tag_name === tag)
+                          .sort((a, b) => a.id - b.id);
+                      if (drafts.length > 0) {
+                          core.info(`Using draft ${drafts[0].id} for ${tag}`);
+                          core.setOutput('release_id', String(drafts[0].id));
+                          return;
+                      }
+                      // A v* tag's release also carries release.yml's web and
+                      // mobile files, so it is named after the tag alone.
+                      const { data } = await github.rest.repos.createRelease({
+                          owner,
+                          repo,
+                          tag_name: tag,
+                          name: tag.startsWith('v') ? tag : `Blackout Desktop ${tag}`,
+                          draft: true,
+                          prerelease: false,
+                          target_commitish: context.sha,
+                      });
+                      core.info(`Created draft ${data.id} for ${tag}`);
+                      core.setOutput('release_id', String(data.id));
+
     build:
-        # Release build only — never on PRs (needs signing secrets + Rust toolchain).
-        if: github.event_name != 'pull_request'
+        # Never on a pull request (it needs the signing secrets and the Rust
+        # toolchain), and only once create-release has a draft for the tag.
+        needs: create-release
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+        permissions:
+            contents: write
         strategy:
             fail-fast: false
             matrix:
@@ -63,6 +151,22 @@ jobs:
         runs-on: ${{ matrix.os }}
 
         steps:
+            # Fails in seconds, before the build, if create-release gave no id.
+            # tauri-action reads the input with Number(), so an empty, 0 or
+            # non-numeric id would make it look the release up by tag after
+            # the build instead (and, with no releaseName, create none).
+            - name: Require the draft's id
+              shell: bash
+              env:
+                  RELEASE_ID: ${{ needs.create-release.outputs.release_id }}
+              run: |
+                  case "$RELEASE_ID" in
+                      '' | 0* | *[!0-9]*)
+                          echo "::error::create-release gave no release id"
+                          exit 1
+                          ;;
+                  esac
+
             - name: Checkout
               uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
 
@@ -117,8 +221,12 @@ jobs:
               run: |
                   [IO.File]::WriteAllBytes('certificate.pfx', [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE))
 
+            # Pinned to the commit that was read: this job relies on v0.6.2's
+            # src/index.ts 178 (with releaseId set, no release is looked up or
+            # created by tag) and src/create-release.ts 100-101 (without
+            # releaseName it cannot create a release at all).
             - name: Build Tauri bundles
-              uses: tauri-apps/tauri-action@v0
+              uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0.6.2
               env:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
                   TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
@@ -130,9 +238,16 @@ jobs:
                   TAURI_UPDATER_PUBKEY: ${{ secrets.TAURI_UPDATER_PUBKEY }}
               with:
                   projectPath: blackout-desktop
+                  # The draft create-release made; every upload goes there.
+                  releaseId: ${{ needs.create-release.outputs.release_id }}
+                  # Only for latest.json's download URLs, which then name
+                  # /download/<this tag>/ rather than /latest/download/
+                  # (src/upload-version-json.ts 191-197; README caveats). With
+                  # releaseId set it neither finds nor creates a release.
                   tagName: ${{ github.ref_name }}
-                  releaseName: Blackout Desktop ${{ github.ref_name }}
-                  releaseDraft: false
-                  prerelease: false
+                  # Read only when releaseId is empty, which the first step
+                  # refuses; the README asks for it whenever tagName names a
+                  # draft.
+                  releaseDraft: true
                   includeUpdaterJson: true
                   args: --bundles ${{ matrix.bundle }}

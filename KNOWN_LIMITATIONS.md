@@ -78,10 +78,14 @@ For the source-of-truth triage with tier/owner detail see
         but has not been exercised in a running desktop build.
 -   **Desktop shell build:** until 2026-10-06 `blackout-desktop` did not
     compile on `develop` (an autostart argument type and the global-shortcut
-    plugin's changed `register` API), unnoticed because
-    `.github/workflows/blackout-desktop-tauri.yml` runs only for pull requests
-    and pushes to `main`. Both are fixed; the desktop workflow still does not
-    run on `develop` pull requests. Since 2026-11-02 a build-only check,
+    plugin's changed `register` API), unnoticed because the desktop release
+    workflow, `.github/workflows/blackout-desktop-tauri.yml`, built the app
+    only on pushes to `main`, on tags and on dispatch (on pull requests, to
+    `main` only, it ran just a notification harness). Both are fixed. Since
+    2026-11-02 that workflow runs only on pushed `release-*` and `v*` tags,
+    uploads into a draft release and leaves publishing to a person; it has
+    never run, and it does not run on `develop` pull requests. Also since
+    2026-11-02 a build-only check,
     `.github/workflows/blackout-desktop-build-check.yml`, builds unsigned
     bundles on Linux, macOS and Windows for `develop` pull requests that
     change the desktop app, the lockfile, the workspace manifests, the
@@ -94,8 +98,9 @@ For the source-of-truth triage with tier/owner detail see
     with a case-insensitive filesystem either (Windows, and macOS by
     default), though none was tried. The next run, 41461856327, passed on
     all three. The bundles were built, not started, and the macOS leg
-    builds aarch64 only. Since 2026-11-02 `ci.yml`'s deployment-readiness
-    job also fails on any pull request whose tree has two such names
+    builds aarch64 only, as does the release's (on 2026-11-02 the operator
+    chose not to add an x86_64 leg yet). `ci.yml`'s deployment-readiness
+    job now also fails on any pull request whose tree has two such names
     (`tools/ci/check-duplicate-paths.mjs` compares names without the last
     extension, ignoring case). A pull request that changes the client
     anywhere else is still built only on Linux (by `ci.yml`), so any other

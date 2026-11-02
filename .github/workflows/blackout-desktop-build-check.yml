@@ -9,19 +9,19 @@ name: blackout-desktop-build-check
 # The job summary lists only the bundles' names and sizes. It references no
 # secret.
 #
-# The release is blackout-desktop-tauri.yml. Do not dispatch that workflow to
-# test a build: its tauri-action step is configured to publish a public,
-# non-draft release named after the ref, with the updater's latest.json, once
-# its build passes (docs/security/dependency-advisories-server-desktop-2026-10-30.md,
-# Found outside scope, item 6). Dispatch this one instead. Keep the setup
-# below in step with that workflow's build job.
+# The release is blackout-desktop-tauri.yml. It cannot be dispatched: it runs
+# only on a pushed release-* or v* tag, uploads into a draft release, and a
+# person publishes it (docs/security/dependency-advisories-server-desktop-2026-10-30.md,
+# Found outside scope, item 6). To test a build, dispatch this one. Keep the
+# setup below in step with that workflow's build job.
 # Where this file's triggers, permissions, concurrency, steps or step
-# settings differ from that job's, a comment says why.
+# settings differ from that job's, a comment says why. That workflow's
+# create-release job, and its build job's first step, which requires the
+# draft's id, have no counterpart here: this check uploads nothing.
 
-# The release job runs on pushes to main, on release-* and v* tags and on
-# dispatch, never on a pull request. This check exists to build before any
-# of those, so it runs on pull requests to develop, the default branch, and
-# on dispatch.
+# The release job runs only on release-* and v* tags, never on a pull
+# request or a dispatch. This check exists to build before a tag, so it runs
+# on pull requests to develop, the default branch, and on dispatch.
 on:
     pull_request:
         branches: [develop]
@@ -51,30 +51,31 @@ on:
             - 'blackout-mobile/package.json'
             - 'mobile/package.json'
             # The frontend build's own configuration. This job is the only
-            # pull-request build of the client on macOS, and the only CI build
-            # of it on Windows, so a break that shows only on macOS or
-            # Windows is caught only here. ci.yml builds the client on every
-            # pull request, on Linux only. A break outside these paths can
-            # still show only on macOS and Windows: the first run
-            # (41461043012) found two files in one client directory whose
-            # names without the extension differed only by case (toolbag.ts
-            # beside ToolBag.tsx), so an import without an extension found
-            # the other file on a case-insensitive filesystem (fixed in
-            # 9eab8c9). That kind of name is now caught on every pull
-            # request: ci.yml's deployment-readiness job runs
-            # tools/ci/check-duplicate-paths.mjs (pnpm guard:duplicate-paths),
-            # which compares names without the last extension as well as
-            # whole paths. Any other break that shows only on macOS or
-            # Windows, in a change to the rest of the client, is still built
-            # on Linux only.
+            # pull-request build of the client on macOS or Windows. The
+            # release job's macOS and Windows legs also build it, but only on
+            # release-* and v* tags, and have never run, so a break that
+            # shows only on macOS or Windows is caught before a release only
+            # here. ci.yml builds the client on every pull request, on Linux
+            # only. A break outside these paths can still show only on macOS
+            # and Windows: the first run (41461043012) found two files in one
+            # client directory whose names without the extension differed
+            # only by case (toolbag.ts beside ToolBag.tsx), so an import
+            # without an extension found the other file on a
+            # case-insensitive filesystem (fixed in 9eab8c9). That kind of
+            # name is now caught on every pull request: ci.yml's
+            # deployment-readiness job runs tools/ci/check-duplicate-paths.mjs
+            # (pnpm guard:duplicate-paths), which compares names without the
+            # last extension as well as whole paths. Any other break that
+            # shows only on macOS or Windows, in a change to the rest of the
+            # client, is still built on Linux only.
             - 'apps/blackout-client/vite.config.*'
             - 'apps/blackout-client/build.config.ts'
             # The desktop bridge; the release workflow's own filter lists it.
             - 'apps/blackout-client/src/platform/**'
     workflow_dispatch:
 
-# The release workflow has contents: write, to create its release. This one
-# only reads the checkout.
+# The release workflow's create-release and build jobs have contents: write,
+# to make the draft and upload into it. This one only reads the checkout.
 permissions:
     contents: read
 
@@ -96,7 +97,8 @@ jobs:
                 # bundle paths the last step requires. macos-latest builds
                 # aarch64 only (run 41461856327 made
                 # Blackout_0.1.0_aarch64.dmg); the release job uses the same
-                # runner, so neither builds an x86_64 macOS bundle.
+                # runner, so neither builds an x86_64 macOS bundle (on
+                # 2026-11-02 the operator chose not to add one yet).
                 include:
                     - os: ubuntu-22.04
                       bundle: 'deb,rpm,appimage'
