@@ -56,11 +56,12 @@ on:
             # Windows is caught only here. ci.yml builds the client on every
             # pull request, on Linux only. A break outside these paths can
             # still show only on macOS and Windows: the first run found two
-            # files in one client directory whose names differ only by case
-            # (toolbag.ts beside ToolBag.tsx), so an import without an
-            # extension found a different file on a case-insensitive
-            # filesystem (fixed in 9eab8c9). Nothing checks for that on a
-            # pull request that changes only the rest of the client.
+            # files in one client directory whose names without the
+            # extension differed only by case (toolbag.ts beside
+            # ToolBag.tsx), so an import without an extension found the
+            # other file on a case-insensitive filesystem (fixed in
+            # 9eab8c9). Nothing checks for that on a pull request that
+            # changes only the rest of the client.
             - 'apps/blackout-client/vite.config.*'
             - 'apps/blackout-client/build.config.ts'
             # The desktop bridge; the release workflow's own filter lists it.

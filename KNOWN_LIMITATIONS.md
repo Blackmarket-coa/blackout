@@ -87,15 +87,17 @@ For the source-of-truth triage with tier/owner detail see
     change the desktop app, the lockfile, the workspace manifests, the
     client's build configuration or its desktop bridge
     (`apps/blackout-client/src/platform`). Its first run found that the
-    client did not build on macOS or Windows, on runners and developer
-    machines alike (macOS with its default filesystem), because two files
-    in one directory had names differing only by case (fixed in
-    `9eab8c9`); the next run, 41461856327, passed on all three. The
-    bundles were built, not
-    started, and the macOS leg builds aarch64 only. A pull request that
-    changes the client anywhere else is built only on Linux (by `ci.yml`),
-    so a break that shows only in the desktop shell or on a
-    case-insensitive filesystem can still land unseen until a release.
+    client did not build on the macOS and Windows runners, because two
+    files in one directory had names that, without the extension, differed
+    only by case (`toolbag.ts` beside `ToolBag.tsx`; fixed in `9eab8c9`).
+    So it would not have built on a developer machine with a
+    case-insensitive filesystem either (Windows, and macOS by default),
+    though none was tried. The next run, 41461856327, passed on all three.
+    The bundles were built, not started, and the macOS leg builds aarch64
+    only. A pull request that changes the client anywhere else is built
+    only on Linux (by `ci.yml`), so a break that shows only in the desktop
+    shell or on a case-insensitive filesystem can still land unseen until
+    a release.
 -   **Placeholder integrations:** Blamazon, MayhemMarketplaze, AntinAmazon
     (`packages/api/src/integrations/marketplace/{blamazon,mayhemMarketplaze,antinAmazon}.ts`).
     -   These are wired as registered providers but return empty catalogs,
