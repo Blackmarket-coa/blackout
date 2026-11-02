@@ -26,6 +26,13 @@ this record's statement that no Blackout template enables `jwt_config` was
 false. It also found five smaller gaps. The answers to both reviews are in
 [What the review changed](#what-the-review-changed).
 
+On 2026-11-02 the operator decided to remove the Railway template rather than
+fix it, and `42f68f2` removed it, with its image, its entrypoint and the test
+that rendered it. The passages below that describe the template are kept as
+they were, each with a dated note in it or beside it;
+[the 2026-11-02 section](#2026-11-02-the-railway-template-is-removed) says what
+went and what stays.
+
 | Package (lock)        | Advisory                              | Severity | Fixed in   | Outcome                                         |
 | --------------------- | ------------------------------------- | -------- | ---------- | ----------------------------------------------- |
 | authlib 1.6.12 (fork) | GHSA-6v38-4h7w-rj9h (CVE-2026-96760)  | Critical | 1.9.0      | bumped to 1.9.1                                 |
@@ -80,7 +87,9 @@ false. It also found five smaller gaps. The answers to both reviews are in
     they are. `JWTConfig` now refuses an `enabled` that is not a YAML
     boolean, and the template writes `enabled: false`. Every other
     `${VAR:-default}` in the template, all deploy defects, is
-    [found outside scope](#found-outside-scope-not-fixed-here).
+    [found outside scope](#found-outside-scope-not-fixed-here). (2026-11-02:
+    the template was removed in `42f68f2`; the `enabled` refusal stays.
+    [Below](#2026-11-02-the-railway-template-is-removed).)
 -   **JWT login and the logout token change too.** The first two versions of
     this record said they did not. Under 1.9.1 both refuse a boolean `exp`,
     `nbf` or `iat`, and an HMAC secret that is empty or holds PEM or SSH key
@@ -201,7 +210,8 @@ false. It also found five smaller gaps. The answers to both reviews are in
     GHSA-rated Moderate and Low advisories, and every other
     `${VAR:-default}` in the Railway template: the listener port, the
     database name, user and port, the Redis port and TURN render as text,
-    so that service cannot start as rendered. On 2026-11-02 it also has
+    so that service cannot start as rendered (2026-11-02: that service was
+    removed in `42f68f2` instead of fixed). On 2026-11-02 it also has
     the desktop release workflow, which is configured to publish a public
     release named after whatever ref runs it once its build passes
     (item 6). See
@@ -231,7 +241,21 @@ type, with the authlib `PATCHES.md` entry), then `05dfc10` (the record).
 After the sixth review: `48ab32d` (`jwt_config.enabled` must be a boolean,
 and the Railway template's JWT login is off, with `PATCHES.md`), `ae70358`
 (the operator notes in `docs/upgrade.md`), then this version of the record,
-with one sentence of `PATCHES.md` corrected (below). On 2026-11-02:
+with one sentence of `PATCHES.md` corrected (below). After the operator's
+decision of 2026-11-02: `42f68f2` (the template's removal, with its
+`PATCHES.md` entry), `b39883a` (dated notes in the fork's documents),
+`91ea92a` (this record's notes, the section name that `PATCHES.md`'s entry
+cites, and the secrets-manager inventory's note, with `lint-staged`'s Prettier
+re-padding of that file), `bacd26c` (notes in four more of the
+fork's documents, and corrections to the `PATCHES.md` entry), `c83dc9b`
+(corrections to this record's notes, and the encryption audit's note), `d1936c9` (the Nixpacks files, which
+are not the template, restored), `d1f1589` (two notes corrected, and dated
+notes in the RC1 release-train changelog and checklist), `4d60ec0` (this
+record's 2026-11-02 section brought up to date), then a commit that corrects
+that section's and `PATCHES.md`'s list of commit-message errors and their
+account of a Railway service at `apps/blackout-server`
+([the 2026-11-02 section](#2026-11-02-the-railway-template-is-removed)).
+Also on 2026-11-02, for the desktop build check (#996):
 `6bea1c9` (the two `tauri.conf.json` fixes), `659f6ed` (the desktop build
 check, with `KNOWN_LIMITATIONS.md`), then `ddd4a41` (the record). After a
 review of those three: `b5f4398` (the check's comments and
@@ -321,7 +345,9 @@ A sixth review found six more. Each is answered here:
 `48ab32d`'s commit message says that fixing either of the Railway service's
 two faults would have opened JWT login. Each alone stops startup, so it would
 take both; the `PATCHES.md` entry it added said the same and is corrected in
-this version.
+this version. (2026-11-02: the template that the table's first row and this
+paragraph describe was removed in `42f68f2`, with its image, instead of
+fixed. The `enabled` check stays.)
 
 A seventh review found no medium or high problem and three low ones:
 
@@ -338,7 +364,8 @@ A seventh review found no medium or high problem and three low ones:
     `SYNAPSE_JWT_LOGIN_SECRET`, as do `.env.example`, `docs/upgrade.md` and
     `PATCHES.md`. A test renders the template with only `JWT_SECRET` set and
     requires an empty secret; with the previous template it gets the API's
-    value.
+    value. (2026-11-02: the template, its `.env.example` and that test were
+    removed in `42f68f2`.)
 -   **`48ab32d`'s commit message**, already corrected in the paragraph above.
 
 ---
@@ -384,7 +411,8 @@ A seventh review found no medium or high problem and three low ones:
 -   **envsubst (sixth review):** gettext-base 0.21-14ubuntu2 from Ubuntu's
     archive, fetched with `apt-get download` into a scratch directory and
     not installed; its sha256 matches apt's index. The Railway image installs
-    Debian bookworm's gettext-base 0.21-12, the same upstream release. Each
+    Debian bookworm's gettext-base 0.21-12, the same upstream release
+    (2026-11-02: its Dockerfile was removed in `42f68f2`). Each
     render was parsed with `HomeServerConfig`, on this branch's code and with
     `05dfc10`'s `config/jwt.py`.
 -   **Tests:** trial under Python 3.11.17 (the image builds on 3.11), in two
@@ -454,6 +482,7 @@ and that stack's `homeserver.yaml.template` configures `oidc_providers`.
 `services/blackout-server/Dockerfile` exports without extras, so it has no
 authlib, and Synapse stops at startup on that service's own `jwt_config`
 (`DependencyException ['authlib']`, with `enabled: false` too; sixth review).
+(2026-11-02: that Dockerfile was removed with the template in `42f68f2`.)
 `deploy/docker/blackout-backend` runs the upstream image, not the fork.
 
 **That upstream image still ships authlib 1.6.12** (added after the fourth
@@ -510,7 +539,10 @@ Per advisory:
     image has no authlib, so `check_requirements("jwt")` stops startup.
     Since `48ab32d` the template writes `enabled: false`, and `JWTConfig`
     refuses an `enabled` that is not a boolean, so fixing both faults no
-    longer opens JWT login. OIDC id_tokens are checked only against the provider's
+    longer opens JWT login. (2026-11-02: the template and its image were
+    removed in `42f68f2`, so no Blackout template in the tree has a
+    `jwt_config` now; the `enabled` refusal stays for any other.)
+    OIDC id_tokens are checked only against the provider's
     JWKS, never against `client_secret`. With 1.9.1 such a configuration fails
     closed. authlib raises `ValueError` for the empty key, which `jwt.py` does
     not catch (it catches `JoseError`), so each JWT login ends in an error
@@ -706,7 +738,8 @@ them). The release each change arrived in was read from the 1.7.2, 1.8.0 and
         public key and so contains `-----BEGIN `, and disabled JWT login are
         not checked. (Until the sixth review this item ended "No Blackout
         template enables `jwt_config`"; the Railway one did. See the
-        `enabled` item below.)
+        `enabled` item below. That template was removed on 2026-11-02 in
+        `42f68f2`.)
     -   **What `5bad47c` missed (third review).** It imported the secret with
         `OctKey.import_key`, and for a JWK that call puts off the empty-key
         and PEM checks until each verify. The review parsed
@@ -837,7 +870,10 @@ them). The release each change arrived in was read from the 1.7.2, 1.8.0 and
         `false` and none, and render the template as `envsubst` does: it has
         `enabled: false` whatever the environment. On `05dfc10`'s
         `config/jwt.py` the refusal test fails, and with `05dfc10`'s
-        template the template test does. This refuses configurations that
+        template the template test does. (2026-11-02: the template and its
+        render test, `test_railway_template_leaves_jwt_login_off`, were
+        removed in `42f68f2`; the refusal and its test stay.) This refuses
+        configurations that
         `develop` starts: there a quoted `"true"`, `"false"` or `1` ran JWT
         login, and `null`, `""` or `0` left it off.
 -   **Loopback `http` metadata (1.8.0).** `is_secure_transport`, which
@@ -2020,7 +2056,9 @@ The record's own commit changes no file Trivy reads.
     one annotation, and the targeted run covers each. Nor after the sixth:
     that round changed how `config/jwt.py` reads `enabled`, its test module,
     a template and an example file that no test but the new one reads, and
-    documents.
+    documents. (2026-11-02: that template and its `.env.example` were
+    removed in `42f68f2`, and so was the new test that read the template,
+    `test_railway_template_leaves_jwt_login_off`.)
 
 -   **The new tests against the code they pin:**
 
@@ -2081,7 +2119,9 @@ The record's own commit changes no file Trivy reads.
         forms, as before. The test's `_envsubst` gave output byte-identical
         to gettext-base 0.21's `envsubst` for the old and the new template,
         each with no variable set and with `.env.example`'s values plus
-        `JWT_ENABLED=true`.
+        `JWT_ENABLED=true`. (2026-11-02: that test and `_envsubst` were
+        removed with the template in `42f68f2`; the module runs 14 tests,
+        [below](#2026-11-02-the-railway-template-is-removed).)
 
 -   **`blackout_runtime_tests`:** 85 passed before and after, and again after
     each of the six reviews, run with `pytest -q` as the fork's
@@ -2300,7 +2340,8 @@ The record's own commit changes no file Trivy reads.
     are not triaged here.
 
 5.  **The Railway template renders every `${VAR:-default}` as text (sixth
-    review).** `apps/blackout-server/services/blackout-server/entrypoint.sh`
+    review).** (Removed on 2026-11-02 in `42f68f2`; see the end of this item.)
+    `apps/blackout-server/services/blackout-server/entrypoint.sh`
     renders `homeserver.yaml.template` with plain `envsubst` at every start
     of the `managed` profile; it is the only `envsubst` user under
     `apps/blackout-server` (`git grep`). gettext's `envsubst` expands only
@@ -2339,6 +2380,14 @@ The record's own commit changes no file Trivy reads.
     `integrations/templates/` have sixteen; they are outside
     `apps/blackout-server`, rendered by hand as their README says, and were
     not analysed here.
+
+    **Removed on 2026-11-02 in `42f68f2`.** The operator chose removal over
+    fixing the template: `entrypoint.sh`, `homeserver.yaml.template`, the
+    service's `Dockerfile` and `.env.example`, and `railway.toml` are gone,
+    with the rest listed [below](#2026-11-02-the-railway-template-is-removed).
+    None of the deploy faults in the table was fixed; they went with the
+    files. The `jwt_config` fault had been fixed in `48ab32d`. The table
+    stays as the record of why that service could not start.
 
 6.  **The desktop release workflow is configured to publish a public,
     non-draft release named after whatever ref runs it, once its build
@@ -2474,14 +2523,17 @@ The record's own commit changes no file Trivy reads.
 -   The JWT checks against an operator's real configuration. The one
     Blackout template with a `jwt_config`, the Railway one, has JWT login
     off now; it was rendered and parsed, not run in its image, which cannot
-    start ([Found outside scope](#found-outside-scope-not-fixed-here)). Until
+    start ([Found outside scope](#found-outside-scope-not-fixed-here)).
+    (2026-11-02: that template was removed in `42f68f2`; no Blackout template in
+    the tree has a `jwt_config` now.) Until
     the sixth review this item said no Blackout template enables
     `jwt_config`. Nor was the key-set warning tried with a real identity
     provider's JWKS; the test's EC key is made at run time.
 -   The Railway image itself, neither built nor started. Its template was
     rendered with Ubuntu's gettext-base 0.21, which matches the image's
     Debian package in upstream release only, and what psycopg2 does with the
-    database values was not run.
+    database values was not run. (2026-11-02: the image was removed in
+    `42f68f2`, so none of this will be verified.)
 -   pyasn1's decode through a real TLS handshake, or the reactor stalling on
     one. The cost was measured on `extract_patterns` directly. That the
     hostname check runs only after the chain has validated, on the reactor
@@ -2496,3 +2548,180 @@ The record's own commit changes no file Trivy reads.
 -   Whether Trivy's database of 2026-10-31 01:14 UTC adds advisories against
     `pnpm-lock.yaml` is for `-v47` to see; on this branch it adds none
     above the ignored seven.
+
+## 2026-11-02: the Railway template is removed
+
+The operator decided on 2026-11-02 to remove the Railway template rather than
+fix it ([Found outside scope](#found-outside-scope-not-fixed-here), item 5).
+`42f68f2` removed, under `apps/blackout-server/`:
+
+-   `railway.toml`, and `services/blackout-server/`: the `Dockerfile`,
+    `entrypoint.sh`, `homeserver.yaml.template` and `.env.example`.
+    `services/blackout-api/` stays.
+-   `.github/workflows/blackout-image-lifecycle.yml`, whose one job was
+    written to build that `Dockerfile`. GitHub reads workflows only from the
+    repository root's `.github/workflows/`, and every workflow the
+    repository registers (read on 2026-11-02, before and after a new one was
+    registered that day) is there, so it never ran
+    in this repository. Nor could this version have run anywhere: it does not
+    parse as YAML (`ScannerError` at line 23, where a heredoc's body starts at
+    column 1 inside a `run: |` block), and it was byte-identical from the
+    fork's arrival in `e0f3065e31` (2026-04-10) to its removal. Whether an
+    earlier version ran in the fork's former repository was not checked.
+    `release/train/image_provenance.json` names it as the builder of the RC1
+    image; that is the RC1 record's statement, not evidence of a run.
+-   `scripts-dev/railway/start.sh`, `nixpacks.toml` and
+    `docs/railway_deploy.md`, with `README.rst`'s link to that how-to and six
+    `.dockerignore` lines (`!.nixpacks`, `!nixpacks.toml`, `!railway.json`,
+    `!scripts-dev`, `!.nixpacks/**` and `!scripts-dev/**`). (2026-11-02:
+    restored in `d1936c9`, so all five files are as on `develop`. They are a
+    separate Synapse-on-Railway path, not the template: `start.sh` generates
+    its own config and patches its listener, reads neither the template nor
+    `railway.toml`, and nothing in the tree runs it. Removing them went beyond
+    the decision as given. The six `.dockerignore` lines are one whitelist
+    for a Nixpacks build: Nixpacks' source (`main` at `144b4f9ab1`) copies
+    the app directory with no ignore filters and runs `docker build` on the
+    copy, so Docker applies that `.dockerignore`, whose first rule is `*`,
+    and without `!scripts-dev` the build would leave `start.sh` out. Of the
+    Dockerfiles built with `apps/blackout-server` as the context, only the
+    removed one copied `scripts-dev`; four built with the repository root as
+    the context copy all of `apps/`, and that `.dockerignore` does not
+    govern them. Whether Railway builds with that version of Nixpacks was
+    not checked. Until `4d60ec0` this bullet called these files "an
+    earlier" path and said they waited on the operator's confirmation;
+    "earlier" is not known, since all of these files, the template's included,
+    arrived in `e0f3065e31`.)
+-   The test `test_railway_template_leaves_jwt_login_off`, in
+    `tests/blackout_runtime/test_jwt_secret_config.py`, with the `_envsubst`
+    helper that only it used. Its only subject was the template. The module
+    ran 15 tests and runs 14.
+
+What stays: `JWTConfig._check_enabled`, which refuses an `enabled` that is not
+a YAML boolean, and `test_non_boolean_enabled_is_refused`, which still refuses
+`${JWT_ENABLED:-false}` among its seven values. No Blackout template in the
+tree has a `jwt_config` now (`git grep`). None of the deploy faults in item 5
+was fixed; they went with the files. The `jwt_config` fault had been fixed in
+`48ab32d`.
+
+The passages above that describe the template are kept as written, each with
+a dated note in it or beside it. `b39883a`, `bacd26c` and `d1f1589` add the
+same kind of note to the fork's documents that described the template, its
+image or what its entrypoint ran: `docs/upgrade.md`, four ops pages (among
+them the RC1 rollout and rollback of `ghcr.io/blackmarket-coa/blackout-server`),
+the deployment checklist review and its copy, two trackers, the Railway
+hardening guide, the BMC server execution plan, the week 3 report, the
+product-fork execution plan and prompts, and the RC1 release-train
+changelog and checklist. `release/train/image_provenance.json`, which the
+release gate reads as JSON, stays as written as the RC1 record.
+`PATCHES.md`'s 2026-11-02 entry lists each of these. Outside the fork, the
+2026-08-10 encryption audit
+(`docs/audits/2026-08-10-encryption-audit.md`) counted this template among
+the three that set `encryption_enabled_by_default_for_room_type: invite`; it
+has a dated note, and two templates carry that setting now. The 2026-05-10
+secrets-manager inventory walked the template's `.env.example`; that line has
+a dated note (`91ea92a`), and Prettier re-padded the rest of that file when
+the note was staged (it was not Prettier-clean on `develop`; no other content
+changed). `THREAT_MODEL.md` and `TRUST.md` never described the
+template. `KNOWN_LIMITATIONS.md` says the encryption backstop is in "both
+in-repo homeserver templates". The audit checked four rendered templates;
+with the Railway one gone three remain, and two of them carry the setting.
+The third, `apps/blackout-server/docker/conf/`'s `homeserver.yaml` (the
+`blackout-synapse` image's), does not, so "both" is exact only for the two
+that set it, as it was before.
+
+Not this template, and left in place: the restored Nixpacks files above, the
+client's `railway.json` and `README.md`'s "Deploy to Railway", the "Deploy to
+Railway" step in `.github/workflows/deploy-web.yml`, `infra/railway/`, the
+Railway section of `docs/deployment/production.md`, and
+`services/blackout-api/railway.toml` (the legacy FastAPI service). None of
+them names a removed file. `infra/railway/README.md` and
+`docs/deployment/production.md` put a Railway service at
+`apps/blackout-server`, where `railway.toml` was and `nixpacks.toml` and
+that directory's `Dockerfile` still are. Railway's documentation (read on
+2026-11-02) says the config file "does not follow the Root Directory path",
+so a service rooted there read `railway.toml` only if its settings gave that
+path; that Railway looks for a `Dockerfile` at the root of the source
+directory; and that it "will always build with a Dockerfile if it finds
+one". By those pages, a service rooted there with no `railway.toml` builds
+`apps/blackout-server/Dockerfile` unless its settings name another
+(`RAILWAY_DOCKERFILE_PATH`), as it already did before the removal if it
+never read `railway.toml`. The pages do not say where the default
+config-file lookup happens; if it is the repository root, such a service may
+read the root `railway.json` (the client's) instead. Not checked. That `Dockerfile` is the `@blackout/api` Node
+image, written for the repository root as its context: its first `COPY`
+names `pnpm-lock.yaml`, `pnpm-workspace.yaml` and `turbo.json`, and none of
+them is in `apps/blackout-server`. `nixpacks.toml` is read only by a
+Nixpacks build, and has no start command. Whether a service set to Nixpacks
+would still take the `Dockerfile` was not checked, and the live service's
+settings are not in the tree and were not checked. Nor were
+`synapse/util/blackout_profiles.py`, `managed_hosting.py` and
+`hosting_smoke.py` removed: `entrypoint.sh` was the
+only caller of the first two at startup, and their tests, `hosting_smoke.py`
+and the smoke scripts still call them. Whether they go is the operator's
+call.
+
+Corrections of 2026-11-02 to what this branch's commit messages said, since
+they are not amended:
+
+-   `42f68f2` removed `start.sh` and `nixpacks.toml`, "the earlier
+    Synapse-on-Railway path", with `docs/railway_deploy.md`, its how-to;
+    `d1936c9` restores all three, and "earlier" is not known. It dropped the
+    `!scripts-dev` lines because only the removed `Dockerfile` copied
+    `scripts-dev`, which holds only for Dockerfiles built with
+    `apps/blackout-server` as the context, and the six lines are one
+    Nixpacks whitelist (above). Its "so it never ran", of the lifecycle
+    workflow, holds for this repository, as `bacd26c` says, and its "whose
+    one job built that Dockerfile" means the job was written to build it.
+-   `b39883a` said all four of FR-002's evidence targets were gone and that
+    no Railway path for the Synapse homeserver remained. Two of the four are
+    the restored Nixpacks files, and `d1936c9` corrects the four notes that
+    said so.
+-   `bacd26c` and `c83dc9b` also call the Nixpacks files "the earlier" and
+    "an earlier" Synapse-on-Railway path. `bacd26c` said the `PATCHES.md`
+    entry "now says only what docs/railway_deploy.md and the checklist review
+    say"; the entry it left read the review's "consolidated to
+    `railway.toml`" as a `railway.json` consolidated away, which the review
+    does not say, and it quotes the review now.
+-   The claim that the RC1 rollout page's `scripts-dev/` smoke commands could
+    run in the removed image only because its `Dockerfile` copied
+    `scripts-dev` was in `bacd26c`'s note on that page, not in its message.
+    `d1f1589` corrected the note, which now says why they could not run
+    there. So `d1f1589`'s "bacd26c's message makes the same claim" and
+    "corrects bacd26c's two claims: the RC1 smoke commands", and `4d60ec0`'s
+    "bacd26c: the RC1 smoke commands", are wrong.
+-   `c83dc9b`'s subject says every passage of this record on the template
+    has its dated note. One, the full-suite bullet's sentence on the sixth
+    round under Validation, had none until the commit after `4d60ec0`.
+-   `d1936c9`'s "That holds for the Dockerfiles in the tree" holds only for
+    those built with `apps/blackout-server` as the context, and that
+    `.dockerignore` does not start with `*`: its first line is a comment,
+    and `*` is its first rule.
+-   `d1f1589` said the release gate "checks only for files, headings and
+    provenance fields", then two sentences later that it also checks for a
+    backticked commit hash. It also said the image lifecycle note said
+    "never ran" two sentences after "built"; it was the next sentence.
+-   `4d60ec0` said this section now says what a Railway service at
+    `apps/blackout-server` would read. That account left out the
+    `Dockerfile` in that directory (above).
+
+Run on this branch, with Python 3.11.17 and the lock above:
+`test_jwt_secret_config` under trial, 15 tests passed before the removal and
+14 after; trial `tests.blackout_runtime`, 51 passed; trial
+`tests.util.test_blackout_profiles`, `test_managed_hosting`,
+`test_hosting_smoke`, `test_release_train` and `tests.config`, 121 passed;
+`pytest -q blackout_runtime_tests`, 85 passed; and the release-train gate,
+`ci_hosting_smoke.py` and `validate_tracker_evidence.sh` passed. No image was
+built: none of the remaining ones reads the removed files. Run again on
+`bacd26c`, after which no Python code or test changes: `test_jwt_secret_config`, 14
+passed; trial `tests.blackout_runtime`, 51 passed; the same five trial
+modules, 121 passed; `pytest -q blackout_runtime_tests`, 85 passed; and the
+release-train gate, `ci_hosting_smoke.py` and `validate_tracker_evidence.sh`
+passed. Run again on `d1f1589`, after the restore (a shell script, a
+Nixpacks file, `.dockerignore` and two documents, none of which these runs
+read) and the release-train notes, which the release-train gate reads: `test_jwt_secret_config`, 14 passed; trial
+`tests.blackout_runtime`, 51 passed; the same five trial modules, 121 passed;
+`pytest -q blackout_runtime_tests`, 85 passed; and the release-train gate,
+`ci_hosting_smoke.py` and `validate_tracker_evidence.sh` passed. Run again on
+the tree of the commit after `4d60ec0`, which changes only this record and
+`PATCHES.md`: the same seven runs, with the same counts (14, 51, 121 and
+85), all passed.
