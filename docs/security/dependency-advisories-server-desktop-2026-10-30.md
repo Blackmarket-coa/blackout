@@ -33,6 +33,12 @@ they were, each with a dated note in it or beside it;
 [the 2026-11-02 section](#2026-11-02-the-railway-template-is-removed) says what
 went and what stays.
 
+Later on 2026-11-02 the operator decided to remove the two things that section
+left for them ("remove both"): `d88e884` removed the fork's Nixpacks path for
+Railway, and `9493f41` the profile and managed-hosting helpers, with their 13
+tests and smoke scripts. [The section after it](#2026-11-02-the-nixpacks-path-and-the-hosting-helpers-are-removed)
+says what went and what is still the operator's.
+
 | Package (lock)        | Advisory                              | Severity | Fixed in   | Outcome                                         |
 | --------------------- | ------------------------------------- | -------- | ---------- | ----------------------------------------------- |
 | authlib 1.6.12 (fork) | GHSA-6v38-4h7w-rj9h (CVE-2026-96760)  | Critical | 1.9.0      | bumped to 1.9.1                                 |
@@ -254,6 +260,12 @@ record's 2026-11-02 section brought up to date), then a commit that corrects
 that section's and `PATCHES.md`'s list of commit-message errors and their
 account of a Railway service at `apps/blackout-server`
 ([the 2026-11-02 section](#2026-11-02-the-railway-template-is-removed)).
+After the operator's second decision of 2026-11-02 ("remove both"): `d88e884`
+(the Nixpacks path, with its `PATCHES.md` entry), `9493f41` (the hosting
+helpers, their tests and smoke scripts, and two steps of the fork's
+`release-train-gate.yml`), `4243a7a` (dated notes in the fork's documents and
+in `PATCHES.md`), then this version of the record, with the Semgrep triage's
+note ([its section](#2026-11-02-the-nixpacks-path-and-the-hosting-helpers-are-removed)).
 Also on 2026-11-02, for the desktop build check (#996):
 `6bea1c9` (the two `tauri.conf.json` fixes), `659f6ed` (the desktop build
 check, with `KNOWN_LIMITATIONS.md`), then `ddd4a41` (the record). After a
@@ -2378,7 +2390,9 @@ fix it ([Found outside scope](#found-outside-scope-not-fixed-here), item 5).
     not checked. Until `4d60ec0` this bullet called these files "an
     earlier" path and said they waited on the operator's confirmation;
     "earlier" is not known, since all of these files, the template's included,
-    arrived in `e0f3065e31`.)
+    arrived in `e0f3065e31`.) (2026-11-02, later: the operator chose removal,
+    and `d88e884` removed all five again, with the six lines and the link;
+    [the next section](#2026-11-02-the-nixpacks-path-and-the-hosting-helpers-are-removed).)
 -   The test `test_railway_template_leaves_jwt_login_off`, in
     `tests/blackout_runtime/test_jwt_secret_config.py`, with the `_envsubst`
     helper that only it used. Its only subject was the template. The module
@@ -2446,7 +2460,12 @@ settings are not in the tree and were not checked. Nor were
 `hosting_smoke.py` removed: `entrypoint.sh` was the
 only caller of the first two at startup, and their tests, `hosting_smoke.py`
 and the smoke scripts still call them. Whether they go is the operator's
-call.
+call. (2026-11-02, later: the operator chose removal ("remove both").
+`d88e884` removed the Nixpacks files, so of the two files said above to be at
+`apps/blackout-server` only the `Dockerfile` is there now, and `9493f41`
+removed the three helpers, their tests and the smoke scripts. The other
+Railway paths in this paragraph are unchanged and still the operator's;
+[the next section](#2026-11-02-the-nixpacks-path-and-the-hosting-helpers-are-removed).)
 
 Corrections of 2026-11-02 to what this branch's commit messages said, since
 they are not amended:
@@ -2463,7 +2482,8 @@ they are not amended:
 -   `b39883a` said all four of FR-002's evidence targets were gone and that
     no Railway path for the Synapse homeserver remained. Two of the four are
     the restored Nixpacks files, and `d1936c9` corrects the four notes that
-    said so.
+    said so. (Since `d88e884` none of the four is in the tree, and no file in
+    it configures Railway to build or start the Synapse homeserver.)
 -   `bacd26c` and `c83dc9b` also call the Nixpacks files "the earlier" and
     "an earlier" Synapse-on-Railway path. `bacd26c` said the `PATCHES.md`
     entry "now says only what docs/railway_deploy.md and the checklist review
@@ -2513,3 +2533,139 @@ read) and the release-train notes, which the release-train gate reads: `test_jwt
 the tree of the commit after `4d60ec0`, which changes only this record and
 `PATCHES.md`: the same seven runs, with the same counts (14, 51, 121 and
 85), all passed.
+
+## 2026-11-02: the Nixpacks path and the hosting helpers are removed
+
+Later on 2026-11-02 the operator decided to remove both things the section
+above left for them ("remove both"). `PATCHES.md`'s entry "2026-11-02 the
+Nixpacks path and the hosting helpers are removed" lists every path. Under
+`apps/blackout-server/`:
+
+-   `d88e884` removed the fork's Nixpacks path for Railway: `nixpacks.toml`,
+    `scripts-dev/railway/start.sh` and `docs/railway_deploy.md`, `README.rst`'s
+    link to that how-to, and the six `.dockerignore` lines (`!.nixpacks`,
+    `!nixpacks.toml`, `!railway.json`, `!scripts-dev`, `!.nixpacks/**` and
+    `!scripts-dev/**`). `.dockerignore` and `README.rst` are as `42f68f2` left
+    them. `!services` and `!services/**` stay for the `services/blackout-api`
+    build in `infra/single-server-baseline/deploy.sh`. Neither Dockerfile
+    built with `apps/blackout-server` as the context copies a file those six
+    lines let in: `services/blackout-api/Dockerfile` and `docker/Dockerfile`,
+    both built by `deploy.sh`, the second also by upstream's
+    `contrib/docker/docker-compose.yml`.
+-   `9493f41` removed the helpers the removed `entrypoint.sh` called,
+    `synapse/util/blackout_profiles.py`, `synapse/util/managed_hosting.py` and
+    `synapse/util/hosting_smoke.py`, and the three scripts that call them,
+    `scripts-dev/blackout/managed_hosting_smoke.sh`, `ci_hosting_smoke.py` and
+    `managed_readiness_integration_smoke.py`. Before it, nothing outside these
+    files and their tests imported a helper or ran one of these files, except
+    two steps of the fork's `release-train-gate.yml` (below). That was checked
+    with `git grep` by path, module name, every exported name, the `python -m`
+    form, the environment variables they read and the `[managed-hosting]` log
+    prefix, across the fork, the root, CI, `tools/ci`, `release/train`, the
+    feature registry, the Dockerfiles, `deploy/` and `infra/`. The Semgrep
+    finding in `managed_hosting.py` (`dynamic-urllib-use-detected`) and its
+    `nosemgrep` went with the file; `semgrep-triage-2026-10-11.md` has a dated
+    note.
+-   The tests that went with them, 13, each in a module whose only subject is
+    a removed helper:
+
+    -   `tests/util/test_blackout_profiles.py` (7):
+        `BlackoutProfileSelectionTestCase`'s
+        `test_explicit_profile_is_deterministic`,
+        `test_auto_falls_back_to_standalone_when_managed_deps_missing` and
+        `test_auto_selects_managed_when_dependencies_present`, and
+        `BlackoutProfileConfigMutationTestCase`'s
+        `test_profile_overrides_keep_client_and_federation_resources`,
+        `test_standalone_overrides_for_sqlite_and_health_listener`,
+        `test_constrained_adds_conservative_defaults` and `test_cli_smoke`.
+    -   `tests/util/test_managed_hosting.py` (5), all
+        `ManagedHostingReadinessTestCase`:
+        `test_readiness_passes_when_dependencies_are_reachable`,
+        `test_readiness_returns_fail_fast_diagnostics`,
+        `test_optional_hook_failure_warns_but_does_not_error`,
+        `test_required_hook_failure_errors` and
+        `test_health_endpoint_failure_returns_message`.
+    -   `tests/util/test_hosting_smoke.py` (1):
+        `HostingSmokeTestCase.test_hosting_smoke_checks_pass`.
+
+    Root CI runs no Synapse trial or pytest suite, so these ran only by hand
+    and in the fork's own `tests.yml`, which GitHub does not register.
+
+-   `9493f41` also removed two steps from
+    `apps/blackout-server/.github/workflows/release-train-gate.yml`, "Run
+    hosting profile smoke checks" (`ci_hosting_smoke.py`) and "Run managed
+    readiness integration smoke" (`managed_readiness_integration_smoke.py`),
+    and the job's `postgres:16` and `redis:7` services, which only the second
+    step used. The steps left (the release-train gate, the divergence markers,
+    the tracker evidence validator and `test_versions_smoke_compatibility`, on
+    SQLite) still check something. GitHub registers workflows only from the
+    repository root's `.github/workflows/`, and the repository's list, read on
+    2026-11-02, has 34 workflows, none under `apps/`. So this job has never
+    run in this repository, and the edit changes the file, not any CI run.
+    That its remaining steps do not run in CI either is older than this change
+    and is not fixed here. No other gate runs a removed file: the release-train
+    gate reads only `release/train/`, the divergence-marker gate names none of
+    these paths, `validate_tracker_evidence.sh` (which the root's
+    `tracker-evidence-validation.yml` runs) reads none of them, and the
+    feature registry names no `apps/blackout-server` path.
+-   `4243a7a` added dated notes, not rewrites, to every fork document that said
+    these files stay or remain or that describes what they did, and to seven
+    passages of `PATCHES.md`; the new entry lists them. The notes in the
+    release-train checklist and changelog name `9493f41` without backticks, as
+    those for `42f68f2` do, so the changelog's 40-digit placeholder is still
+    what meets the release gate's backticked-hash check. This version adds the
+    notes above in this record and in `semgrep-triage-2026-10-11.md`.
+
+`THREAT_MODEL.md`, `TRUST.md` and `KNOWN_LIMITATIONS.md` were checked and need
+no change: none describes these files, `BLACKOUT_PROFILE`, Nixpacks or the
+readiness helpers, and `KNOWN_LIMITATIONS.md`'s mention of Railway is about
+the web client host's framing headers. Nothing on the server reads
+`BLACKOUT_PROFILE` now. The web client's feature flags
+(`apps/blackout-client/src/app/core/features/featureFlags.ts`) read a variable
+of the same name, `true` or `false`, to turn the client's profile feature on or
+off. That is a different setting, and any other value, such as `managed`, is
+ignored there.
+
+Still the operator's, and unchanged: the client's root `railway.json` (builder
+`NIXPACKS`) and `index.js`, `README.md`'s "Deploy to Railway", the "Deploy to
+Railway" step in `.github/workflows/deploy-web.yml`, `infra/railway/`, the
+Railway section of `docs/deployment/production.md`,
+`services/blackout-api/railway.toml` (the legacy FastAPI service) and the live
+Railway dashboard. None of them names a removed file, and no file in the tree
+configures Railway to build or start the Synapse homeserver now. The dashboard
+was not read. A service rooted at `apps/blackout-server` changes with this only
+if its settings force a Nixpacks build or name `start.sh` as its start command,
+and the tree points to neither: `infra/railway/README.md` gives
+`pnpm --filter @blackout/server start`, which starts `@blackout/api`.
+
+A correction to this branch's commit messages, which are not amended:
+`d88e884` calls the workflow steps "the release-train-gate.yml steps that ran
+two of the scripts". They were written to run them, and never ran in this
+repository (above).
+
+Run before, on `0367abdd69` (`develop` with #997), with Python 3.11.17 and the
+lock above: trial `tests.util.test_blackout_profiles`, `test_managed_hosting`
+and `test_hosting_smoke`, 13 passed; trial `test_blackout_profiles`,
+`test_managed_hosting`, `test_hosting_smoke`, `test_release_train` and
+`tests.config`, 121 passed; trial `tests.util`, 242 run, 241 passed and 1
+skipped (upstream's "Requires Postgres"); trial `tests.blackout_runtime`, 51
+passed; `pytest -q blackout_runtime_tests`, 85 passed; trial
+`tests.rest.client.test_versions`, 3 passed. The release-train gate, the
+divergence markers, `validate_tracker_evidence.sh` and `ci_hosting_smoke.py`
+passed; `managed_readiness_integration_smoke.py` passed against a real
+Postgres 16 and Redis, and failed as designed with no hosts set and with
+closed ports; `managed_hosting_smoke.sh` exited 1 with nothing on its default
+health URL and 0 against a local server answering 200.
+
+Run after, on `9493f41`, after which no Python code or test changes: trial
+`test_release_train` and `tests.config`, 108 passed (121 less the 13); trial
+`tests.util`, 229 run, 228 passed and the same 1 skipped; trial
+`tests.config`, 103 passed; trial `tests.blackout_runtime`, 51 passed;
+`pytest -q blackout_runtime_tests`, 85 passed; trial
+`tests.rest.client.test_versions`, 3 passed. On `4243a7a`, with the
+release-train notes: the release-train gate, the divergence markers (30 files
+changed against `origin/develop`, none on a risky path) and
+`validate_tracker_evidence.sh` passed; `release-train-gate.yml` parses as YAML;
+and `pnpm guard:feature-registry` (24 features),
+`node tools/ci/check-deployment-readiness.mjs` and `pnpm guard:ops-artifacts`
+passed.
