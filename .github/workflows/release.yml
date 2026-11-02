@@ -42,9 +42,16 @@ jobs:
                   path: apps/blackout-client/dist
 
     # Desktop bundles are produced by the dedicated cross-OS workflow
-    # .github/workflows/blackout-desktop-tauri.yml (which also triggers on v* tags).
-    # It builds + signs via tauri-action and attaches the installers + updater JSON
-    # to this same release tag, so there is no separate build-desktop job here.
+    # .github/workflows/blackout-desktop-tauri.yml, which also runs on v* tags.
+    # Its create-release job makes the tag's draft release seconds after the
+    # push (or reuses the oldest draft for the tag), and its legs sign and
+    # upload the installers and the updater's latest.json into that draft, so
+    # there is no build-desktop job here. The release job below uploads into
+    # the same draft and leaves it a draft (draft: true on both
+    # action-gh-release steps): a person checks it and publishes it, and only
+    # then can installed desktops get the update (operator decision of
+    # 2026-11-02; docs/security/dependency-advisories-server-desktop-2026-10-30.md,
+    # Found outside scope, item 6).
 
     build-mobile-android:
         name: Build mobile artifact (Android)
@@ -123,11 +130,20 @@ jobs:
               with:
                   path: artifacts
 
+            # Pinned to the version whose behaviour was read (v2.6.2,
+            # src/github.ts). It cannot find a draft by tag, so it creates
+            # one, then keeps the tag's oldest draft (the desktop one, if that
+            # came first), deletes its own empty duplicate and uploads into
+            # the one it kept. Without draft: true it would then publish that
+            # draft as latest (finalizeRelease), desktop files and all, with
+            # no person in between. When it keeps the desktop draft, that
+            # draft has no generated notes; generate them when publishing.
             - name: Create GitHub Release with all artifacts
-              uses: softprops/action-gh-release@v2
+              uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
               with:
                   files: artifacts/**
                   generate_release_notes: true
+                  draft: true
 
             - name: Set up QEMU
               uses: docker/setup-qemu-action@v3
@@ -193,9 +209,11 @@ jobs:
                       "$f"
                   done
 
+            # The same draft as above, found the same way; still a draft.
             - name: Attach signatures to GitHub release
-              uses: softprops/action-gh-release@v2
+              uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
               with:
+                  draft: true
                   files: |
                       artifacts/**/*.sig
                       artifacts/**/*.pem

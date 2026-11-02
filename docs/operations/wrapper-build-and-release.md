@@ -87,6 +87,10 @@ To release:
     - Every `url` in it names `/releases/download/<this tag>/`, and every
       `signature` is non-empty.
     - The installers are signed (`blackout-desktop/docs/signing-verification.md`).
+    - On a `v*` tag the same draft also gets `release.yml`'s web, mobile, SBOM and
+      signature files, and `release.yml` leaves it a draft too. Wait for its
+      `release` job as well; when the desktop draft came first, the release has no
+      generated notes, so generate them in the form before publishing.
 4. Publish. Leave "Set as the latest release" ticked only if the release carries
    `latest.json`: the updater reads whichever release is latest, and a latest
    release without it makes the endpoint 404, so updates fail closed.
@@ -186,12 +190,12 @@ the exact id.
 
 ## Workflow ownership
 
-| Workflow                     | Trigger                    | Owns                                                                                      |
-| ---------------------------- | -------------------------- | ----------------------------------------------------------------------------------------- |
-| `blackout-desktop-tauri.yml` | `release-*`, `v*` tags     | Signed desktop bundles (all OSes) + updater JSON, in a draft release a person publishes   |
-| `mobile-native-ci.yml`       | PR + `main` (mobile paths) | Mobile contract checks; internal-track AAB → Play, IPA → TestFlight                       |
-| `blackout-mobile.yml`        | `mobile-release-*` tags    | Signed beta/production AAB+APK and TestFlight                                             |
-| `release.yml`                | `v*` tags                  | Web SBOM artifact, Docker image, GitHub release aggregation, unsigned mobile proof builds |
+| Workflow                     | Trigger                    | Owns                                                                                                     |
+| ---------------------------- | -------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `blackout-desktop-tauri.yml` | `release-*`, `v*` tags     | Signed desktop bundles (all OSes) + updater JSON, in a draft release a person publishes                  |
+| `mobile-native-ci.yml`       | PR + `main` (mobile paths) | Mobile contract checks; internal-track AAB → Play, IPA → TestFlight                                      |
+| `blackout-mobile.yml`        | `mobile-release-*` tags    | Signed beta/production AAB+APK and TestFlight                                                            |
+| `release.yml`                | `v*` tags                  | Web SBOM artifact, Docker image, unsigned mobile proof builds; its release files go into the tag's draft |
 
 ## Credentials the maintainer must supply (secrets)
 
