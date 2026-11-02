@@ -8,11 +8,11 @@ import reactHooks from 'eslint-plugin-react-hooks';
 import reactRefresh from 'eslint-plugin-react-refresh';
 import prettier from 'eslint-config-prettier';
 
-
 const noDirectBmcImportsRule = [
     'error',
     {
-        selector: "ImportDeclaration[source.value=/bmc-/], ExportNamedDeclaration[source.value=/bmc-/], ExportAllDeclaration[source.value=/bmc-/]",
+        selector:
+            'ImportDeclaration[source.value=/bmc-/], ExportNamedDeclaration[source.value=/bmc-/], ExportAllDeclaration[source.value=/bmc-/]',
         message:
             'Direct bmc-* imports are blocked in shell/runtime entrypoints. Route customizations through feature plugins.',
     },

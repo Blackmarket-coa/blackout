@@ -43,16 +43,16 @@ free and open-source; the only costs are a server and a domain name.
 
 **Backend services** (all containerised via Docker Compose):
 
-| Service | Image | Role |
-|---------|-------|------|
-| synapse | `matrixdotorg/synapse` | Matrix homeserver |
-| postgres | `postgres:16-alpine` | Synapse database |
-| redis | `redis:7-alpine` | Cache / session store |
-| livekit | `livekit/livekit-server` | WebRTC SFU for voice/video |
-| lk-jwt-service | `element-hq/lk-jwt-service` | MatrixRTC auth bridge |
-| draupnir | `draupnir-project/draupnir` | Moderation bot |
-| nginx | `nginx:1.27-alpine` | Reverse proxy + TLS termination |
-| certbot | `certbot/certbot` | Let's Encrypt auto-renewal |
+| Service        | Image                       | Role                            |
+| -------------- | --------------------------- | ------------------------------- |
+| synapse        | `matrixdotorg/synapse`      | Matrix homeserver               |
+| postgres       | `postgres:16-alpine`        | Synapse database                |
+| redis          | `redis:7-alpine`            | Cache / session store           |
+| livekit        | `livekit/livekit-server`    | WebRTC SFU for voice/video      |
+| lk-jwt-service | `element-hq/lk-jwt-service` | MatrixRTC auth bridge           |
+| draupnir       | `draupnir-project/draupnir` | Moderation bot                  |
+| nginx          | `nginx:1.27-alpine`         | Reverse proxy + TLS termination |
+| certbot        | `certbot/certbot`           | Let's Encrypt auto-renewal      |
 
 ---
 
@@ -60,12 +60,12 @@ free and open-source; the only costs are a server and a domain name.
 
 ### System requirements (laptop / dev machine)
 
-| Tool | Version | Install |
-|------|---------|---------|
-| Node.js | >= 22.11 | [nodejs.org](https://nodejs.org) or `dnf install nodejs` |
-| pnpm | 9.15.4 | `corepack enable && corepack prepare pnpm@9.15.4 --activate` |
-| Rust | >= 1.77 | `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \| sh` |
-| Tauri CLI | >= 2.1.0 | Installed as a devDependency in `blackout-desktop/package.json` |
+| Tool      | Version  | Install                                                           |
+| --------- | -------- | ----------------------------------------------------------------- |
+| Node.js   | >= 22.11 | [nodejs.org](https://nodejs.org) or `dnf install nodejs`          |
+| pnpm      | 9.15.4   | `corepack enable && corepack prepare pnpm@9.15.4 --activate`      |
+| Rust      | >= 1.77  | `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \| sh` |
+| Tauri CLI | >= 2.1.0 | Installed as a devDependency in `blackout-desktop/package.json`   |
 
 ### Tauri system dependencies
 
@@ -109,10 +109,10 @@ pnpm install
 
 ### Recommended VS Code extensions
 
-- **Tauri** (`tauri-apps.tauri-vscode`) — run/debug Tauri apps
-- **rust-analyzer** (`rust-lang.rust-analyzer`) — Rust language support
-- **Even Better TOML** (`tamasfe.even-better-toml`) — Cargo.toml editing
-- **ESLint** (`dbaeumer.vscode-eslint`)
+-   **Tauri** (`tauri-apps.tauri-vscode`) — run/debug Tauri apps
+-   **rust-analyzer** (`rust-lang.rust-analyzer`) — Rust language support
+-   **Even Better TOML** (`tamasfe.even-better-toml`) — Cargo.toml editing
+-   **ESLint** (`dbaeumer.vscode-eslint`)
 
 ---
 
@@ -135,34 +135,34 @@ openssl rand -hex 32
 
 ### 3.2 Environment variables reference
 
-| Variable | What it does | Example |
-|----------|-------------|---------|
-| `SERVER_NAME` | Your public domain (nginx, certbot) | `blackout.yourdomain.com` |
-| `MATRIX_SERVER_NAME` | Matrix federation domain | `blackout.yourdomain.com` |
-| `MATRIX_HOMESERVER_URL` | Full URL to your homeserver | `https://blackout.yourdomain.com` |
-| `MATRIX_WELL_KNOWN_CLIENT_URL` | URL for `.well-known` discovery | `https://blackout.yourdomain.com` |
-| `POSTGRES_DB` | Synapse database name | `synapse` |
-| `POSTGRES_USER` | Synapse database user | `synapse` |
-| `POSTGRES_PASSWORD` | Database password | (generate) |
-| `REDIS_PASSWORD` | Redis auth password | (generate) |
-| `SYNAPSE_REPORT_STATS` | Report anonymous stats to matrix.org | `no` |
-| `SYNAPSE_ENABLE_REGISTRATION` | Allow public sign-up | `true` |
-| `SYNAPSE_REGISTRATION_SHARED_SECRET` | Shared secret for admin user creation | (generate) |
-| `SYNAPSE_MACAROON_SECRET_KEY` | Macaroon signing key | (generate) |
-| `SYNAPSE_FORM_SECRET` | Form CSRF secret | (generate) |
-| `LIVEKIT_WS_PORT` | LiveKit WebSocket port | `7880` |
-| `LIVEKIT_TCP_PORT` | LiveKit TCP fallback port | `7881` |
-| `LIVEKIT_RTC_UDP_START` | WebRTC media UDP range start | `50100` |
-| `LIVEKIT_RTC_UDP_END` | WebRTC media UDP range end | `50200` |
-| `LIVEKIT_API_KEY` | LiveKit API key | `devkey` (change for prod) |
-| `LIVEKIT_API_SECRET` | LiveKit API secret | (generate) |
-| `LIVEKIT_INTERNAL_URL` | Internal LiveKit URL (container network) | `ws://livekit:7880` |
-| `LK_JWT_SIGNING_KEY` | JWT signing key for MatrixRTC bridge | (generate) |
-| `LK_JWT_TRUSTED_HOSTS` | Trusted host for JWT validation | `blackout.yourdomain.com` |
-| `DRAUPNIR_ACCESS_TOKEN` | Moderation bot access token | (create after Synapse is running) |
-| `DRAUPNIR_MANAGEMENT_ROOM` | Room ID for moderation commands | `!roomid:yourdomain.com` |
-| `DRAUPNIR_PANTALAIMON_USE` | Use Pantalaimon E2EE proxy | `false` |
-| `CERTBOT_EMAIL` | Email for Let's Encrypt notifications | `admin@yourdomain.com` |
+| Variable                             | What it does                             | Example                           |
+| ------------------------------------ | ---------------------------------------- | --------------------------------- |
+| `SERVER_NAME`                        | Your public domain (nginx, certbot)      | `blackout.yourdomain.com`         |
+| `MATRIX_SERVER_NAME`                 | Matrix federation domain                 | `blackout.yourdomain.com`         |
+| `MATRIX_HOMESERVER_URL`              | Full URL to your homeserver              | `https://blackout.yourdomain.com` |
+| `MATRIX_WELL_KNOWN_CLIENT_URL`       | URL for `.well-known` discovery          | `https://blackout.yourdomain.com` |
+| `POSTGRES_DB`                        | Synapse database name                    | `synapse`                         |
+| `POSTGRES_USER`                      | Synapse database user                    | `synapse`                         |
+| `POSTGRES_PASSWORD`                  | Database password                        | (generate)                        |
+| `REDIS_PASSWORD`                     | Redis auth password                      | (generate)                        |
+| `SYNAPSE_REPORT_STATS`               | Report anonymous stats to matrix.org     | `no`                              |
+| `SYNAPSE_ENABLE_REGISTRATION`        | Allow public sign-up                     | `true`                            |
+| `SYNAPSE_REGISTRATION_SHARED_SECRET` | Shared secret for admin user creation    | (generate)                        |
+| `SYNAPSE_MACAROON_SECRET_KEY`        | Macaroon signing key                     | (generate)                        |
+| `SYNAPSE_FORM_SECRET`                | Form CSRF secret                         | (generate)                        |
+| `LIVEKIT_WS_PORT`                    | LiveKit WebSocket port                   | `7880`                            |
+| `LIVEKIT_TCP_PORT`                   | LiveKit TCP fallback port                | `7881`                            |
+| `LIVEKIT_RTC_UDP_START`              | WebRTC media UDP range start             | `50100`                           |
+| `LIVEKIT_RTC_UDP_END`                | WebRTC media UDP range end               | `50200`                           |
+| `LIVEKIT_API_KEY`                    | LiveKit API key                          | `devkey` (change for prod)        |
+| `LIVEKIT_API_SECRET`                 | LiveKit API secret                       | (generate)                        |
+| `LIVEKIT_INTERNAL_URL`               | Internal LiveKit URL (container network) | `ws://livekit:7880`               |
+| `LK_JWT_SIGNING_KEY`                 | JWT signing key for MatrixRTC bridge     | (generate)                        |
+| `LK_JWT_TRUSTED_HOSTS`               | Trusted host for JWT validation          | `blackout.yourdomain.com`         |
+| `DRAUPNIR_ACCESS_TOKEN`              | Moderation bot access token              | (create after Synapse is running) |
+| `DRAUPNIR_MANAGEMENT_ROOM`           | Room ID for moderation commands          | `!roomid:yourdomain.com`          |
+| `DRAUPNIR_PANTALAIMON_USE`           | Use Pantalaimon E2EE proxy               | `false`                           |
+| `CERTBOT_EMAIL`                      | Email for Let's Encrypt notifications    | `admin@yourdomain.com`            |
 
 > **Registration safety:** `SYNAPSE_ENABLE_REGISTRATION=true` keeps public signup enabled, but this stack also keeps `enable_registration_without_verification: false` in Synapse. Configure at least one verification gate (registration tokens, CAPTCHA, or email verification) before going live, or set `SYNAPSE_ENABLE_REGISTRATION=false` for invite-only/private deployments.
 
@@ -232,10 +232,10 @@ The Tauri build process is defined in `blackout-desktop/package.json`:
 
 ```json
 {
-  "scripts": {
-    "dev": "pnpm icons:generate && tauri dev",
-    "build": "pnpm icons:generate && tauri build"
-  }
+    "scripts": {
+        "dev": "pnpm icons:generate && tauri dev",
+        "build": "pnpm icons:generate && tauri build"
+    }
 }
 ```
 
@@ -243,14 +243,15 @@ The Tauri build process is defined in `blackout-desktop/package.json`:
 
 ```json
 {
-  "build": {
-    "beforeBuildCommand": "cd ../.. && pnpm --filter @blackout/blackout-web build:web",
-    "frontendDist": "../../apps/blackout-web/dist"
-  }
+    "build": {
+        "beforeBuildCommand": "cd ../.. && pnpm --filter @blackout/blackout-web build:web",
+        "frontendDist": "../../apps/blackout-web/dist"
+    }
 }
 ```
 
 So a single `pnpm build` in `blackout-desktop/`:
+
 1. Generates icons from `src-tauri/icons/blackout.svg`
 2. Builds the Blackout web frontend into `apps/blackout-web/dist/`
 3. Compiles the Rust wrapper (`src-tauri/src/main.rs`)
@@ -282,28 +283,28 @@ pnpm build
 
 Artifacts appear in `blackout-desktop/src-tauri/target/release/bundle/`:
 
-| Platform | File | Location |
-|----------|------|----------|
-| Fedora/RHEL | `.rpm` | `bundle/rpm/blackout-0.1.0-1.x86_64.rpm` |
-| Debian/Ubuntu | `.deb` | `bundle/deb/blackout_0.1.0_amd64.deb` |
-| Universal Linux | `.AppImage` | `bundle/appimage/blackout_0.1.0_amd64.AppImage` |
-| macOS | `.dmg` | `bundle/dmg/Blackout_0.1.0_aarch64.dmg` |
-| Windows | `.msi` | `bundle/msi/Blackout_0.1.0_x64_en-US.msi` |
-| Windows | `.exe` (NSIS) | `bundle/nsis/Blackout_0.1.0_x64-setup.exe` |
+| Platform        | File          | Location                                        |
+| --------------- | ------------- | ----------------------------------------------- |
+| Fedora/RHEL     | `.rpm`        | `bundle/rpm/blackout-0.1.0-1.x86_64.rpm`        |
+| Debian/Ubuntu   | `.deb`        | `bundle/deb/blackout_0.1.0_amd64.deb`           |
+| Universal Linux | `.AppImage`   | `bundle/appimage/blackout_0.1.0_amd64.AppImage` |
+| macOS           | `.dmg`        | `bundle/dmg/Blackout_0.1.0_aarch64.dmg`         |
+| Windows         | `.msi`        | `bundle/msi/Blackout_0.1.0_x64_en-US.msi`       |
+| Windows         | `.exe` (NSIS) | `bundle/nsis/Blackout_0.1.0_x64-setup.exe`      |
 
 ### 5.5 Desktop features (built-in)
 
 The Tauri wrapper (`src-tauri/src/main.rs`) provides:
 
-- **System tray** with show/hide/quit menu
-- **Unread badge count** on tray icon tooltip
-- **Native notifications** via `tauri-plugin-notification`
-- **Global shortcut** `Super+Shift+B` to toggle window
-- **Minimize to tray** on close (configurable)
-- **Single instance** enforcement
-- **Auto-start** on login (macOS LaunchAgent)
-- **Deep linking** for `matrix://` URLs
-- **Auto-updater** checking GitHub releases
+-   **System tray** with show/hide/quit menu
+-   **Unread badge count** on tray icon tooltip
+-   **Native notifications** via `tauri-plugin-notification`
+-   **Global shortcut** `Super+Shift+B` to toggle window
+-   **Minimize to tray** on close (configurable)
+-   **Single instance** enforcement
+-   **Auto-start** on login (macOS LaunchAgent)
+-   **Deep linking** for `matrix://` URLs
+-   **Auto-updater** checking GitHub releases
 
 ### 5.6 Auto-updater setup (optional)
 
@@ -317,15 +318,13 @@ Set the public key in `blackout-desktop/src-tauri/tauri.conf.json`:
 
 ```json
 {
-  "plugins": {
-    "updater": {
-      "active": true,
-      "endpoints": [
-        "https://your-update-server.com/releases/latest.json"
-      ],
-      "pubkey": "YOUR_PUBLIC_KEY_HERE"
+    "plugins": {
+        "updater": {
+            "active": true,
+            "endpoints": ["https://your-update-server.com/releases/latest.json"],
+            "pubkey": "YOUR_PUBLIC_KEY_HERE"
+        }
     }
-  }
 }
 ```
 
@@ -341,9 +340,10 @@ Tauri 2.x supports Android and iOS targets.
 ### 6.1 Android
 
 **Prerequisites:**
-- Android Studio with SDK and NDK installed
-- `ANDROID_HOME` and `NDK_HOME` environment variables set
-- Rust Android targets: `rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android i686-linux-android`
+
+-   Android Studio with SDK and NDK installed
+-   `ANDROID_HOME` and `NDK_HOME` environment variables set
+-   Rust Android targets: `rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android i686-linux-android`
 
 ```bash
 cd blackout-desktop
@@ -355,8 +355,9 @@ pnpm tauri android build   # produce release APK/AAB
 ### 6.2 iOS
 
 **Prerequisites:**
-- macOS with Xcode installed
-- Rust iOS targets: `rustup target add aarch64-apple-ios x86_64-apple-ios aarch64-apple-ios-sim`
+
+-   macOS with Xcode installed
+-   Rust iOS targets: `rustup target add aarch64-apple-ios x86_64-apple-ios aarch64-apple-ios-sim`
 
 ```bash
 cd blackout-desktop
@@ -413,7 +414,7 @@ Alternatively, add `:Z` to volume mounts in `docker-compose.yml` to auto-relabel
 
 ```yaml
 volumes:
-  - ./nginx/nginx.conf:/etc/nginx/templates/nginx.conf.template:ro,Z
+    - ./nginx/nginx.conf:/etc/nginx/templates/nginx.conf.template:ro,Z
 ```
 
 ### 7.4 DNS
@@ -677,14 +678,14 @@ docker compose logs -f livekit       # Follow LiveKit logs
 
 ## Quick Reference: Port Map
 
-| Port | Protocol | Service | Purpose |
-|------|----------|---------|---------|
-| 80 | TCP | nginx | HTTP (redirects to 443) |
-| 443 | TCP | nginx | HTTPS (TLS termination) |
-| 7880 | TCP | LiveKit | WebSocket signaling |
-| 7881 | TCP | LiveKit | TCP fallback for WebRTC |
-| 50100-50200 | UDP | LiveKit | WebRTC media streams |
-| 8008 | TCP | Synapse | Matrix API (internal only, behind nginx) |
-| 8080 | TCP | lk-jwt-service | MatrixRTC JWT (internal only) |
-| 6379 | TCP | Redis | Cache (internal only) |
-| 5432 | TCP | PostgreSQL | Database (internal only) |
+| Port        | Protocol | Service        | Purpose                                  |
+| ----------- | -------- | -------------- | ---------------------------------------- |
+| 80          | TCP      | nginx          | HTTP (redirects to 443)                  |
+| 443         | TCP      | nginx          | HTTPS (TLS termination)                  |
+| 7880        | TCP      | LiveKit        | WebSocket signaling                      |
+| 7881        | TCP      | LiveKit        | TCP fallback for WebRTC                  |
+| 50100-50200 | UDP      | LiveKit        | WebRTC media streams                     |
+| 8008        | TCP      | Synapse        | Matrix API (internal only, behind nginx) |
+| 8080        | TCP      | lk-jwt-service | MatrixRTC JWT (internal only)            |
+| 6379        | TCP      | Redis          | Cache (internal only)                    |
+| 5432        | TCP      | PostgreSQL     | Database (internal only)                 |

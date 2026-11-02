@@ -91,11 +91,7 @@ import {
 } from '../../state/upload';
 import { getImageUrlBlob, loadImageElement } from '../../utils/dom';
 import { API_BASE_URL, fetchAuthorizedBlob } from '../../sdk/client';
-import {
-    buildGifBinaryUrl,
-    registerGifShare,
-    type GifPickerItem,
-} from './gifClient';
+import { buildGifBinaryUrl, registerGifShare, type GifPickerItem } from './gifClient';
 import { addGifRecent } from './gifRecents';
 import { readBlackoutApiToken } from '../monetization/marketplace/useMarketplaceAuth';
 import { safeFile } from '../../utils/mimeTypes';
@@ -726,14 +722,10 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                                 radii="300"
                                 onClick={() => setToolbar(!toolbar)}
                                 aria-label={
-                                    toolbar
-                                        ? 'Hide formatting toolbar'
-                                        : 'Show formatting toolbar'
+                                    toolbar ? 'Hide formatting toolbar' : 'Show formatting toolbar'
                                 }
                                 title={
-                                    toolbar
-                                        ? 'Hide formatting toolbar'
-                                        : 'Show formatting toolbar'
+                                    toolbar ? 'Hide formatting toolbar' : 'Show formatting toolbar'
                                 }
                             >
                                 <Icon src={toolbar ? Icons.AlphabetUnderline : Icons.Alphabet} />
