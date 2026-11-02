@@ -978,7 +978,10 @@ test('an account deletion that lands during a send stands: the row stays failed 
         // The room is made and the send is in flight; the account is deleted.
         assert.ok(db.getDeadmanReleaseNotice(record.id, leaving.user.id)?.roomId);
         const issued = lifecycle.requestAccountDeletion({ userId: leaving.user.id })!;
-        assert.equal(lifecycle.confirmAccountDeletion(issued.token, leaving.user.id).kind, 'ok');
+        assert.equal(
+            (await lifecycle.confirmAccountDeletion(issued.token, leaving.user.id)).kind,
+            'ok'
+        );
         assert.equal(db.getDeadmanReleaseNotice(record.id, leaving.user.id)?.status, 'failed');
         release();
         const result = await within(5000, tick);
@@ -1105,7 +1108,10 @@ test('an account deletion that lands during a send stands: the row stays failed 
         const tick = runDeadmanReleaseNotifier({ now: fourth.at });
         await new Promise((resolve) => setTimeout(resolve, 20));
         const issued = lifecycle.requestAccountDeletion({ userId: refused.user.id })!;
-        assert.equal(lifecycle.confirmAccountDeletion(issued.token, refused.user.id).kind, 'ok');
+        assert.equal(
+            (await lifecycle.confirmAccountDeletion(issued.token, refused.user.id)).kind,
+            'ok'
+        );
         release4();
         assert.deepEqual(await within(5000, tick), {
             caughtUp: 0,
@@ -1156,7 +1162,10 @@ test('a deletion that lands while the room is being found or made is seen before
     ) => {
         await new Promise((resolve) => setTimeout(resolve, 20));
         const issued = lifecycle.requestAccountDeletion({ userId: person.user.id })!;
-        assert.equal(lifecycle.confirmAccountDeletion(issued.token, person.user.id).kind, 'ok');
+        assert.equal(
+            (await lifecycle.confirmAccountDeletion(issued.token, person.user.id)).kind,
+            'ok'
+        );
         release();
         return within(5000, tick);
     };
@@ -1249,7 +1258,10 @@ test('a deletion that lands while the room is being found or made is seen before
         const tickB = runDeadmanReleaseNotifier({ now });
         await new Promise((resolve) => setTimeout(resolve, 20));
         const issued = lifecycle.requestAccountDeletion({ userId: fourth.user.id })!;
-        assert.equal(lifecycle.confirmAccountDeletion(issued.token, fourth.user.id).kind, 'ok');
+        assert.equal(
+            (await lifecycle.confirmAccountDeletion(issued.token, fourth.user.id)).kind,
+            'ok'
+        );
         release();
         results = await within(5000, Promise.all([tickA, tickB]));
     } finally {
@@ -1793,7 +1805,10 @@ test('a deletion that lands during the alias lookup, the bot’s id or a create 
     ) => {
         await new Promise((resolve) => setTimeout(resolve, 20));
         const issued = lifecycle.requestAccountDeletion({ userId: person.user.id })!;
-        assert.equal(lifecycle.confirmAccountDeletion(issued.token, person.user.id).kind, 'ok');
+        assert.equal(
+            (await lifecycle.confirmAccountDeletion(issued.token, person.user.id)).kind,
+            'ok'
+        );
         release();
         return within(5000, tick);
     };
