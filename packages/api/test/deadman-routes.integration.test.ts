@@ -12,7 +12,7 @@ process.env.AUTH_RATE_LIMIT_MAX = process.env.AUTH_RATE_LIMIT_MAX ?? '1000';
 process.env.BLACKOUT_DB_MODE = 'memory';
 
 const { default: app } = await import('../src/index');
-const { signJwt } = await import('../src/services/auth');
+const { sessionFor } = await import('./_fixtures/session');
 const { ARMING_UNAVAILABLE, sweepOverdueDeadmanSwitches } = await import('../src/modules/deadman');
 const { computeDeadlines } = await import('../src/services/deadmanScheduler');
 const { db } = await import('../src/db/store');
@@ -20,7 +20,7 @@ const { db } = await import('../src/db/store');
 // A default session token: what every signed-in account holds, deadman.read
 // and deadman.write among it, with no capability header.
 const headersFor = (userId: string, capabilityHeader?: string) => ({
-    authorization: `Bearer ${signJwt(userId, userId, 600)}`,
+    authorization: `Bearer ${sessionFor(db, userId, userId, 600)}`,
     'content-type': 'application/json',
     ...(capabilityHeader === undefined ? {} : { 'x-blackout-capabilities': capabilityHeader }),
 });

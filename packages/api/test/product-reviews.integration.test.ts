@@ -15,14 +15,15 @@ process.env.LIVEKIT_API_SECRET = process.env.LIVEKIT_API_SECRET ?? 'lk_test_secr
 process.env.FREEBLACKMARKET_STUB = process.env.FREEBLACKMARKET_STUB ?? '1';
 
 const { default: app } = await import('../src/index');
-const { signJwt } = await import('../src/services/auth');
+const { sessionFor } = await import('./_fixtures/session');
+const { db } = await import('../src/db/store');
 
 const PROVIDER = 'freeblackmarket';
 const LISTING = 'listing-xyz';
 
 function authHeader(sub = 'review-test-user'): Record<string, string> {
     return {
-        authorization: `Bearer ${signJwt(sub, 'reviews', 600)}`,
+        authorization: `Bearer ${sessionFor(db, sub, 'reviews', 600)}`,
         'content-type': 'application/json',
     };
 }

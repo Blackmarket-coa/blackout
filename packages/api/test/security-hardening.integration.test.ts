@@ -10,17 +10,21 @@ process.env.AUTH_RATE_LIMIT_MAX = process.env.AUTH_RATE_LIMIT_MAX ?? '1000';
 process.env.BLACKOUT_DB_MODE = 'memory';
 
 const { default: app } = await import('../src/index');
-const { signJwt } = await import('../src/services/auth');
 const { isBlockedHost } = await import('../src/services/outboundEventWebhooks');
 const { db } = await import('../src/db/store');
 const { signJwtWithScopes } = await import('./_fixtures/capabilityToken');
+const { ensureUser, sessionFor } = await import('./_fixtures/session');
 
 // A token whose claims carry `capabilities` on top of what every session token
 // carries. The header can only narrow what a token grants, so it cannot stand
 // in for a scope no session token carries (governance.write, deaddrop.write, ...).
 function headersFor(userId: string, capabilities: string[]) {
     return {
-        authorization: `Bearer ${signJwtWithScopes(userId, userId, capabilities)}`,
+        authorization: `Bearer ${signJwtWithScopes(
+            ensureUser(db, userId, userId),
+            userId,
+            capabilities
+        )}`,
         'content-type': 'application/json',
     };
 }
@@ -28,7 +32,7 @@ function headersFor(userId: string, capabilities: string[]) {
 // A default session token that names `capabilities` in the header.
 function headerAskingFor(userId: string, capabilities: string[]) {
     return {
-        authorization: `Bearer ${signJwt(userId, userId, 600)}`,
+        authorization: `Bearer ${sessionFor(db, userId, userId, 600)}`,
         'content-type': 'application/json',
         'x-blackout-capabilities': capabilities.join(','),
     };
@@ -196,7 +200,7 @@ test('SEC-18: isBlockedHost rejects private / link-local / metadata targets', ()
 
 // What every signed-in account holds: the minted read scopes, no header.
 const defaultToken = (userId: string) => ({
-    authorization: `Bearer ${signJwt(userId, userId, 600)}`,
+    authorization: `Bearer ${sessionFor(db, userId, userId, 600)}`,
 });
 
 type DomainEventRow = { type: string; payload: Record<string, unknown> };

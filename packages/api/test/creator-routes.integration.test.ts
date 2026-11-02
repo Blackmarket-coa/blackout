@@ -40,7 +40,8 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
 }) as typeof fetch;
 
 const { default: app } = await import('../src/index');
-const { signJwt } = await import('../src/services/auth');
+const { sessionFor } = await import('./_fixtures/session');
+const { db } = await import('../src/db/store');
 const { _resetCreatorListingsForTest } = await import('../src/services/creatorListings');
 
 const USER_ID = 'creator-user-1';
@@ -48,7 +49,7 @@ const USERNAME = 'creator-tester';
 
 function authHeaders(): Record<string, string> {
     return {
-        authorization: `Bearer ${signJwt(USER_ID, USERNAME, 600)}`,
+        authorization: `Bearer ${sessionFor(db, USER_ID, USERNAME, 600)}`,
         'content-type': 'application/json',
     };
 }

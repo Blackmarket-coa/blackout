@@ -12,7 +12,7 @@ process.env.BLACKOUT_DB_MODE = process.env.BLACKOUT_DB_MODE ?? 'memory';
 process.env.BLACKOUT_PLUGIN_INSTALL_SCOPES = 'true';
 
 const { default: app } = await import('../src/index');
-const { signJwt } = await import('../src/services/auth');
+const { sessionFor } = await import('./_fixtures/session');
 const { db } = await import('../src/db/store');
 
 const MEMBER_ID = 'pi-member';
@@ -30,7 +30,7 @@ db.createUser({
 
 function headers(userId: string): Record<string, string> {
     return {
-        authorization: `Bearer ${signJwt(userId, userId, 600)}`,
+        authorization: `Bearer ${sessionFor(db, userId, userId, 600)}`,
         'content-type': 'application/json',
     };
 }
@@ -65,13 +65,15 @@ test('install a free plugin at the caller own user scope', async () => {
         }),
     });
     assert.equal(res.status, 201);
-    const json = (await res.json()) as { installation: { status: string; scope: { type: string } } };
+    const json = (await res.json()) as {
+        installation: { status: string; scope: { type: string } };
+    };
     assert.equal(json.installation.status, 'enabled');
     assert.equal(json.installation.scope.type, 'user');
 
     const active = await app.request(
         `/v1/plugin-installations/active?pluginId=debate-timer&scopeType=user&scopeId=${MEMBER_ID}`,
-        { headers: headers(MEMBER_ID) },
+        { headers: headers(MEMBER_ID) }
     );
     assert.deepEqual(await active.json(), { active: true });
 });
@@ -112,7 +114,10 @@ test('den install requires elevated reputation (member denied, coordinator allow
         }),
     });
     assert.equal(allowed.status, 201);
-    assert.equal(((await allowed.json()) as { installation: { status: string } }).installation.status, 'enabled');
+    assert.equal(
+        ((await allowed.json()) as { installation: { status: string } }).installation.status,
+        'enabled'
+    );
 });
 
 test('coalition install is per-den opt-in: available at coalition, not active in dens until enabled', async () => {
@@ -129,13 +134,13 @@ test('coalition install is per-den opt-in: available at coalition, not active in
     assert.equal(coalition.status, 201);
     assert.equal(
         ((await coalition.json()) as { installation: { status: string } }).installation.status,
-        'available',
+        'available'
     );
 
     // A den in the coalition has not opted in yet → not active.
     const before = await app.request(
         '/v1/plugin-installations/active?pluginId=aid-board&scopeType=den&scopeId=coa-den-A',
-        { headers: headers(COORDINATOR_ID) },
+        { headers: headers(COORDINATOR_ID) }
     );
     assert.deepEqual(await before.json(), { active: false });
 
@@ -151,7 +156,7 @@ test('coalition install is per-den opt-in: available at coalition, not active in
     });
     const after = await app.request(
         '/v1/plugin-installations/active?pluginId=aid-board&scopeType=den&scopeId=coa-den-A',
-        { headers: headers(COORDINATOR_ID) },
+        { headers: headers(COORDINATOR_ID) }
     );
     assert.deepEqual(await after.json(), { active: true });
 
@@ -229,7 +234,7 @@ test('disable then delete an installation', async () => {
 
     const active = await app.request(
         `/v1/plugin-installations/active?pluginId=lifecycle-plugin&scopeType=user&scopeId=${MEMBER_ID}`,
-        { headers: headers(MEMBER_ID) },
+        { headers: headers(MEMBER_ID) }
     );
     assert.deepEqual(await active.json(), { active: false });
 

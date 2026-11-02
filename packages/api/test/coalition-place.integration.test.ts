@@ -14,7 +14,8 @@ process.env.LIVEKIT_API_KEY = process.env.LIVEKIT_API_KEY ?? 'lk_test_key';
 process.env.LIVEKIT_API_SECRET = process.env.LIVEKIT_API_SECRET ?? 'lk_test_secret';
 
 const { default: app } = await import('../src/index');
-const { signJwt } = await import('../src/services/auth');
+const { sessionFor } = await import('./_fixtures/session');
+const { db } = await import('../src/db/store');
 const { MAX_AREA_RADIUS_METERS } = await import('@blackout/core');
 
 const CANOPY = '!place-canopy:server';
@@ -22,7 +23,7 @@ const PIN = { kind: 'pin', latitude: 47.6062, longitude: -122.3321, label: 'Elm 
 const AREA = { kind: 'area', latitude: 47.6062, longitude: -122.3321, radiusMeters: 5000 };
 
 function authHeader(userId = 'place-user'): Record<string, string> {
-    return { authorization: `Bearer ${signJwt(userId, 'coalition', 600)}` };
+    return { authorization: `Bearer ${sessionFor(db, userId, 'coalition', 600)}` };
 }
 
 const post = (path: string, body: unknown, userId?: string) =>

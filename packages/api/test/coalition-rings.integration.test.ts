@@ -10,13 +10,13 @@ process.env.JWT_AUDIENCE = process.env.JWT_AUDIENCE ?? 'blackout-client-test';
 process.env.AUTH_RATE_LIMIT_MAX = process.env.AUTH_RATE_LIMIT_MAX ?? '1000';
 
 const { default: app } = await import('../src/index');
-const { signJwt } = await import('../src/services/auth');
+const { sessionFor } = await import('./_fixtures/session');
 const { db } = await import('../src/db/store');
 const { countActiveMembers, canManageRing } = await import('@blackout/core');
 
 function authHeader(user: string): Record<string, string> {
     return {
-        authorization: `Bearer ${signJwt(user, 'coalition', 600)}`,
+        authorization: `Bearer ${sessionFor(db, user, 'coalition', 600)}`,
         'content-type': 'application/json',
     };
 }
@@ -41,7 +41,11 @@ test('countActiveMembers + canManageRing helpers', () => {
 });
 
 test('ring lifecycle: create (owner auto-member), join, leave, member metric', async () => {
-    const created = await createRing({ name: 'Riverside Crew', kind: 'crew', visibility: 'public' });
+    const created = await createRing({
+        name: 'Riverside Crew',
+        kind: 'crew',
+        visibility: 'public',
+    });
     assert.equal(created.status, 201);
     const { ring, memberCount } = (await created.json()) as {
         ring: { id: string; ownerId: string };
@@ -65,7 +69,9 @@ test('ring lifecycle: create (owner auto-member), join, leave, member metric', a
     assert.equal(((await join.json()) as { memberCount: number }).memberCount, 2);
 
     // detail lists active members
-    const detail = await app.request(`/v1/coalition/rings/${ring.id}`, { headers: authHeader('viewer') });
+    const detail = await app.request(`/v1/coalition/rings/${ring.id}`, {
+        headers: authHeader('viewer'),
+    });
     const detailBody = (await detail.json()) as {
         memberCount: number;
         members: Array<{ userId: string; role: string }>;
@@ -88,7 +94,11 @@ test('ring lifecycle: create (owner auto-member), join, leave, member metric', a
 });
 
 test('private rings are invite-only (join 403) and hidden from public list', async () => {
-    const created = await createRing({ name: 'Inner Circle', kind: 'circle', visibility: 'private' });
+    const created = await createRing({
+        name: 'Inner Circle',
+        kind: 'circle',
+        visibility: 'private',
+    });
     const { ring } = (await created.json()) as { ring: { id: string } };
 
     const list = await app.request('/v1/coalition/rings', { headers: authHeader('viewer') });

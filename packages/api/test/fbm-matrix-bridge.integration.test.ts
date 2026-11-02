@@ -22,7 +22,7 @@ delete process.env.MATRIX_HOMESERVER_URL;
 delete process.env.MATRIX_BOT_TOKEN;
 
 const { default: app } = await import('../src/index');
-const { signJwt } = await import('../src/services/auth');
+const { sessionFor } = await import('./_fixtures/session');
 const { db } = await import('../src/db/store');
 const { resetMarketplaceEntitlementsForTest, listEntitlementsForUser, recordWebhookReceipt } =
     await import('../src/services/marketplaceEntitlements');
@@ -47,7 +47,7 @@ const USER_ID = 'stub-user';
 
 function authHeaders(): Record<string, string> {
     return {
-        authorization: `Bearer ${signJwt(USER_ID, 'stub-tester', 600)}`,
+        authorization: `Bearer ${sessionFor(db, USER_ID, 'stub-tester', 600)}`,
         'content-type': 'application/json',
     };
 }

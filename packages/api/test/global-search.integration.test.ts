@@ -13,14 +13,15 @@ process.env.LIVEKIT_API_KEY = process.env.LIVEKIT_API_KEY ?? 'lk_test_key';
 process.env.LIVEKIT_API_SECRET = process.env.LIVEKIT_API_SECRET ?? 'lk_test_secret';
 
 const { default: app } = await import('../src/index');
-const { signJwt } = await import('../src/services/auth');
+const { sessionFor } = await import('./_fixtures/session');
+const { db } = await import('../src/db/store');
 const { discoveryService } = await import('../src/services/discovery');
 const coliseumStore = await import('../src/services/coliseumStore');
 const creatorContentStore = await import('../src/services/creatorContentStore');
 
 function authHeader(sub = 'search-test-user'): Record<string, string> {
     return {
-        authorization: `Bearer ${signJwt(sub, 'search', 600)}`,
+        authorization: `Bearer ${sessionFor(db, sub, 'search', 600)}`,
         'content-type': 'application/json',
     };
 }
@@ -169,7 +170,7 @@ test('recommendations boost shared interests and exclude already-followed', asyn
     discoveryService.runFullIndex();
 
     const res = await app.request(
-        '/v1/search/recommended?tags=permaculture&exclude=!followed-canopy:bmc',
+        '/v1/search/recommended?tags=permaculture&exclude=!followed-canopy:bmc'
     );
     assert.equal(res.status, 200);
     const { results } = (await res.json()) as {
@@ -179,7 +180,7 @@ test('recommendations boost shared interests and exclude already-followed', asyn
     // Excluded entity must not be recommended.
     assert.ok(
         !results.some((r) => r.id === '!followed-canopy:bmc'),
-        'followed coalition should be excluded',
+        'followed coalition should be excluded'
     );
     // The interest-matching creator outranks the unrelated one.
     const pat = results.find((r) => r.id === '@permaculture-pat:bmc');

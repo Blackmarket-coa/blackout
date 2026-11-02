@@ -10,13 +10,19 @@ process.env.AUTH_RATE_LIMIT_MAX = process.env.AUTH_RATE_LIMIT_MAX ?? '1000';
 
 const { default: app } = await import('../src/index');
 const { signJwtWithScopes } = await import('./_fixtures/capabilityToken');
+const { ensureUser } = await import('./_fixtures/session');
+const { db } = await import('../src/db/store');
 const { __resetGovernanceStoreForTests } = await import('../src/services/governanceStore');
 
 // No session token carries governance.write (the header can only narrow what a
 // token grants), so these tests sign a token whose claims carry it.
 function authHeaders(capabilities = ['governance.read', 'governance.write']) {
     return {
-        authorization: `Bearer ${signJwtWithScopes('gov-user', 'govuser', capabilities)}`,
+        authorization: `Bearer ${signJwtWithScopes(
+            ensureUser(db, 'gov-user', 'govuser'),
+            'govuser',
+            capabilities
+        )}`,
         'content-type': 'application/json',
     };
 }

@@ -425,7 +425,8 @@ test('revoke-all cutoff invalidates access tokens minted before it (H9)', async 
     const { auth, db } = await loadModules();
     auth.clearAuthRuntimeConfigCache();
     const { default: app } = await import('../src/index');
-    const userId = `user-cutoff-${randomUUID().slice(0, 8)}`;
+    const { ensureUser } = await import('./_fixtures/session');
+    const userId = ensureUser(db, `user-cutoff-${randomUUID().slice(0, 8)}`, 'alice');
 
     const signed = auth.signJwtWithMeta(userId, 'alice', 3600);
     const payload = auth.verifyJwt(signed.token)!;

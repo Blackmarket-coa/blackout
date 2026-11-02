@@ -11,11 +11,14 @@ process.env.JWT_AUDIENCE = process.env.JWT_AUDIENCE ?? 'blackout-client-test';
 process.env.AUTH_RATE_LIMIT_MAX = process.env.AUTH_RATE_LIMIT_MAX ?? '1000';
 
 const { default: app } = await import('../src/index');
-const { signJwt } = await import('../src/services/auth');
+const { sessionFor } = await import('./_fixtures/session');
 const { db } = await import('../src/db/store');
 
 function authHeader(user: string): Record<string, string> {
-    return { authorization: `Bearer ${signJwt(user, 'coalition', 600)}`, 'content-type': 'application/json' };
+    return {
+        authorization: `Bearer ${sessionFor(db, user, 'coalition', 600)}`,
+        'content-type': 'application/json',
+    };
 }
 
 function seedUser(tier: 'member' | 'coordinator'): string {
@@ -74,7 +77,7 @@ test('a coordinator applies a kit: installs plugins, records the application', a
     // the application is queryable for the scope
     const applied = await app.request(
         `/v1/coalition/kits/applied?scopeType=den&scopeId=${encodeURIComponent(denId)}`,
-        { headers: authHeader(coordId) },
+        { headers: authHeader(coordId) }
     );
     const { applications } = (await applied.json()) as {
         applications: Array<{ kitId: string }>;

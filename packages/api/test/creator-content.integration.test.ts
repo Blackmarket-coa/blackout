@@ -13,12 +13,13 @@ process.env.LIVEKIT_API_KEY = process.env.LIVEKIT_API_KEY ?? 'lk_test_key';
 process.env.LIVEKIT_API_SECRET = process.env.LIVEKIT_API_SECRET ?? 'lk_test_secret';
 
 const { default: app } = await import('../src/index');
-const { signJwt } = await import('../src/services/auth');
+const { sessionFor } = await import('./_fixtures/session');
+const { db } = await import('../src/db/store');
 const { runScheduledContentDispatch } = await import('../src/services/scheduledContentDispatcher');
 
 function authHeader(sub = 'creator-test-user'): Record<string, string> {
     return {
-        authorization: `Bearer ${signJwt(sub, 'creator', 600)}`,
+        authorization: `Bearer ${sessionFor(db, sub, 'creator', 600)}`,
         'content-type': 'application/json',
     };
 }
@@ -104,7 +105,9 @@ test('creator content: distribution to a coalition target', async () => {
     };
     // publish auto-adds a 'home' distribution; we then added a coalition one.
     assert.ok(distributions.some((d) => d.target === 'home'));
-    assert.ok(distributions.some((d) => d.target === 'coalition' && d.targetId === '!canopy:blackout'));
+    assert.ok(
+        distributions.some((d) => d.target === 'coalition' && d.targetId === '!canopy:blackout')
+    );
 });
 
 test('creator content: another creator cannot edit your content (403)', async () => {

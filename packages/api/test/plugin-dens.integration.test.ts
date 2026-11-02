@@ -10,7 +10,7 @@ process.env.BLACKOUT_DB_MODE = process.env.BLACKOUT_DB_MODE ?? 'memory';
 process.env.BLACKOUT_PLUGIN_INSTALL_SCOPES = 'true';
 
 const { default: app } = await import('../src/index');
-const { signJwt } = await import('../src/services/auth');
+const { sessionFor } = await import('./_fixtures/session');
 const { db } = await import('../src/db/store');
 const { provisionPluginDens, listPluginDensForInstallation } = await import(
     '../src/services/pluginDens'
@@ -20,7 +20,7 @@ const USER_ID = 'pd-user';
 
 function headers(userId: string): Record<string, string> {
     return {
-        authorization: `Bearer ${signJwt(userId, userId, 600)}`,
+        authorization: `Bearer ${sessionFor(db, userId, userId, 600)}`,
         'content-type': 'application/json',
     };
 }
@@ -57,7 +57,7 @@ test('provisionPluginDens records linkage via an injected provisioner and is ide
             pluginName: 'Fancy Stickers',
             specs: [{ purpose: 'support' }, { purpose: 'tutorial', denType: 'private' }],
         },
-        fakeProvisioner,
+        fakeProvisioner
     );
     assert.equal(first.provisioned.length, 2);
     assert.equal(first.failures.length, 0);
@@ -72,7 +72,7 @@ test('provisionPluginDens records linkage via an injected provisioner and is ide
             pluginName: 'Fancy Stickers',
             specs: [{ purpose: 'support' }, { purpose: 'tutorial', denType: 'private' }],
         },
-        fakeProvisioner,
+        fakeProvisioner
     );
     assert.equal(second.provisioned.length, 2);
     assert.equal(calls.length, 2, 'provisioner not called again for existing dens');
@@ -89,7 +89,7 @@ test('provisionPluginDens records failures when the provisioner cannot create a 
             pluginName: 'Fancy Stickers',
             specs: [{ purpose: 'support' }],
         },
-        failing,
+        failing
     );
     assert.equal(result.provisioned.length, 0);
     assert.deepEqual(result.failures, [{ purpose: 'support', reason: 'matrix_not_configured' }]);
@@ -114,7 +114,7 @@ test('GET dens lists provisioned linkage when the flag is on', async () => {
             pluginName: 'Fancy Stickers',
             specs: [{ purpose: 'support' }],
         },
-        async (plan) => ({ ok: true as const, denId: `!r-${plan.purpose}:test` }),
+        async (plan) => ({ ok: true as const, denId: `!r-${plan.purpose}:test` })
     );
     process.env.BLACKOUT_PLUGIN_DENS = 'true';
     try {

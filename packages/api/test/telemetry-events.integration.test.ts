@@ -29,7 +29,8 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
 }) as typeof fetch;
 
 const { default: app } = await import('../src/index');
-const { signJwt } = await import('../src/services/auth');
+const { sessionFor } = await import('./_fixtures/session');
+const { db } = await import('../src/db/store');
 const { clearClickhouseConfigCache } = await import('../src/config/clickhouse');
 
 const USER_ID = '@viewer:blackout.test';
@@ -37,7 +38,7 @@ const USERNAME = 'viewer';
 
 function authHeaders(extra: Record<string, string> = {}): Record<string, string> {
     return {
-        authorization: `Bearer ${signJwt(USER_ID, USERNAME, 600)}`,
+        authorization: `Bearer ${sessionFor(db, USER_ID, USERNAME, 600)}`,
         'content-type': 'application/json',
         ...extra,
     };

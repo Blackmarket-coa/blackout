@@ -10,6 +10,8 @@ process.env.AUTH_RATE_LIMIT_MAX = process.env.AUTH_RATE_LIMIT_MAX ?? '1000';
 
 const { default: app } = await import('../src/index');
 const { signJwtWithScopes } = await import('./_fixtures/capabilityToken');
+const { ensureUser } = await import('./_fixtures/session');
+const { db } = await import('../src/db/store');
 const { __resetMjolnirStoreForTests } = await import('../src/modules/moderationMjolnir');
 
 // No session token carries moderation.write (the header can only narrow what a
@@ -17,7 +19,9 @@ const { __resetMjolnirStoreForTests } = await import('../src/modules/moderationM
 function authHeaders(userId: string) {
     const username = userId.replace(/[^a-z0-9]/gi, '') || 'mod';
     return {
-        authorization: `Bearer ${signJwtWithScopes(userId, username, ['moderation.write'])}`,
+        authorization: `Bearer ${signJwtWithScopes(ensureUser(db, userId, username), username, [
+            'moderation.write',
+        ])}`,
         'content-type': 'application/json',
     };
 }

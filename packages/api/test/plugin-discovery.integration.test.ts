@@ -15,13 +15,16 @@ process.env.JWT_AUDIENCE = process.env.JWT_AUDIENCE ?? 'blackout-client-test';
 process.env.BLACKOUT_DB_MODE = process.env.BLACKOUT_DB_MODE ?? 'memory';
 
 const { default: app } = await import('../src/index');
-const { signJwt } = await import('../src/services/auth');
+const { sessionFor } = await import('./_fixtures/session');
 const { db } = await import('../src/db/store');
 const { discoverPlugins } = await import('../src/services/pluginDiscovery');
 const { submitReview } = await import('../src/services/pluginSocial');
 
 function headers(userId: string): Record<string, string> {
-    return { authorization: `Bearer ${signJwt(userId, userId, 600)}`, 'content-type': 'application/json' };
+    return {
+        authorization: `Bearer ${sessionFor(db, userId, userId, 600)}`,
+        'content-type': 'application/json',
+    };
 }
 
 const rec = (over: Partial<PluginRecommendation>): PluginRecommendation => ({
@@ -51,31 +54,70 @@ test('rankPluginRecommendations is deterministic with stable tiebreaks', () => {
         rec({ pluginId: 'high', rating: 5, installCount: 1 }),
         rec({ pluginId: 'mid', rating: 3, installCount: 1 }),
     ]);
-    assert.deepEqual(ranked.map((r) => r.pluginId), ['high', 'mid', 'low']);
+    assert.deepEqual(
+        ranked.map((r) => r.pluginId),
+        ['high', 'mid', 'low']
+    );
 });
 
 test('discoverPlugins joins active installs + ratings and places by domain', () => {
     // Two active installs of an AI plugin, one of a coliseum plugin.
     db.createPluginInstallation({
-        id: 'di-1', pluginId: 'ai-helper', entitlementId: null, scopeType: 'den', scopeId: 'd1',
-        installedByUserId: 'u1', status: 'enabled', artifactKind: 'code_plugin', domain: 'ai',
-        grantedCapabilities: [], config: {}, manifest: {},
+        id: 'di-1',
+        pluginId: 'ai-helper',
+        entitlementId: null,
+        scopeType: 'den',
+        scopeId: 'd1',
+        installedByUserId: 'u1',
+        status: 'enabled',
+        artifactKind: 'code_plugin',
+        domain: 'ai',
+        grantedCapabilities: [],
+        config: {},
+        manifest: {},
     });
     db.createPluginInstallation({
-        id: 'di-2', pluginId: 'ai-helper', entitlementId: null, scopeType: 'den', scopeId: 'd2',
-        installedByUserId: 'u2', status: 'enabled', artifactKind: 'code_plugin', domain: 'ai',
-        grantedCapabilities: [], config: {}, manifest: {},
+        id: 'di-2',
+        pluginId: 'ai-helper',
+        entitlementId: null,
+        scopeType: 'den',
+        scopeId: 'd2',
+        installedByUserId: 'u2',
+        status: 'enabled',
+        artifactKind: 'code_plugin',
+        domain: 'ai',
+        grantedCapabilities: [],
+        config: {},
+        manifest: {},
     });
     db.createPluginInstallation({
-        id: 'di-3', pluginId: 'debate-timer', entitlementId: null, scopeType: 'user', scopeId: 'u1',
-        installedByUserId: 'u1', status: 'enabled', artifactKind: 'manifest_plugin', domain: 'coliseum',
-        grantedCapabilities: [], config: {}, manifest: {},
+        id: 'di-3',
+        pluginId: 'debate-timer',
+        entitlementId: null,
+        scopeType: 'user',
+        scopeId: 'u1',
+        installedByUserId: 'u1',
+        status: 'enabled',
+        artifactKind: 'manifest_plugin',
+        domain: 'coliseum',
+        grantedCapabilities: [],
+        config: {},
+        manifest: {},
     });
     // A disabled install should not count toward adoption.
     db.createPluginInstallation({
-        id: 'di-4', pluginId: 'ai-helper', entitlementId: null, scopeType: 'den', scopeId: 'd3',
-        installedByUserId: 'u3', status: 'disabled', artifactKind: 'code_plugin', domain: 'ai',
-        grantedCapabilities: [], config: {}, manifest: {},
+        id: 'di-4',
+        pluginId: 'ai-helper',
+        entitlementId: null,
+        scopeType: 'den',
+        scopeId: 'd3',
+        installedByUserId: 'u3',
+        status: 'disabled',
+        artifactKind: 'code_plugin',
+        domain: 'ai',
+        grantedCapabilities: [],
+        config: {},
+        manifest: {},
     });
     submitReview({ pluginId: 'ai-helper', userId: 'u1', rating: 5 });
 

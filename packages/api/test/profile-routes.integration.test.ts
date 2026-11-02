@@ -9,12 +9,14 @@ process.env.JWT_AUDIENCE = process.env.JWT_AUDIENCE ?? 'blackout-client-test';
 process.env.AUTH_RATE_LIMIT_MAX = process.env.AUTH_RATE_LIMIT_MAX ?? '1000';
 
 const { default: app } = await import('../src/index');
-const { signJwt } = await import('../src/services/auth');
+const { sessionFor } = await import('./_fixtures/session');
+const { db } = await import('../src/db/store');
 const { __resetProfileStoreForTests } = await import('../src/services/profileStore');
 
 function authHeaders(userId: string, capabilities: string[] = ['profile.read', 'profile.write']) {
     return {
-        authorization: `Bearer ${signJwt(
+        authorization: `Bearer ${sessionFor(
+            db,
             userId,
             userId.replace(/[^a-z0-9]/gi, '') || 'user',
             600
@@ -117,7 +119,7 @@ test('profile PUT to own profile is granted by default (profile.write)', async (
     const response = await app.request('/v1/profile/profile-user-e', {
         method: 'PUT',
         headers: {
-            authorization: `Bearer ${signJwt('profile-user-e', 'profileusere', 600)}`,
+            authorization: `Bearer ${sessionFor(db, 'profile-user-e', 'profileusere', 600)}`,
             'content-type': 'application/json',
         },
         body: JSON.stringify({ displayName: 'Self edit' }),
@@ -137,7 +139,7 @@ test('profile PUT accepts the owner addressed by their Matrix id (sub is a Black
     const response = await app.request(`/v1/profile/${encodeURIComponent(matrixId)}`, {
         method: 'PUT',
         headers: {
-            authorization: `Bearer ${signJwt(blackoutSub, username, 600)}`,
+            authorization: `Bearer ${sessionFor(db, blackoutSub, username, 600)}`,
             'content-type': 'application/json',
             'x-blackout-capabilities': 'profile.read,profile.write',
         },
@@ -157,7 +159,12 @@ test('profile PUT still rejects a Matrix-id path that belongs to another user', 
         {
             method: 'PUT',
             headers: {
-                authorization: `Bearer ${signJwt('blackout-user-uuid-2', 'someoneelse', 600)}`,
+                authorization: `Bearer ${sessionFor(
+                    db,
+                    'blackout-user-uuid-2',
+                    'someoneelse',
+                    600
+                )}`,
                 'content-type': 'application/json',
                 'x-blackout-capabilities': 'profile.read,profile.write',
             },
@@ -178,7 +185,7 @@ test('profile PUT accepts the owner regardless of the MXID domain (no MATRIX_HOM
     const response = await app.request(`/v1/profile/${encodeURIComponent(matrixId)}`, {
         method: 'PUT',
         headers: {
-            authorization: `Bearer ${signJwt('blackout-user-uuid-3', 'crashdummy', 600)}`,
+            authorization: `Bearer ${sessionFor(db, 'blackout-user-uuid-3', 'crashdummy', 600)}`,
             'content-type': 'application/json',
             'x-blackout-capabilities': 'profile.read,profile.write',
         },

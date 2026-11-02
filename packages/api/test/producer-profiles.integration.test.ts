@@ -9,14 +9,15 @@ process.env.JWT_AUDIENCE = process.env.JWT_AUDIENCE ?? 'blackout-client-test';
 process.env.BLACKOUT_DB_MODE = process.env.BLACKOUT_DB_MODE ?? 'memory';
 
 const { default: app } = await import('../src/index');
-const { signJwt } = await import('../src/services/auth');
+const { sessionFor } = await import('./_fixtures/session');
+const { db } = await import('../src/db/store');
 
 const USER_ID = 'producer-1';
 const USERNAME = 'producer';
 
 function authHeaders(): Record<string, string> {
     return {
-        authorization: `Bearer ${signJwt(USER_ID, USERNAME, 600)}`,
+        authorization: `Bearer ${sessionFor(db, USER_ID, USERNAME, 600)}`,
         'content-type': 'application/json',
     };
 }

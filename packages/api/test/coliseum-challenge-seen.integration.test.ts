@@ -21,7 +21,7 @@ process.env.BLACKOUT_DB_MODE = 'memory';
 process.env.COLISEUM_MATCH_RATE_LIMIT_MAX = '1000';
 
 const { default: app } = await import('../src/index');
-const { signJwt } = await import('../src/services/auth');
+const { sessionFor } = await import('./_fixtures/session');
 const { db } = await import('../src/db/store');
 
 let seq = 0;
@@ -29,7 +29,7 @@ const nextId = (label: string) => `${label}-${Date.now()}-${++seq}`;
 
 const auth = (userId: string | null): Record<string, string> => ({
     'content-type': 'application/json',
-    ...(userId ? { authorization: `Bearer ${signJwt(userId, 'coliseum', 600)}` } : {}),
+    ...(userId ? { authorization: `Bearer ${sessionFor(db, userId, 'coliseum', 600)}` } : {}),
 });
 
 const callout = async (challenger: string, body: Record<string, unknown>) => {

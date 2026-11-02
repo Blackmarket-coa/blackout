@@ -13,11 +13,12 @@ process.env.LIVEKIT_API_KEY = process.env.LIVEKIT_API_KEY ?? 'lk_test_key';
 process.env.LIVEKIT_API_SECRET = process.env.LIVEKIT_API_SECRET ?? 'lk_test_secret';
 
 const { default: app } = await import('../src/index');
-const { signJwt } = await import('../src/services/auth');
+const { sessionFor } = await import('./_fixtures/session');
+const { db } = await import('../src/db/store');
 
 function authHeader(sub = 'challenge-host'): Record<string, string> {
     return {
-        authorization: `Bearer ${signJwt(sub, 'coliseum', 600)}`,
+        authorization: `Bearer ${sessionFor(db, sub, 'coliseum', 600)}`,
         'content-type': 'application/json',
     };
 }

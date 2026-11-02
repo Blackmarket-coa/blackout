@@ -17,10 +17,11 @@ process.env.LIVEKIT_API_KEY = process.env.LIVEKIT_API_KEY ?? 'lk_test_key';
 process.env.LIVEKIT_API_SECRET = process.env.LIVEKIT_API_SECRET ?? 'lk_test_secret';
 
 const { default: app } = await import('../src/index');
-const { signJwt } = await import('../src/services/auth');
+const { sessionFor } = await import('./_fixtures/session');
+const { db } = await import('../src/db/store');
 
 function authHeader(userId: string): Record<string, string> {
-    return { authorization: `Bearer ${signJwt(userId, 'reputation', 600)}` };
+    return { authorization: `Bearer ${sessionFor(db, userId, 'reputation', 600)}` };
 }
 
 interface ReputationResponse {

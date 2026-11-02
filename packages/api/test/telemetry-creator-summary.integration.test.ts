@@ -27,13 +27,14 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
 }) as typeof fetch;
 
 const { default: app } = await import('../src/index');
-const { signJwt } = await import('../src/services/auth');
+const { sessionFor } = await import('./_fixtures/session');
+const { db } = await import('../src/db/store');
 const { clearClickhouseConfigCache } = await import('../src/config/clickhouse');
 
 const USER_ID = '@creator:blackout.test';
 
 function authHeaders(): Record<string, string> {
-    return { authorization: `Bearer ${signJwt(USER_ID, 'creator', 600)}` };
+    return { authorization: `Bearer ${sessionFor(db, USER_ID, 'creator', 600)}` };
 }
 
 function resetAll(): void {

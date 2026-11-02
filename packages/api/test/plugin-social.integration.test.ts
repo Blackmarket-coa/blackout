@@ -10,14 +10,15 @@ process.env.JWT_AUDIENCE = process.env.JWT_AUDIENCE ?? 'blackout-client-test';
 process.env.BLACKOUT_DB_MODE = process.env.BLACKOUT_DB_MODE ?? 'memory';
 
 const { default: app } = await import('../src/index');
-const { signJwt } = await import('../src/services/auth');
+const { sessionFor } = await import('./_fixtures/session');
+const { db } = await import('../src/db/store');
 
 const USER_A = 'ps-a';
 const USER_B = 'ps-b';
 
 function headers(userId: string): Record<string, string> {
     return {
-        authorization: `Bearer ${signJwt(userId, userId, 600)}`,
+        authorization: `Bearer ${sessionFor(db, userId, userId, 600)}`,
         'content-type': 'application/json',
     };
 }
@@ -96,10 +97,9 @@ test('forks and showcases record and list', async () => {
             }),
         });
         assert.equal(showcase.status, 201);
-        const list = await app.request(
-            '/v1/plugin-social/showcases?scopeType=den&scopeId=den-1',
-            { headers: headers(USER_A) },
-        );
+        const list = await app.request('/v1/plugin-social/showcases?scopeType=den&scopeId=den-1', {
+            headers: headers(USER_A),
+        });
         assert.equal(((await list.json()) as { showcases: unknown[] }).showcases.length, 1);
     } finally {
         process.env.BLACKOUT_PLUGIN_SOCIAL = '';

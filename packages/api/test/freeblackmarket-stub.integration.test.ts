@@ -13,11 +13,11 @@ process.env.FREEBLACKMARKET_WEBHOOK_SECRET =
 process.env.BLACKOUT_DB_MODE = process.env.BLACKOUT_DB_MODE ?? 'memory';
 
 const { default: app } = await import('../src/index');
-const { signJwt } = await import('../src/services/auth');
-const {
-    resetMarketplaceEntitlementsForTest,
-    listEntitlementsForUser,
-} = await import('../src/services/marketplaceEntitlements');
+const { sessionFor } = await import('./_fixtures/session');
+const { db } = await import('../src/db/store');
+const { resetMarketplaceEntitlementsForTest, listEntitlementsForUser } = await import(
+    '../src/services/marketplaceEntitlements'
+);
 const { resetMarketplaceRegistry, getMarketplaceProvider } = await import(
     '../src/integrations/marketplace'
 );
@@ -29,7 +29,7 @@ const USER_ID = 'stub-user';
 
 function authHeaders(): Record<string, string> {
     return {
-        authorization: `Bearer ${signJwt(USER_ID, 'stub-tester', 600)}`,
+        authorization: `Bearer ${sessionFor(db, USER_ID, 'stub-tester', 600)}`,
         'content-type': 'application/json',
     };
 }
@@ -70,7 +70,7 @@ test('stub provider: artifactKind filter returns only listings of that kind', as
     resetAll();
     const response = await app.request(
         '/v1/marketplace/listings?providerId=freeblackmarket&artifactKind=manifest_plugin',
-        { headers: authHeaders() },
+        { headers: authHeaders() }
     );
     assert.equal(response.status, 200);
     const json = (await response.json()) as {
@@ -189,14 +189,11 @@ test('stub provider: creator listing flow seeds a new draft into the catalog', a
     );
 
     // Publish.
-    const publishResult = await app.request(
-        `/v1/creator/listings/${draft.listing.id}/publish`,
-        {
-            method: 'POST',
-            headers: authHeaders(),
-            body: JSON.stringify({}),
-        }
-    );
+    const publishResult = await app.request(`/v1/creator/listings/${draft.listing.id}/publish`, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({}),
+    });
     assert.equal(publishResult.status, 200);
     const publishJson = (await publishResult.json()) as {
         listing: { status: string } | null;
@@ -207,9 +204,7 @@ test('stub provider: creator listing flow seeds a new draft into the catalog', a
     // bypass the listings cache).
     const publishedCatalog = await provider!.fetchCatalog({});
     assert.ok(
-        publishedCatalog.some(
-            (l) => l.providerListingId === draft.listing.providerListingId
-        ),
+        publishedCatalog.some((l) => l.providerListingId === draft.listing.providerListingId),
         'published draft should appear in catalog'
     );
 });

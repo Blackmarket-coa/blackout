@@ -10,7 +10,10 @@
  * default capabilities plus `scopes`. Outside tests only an allowlisted admin
  * holds the admin-only scopes.
  *
- * Call it after the test file has set the JWT environment variables.
+ * Call it after the test file has set the JWT environment variables. Like any
+ * session token, it should name a subject with an account row: pass the id
+ * through `ensureUser` (`./session`) first, e.g.
+ * `signJwtWithScopes(ensureUser(db, id, username), username, scopes)`.
  */
 import { createHmac, randomBytes } from 'node:crypto';
 import {

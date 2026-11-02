@@ -9,12 +9,14 @@ process.env.JWT_AUDIENCE = process.env.JWT_AUDIENCE ?? 'blackout-client-test';
 process.env.AUTH_RATE_LIMIT_MAX = process.env.AUTH_RATE_LIMIT_MAX ?? '1000';
 
 const { default: app } = await import('../src/index');
-const { signJwt } = await import('../src/services/auth');
+const { sessionFor } = await import('./_fixtures/session');
+const { db } = await import('../src/db/store');
 const { __resetNotificationRulesForTests } = await import('../src/routes/notifications');
 
 function authHeaders(userId: string) {
     return {
-        authorization: `Bearer ${signJwt(
+        authorization: `Bearer ${sessionFor(
+            db,
             userId,
             userId.replace(/[^a-z0-9]/gi, '') || 'user',
             600

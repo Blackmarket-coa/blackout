@@ -14,10 +14,11 @@ process.env.LIVEKIT_API_KEY = process.env.LIVEKIT_API_KEY ?? 'lk_test_key';
 process.env.LIVEKIT_API_SECRET = process.env.LIVEKIT_API_SECRET ?? 'lk_test_secret';
 
 const { default: app } = await import('../src/index');
-const { signJwt } = await import('../src/services/auth');
+const { sessionFor } = await import('./_fixtures/session');
+const { db } = await import('../src/db/store');
 
 function authHeader(userId: string): Record<string, string> {
-    return { authorization: `Bearer ${signJwt(userId, userId, 600)}` };
+    return { authorization: `Bearer ${sessionFor(db, userId, userId, 600)}` };
 }
 
 const json = { 'content-type': 'application/json' };
@@ -102,14 +103,14 @@ test('creator becomes moderator; request -> grant flow mutates the queue', async
     // Non-moderator cannot grant.
     const forbidden = await app.request(
         `/v1/coliseum/live/sessions/${sessionId}/speak/@speaker:server/grant`,
-        { method: 'POST', headers: { ...authHeader('@speaker:server'), ...json } },
+        { method: 'POST', headers: { ...authHeader('@speaker:server'), ...json } }
     );
     assert.equal(forbidden.status, 403);
 
     // Moderator grants.
     const granted = await app.request(
         `/v1/coliseum/live/sessions/${sessionId}/speak/@speaker:server/grant`,
-        { method: 'POST', headers: { ...authHeader('@mod-grid:server'), ...json } },
+        { method: 'POST', headers: { ...authHeader('@mod-grid:server'), ...json } }
     );
     assert.equal(granted.status, 200);
     const grantedBody = (await granted.json()) as {
@@ -117,7 +118,7 @@ test('creator becomes moderator; request -> grant flow mutates the queue', async
     };
     assert.equal(
         grantedBody.session.speakingQueue.find((s) => s.userId === '@speaker:server')!.state,
-        'granted',
+        'granted'
     );
 });
 

@@ -13,10 +13,11 @@ process.env.LIVEKIT_API_KEY = process.env.LIVEKIT_API_KEY ?? 'lk_test_key';
 process.env.LIVEKIT_API_SECRET = process.env.LIVEKIT_API_SECRET ?? 'lk_test_secret';
 
 const { default: app } = await import('../src/index');
-const { signJwt } = await import('../src/services/auth');
+const { sessionFor } = await import('./_fixtures/session');
+const { db } = await import('../src/db/store');
 
 function authHeader(): Record<string, string> {
-    return { authorization: `Bearer ${signJwt('coalition-test-user', 'coalition', 600)}` };
+    return { authorization: `Bearer ${sessionFor(db, 'coalition-test-user', 'coalition', 600)}` };
 }
 
 test('coalition feed returns ranked items', async () => {
@@ -252,7 +253,7 @@ test('coalition task update is denied for a non-creator/non-assignee (M3)', asyn
     const { task } = (await created.json()) as { task: { id: string } };
 
     const intruder = {
-        authorization: `Bearer ${signJwt('coalition-test-intruder', 'coalition', 600)}`,
+        authorization: `Bearer ${sessionFor(db, 'coalition-test-intruder', 'coalition', 600)}`,
         'content-type': 'application/json',
     };
     const denied = await app.request(`/v1/coalition/tasks/${task.id}`, {

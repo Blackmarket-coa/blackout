@@ -13,10 +13,14 @@ process.env.AUTH_RATE_LIMIT_MAX = process.env.AUTH_RATE_LIMIT_MAX ?? '1000';
 process.env.COLISEUM_VOTE_RATE_LIMIT_MAX = '3';
 
 const { default: app } = await import('../src/index');
-const { signJwt } = await import('../src/services/auth');
+const { sessionFor } = await import('./_fixtures/session');
+const { db } = await import('../src/db/store');
 
 function authHeader(userId: string): Record<string, string> {
-    return { authorization: `Bearer ${signJwt(userId, userId, 600)}`, 'content-type': 'application/json' };
+    return {
+        authorization: `Bearer ${sessionFor(db, userId, userId, 600)}`,
+        'content-type': 'application/json',
+    };
 }
 
 function vote(userId: string) {

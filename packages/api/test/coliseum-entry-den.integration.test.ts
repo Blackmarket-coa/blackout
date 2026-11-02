@@ -15,10 +15,11 @@ process.env.LIVEKIT_API_KEY = process.env.LIVEKIT_API_KEY ?? 'lk_test_key';
 process.env.LIVEKIT_API_SECRET = process.env.LIVEKIT_API_SECRET ?? 'lk_test_secret';
 
 const { default: app } = await import('../src/index');
-const { signJwt } = await import('../src/services/auth');
+const { sessionFor } = await import('./_fixtures/session');
+const { db } = await import('../src/db/store');
 
 function authHeader(userId = 'entry-den-user'): Record<string, string> {
-    return { authorization: `Bearer ${signJwt(userId, 'coliseum', 600)}` };
+    return { authorization: `Bearer ${sessionFor(db, userId, 'coliseum', 600)}` };
 }
 
 /** A challenge with one entry on it, returning the entry's id. */
