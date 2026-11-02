@@ -1018,8 +1018,8 @@ JWT login, which the same render had turned on, was turned off in `48ab32d`
 no upstream counterpart; `.dockerignore`, `README.rst` and `docs/upgrade.md`
 are upstream files with Blackout lines. Record:
 `docs/security/dependency-advisories-server-desktop-2026-10-30.md`
-(repository root), "Found outside scope", item 5, and the section "The
-Railway template is removed (2026-11-02)".
+(repository root), "Found outside scope", item 5, and the section
+"2026-11-02: the Railway template is removed".
 
 - Removed:
   - `railway.toml`: the Railway service (Dockerfile builder,
