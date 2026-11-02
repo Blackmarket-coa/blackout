@@ -1332,11 +1332,13 @@ Error during startup`), under either Twisted; a configured key pair never
   the file and what it holds. Upstream loads both files without comparing
   them. Each refused config starts a manhole on which no SSH session
   completes. Keep it through a reconciliation. Tests in
-  `tests/blackout_runtime/test_manhole.py`, through `HomeServerConfig`: the
-  three refusals for each key type (the type mismatch as Ed25519 with RSA,
-  RSA with ECDSA, and ECDSA P-256 with P-384), each failing against the file
-  before this change, and matching pairs and private keys alone still
-  loading.
+  `tests/blackout_runtime/test_manhole.py`, through `HomeServerConfig`: a
+  public key at `ssh_priv_key_path` and another key of the same type at
+  `ssh_pub_key_path`, each for RSA, Ed25519 and ECDSA P-256, P-384 and P-521,
+  and a public key of another type for three pairs (Ed25519 with RSA, RSA
+  with ECDSA P-256, ECDSA P-256 with P-384), the three tests failing against
+  the file before this change; and matching pairs and private keys alone
+  still loading.
 - `docs/manhole.md`: its option list and example named `ssh_priv_key` and
   `ssh_pub_key`. `synapse/config/server.py` reads only `ssh_priv_key_path`
   and `ssh_pub_key_path`, and `_MANHOLE_SETTINGS_SCHEMA` accepts unknown
@@ -1351,9 +1353,9 @@ Error during startup`), under either Twisted; a configured key pair never
   key alone is ignored, and no longer says that leaving both unset "is no
   longer a confidentiality problem": a host key that changes on every restart
   gives a client nothing to tell a restart from an impersonator. With the
-  fifth-round fixes above, both pages also name the key types that work (RSA,
-  Ed25519, ECDSA) and the refusals at startup, and `docs/manhole.md`'s
-  example and `ssh-keygen` line use an Ed25519 key.
+  fixes for the review of the fifth round (above), both pages also name the
+  key types that work (RSA, Ed25519, ECDSA) and the refusals at startup, and
+  `docs/manhole.md`'s example and `ssh-keygen` line use an Ed25519 key.
 - `docs/usage/configuration/config_documentation.md`, an upstream line: the
   `ssh_priv_key_path` and `ssh_pub_key_path` bullet opened with upstream's
   "The private and public SSH key pair used to encrypt the manhole traffic".
