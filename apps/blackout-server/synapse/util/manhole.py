@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 
 # The hardcoded manhole keypair that upstream Synapse ships here has been
 # removed, and an ephemeral one is generated instead when the operator has not
-# configured a key (see `_ephemeral_rsa_key` below).
+# configured a private key (see `_ephemeral_rsa_key` and `manhole` below).
 #
 # Why this diverges from upstream: the baked-in key is published in every copy
 # of the source, so it is not a secret in any sense. It is the manhole's SSH
@@ -67,11 +67,12 @@ def _ephemeral_rsa_key() -> Key:
 
     # `Key(keyObject)` is how twisted.conch wraps a cryptography key: its
     # constructor takes "a private or public cryptography.hazmat.primitives
-    # .asymmetric key" (twisted/conch/ssh/keys.py). From 2026-09-13 to
-    # 2026-11-02 this line called `Key.fromCryptographyKey()`, a method the
-    # class has never had, so a homeserver with a `type: manhole` listener and
-    # no configured key raised AttributeError in `start_listening` and never
-    # came up. Tested in tests/blackout_runtime/test_manhole.py.
+    # .asymmetric key" (twisted/conch/ssh/keys.py). From 2026-09-13 until the
+    # Twisted 26.10.0 change this line called `Key.fromCryptographyKey()`, a
+    # method the class has never had, so a homeserver with a `type: manhole`
+    # listener without a configured key pair (either path unset) raised
+    # AttributeError in `start_listening` and never came up. Tested in
+    # tests/blackout_runtime/test_manhole.py.
     return Key(rsa.generate_private_key(public_exponent=65537, key_size=2048))
 
 
@@ -93,16 +94,31 @@ def manhole(settings: ManholeConfig, globals: Dict[str, Any]) -> ServerFactory:
     password = settings.password.encode("ascii")
     priv_key = settings.priv_key
     pub_key = settings.pub_key
-    if priv_key is None or pub_key is None:
-        # No configured keypair: mint one for this process rather than fall
-        # back to a key published in the source. Both halves are replaced
-        # together — a configured private key with a generated public half, or
-        # the reverse, would not match.
-        logger.warning(
-            "manhole: no ssh_priv_key_path configured, using an ephemeral host"
-            " key. Clients will see a host-key change on every restart. Set"
-            " manhole_settings.ssh_priv_key_path to pin a stable key."
-        )
+    if priv_key is not None and pub_key is None:
+        # A private key carries its public half, so a configured private key
+        # alone pins the host key. Upstream instead pairs it with the public
+        # half of its hardcoded key, which does not match.
+        pub_key = priv_key.public()
+    elif priv_key is None:
+        # No private key: mint a pair for this process rather than fall back
+        # to a key published in the source. A configured public key cannot be
+        # used on its own (the server signs with the private half), so it is
+        # replaced too, and the warning says so.
+        if pub_key is not None:
+            logger.warning(
+                "manhole: ssh_pub_key_path is configured without"
+                " ssh_priv_key_path. A public key alone cannot serve as a host"
+                " key, so it is ignored and an ephemeral host key is used."
+                " Clients will see a host-key change on every restart. Set"
+                " manhole_settings.ssh_priv_key_path to pin a stable key."
+            )
+        else:
+            logger.warning(
+                "manhole: no ssh_priv_key_path configured, using an ephemeral"
+                " host key. Clients will see a host-key change on every"
+                " restart. Set manhole_settings.ssh_priv_key_path to pin a"
+                " stable key."
+            )
         generated = _ephemeral_rsa_key()
         priv_key = generated
         pub_key = generated.public()

@@ -478,9 +478,9 @@ of these converge with upstream rather than diverge from it.
   clears its advisories but reformats 207 fork files. Twisted 26.4.0 still has
   three High advisories that only the 26.10.0rc1 pre-release fixes, in
   `twisted.words` and `twisted.conch.telnet`, which Synapse never loads.
-  Superseded on 2026-11-02: Twisted 26.10.0 (final) is locked and fixes those
-  three and the HTTP/2 one (GHSA-vpp8-g58w-m8mp) that the 2026-10-30 record
-  added; see the 2026-11-02 entry below.
+  Superseded by the 2026-11-02 entry below, which locks Twisted 26.10.0
+  (final), the release that fixes those three and the HTTP/2 one
+  (GHSA-vpp8-g58w-m8mp) that the 2026-10-30 record added.
 - `tox.ini` (`py311`), `mypy.ini` (`python_version = 3.11`),
   `synapse/__init__.py` (refuses to start below 3.11), `[tool.black]` and
   `[tool.cibuildwheel]` targets, `docker/Dockerfile` (build-arg example),
@@ -1037,10 +1037,13 @@ requires `zope-interface>=8`).
   second shell request on one channel is refused and logged under 26.10.0
   and accepted under 26.4.0; ordinary SSH clients send one); the manhole's
   SSH server now offers the hybrid post-quantum key exchange
-  `mlkem768x25519-sha256` first (#12520), which OpenSSH clients use by
-  default since 10.0 (Twisted's own client, used by the tests, does not offer
-  it; asyncssh offering only that algorithm got a manhole shell under
-  26.10.0, and 26.4.0 does not offer it); the removed
+  `mlkem768x25519-sha256` first (#12520), which OpenSSH clients from 9.9 on
+  negotiate with it by default (9.9 lists it after two sntrup761x25519 names
+  that Twisted does not implement, 10.0 lists it first; worked out from their
+  `myproposal.h` and Twisted's selection rule, not run with an OpenSSH
+  client). Twisted's own client, used by the tests, does not offer it;
+  asyncssh offering only that algorithm got a manhole shell under 26.10.0,
+  and 26.4.0 does not offer it. The removed
   `PotentialZombieWarning`, `_makeGetterFactory`, `ThreadedResolver`,
   `dns.Message` class attributes and `IProcessProtocol` without
   `processExited` are not used.
@@ -1060,7 +1063,8 @@ requires `zope-interface>=8`).
   `fromFile`, `fromString` and the constructor, which takes a cryptography
   key). Since the 2026-09-13 SAST triage replaced upstream's hardcoded
   manhole host key with a generated one, a homeserver with a `type: manhole`
-  listener and no `ssh_priv_key_path` raised AttributeError in
+  listener without a configured key pair (either path unset) raised
+  AttributeError in
   `start_listening` and never came up (`synapse.app._base - 267 - CRITICAL -
 Error during startup`), under either Twisted; a configured key pair never
   reached the helper. That file's divergence from upstream (the removed key,
@@ -1074,3 +1078,32 @@ Error during startup`), under either Twisted; a configured key pair never
   expression evaluated in the manhole namespace), passing under 26.4.0 and
   26.10.0 and erroring with the AttributeError against the file before the
   fix.
+- `synapse/util/manhole.py` (`manhole`), found by the review of the fourth
+  round: the generated pair replaced both halves whenever either was unset,
+  and logged "no ssh_priv_key_path configured" even when it was. Now a
+  configured private key with no public key is the host key, with its public
+  half derived from it (`priv_key.public()`) and no warning; a configured
+  public key with no private key is ignored, since a host key must be able to
+  sign, and the warning says so; with neither, the warning is unchanged.
+  Upstream instead fills each unset half from its hardcoded pair, so a
+  configured private key is served beside the hardcoded public key, which
+  does not match it. Keep it, with the generated key above, through a
+  reconciliation. Tests in the same file: the private key alone is served
+  unchanged with a matching public half and no warning, the public key alone
+  gets the ephemeral pair and its own warning text, and a loopback SSH session
+  with only the private key configured is shown that key's public half; the
+  three fail against the file before this change, under 26.4.0 and 26.10.0.
+- `docs/manhole.md`: its option list and example named `ssh_priv_key` and
+  `ssh_pub_key`. `synapse/config/server.py` reads only `ssh_priv_key_path`
+  and `ssh_pub_key_path`, and `_MANHOLE_SETTINGS_SCHEMA` accepts unknown
+  keys, so a config written from the page ran on an ephemeral host key (and,
+  before the `_ephemeral_rsa_key` fix above, did not start). Corrected in the
+  list, the example and the fork's host-key paragraph on that page, with a
+  note saying the page had the old names. Upstream `develop`'s `docs/manhole.md` carries the same wrong names
+  ("defaults to a hardcoded value"; fetched raw on 2026-11-02, sha256
+  `2f985e2e…`), so keep the correction through a reconciliation.
+  `docs/usage/configuration/config_documentation.md`'s fork paragraph under
+  `manhole_settings` now says the private key alone is enough and the public
+  key alone is ignored, and no longer says that leaving both unset "is no
+  longer a confidentiality problem": a host key that changes on every restart
+  gives a client nothing to tell a restart from an impersonator.

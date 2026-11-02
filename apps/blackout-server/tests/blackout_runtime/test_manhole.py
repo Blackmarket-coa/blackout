@@ -1,14 +1,22 @@
-"""The manhole starts without a configured host key, and a client gets a shell.
+"""The manhole's host key, and a client gets a shell.
 
 ``synapse/util/manhole.py`` mints an ephemeral RSA host key when the operator
-has not configured one (the fork removed upstream's hardcoded key on
-2026-09-13). Until 2026-11-02 the helper called ``Key.fromCryptographyKey()``,
+has not configured a usable one (the fork removed upstream's hardcoded key on
+2026-09-13). Until this change the helper called ``Key.fromCryptographyKey()``,
 which ``twisted.conch.ssh.keys.Key`` has never had, so a homeserver with a
-``type: manhole`` listener and no key raised AttributeError in
-``start_listening`` and never came up. The helper now uses ``Key(keyObject)``.
+``type: manhole`` listener without a configured key pair (either path unset)
+raised AttributeError in ``start_listening`` and never came up. The helper now
+uses ``Key(keyObject)``.
 
-These tests build the factory as ``listen_manhole`` does and, in the last one,
-connect to it over loopback TCP with twisted.conch's client: password
+A configured private key with no public key is now used as it is, with its
+public half derived from it, and nothing is logged. Before this change it took
+the ephemeral path like a config with no key (and so crashed as above), under a
+warning that said no private key was configured. A configured public key with
+no private key cannot serve as a host key: it is ignored, an ephemeral pair is
+used, and the warning says so.
+
+These tests build the factory as ``listen_manhole`` does and, in the session
+tests, connect to it over loopback TCP with twisted.conch's client: password
 authentication, a pty, a shell, and an expression evaluated in the manhole's
 namespace. Nothing here pins Twisted's own session semantics (26.10.0 allows
 one shell request per channel, 26.4.0 allowed more); the shell must simply
@@ -77,7 +85,10 @@ class EphemeralKeyTestCase(TestCase):
     def test_factory_without_a_configured_key_mints_a_matching_pair(self) -> None:
         with self.assertLogs("synapse.util.manhole", level="WARNING") as logs:
             factory = manhole(_settings(), {})
-        self.assertIn("ephemeral host key", "\n".join(logs.output))
+        self.assertEqual(len(logs.records), 1)
+        message = logs.records[0].getMessage()
+        self.assertIn("no ssh_priv_key_path configured", message)
+        self.assertIn("ephemeral host key", message)
 
         priv, pub = _host_keys(factory)
         self.assertIsInstance(priv, Key)
@@ -94,6 +105,41 @@ class EphemeralKeyTestCase(TestCase):
         got_priv, got_pub = _host_keys(manhole(_settings(priv, pub), {}))
         self.assertIs(got_priv, priv)
         self.assertIs(got_pub, pub)
+
+    def test_configured_private_key_alone_is_used_with_its_public_half(
+        self,
+    ) -> None:
+        # ssh_priv_key_path set, ssh_pub_key_path unset: the configured key is
+        # the host key, its public half is derived from it, and nothing warns.
+        priv = _ephemeral_rsa_key()
+        with self.assertNoLogs("synapse.util.manhole", level="WARNING"):
+            factory = manhole(_settings(priv, None), {})
+        got_priv, got_pub = _host_keys(factory)
+        self.assertIs(got_priv, priv)
+        self.assertTrue(got_pub.isPublic())
+        self.assertEqual(got_pub.blob(), priv.public().blob())
+
+    def test_configured_public_key_alone_is_ignored_with_a_warning(self) -> None:
+        # ssh_pub_key_path set, ssh_priv_key_path unset: a public key cannot
+        # sign, so it cannot be the host key. An ephemeral pair is used, and
+        # the warning says the public key was ignored rather than that nothing
+        # was configured.
+        configured_pub = _ephemeral_rsa_key().public()
+        with self.assertLogs("synapse.util.manhole", level="WARNING") as logs:
+            factory = manhole(_settings(None, configured_pub), {})
+        self.assertEqual(len(logs.records), 1)
+        message = logs.records[0].getMessage()
+        self.assertIn(
+            "ssh_pub_key_path is configured without ssh_priv_key_path", message
+        )
+        self.assertIn("ignored", message)
+        self.assertIn("ephemeral host key", message)
+        self.assertNotIn("no ssh_priv_key_path configured", message)
+
+        priv, pub = _host_keys(factory)
+        self.assertFalse(priv.isPublic())
+        self.assertNotEqual(pub.blob(), configured_pub.blob())
+        self.assertEqual(priv.public().blob(), pub.blob())
 
 
 class _Probe:
@@ -206,11 +252,15 @@ class ManholeSessionTestCase(TestCase):
     # fast on loopback; this bounds a hung handshake rather than a slow one.
     timeout = 60
 
-    def test_client_opens_a_shell_and_evaluates_in_the_namespace(
-        self,
-    ) -> "defer.Deferred[None]":
-        namespace: Dict[str, Any] = {"answer": 41}
-        factory = manhole(_settings(), namespace)
+    def _session(
+        self, settings: ManholeConfig, namespace: Dict[str, Any]
+    ) -> "defer.Deferred[Tuple[_Probe, Key]]":
+        """Serve `manhole(settings, namespace)` on loopback and run one session.
+
+        Fires with what the client saw and the public key the factory serves,
+        once both ends of the connection have closed.
+        """
+        factory = manhole(settings, namespace)
         _, host_key = _host_keys(factory)
 
         # Watch the server side of the one connection close as well, so the
@@ -234,15 +284,39 @@ class ManholeSessionTestCase(TestCase):
         probe = _Probe()
         tcp.connectTCP(host.host, host.port, _ClientFactory(probe))
 
-        async def run() -> None:
+        async def run() -> Tuple[_Probe, Key]:
             await probe.closed
             await server_closed
             self.assertTrue(probe.authenticated, "password authentication failed")
             self.assertTrue(probe.shell_opened, "the shell request was refused")
-            # The host key the client was shown is the ephemeral public half.
-            self.assertEqual(probe.host_key_blob, host_key.blob())
             text = probe.output.decode("utf-8", "replace")
             self.assertIn(">>> ", text)
             self.assertIn("42", text)
+            return probe, host_key
+
+        return defer.ensureDeferred(run())
+
+    def test_client_opens_a_shell_and_evaluates_in_the_namespace(
+        self,
+    ) -> "defer.Deferred[None]":
+        async def run() -> None:
+            probe, host_key = await self._session(_settings(), {"answer": 41})
+            # The host key the client was shown is the ephemeral public half.
+            self.assertEqual(probe.host_key_blob, host_key.blob())
+
+        return defer.ensureDeferred(run())
+
+    def test_client_is_shown_the_configured_private_keys_public_half(
+        self,
+    ) -> "defer.Deferred[None]":
+        # Only ssh_priv_key_path configured: the server signs the key exchange
+        # with that key, so the client completes it against the derived
+        # public half and is shown that, not an ephemeral key.
+        priv = _ephemeral_rsa_key()
+
+        async def run() -> None:
+            probe, host_key = await self._session(_settings(priv, None), {"answer": 41})
+            self.assertEqual(host_key.blob(), priv.public().blob())
+            self.assertEqual(probe.host_key_blob, priv.public().blob())
 
         return defer.ensureDeferred(run())
