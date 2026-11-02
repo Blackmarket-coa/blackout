@@ -6053,8 +6053,8 @@ finding.
     sweep's stays, since there it keeps the process from firing an unfired
     switch of a deleted account whose erase and read-back both failed. The
     verifiers' `d30-attacks.mts` C and C2 now end with the release fired,
-    the recipient's copy held, served on the deleting process and a fresh
-    one, and the notice pending. Tests: test 19 of the switch-writes file
+    the recipient's copy held, served on the deleting process, hydrated so by
+    a fresh one (C), and the notice pending. Tests: test 19 of the switch-writes file
     (while the first erase is held, the switch is marked and armed in the
     mirror, a sweep pass there blanks no copy in Postgres, and it is not
     served there; once landed, the mark ends), test 24 (the dropped erase
@@ -6064,7 +6064,7 @@ finding.
     fire the unfired switch, which a fresh process hydrates armed), test 25
     (a mirror view of a release as cancelled, behind Postgres's trigger:
     the removal pass blanks nothing, logs `deadman_cancelled_view_behind`
-    and refreshes the view). S01–S04 below.
+    and refreshes the view). S01–S04, S01b and S19 below.
 -   **The awaited deletion opened a window for another session (Medium,
     attack replay; Medium, claims; fixed in code).** Round 12 made
     `confirmAccountDeletion` await one statement per switch before it wrote
@@ -6096,9 +6096,9 @@ finding.
     verifiers' `l14-pg-owner.mts` now reads `failed`, `recipient_gone`, no
     room, no `sentAt`, in the mirror and in Postgres, for both cases. Test 27
     (an account that owns a switch; the send parked, released while that
-    switch's erase statement is held; the notice already `failed` then, and
-    `failed`/`recipient_gone` with no room or `sentAt` in the mirror and in
-    Postgres after). S09.
+    switch's erase statement is held; the notice already `failed` and the
+    account's copy already blank then, and `failed`/`recipient_gone` with
+    no room or `sentAt` in the mirror and in Postgres after). S09.
 -   **Switches Postgres had and the deleting process's mirror did not
     (High, fix quality; Low, attack replay; fixed in code).** The deletion
     erased `db.listDeadmanSwitchesForOwner(userId)`, the mirror, which takes
@@ -7114,6 +7114,58 @@ room encryption; the feature registry; auth secrets; prettier over the 42
 files the branch changes; and gitleaks over the branch and over the brief's
 range. The commit that adds this paragraph changes this record alone;
 prettier and gitleaks were run again on it.
+
+Round 13's mutants (`fix/mut/spec-round13b.py` and `spec-round13c.py`, run
+with the round-7 runner against snapshots of `1ec5ce07d4` and `076f0bf83a`
+taken with `git archive`, never the worktree; the switch-writes file has 27
+tests now, each mutant run against the test named). Twenty mutants, all
+caught. Two were caught only once a test was sharpened: S09 (the copies and
+notices ended after the switches' statements, as in round 12) survived its
+first run, because the user row going first already ends the notice, and is
+caught since test 27 records that the copy sealed to the account is blank
+while the account's own switch statement is held; S01 (round 12's erased
+view written into the mirror) was first caught on the mark, and with test 19
+now running its sweep pass first it is caught on the mirror's view of the
+switch, while S19, the whole of round 12's queued erase (that view and the
+removal pass's plain blanking together), is caught on the copies the sweep
+pass blanked, the failure the attack replay found.
+
+| Check removed                                                                                          | Test file                                            | What failed                                                                    |
+| ------------------------------------------------------------------------------------------------------ | ---------------------------------------------------- | ------------------------------------------------------------------------------ |
+| S01: a queued erase writes this process's own erased view into the mirror, unmarked                    | `deadman-switch-writes-postgres.integration.test.ts` | test 19: the switch `cancelled` in the mirror where `armed`, as it had it      |
+| S01b: the same view written, the mark kept                                                             | `deadman-switch-writes-postgres.integration.test.ts` | test 19: the same                                                              |
+| S19: round 12's queued erase whole (that view, unmarked, and the removal pass's plain blanking)        | `deadman-switch-writes-postgres.integration.test.ts` | test 19: a copy of the release fired elsewhere blanked in Postgres by the pass |
+| S02: the removal pass's blanking of a cancelled switch's copies is the mirror's plain writes           | `deadman-switch-writes-postgres.integration.test.ts` | test 25: nothing logged, the copies blanked under Postgres's trigger           |
+| S03: the sweep moves a switch whose queued erase has not landed                                        | `deadman-switch-writes-postgres.integration.test.ts` | test 24: the unfired switch `triggered` by this process where `armed`          |
+| S04: a dropped erase is not read back from Postgres                                                    | `deadman-switch-writes-postgres.integration.test.ts` | test 24: the mark left standing                                                |
+| S05: a queued erase whose call is refused (its connection) is not tried again                          | `deadman-switch-writes-postgres.integration.test.ts` | test 24: the erase dropped                                                     |
+| S06: the store's drain does not wait for a queued erase's retry                                        | `deadman-switch-writes-postgres.integration.test.ts` | test 24: the retry not landed when the drain ended                             |
+| S07: an unfired switch's copies are not blanked once more after the erase                              | `deadman-switch-writes-postgres.integration.test.ts` | test 22: the re-sealed copy held in Postgres                                   |
+| S08: the user row deleted only after the switches' statements (round 12's order)                       | `deadman-switch-writes-postgres.integration.test.ts` | test 18: the re-publish during the deletion 201 where 404                      |
+| S09: the copies and notices ended only after the switches' statements (round 12's order)               | `deadman-switch-writes-postgres.integration.test.ts` | second run, test 27: the account's copy held while its switch statement was    |
+| S10: arming does not refuse an owner whose account is gone                                             | `deadman-switch-writes-postgres.integration.test.ts` | test 18: `owner_identity_missing` where `no_account`                           |
+| S11: re-sealing does not refuse an owner whose account is gone                                         | `deadman-switch-writes-postgres.integration.test.ts` | test 18: the re-seal 409 where 404                                             |
+| S12: an arm that lands for an owner deleted meanwhile is answered armed and keeps its switch           | `deadman-switch-writes-postgres.integration.test.ts` | test 21: `armed` where `no_account`                                            |
+| S13: the deletion does not wait for the owner's arms in flight                                         | `deadman-switch-writes-postgres.integration.test.ts` | test 21: the deletion answered while the arm's insert was held                 |
+| S14: the deletion's last statements do not erase the owner's switches in Postgres                      | `deadman-switch-writes-postgres.integration.test.ts` | test 21: the arm answered 503 left `armed`                                     |
+| S15: the last statement blanks the owner's unfired switches' copies only, not every one to the account | `deadman-switch-writes-postgres.integration.test.ts` | test 21: the copy sealed to the account on another owner's switch held         |
+| S16: a failed arm's look answers armed for any switch of the same owner's with the id                  | `deadman-switch-writes-postgres.integration.test.ts` | test 26: 201 where 409                                                         |
+| S17: the erase of a switch Postgres has no row for inserts nothing (the verifiers' M3)                 | `deadman-switch-writes-postgres.integration.test.ts` | test 23: nothing logged, no row                                                |
+| S18: the deletion's erase is not announced (the verifiers' M8)                                         | `deadman-switch-writes-postgres.integration.test.ts` | test 18: no `deadmanSwitches` announcement since the deletion began            |
+
+Not counted as checks: the memory and file stores'
+`eraseDeadmanSwitchesOfDeletedOwner`, which finds nothing left there (the
+mirror is the database and the deletion has erased it), and the reader,
+notifier and removal-pass skips of a marked switch, which were built and
+removed in this round (the second commit) because none changed an outcome.
+
+The second commit also reformatted 46 other files under
+`packages/api/src/services/` with the root Prettier configuration (a
+`prettier --write` given the whole directory); the change is formatting
+only, and the API's lint, typecheck and suites pass on it. They are left as
+they are: the pre-commit hook formats every staged file with that
+configuration, so they cannot be put back through it, and the brief does not
+allow skipping the hook.
 
 ### Still open
 
