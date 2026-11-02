@@ -179,12 +179,6 @@ export function kvOf(plan: TablePlan, record: Record<string, unknown>): unknown[
  * so a write does not land over a row another process changed meanwhile.
  * With `insertOnly`, `ON CONFLICT ... DO NOTHING`: the record is written only
  * where no row has its key, and a stored row is never changed.
- *
- * Each guard column is compared by its type (guardExpr: a timestamp at
- * millisecond precision, JSON as jsonb, NULL-safe), as a targeted step's
- * guard is: the mirror keeps ISO strings while a `DEFAULT NOW()` stores
- * microseconds, so plain equality would refuse almost every such row. The
- * statement has no RETURNING; upsertRecord adds the key columns.
  */
 export function buildUpsertSql(
     plan: TablePlan,
@@ -203,6 +197,11 @@ export function buildUpsertSql(
         updates.length > 0 && guardColumns.length > 0
             ? ` WHERE ${guardColumns
                   .map((c, i) => {
+                      // By the column's type (guardExpr: a timestamp at millisecond
+                      // precision, JSON as jsonb, NULL-safe), as a targeted step's
+                      // guard is: the mirror keeps ISO strings while a DEFAULT NOW()
+                      // stores microseconds, so plain equality would refuse almost
+                      // every such row.
                       const meta = columnMeta(plan, c);
                       if (!meta) throw new Error(`upsert guard on ${table}: no column ${c}`);
                       return guardCondition(
@@ -227,11 +226,6 @@ export function buildUpsertSql(
  * is written and this throws, rather than drop the condition. With
  * `insertOnly`, an existing row is left as it is (a guard is then refused
  * too, since it could only ever compare an update).
- *
- * Resolves true when Postgres wrote the row, and false when it did not: an
- * insert-only write found a row with the key, or the guard no longer held
- * (or the record has no column at all). The write-behind queue re-reads a
- * refused write's key instead of announcing it.
  */
 export async function upsertRecord(
     client: PgClient,
@@ -257,6 +251,12 @@ export async function upsertRecord(
             `upsert guard on ${plan.descriptor.tableName} names a field with no column or value`
         );
     }
+    // RETURNING is appended here, not by buildUpsertSql, whose text a caller
+    // may append its own RETURNING to. With it this resolves whether Postgres
+    // wrote the row: false when an insert-only write found a row with the key
+    // or the guard no longer held (and, above, for a record with no column).
+    // The write-behind queue re-reads a refused write's key instead of
+    // announcing it.
     const sql = `${buildUpsertSql(
         plan,
         columns,
@@ -370,7 +370,8 @@ export type TargetedStep =
            * A literal condition over the stored row (the table's name) and
            * EXCLUDED, appended as `DO UPDATE SET ... WHERE <literal>`: where it
            * is false the stored row stays as it is, the statement returns no
-           * row, and the key is counted as a conflict and re-read (refusable).
+           * row, and the key is counted as a conflict and re-read (refusable;
+           * after an uncertain COMMIT the miss is logged, not counted).
            */
           onConflictWhere?: string;
           /** The arbiter after ON CONFLICT, replacing `(<conflict columns>)`: a column list, optionally with a partial index's predicate. */
@@ -382,15 +383,22 @@ export type TargetedStep =
            * (the diff of the two records as recordToRow writes them). A
            * descriptor's sticky column is set only where it is still NULL,
            * so Postgres keeps the first writer. A row Postgres refuses to
-           * change (gone, a predicate false) is counted and re-read, never
-           * inserted, and the op's other statements still commit.
+           * change (gone, a predicate false) is counted (after an uncertain
+           * COMMIT, logged instead) and re-read, never inserted, and the op's
+           * other statements still commit.
            */
           op: 'patch';
           /** Compare-and-set: columns that must still hold the value the mirror held before the call (guardExpr: ms timestamps, jsonb, NULL-safe). */
           cas?: string[];
           /** A literal predicate over this table's columns, with no parameter, ANDed to the key match (`status = 'pending'`). */
           where?: string;
-          /** Counter columns written as `c = c + (after - before)` instead of `c = after`; an absent prior value counts as 0. */
+          /**
+           * Counter columns written as `c = c + (after - before)` instead of `c = after`. A prior
+           * value that is absent or null counts as 0. The new record must hold a finite number for
+           * the difference to mean anything: one that drops the counter, or holds null for it, is a
+           * bind error, never a write that subtracts the prior count. An insert has no prior to
+           * subtract from, so there an absent or null counter is inserted as 0, the column's default.
+           */
           delta?: string[];
           /** Sticky columns this step may set even where the stored row already has them: `c = COALESCE(c, $n)` replaces the `c IS NULL` predicate. */
           keepStored?: string[];
@@ -399,7 +407,8 @@ export type TargetedStep =
            * spec on a creating method is a spec bug, made loud). 'nothing': insert, or leave the stored
            * row as it is (a true create). 'add': insert, or add this record's `delta` columns to the
            * stored row and touch nothing else (needs `delta`). 'replace': insert, or overwrite the
-           * stored row's columns this record carries, keeping its id and created_at.
+           * stored row's columns this record carries, keeping its id and created_at (refused on a
+           * table with a sticky column, which it would overwrite).
            */
           insertWhenAbsent?: 'nothing' | 'add' | 'replace';
           /** The insert branch's arbiter, replacing `(<conflict columns>)` after ON CONFLICT: a column list, optionally with a partial-index predicate. */
@@ -422,8 +431,10 @@ export interface BoundStatement {
     /**
      * Postgres may refuse the row (a patch whose predicate no longer holds,
      * an upsertEach whose onConflictWhere is false). No row returned is
-     * counted as a conflict and the key is re-read, but unlike `required`
-     * nothing is rolled back: the op's other statements still commit.
+     * counted as a conflict (only logged when an earlier attempt's COMMIT
+     * reply was lost, since the miss may be that attempt's own effect) and
+     * the key is re-read, but unlike `required` nothing is rolled back: the
+     * op's other statements still commit.
      */
     refusable?: true;
 }
@@ -655,7 +666,8 @@ function bindPatch(compiled: CompiledStep, step: PatchStep, ctx: StepContext): B
                     `the call added ${key}, which the mirror did not hold (no insertWhenAbsent)`
                 );
             }
-            // A counter the record lacks is inserted as 0, its column's default.
+            // A counter the record lacks, or holds null for, is inserted as 0,
+            // its column's default.
             for (const d of delta) {
                 is[d] = hasColumn(is, d) && is[d] !== null ? counter(is[d], `${d} of ${key}`) : 0;
             }
@@ -686,6 +698,8 @@ function bindPatch(compiled: CompiledStep, step: PatchStep, ctx: StepContext): B
                 continue;
             }
             if (delta.has(c)) {
+                // The prior counts as 0 when absent or null; the new value must
+                // be a number (a dropped one is refused above, a null one here).
                 const prior = inWas && was[c] !== null ? counter(was[c], `prior ${c}`) : 0;
                 const d = counter(is[c], `${c}`) - prior;
                 if (!Number.isFinite(d)) throw fail(`${c} changes by ${d}`);
@@ -736,8 +750,9 @@ function bindPatch(compiled: CompiledStep, step: PatchStep, ctx: StepContext): B
  * A patch also throws when a cas, delta, keepStored or sticky column is
  * missing (or, but for sticky, is a key column), a delta column is not a
  * number, a keepStored column is not sticky, its where literal takes a
- * parameter, 'add' has no delta, or conflictTarget comes without
- * insertWhenAbsent. Its key match carries the parameter, so a literal such as
+ * parameter, 'add' has no delta, 'replace' is on a table with a sticky
+ * column, or conflictTarget comes without insertWhenAbsent. Its key match
+ * carries the parameter, so a literal such as
  * `status = 'pending'` is allowed on it.
  */
 export function compileStep(plan: TablePlan, step: TargetedStep): CompiledStep {
@@ -854,6 +869,16 @@ export function compileStep(plan: TablePlan, step: TargetedStep): CompiledStep {
             }
             if (step.insertWhenAbsent === 'add' && delta.length === 0) {
                 throw fail("insertWhenAbsent 'add' without a delta column");
+            }
+            // 'replace' writes every column the record carries over the stored
+            // row, so a one-way column could go back to NULL or to a later
+            // writer's value: Postgres must keep the first writer.
+            if (step.insertWhenAbsent === 'replace' && sticky.length > 0) {
+                throw fail(
+                    `insertWhenAbsent 'replace' on a table with one-way columns (${sticky
+                        .map((s) => s.name)
+                        .join(', ')}), which its DO UPDATE would overwrite`
+                );
             }
             const nonKey = plan.columns.filter((c) => !keys.includes(c.name));
             if (nonKey.length === 0) throw fail('the table has no column outside its key');

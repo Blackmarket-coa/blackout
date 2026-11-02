@@ -8390,7 +8390,8 @@ export class FileBackedDb extends InMemoryDb {
  * whole row from this mirror's copy), so it can overwrite a newer version of
  * that row (the last writer wins). An upsert Postgres refuses (insert-only
  * and the row exists, or a guard that no longer holds) is re-read into this
- * mirror and not announced.
+ * mirror and not announced, unless an earlier attempt's reply was lost (that
+ * attempt may have written the row its retry then finds).
  *
  * Multi-replica consistency: when a change transport is supplied — Postgres
  * LISTEN/NOTIFY, ON BY DEFAULT (BLACKOUT_DB_PG_NOTIFY=1) — each replica

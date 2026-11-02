@@ -575,19 +575,24 @@ export const TABLE_DESCRIPTORS: TableDescriptor[] = ALL_MAP_NAMES.map((mapName) 
  *   wins), when the call wrote its map; a call that left the map untouched
  *   writes nothing. With `insertOnly` the record is written only where no row
  *   has its key, and with `guardOf` only while the stored row still holds the
- *   guard's values. A write Postgres refuses is not announced, and the
- *   writer's mirror re-reads the row Postgres kept.
+ *   guard's values. A write Postgres refuses is not announced (unless an
+ *   earlier attempt's reply was lost: that attempt may have written the row
+ *   the retry finds), and the writer's mirror re-reads the row Postgres kept.
  * - `targeted`: run fixed statements (pgWriter's TargetedStep) that name the
  *   rows the call changed, by key or by a predicate Postgres evaluates, in one
  *   transaction; the statements are checked against the schema at boot. A
  *   `patch` writes only the columns the call changed, to each row it changed,
  *   and sets a STICKY_COLUMNS column only where it is still NULL; a key the
  *   mirror did not hold is inserted by its `insertWhenAbsent` mode ('nothing',
- *   'add' or 'replace', on its `conflictTarget` when it names one) and is
- *   otherwise a bind error. An `upsertEach` can keep the stored row where its
- *   `onConflictWhere` is false, and can name its arbiter (`conflictTarget`).
- *   A row Postgres refuses is counted (db_targeted_write_conflicts_total),
- *   re-read and not announced, and the op's other statements still commit.
+ *   'add' or 'replace', on its `conflictTarget` when it names one; 'replace'
+ *   only on a table with no STICKY_COLUMNS entry) and is otherwise a bind
+ *   error. An `upsertEach` can keep the stored row where its `onConflictWhere`
+ *   is false, and can name its arbiter (`conflictTarget`). A row Postgres
+ *   refuses is counted (db_targeted_write_conflicts_total), re-read and not
+ *   announced, and the op's other statements still commit; after an
+ *   uncertain COMMIT (an attempt whose reply was lost) the refusal is logged,
+ *   not counted, and that attempt's keys are announced, since it may have
+ *   committed.
  *   Every STICKY_COLUMNS column is checked against the live table at boot.
  */
 export type MutatorSpec =

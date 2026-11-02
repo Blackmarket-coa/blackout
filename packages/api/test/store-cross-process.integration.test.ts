@@ -1324,6 +1324,30 @@ test('U4c: a STICKY_COLUMNS column the table lacks makes init reject, though no 
     });
 });
 
+test("U4d: a patch's insert branch whose arbiter no index backs makes init reject", async () => {
+    await withWorld(0, 'hub', async (w) => {
+        const spec = (conflictTarget: string): typeof MUTATOR_SPECS[string] => ({
+            kind: 'targeted',
+            steps: [
+                { op: 'patch', map: 'vaultItems', insertWhenAbsent: 'nothing', conflictTarget },
+            ],
+        });
+        // No index backs (label). The update branch fits the schema; the
+        // insert branch, PREPAREd beside it, refuses the boot and is named.
+        await withSpec('updateVaultItem', spec('(label)'), async () => {
+            await assert.rejects(
+                w.boot(),
+                /MUTATOR_SPECS\.updateVaultItem step 1 \(patch on vault_items, its insert\) does not fit the schema: there is no unique or exclusion constraint matching the ON CONFLICT specification/
+            );
+        });
+        // The same patch on the key's own arbiter boots: both branches fit.
+        await withSpec('updateVaultItem', spec('(id)'), async () => {
+            const db = await w.boot();
+            await db.shutdown();
+        });
+    });
+});
+
 test('U5: a spec naming a method InMemoryDb does not define throws when the store is built', async () => {
     await withSpec(
         'deleteNoSuchRecord',

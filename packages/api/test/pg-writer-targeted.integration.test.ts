@@ -14,7 +14,9 @@ import { join } from 'node:path';
 process.env.BLACKOUT_DB_MODE = 'memory';
 
 const { MIGRATIONS_DIR } = await import('../src/db/migrate');
-const { TABLE_DESCRIPTORS, MUTATOR_SPECS } = await import('../src/db/pgDescriptors');
+const { TABLE_DESCRIPTORS, MUTATOR_SPECS, STICKY_COLUMNS } = await import(
+    '../src/db/pgDescriptors'
+);
 const W = await import('../src/db/pgWriter');
 const { PGlite } = await import('@electric-sql/pglite');
 
@@ -109,6 +111,7 @@ test('U2: keyOfTuple(kvOf(record)) is the mirror key keyOf(record), for every de
 test('U3: every compiled UPDATE and DELETE has a WHERE that uses a parameter, and every step PREPAREs on every table', async () => {
     const { client, plans } = await shared;
     let prepared = 0;
+    const replaceRefused: string[] = [];
     for (const plan of plans) {
         const keys = plan.descriptor.conflictColumns;
         const map = plan.descriptor.mapName;
@@ -152,9 +155,21 @@ test('U3: every compiled UPDATE and DELETE has a WHERE that uses a parameter, an
                     cas: [...classes.values()],
                     where: `${nonKey[0].name} IS NOT NULL`,
                 },
-                { op: 'patch', map, insertWhenAbsent: 'nothing' },
-                { op: 'patch', map, insertWhenAbsent: 'replace' }
+                { op: 'patch', map, insertWhenAbsent: 'nothing' }
             );
+            // 'replace' overwrites every column the record carries, so a table
+            // with a one-way column refuses it; every other table compiles it.
+            const replace: TargetedStep = { op: 'patch', map, insertWhenAbsent: 'replace' };
+            if (sticky.length > 0) {
+                assert.throws(
+                    () => W.compileStep(plan, replace),
+                    /insertWhenAbsent 'replace' on a table with one-way columns/,
+                    map
+                );
+                replaceRefused.push(map);
+            } else {
+                steps.push(replace);
+            }
             if (counter) {
                 steps.push({ op: 'patch', map, delta: [counter.name], insertWhenAbsent: 'add' });
             }
@@ -223,6 +238,11 @@ test('U3: every compiled UPDATE and DELETE has a WHERE that uses a parameter, an
         prepared += 1;
     }
     assert.ok(prepared > plans.length * 5, `prepared ${prepared} statements`);
+    assert.deepEqual(
+        replaceRefused.sort(),
+        Object.keys(STICKY_COLUMNS).sort(),
+        "'replace' is refused on exactly the STICKY_COLUMNS tables"
+    );
 
     // The check itself: a SET that alone uses the parameter does not restrict.
     assert.equal(restrictsByParameter('UPDATE t SET a = $1 WHERE id = id RETURNING id'), false);
@@ -709,8 +729,29 @@ test('U3 (patch): the diff rule, the sticky rule, the delta rule and the insert 
         'UPDATE burner_identities SET rotation_epoch = rotation_epoch + $1::int4 WHERE id = $2 RETURNING id'
     );
     assert.deepEqual(plusOne.params, [1, id]);
-    // A prior record lacking the field counts as 0.
+    // A prior record lacking the field counts as 0, and so does one holding null.
     assert.deepEqual(one(delta, base, { ...base, rotationEpoch: 1 }).params, [1, id]);
+    assert.deepEqual(
+        one(delta, { ...base, rotationEpoch: null }, { ...base, rotationEpoch: 1 }).params,
+        [1, id]
+    );
+    // The new record must hold a number. A null (an own null or an own
+    // undefined) or a dropped counter is a bind error, never a write that
+    // subtracts the prior count; neither record holding it binds nothing.
+    for (const gone of [null, undefined]) {
+        assert.throws(
+            () => bind(delta, { ...base, rotationEpoch: 1 }, { ...base, rotationEpoch: gone }),
+            /rotation_epoch is null, not a finite number/,
+            String(gone)
+        );
+        assert.throws(
+            () => bind(delta, base, { ...base, rotationEpoch: gone }),
+            /rotation_epoch is null, not a finite number/,
+            `${String(gone)} over an absent prior`
+        );
+    }
+    assert.throws(() => bind(delta, { ...base, rotationEpoch: 1 }, base), /dropped rotation_epoch/);
+    assert.deepEqual(bind(delta, base, { ...base }), []);
     // A delta of 0 is no change.
     assert.deepEqual(bind(delta, { ...base, rotationEpoch: 4 }, { ...base, rotationEpoch: 4 }), []);
     for (const bad of ['3', Number.NaN, Number.POSITIVE_INFINITY]) {
@@ -749,6 +790,20 @@ test('U3 (patch): the diff rule, the sticky rule, the delta rule and the insert 
     );
     assert.equal(add.params.at(-1), 0, 'a counter the record lacks is inserted as 0');
     assert.equal(add.merges, true);
+    // An insert has no prior to subtract from: a null counter is inserted as 0 too.
+    for (const gone of [null, undefined]) {
+        const ins = one(patch({ delta: ['rotation_epoch'], insertWhenAbsent: 'add' }), undefined, {
+            ...base,
+            rotationEpoch: gone,
+        });
+        const columns = /\(([^)]*)\) VALUES/.exec(ins.sql)![1].split(', ');
+        assert.equal(ins.params[columns.indexOf('rotation_epoch')], 0, String(gone));
+    }
+    // 'replace' would overwrite burned_at with whatever the record carries.
+    assert.throws(
+        () => patch({ insertWhenAbsent: 'replace' }),
+        /targeted patch on burner_identities: insertWhenAbsent 'replace' on a table with one-way columns \(burned_at\), which its DO UPDATE would overwrite/
+    );
     const linked = plans.find((p) => p.descriptor.mapName === 'linkedAccounts')!;
     const replace = W.bindStep(
         W.compileStep(linked, { op: 'patch', map: 'linkedAccounts', insertWhenAbsent: 'replace' }),

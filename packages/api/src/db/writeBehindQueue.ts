@@ -21,14 +21,18 @@
 // required that matches no row rolls the whole op back. A statement marked
 // refusable that matches no row (a patch whose predicate no longer holds:
 // another process got there first) is counted as a conflict and rolls nothing
-// back. Afterwards the keys where Postgres's effect and the mirror's differ
-// are handed back to the store to re-read (onRereadKeys).
+// back; after an uncertain COMMIT (an earlier attempt sent COMMIT and heard
+// nothing back) it is logged, not counted, and that attempt's keys are
+// announced. Afterwards the keys where Postgres's effect and the mirror's
+// differ are handed back to the store to re-read (onRereadKeys).
 //
 // An upsert is one statement and returns the key of the row it wrote. One
 // that Postgres refuses (insert-only, and a row has the key; or a guard that
-// no longer holds) is not announced, since Postgres did not change, and its
-// key is handed back to be re-read once the fence is down, so the writer's
-// mirror takes the row Postgres kept.
+// no longer holds) is not announced, since Postgres did not change, unless an
+// earlier attempt failed (it may have written the row before its reply was
+// lost, and the retry then finds that row). Either way its key is handed back
+// to be re-read once the fence is down, so the writer's mirror takes the row
+// Postgres kept.
 
 import { log } from '../telemetry/logger';
 import {
