@@ -1,0 +1,10 @@
+[phases.setup]
+nixPkgs = ["bash", "coreutils", "python311", "cargo", "rustc"]
+
+[phases.install]
+cmds = [
+  "python -m venv --copies /opt/venv && . /opt/venv/bin/activate && pip install poetry==$NIXPACKS_POETRY_VERSION && poetry install --only main --no-root --no-interaction --no-ansi"
+]
+
+[variables]
+PYTHONUNBUFFERED = "1"

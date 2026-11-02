@@ -77,8 +77,10 @@ Exit criteria:
 
 > **2026-11-02.** The fork's Railway template (`railway.toml` and
 > `services/blackout-server/`) was removed in `42f68f2`; the operator chose removal
-> over fixing the template. No Railway deploy path for the Synapse homeserver
-> remains in the tree.
+> over fixing the template. The fork's separate Nixpacks files for Railway,
+> `nixpacks.toml` and `scripts-dev/railway/start.sh` (`docs/railway_deploy.md`),
+> are not the template and stay. Nothing in the tree runs them, and they start
+> a single homeserver process, not the worker split below.
 
 1. Split Synapse worker roles into distinct Railway services.
 2. Use MinIO via Synapse S3 media storage configuration.

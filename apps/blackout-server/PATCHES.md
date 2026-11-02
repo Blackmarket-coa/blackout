@@ -1015,8 +1015,10 @@ and Synapse refused the config; and the image exported the lock without
 extras, so with no authlib `check_requirements("jwt")` stopped it too. Its
 JWT login, which the same render had turned on, was turned off in `48ab32d`
 (the 2026-10-31 entry above). The removed files are Blackout's own and have
-no upstream counterpart; `.dockerignore`, `README.rst` and `docs/upgrade.md`
-are upstream files with Blackout lines. Record:
+no upstream counterpart; `docs/upgrade.md` is an upstream file with Blackout
+lines. `.dockerignore` and `README.rst`, also upstream files with Blackout
+lines, were changed in `42f68f2` and are back as on `develop` (the restored
+Nixpacks path below). Record:
 `docs/security/dependency-advisories-server-desktop-2026-10-30.md`
 (repository root), "Found outside scope", item 5, and the section
 "2026-11-02: the Railway template is removed".
@@ -1039,24 +1041,37 @@ are upstream files with Blackout lines. Record:
     from the fork's arrival in `e0f3065e31` (2026-04-10) to its removal.
     Whether an earlier version ran in the fork's former repository was not
     checked.
-  - `scripts-dev/railway/start.sh` and `nixpacks.toml`: an earlier, separate
-    Synapse-on-Railway path (Nixpacks phases and a start script that
-    generates a config with `--generate-config` and patches its listener).
-    Neither reads the template, and nothing in the tree runs them.
-    `docs/railway_deploy.md` lists them with a `railway.json`, which
-    `DEPLOYMENT_CHECKLIST_REVIEW.md` says was "consolidated to
-    `railway.toml`"; no `railway.json` under this directory is in this
-    repository's history.
-  - `docs/railway_deploy.md`: the how-to for `railway.json`, `nixpacks.toml`
-    and `start.sh`.
-  - These three, the `README.rst` link and the `.dockerignore` lines for
-    Nixpacks and `railway.json` are not the template, and not files that
-    exist only to build, deploy, document or test it: they are the earlier
-    Synapse-on-Railway path. They were removed with it as the same deploy
-    surface, which goes beyond the decision as given ("remove railway
-    template"), so they wait on the operator's confirmation. If it is not given, restore
-    them from `42f68f2^` (the `!scripts-dev` lines are needed only by the
-    removed `Dockerfile` and stay out either way).
+- Removed in `42f68f2` and restored on 2026-11-02, because they are not the
+  template and do not exist only to build, deploy, document or test it:
+  `scripts-dev/railway/start.sh`, `nixpacks.toml`, `docs/railway_deploy.md`,
+  `README.rst`'s "Railway deployment" link to that how-to, and six
+  `.dockerignore` lines (`!.nixpacks`, `!nixpacks.toml`, `!railway.json`,
+  `!scripts-dev`, `!.nixpacks/**`, `!scripts-dev/**`). All five files are as
+  on `develop` again, and they are left in place for the operator.
+  - They are a separate Synapse-on-Railway path. `nixpacks.toml` sets
+    Nixpacks' setup and install phases, and `start.sh` generates a config
+    with `--generate-config` and patches its listener; neither reads the
+    template or `railway.toml`. `docs/railway_deploy.md` gives `railway.json`,
+    `nixpacks.toml` and `start.sh` as that path's configuration. No
+    `railway.json` under this directory is in this repository's history, and
+    `nixpacks.toml` has no start command, so nothing in the tree runs
+    `start.sh`.
+  - `DEPLOYMENT_CHECKLIST_REVIEW.md` says a "Railway config conflict" was
+    "resolved (consolidated to `railway.toml`)", without naming the other
+    file. Every one of these files, the template's included, arrived in
+    `e0f3065e31`, so the tree does not say which path came first.
+  - `42f68f2`'s message, and this entry until the restore, said only the
+    removed `Dockerfile` copied `scripts-dev`, so the `!scripts-dev` lines
+    could stay out even if the rest came back. Of the Dockerfiles in the tree
+    that is true, but the six lines are one whitelist for a Nixpacks build.
+    Nixpacks' source (`main` at `144b4f9ab1`,
+    `src/nixpacks/builder/docker/docker_image_builder.rs` and
+    `src/nixpacks/files.rs`) copies the app directory with no ignore filters
+    and runs `docker build` on the copy, so Docker applies this
+    `.dockerignore`, whose first line is `*`. Without `!scripts-dev`, a
+    Nixpacks build here would leave `start.sh` out of the image. The restore
+    brings back all six. Whether Railway builds with that version of Nixpacks
+    was not checked.
 - `tests/blackout_runtime/test_jwt_secret_config.py`:
   `test_railway_template_leaves_jwt_login_off`, whose only subject was the
   template, is removed with it, and so are `RAILWAY_TEMPLATE`, `_envsubst`
@@ -1065,13 +1080,10 @@ are upstream files with Blackout lines. Record:
   `${JWT_ENABLED:-false}` case: it pins `JWTConfig._check_enabled`
   (`synapse/config/jwt.py`), which stays and refuses that text from any
   template.
-- `.dockerignore`: drops `!.nixpacks`, `!nixpacks.toml`, `!railway.json`,
-  `!.nixpacks/**`, `!scripts-dev` and `!scripts-dev/**`. Only the removed
-  Dockerfile copied `scripts-dev`. `!services` and `!services/**` stay:
+- `.dockerignore` and `README.rst`: as on `develop`, after the restore above.
+  `!services` and `!services/**` were not touched at any point:
   `infra/single-server-baseline/deploy.sh` builds
   `services/blackout-api/Dockerfile` with this directory as the context.
-- `README.rst`: the "Railway deployment" link to `docs/railway_deploy.md` is
-  gone.
 - Dated notes, not rewrites, where a document described the template or what
   it ran: `docs/upgrade.md` ("The Railway service template", and the
   managed-preflight and `BLACKOUT_PROFILE` sections),
@@ -1103,14 +1115,30 @@ are upstream files with Blackout lines. Record:
   RC1 record's statement, not evidence of a run); and the next-step prompt
   in `docs/reports/phase6_ci_release_hardening_completion_report_2026-03-19.md`
   that asked for that workflow.
-- The other Railway paths are not this template and stay:
-  `services/blackout-api/railway.toml` (the legacy FastAPI service) and,
-  outside this directory, the client's `railway.json`, `README.md`'s "Deploy
-  to Railway", the "Deploy to Railway" step in
+- The other Railway paths are not this template and stay: the Nixpacks path
+  above, `services/blackout-api/railway.toml` (the legacy FastAPI service)
+  and, outside this directory, the client's `railway.json`, `README.md`'s
+  "Deploy to Railway", the "Deploy to Railway" step in
   `.github/workflows/deploy-web.yml`, `infra/railway/`, and the Railway
   section of `docs/deployment/production.md`. None of them names a removed
   file. `infra/railway/README.md` and `docs/deployment/production.md` put a
-  Railway service at `apps/blackout-server`, where `railway.toml` and
-  `nixpacks.toml` were; whether a live Railway service reads its config file
-  from there, or builds with Nixpacks there, is that service's settings,
-  which are not in the tree, and was not checked.
+  Railway service at `apps/blackout-server`, where `railway.toml` was and
+  `nixpacks.toml` still is. Whether a live Railway service read its config
+  file from there, or builds with Nixpacks there, is that service's
+  settings, which are not in the tree, and was not checked. A service that
+  read `railway.toml` would build by its own settings now; if those choose
+  Nixpacks, it would read `nixpacks.toml`, which has no start command.
+- Corrections to commit messages on this branch, which are not amended:
+  - `42f68f2` says it removed `start.sh`, `nixpacks.toml` and
+    `docs/railway_deploy.md` with the template, calls them "the earlier
+    Synapse-on-Railway path", and drops the `!scripts-dev` lines because only
+    the removed `Dockerfile` copied `scripts-dev`. Those files and the six
+    `.dockerignore` lines are restored, and "earlier" is not known, for the
+    reasons above.
+  - `b39883a` says all four of FR-002's evidence targets are gone and that no
+    Railway path for the Synapse homeserver remains in the tree. Two of the
+    four (`railway.toml`, `services/blackout-server/Dockerfile`) are gone;
+    the other two (`start.sh`, `docs/railway_deploy.md`) are the restored
+    Nixpacks path, which remains. The notes in FR-002, the phase-0 tracker,
+    `docs/railway_deployment_hardening.md` and
+    `docs/bmc_server_execution_plan.md` say so now.

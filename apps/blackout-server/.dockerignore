@@ -11,6 +11,10 @@
 !Cargo.lock
 !Cargo.toml
 !build_rust.py
+!.nixpacks
+!nixpacks.toml
+!railway.json
+!scripts-dev
 !services
 !docker/**
 !synapse/**
@@ -21,3 +25,6 @@ rust/target
 synapse/*.so
 
 **/__pycache__
+
+!.nixpacks/**
+!scripts-dev/**
