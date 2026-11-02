@@ -18,9 +18,17 @@
 // BEGIN; statements; NOTIFY of the changed keys; COMMIT. Peers are therefore
 // told about exactly the rows that changed, and only once they have: Postgres
 // delivers a NOTIFY on COMMIT and drops it on ROLLBACK. A statement marked
-// required that matches no row rolls the whole op back. Afterwards the keys
-// where Postgres's effect and the mirror's differ are handed back to the store
-// to re-read (onRereadKeys).
+// required that matches no row rolls the whole op back. A statement marked
+// refusable that matches no row (a patch whose predicate no longer holds:
+// another process got there first) is counted as a conflict and rolls nothing
+// back. Afterwards the keys where Postgres's effect and the mirror's differ
+// are handed back to the store to re-read (onRereadKeys).
+//
+// An upsert is one statement and returns the key of the row it wrote. One
+// that Postgres refuses (insert-only, and a row has the key; or a guard that
+// no longer holds) is not announced, since Postgres did not change, and its
+// key is handed back to be re-read once the fence is down, so the writer's
+// mirror takes the row Postgres kept.
 
 import { log } from '../telemetry/logger';
 import {
@@ -32,6 +40,7 @@ import type { PgPool } from './migrate';
 import { keyChangePayloads, type StoreChangePayload, type StoreChangeTransport } from './pgNotify';
 import {
     keyOfTuple,
+    kvOf,
     snakeToCamel,
     upsertRecord,
     type BoundStatement,
@@ -51,8 +60,11 @@ export interface TargetedWrite {
 }
 
 type TargetedOutcome =
-    /** `merged`: returned keys whose row Postgres merged with the record bound (BoundStatement.merges). */
-    | { outcome: 'committed'; returned: KeySet; merged: KeySet }
+    /**
+     * `merged`: returned keys whose row Postgres merged with the record bound
+     * (BoundStatement.merges). `refused`: refusable statements that returned no row.
+     */
+    | { outcome: 'committed'; returned: KeySet; merged: KeySet; refused: BoundStatement[] }
     | { outcome: 'conflict'; at: BoundStatement };
 
 function addKey(set: KeySet, mapName: string, key: string, kv: unknown[]): void {
@@ -95,7 +107,15 @@ function minus(a: KeySet, b: KeySet): KeySet {
 const sizeOf = (set: KeySet) => [...set.values()].reduce((n, keys) => n + keys.size, 0);
 
 type WriteOp = (
-    | { kind: 'upsert'; mapName: string; record: Record<string, unknown> }
+    | {
+          kind: 'upsert';
+          mapName: string;
+          record: Record<string, unknown>;
+          /** Fields the stored row must still hold for the update to apply (`upsertRecord`). */
+          guard?: Record<string, unknown>;
+          /** Written only where no row has the record's key (`ON CONFLICT ... DO NOTHING`). */
+          insertOnly?: boolean;
+      }
     | { kind: 'targeted'; mapName: string; write: TargetedWrite }
 ) & {
     /** map -> mirror keys this op writes, counted in the fence while it is queued. */
@@ -151,11 +171,23 @@ export class WriteBehindQueue {
         this.schedule({ kind: 'targeted', mapName, write, fence });
     }
 
-    enqueueUpsert(mapName: string, record: Record<string, unknown>): void {
+    enqueueUpsert(
+        mapName: string,
+        record: Record<string, unknown>,
+        guard?: Record<string, unknown>,
+        insertOnly = false
+    ): void {
         const fence = new Map<string, string[]>();
         const key = this.fenceKeyOf(mapName, record);
         if (key !== undefined) fence.set(mapName, [key]);
-        this.schedule({ kind: 'upsert', mapName, record, fence });
+        this.schedule({
+            kind: 'upsert',
+            mapName,
+            record,
+            ...(guard ? { guard } : {}),
+            ...(insertOnly ? { insertOnly } : {}),
+            fence,
+        });
     }
 
     /**
@@ -232,22 +264,29 @@ export class WriteBehindQueue {
             this.lower(op.fence);
             return;
         }
+        let refused: KeySet | null = null;
         try {
-            await this.withRetry(async () => {
+            let attempts = 0;
+            const applied = await this.withRetry(async () => {
+                attempts += 1;
                 const client = await this.pool.connect();
                 try {
-                    await upsertRecord(client, plan, op.record);
+                    return await upsertRecord(client, plan, op.record, op.guard, op.insertOnly);
                 } finally {
                     client.release?.();
                 }
             });
-            // Tell peer replicas to refresh their mirror for this change.
-            if (this.transport) {
+            // Tell peer replicas to refresh their mirror for this change. A
+            // refused write changed nothing and is not announced, unless an
+            // earlier attempt failed: it may have written the row before its
+            // reply was lost, and the retry then finds that row.
+            if (this.transport && (applied || attempts > 1)) {
                 const kv = plan.descriptor.conflictColumns.map((col) =>
                     String(op.record[snakeToCamel(col)])
                 );
                 this.transport.publish({ src: this.instanceId, m: op.mapName, op: 'u', kv });
             }
+            if (!applied) refused = this.keySetOf(plan, op.mapName, op.record);
         } catch (err) {
             // Permanent failure after the retry: the in-memory mirror has the write
             // but Postgres does not, so a restart loses it and no other process
@@ -263,7 +302,29 @@ export class WriteBehindQueue {
         } finally {
             this.pending -= 1;
             dbWriteBehindDepth.set(this.pending);
+            // Fence first, so the re-read is not skipped for this op's own key.
             this.lower(op.fence);
+            if (refused) this.reread?.(refused);
+        }
+    }
+
+    /** The record's key as a KeySet, for a re-read; null (logged) where it cannot be computed. */
+    private keySetOf(
+        plan: TablePlan,
+        mapName: string,
+        record: Record<string, unknown>
+    ): KeySet | null {
+        try {
+            const kv = kvOf(plan, record);
+            const set: KeySet = new Map();
+            addKey(set, mapName, keyOfTuple(plan, kv), kv);
+            return set;
+        } catch (err) {
+            log.warn('db_write_behind_reread_key_failed', {
+                map: mapName,
+                error: err instanceof Error ? err.message : String(err),
+            });
+            return null;
         }
     }
 
@@ -298,28 +359,30 @@ export class WriteBehindQueue {
                 this.transport.publish(p);
         }
         if (result?.outcome === 'conflict') {
-            if (sizeOf(uncertain) > 0) {
-                // An earlier attempt sent COMMIT and heard nothing back. A
-                // required step that misses now may be missing that attempt's
-                // own committed effect, so this is not counted as another
-                // process getting there first. The keys are re-read either way.
-                log.warn('db_targeted_write_conflict_after_uncertain_commit', {
-                    map: result.at.map,
-                    method: write.method,
-                });
-            } else {
-                dbTargetedWriteConflictsTotal.inc({ map: result.at.map, method: write.method });
-                log.warn('db_targeted_write_conflict', {
-                    map: result.at.map,
-                    method: write.method,
-                });
-            }
+            this.conflict(result.at.map, write.method, uncertain);
             return union(write.touched, uncertain);
         }
         if (result?.outcome === 'committed') {
+            // A refused statement's key is in touched and not returned, so it
+            // is re-read with the symmetric difference below.
+            for (const s of result.refused) this.conflict(s.map, write.method, uncertain);
             return union(symmetricDifference(write.touched, committed), result.merged, uncertain);
         }
         return minus(uncertain, write.touched);
+    }
+
+    /** A statement Postgres refused (a required gate, or a refusable row): counted, or only logged after an uncertain COMMIT. */
+    private conflict(map: string, method: string, uncertain: KeySet): void {
+        if (sizeOf(uncertain) > 0) {
+            // An earlier attempt sent COMMIT and heard nothing back. A
+            // statement that misses now may be missing that attempt's own
+            // committed effect, so this is not counted as another process
+            // getting there first. The keys are re-read either way.
+            log.warn('db_targeted_write_conflict_after_uncertain_commit', { map, method });
+        } else {
+            dbTargetedWriteConflictsTotal.inc({ map, method });
+            log.warn('db_targeted_write_conflict', { map, method });
+        }
     }
 
     private async attemptTargeted(
@@ -328,6 +391,7 @@ export class WriteBehindQueue {
     ): Promise<TargetedOutcome> {
         const returned: KeySet = new Map();
         const merged: KeySet = new Map();
+        const refused: BoundStatement[] = [];
         const client = await this.pool.connect();
         let open = false;
         try {
@@ -349,6 +413,7 @@ export class WriteBehindQueue {
                     await client.query('ROLLBACK');
                     return { outcome: 'conflict', at: s };
                 }
+                if (s.refusable && res.rows.length === 0) refused.push(s);
             }
             const transport = this.transport;
             if (transport?.publishWithin) {
@@ -364,7 +429,7 @@ export class WriteBehindQueue {
                     for (const [k, kv] of keys) addKey(uncertain, m, k, kv);
                 throw err;
             }
-            return { outcome: 'committed', returned, merged };
+            return { outcome: 'committed', returned, merged, refused };
         } catch (err) {
             if (open) await client.query('ROLLBACK').catch(() => undefined);
             throw err;

@@ -15,6 +15,7 @@ import {
     type Row,
     type StepContext,
     type TableDescriptor,
+    type TablePlan,
     type TargetedStep,
 } from './pgWriter';
 
@@ -562,17 +563,52 @@ export const TABLE_DESCRIPTORS: TableDescriptor[] = ALL_MAP_NAMES.map((mapName) 
         conflictColumns: ov.conflictColumns ?? ['id'],
         toRow: ov.toRow,
         fromRow: ov.fromRow,
+        // Read when a plan is compiled: STICKY_COLUMNS is declared below.
+        get sticky() {
+            return STICKY_COLUMNS[mapName];
+        },
     };
 });
 
 /**
- * - `upsert`: persist the record the method returned, whole (last writer wins).
+ * - `upsert`: persist the record the method returned, whole (last writer
+ *   wins), when the call wrote its map; a call that left the map untouched
+ *   writes nothing. With `insertOnly` the record is written only where no row
+ *   has its key, and with `guardOf` only while the stored row still holds the
+ *   guard's values. A write Postgres refuses is not announced, and the
+ *   writer's mirror re-reads the row Postgres kept.
  * - `targeted`: run fixed statements (pgWriter's TargetedStep) that name the
  *   rows the call changed, by key or by a predicate Postgres evaluates, in one
- *   transaction; the statements are checked against the schema at boot.
+ *   transaction; the statements are checked against the schema at boot. A
+ *   `patch` writes only the columns the call changed, to each row it changed,
+ *   and sets a STICKY_COLUMNS column only where it is still NULL; a key the
+ *   mirror did not hold is inserted by its `insertWhenAbsent` mode ('nothing',
+ *   'add' or 'replace', on its `conflictTarget` when it names one) and is
+ *   otherwise a bind error. An `upsertEach` can keep the stored row where its
+ *   `onConflictWhere` is false, and can name its arbiter (`conflictTarget`).
+ *   A row Postgres refuses is counted (db_targeted_write_conflicts_total),
+ *   re-read and not announced, and the op's other statements still commit.
+ *   Every STICKY_COLUMNS column is checked against the live table at boot.
  */
 export type MutatorSpec =
-    | { kind: 'upsert'; map: string }
+    | {
+          kind: 'upsert';
+          map: string;
+          /**
+           * For a conditional mutator: the record fields, from the call's
+           * arguments, that the stored row must still hold for the Postgres
+           * update to apply (`upsertRecord`'s guard).
+           */
+          guardOf?: (args: unknown[]) => Record<string, unknown>;
+          /**
+           * For a mutator that only ever creates a row the mirror lacks: the
+           * Postgres write inserts it only where the table has no row with
+           * its key either (`ON CONFLICT ... DO NOTHING`), so a process whose
+           * mirror has not yet heard of a row another process wrote does not
+           * write over it.
+           */
+          insertOnly?: boolean;
+      }
     | { kind: 'targeted'; steps: TargetedStep[] };
 
 const upsert = (map: string): MutatorSpec => ({ kind: 'upsert', map });
@@ -712,6 +748,53 @@ const USER_AUTH_ARTIFACTS: ReadonlyArray<{ map: string; column: string }> = [
     { map: 'linkedAccounts', column: 'blackout_user_id' },
     { map: 'pendingOAuthLinks', column: 'blackout_user_id' },
 ];
+
+/** Columns that move one way. A patch may set one only where it is still NULL, so Postgres keeps the first writer; a patch that would write one back to NULL over a value the mirror held is refused at bind. Every listed column is checked against the live table at boot (assertStickyColumns). */
+export const STICKY_COLUMNS: Record<string, string[]> = {
+    refreshTokens: ['replaced_by', 'revoked_at', 'revoked_reason'],
+    passwordResetTokens: ['consumed_at'],
+    emailVerificationTokens: ['consumed_at', 'sent_at', 'revoked_reason'],
+    accountDeletionTokens: ['consumed_at'],
+    pendingOAuthLinks: ['consumed_at'],
+    pendingOidcLogins: ['consumed_at'],
+    invitationTokens: ['revoked_at', 'revoked_reason'],
+    invitationAdmissions: ['claimed_at', 'claimed_by_user_id'],
+    burnerIdentities: ['burned_at'],
+    widgetAlertTokens: ['revoked_at', 'revoked_reason'],
+    twitchIrcBotTokens: ['revoked_at', 'revoke_reason'], // the column is revoke_reason (018_twitch_irc_bot_tokens.up.sql)
+    obsWsPasswords: ['revoked_at', 'revoke_reason'], // likewise (019_obs_ws_passwords.up.sql)
+    deadDrops: ['opened_at'],
+    releaseIdentities: ['superseded_at'],
+    voiceRoomParticipants: ['left_at'],
+    voiceRoomSanctions: ['lifted_at', 'lifted_by'],
+    coalitionNotifications: ['read_at'],
+    marketplaceWebhookAudit: ['processed_at'],
+    scheduledMessages: ['delivered_at'],
+};
+
+/**
+ * Refuse the boot when a STICKY_COLUMNS entry names a map no descriptor
+ * names, or a column its table lacks, whether or not a patch writes that
+ * table yet. A map whose table this database does not have yet (no plan) is
+ * skipped, as a targeted step on it is.
+ */
+export function assertStickyColumns(plans: ReadonlyMap<string, TablePlan>): void {
+    const described = new Set(TABLE_DESCRIPTORS.map((d) => d.mapName));
+    for (const [map, columns] of Object.entries(STICKY_COLUMNS)) {
+        if (!described.has(map)) {
+            throw new Error(`STICKY_COLUMNS names ${map}, which no table descriptor names`);
+        }
+        const plan = plans.get(map);
+        if (!plan) continue;
+        for (const column of columns) {
+            if (!plan.columnNames.has(column)) {
+                throw new Error(
+                    `STICKY_COLUMNS.${map} names ${column}, which ${plan.descriptor.tableName} lacks`
+                );
+            }
+        }
+    }
+}
 
 /** The records the call left in `map` for the keys it changed (what an upsertEach writes). */
 const changedRecords = (ctx: StepContext, map: string): Array<Record<string, unknown>> =>

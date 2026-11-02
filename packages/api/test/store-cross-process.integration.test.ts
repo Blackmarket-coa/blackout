@@ -24,8 +24,14 @@ process.env.BLACKOUT_DB_MODE = 'memory';
 
 const { PostgresBackedDb } = await import('../src/db/store');
 const { MIGRATIONS_DIR, migrateUp } = await import('../src/db/migrate');
-const { MUTATOR_SPECS, TABLE_DESCRIPTORS, USER_CASCADE_CHILDREN, USER_CASCADE_LEFT_IN_MIRRORS } =
-    await import('../src/db/pgDescriptors');
+const {
+    MUTATOR_SPECS,
+    STICKY_COLUMNS,
+    TABLE_DESCRIPTORS,
+    USER_CASCADE_CHILDREN,
+    USER_CASCADE_LEFT_IN_MIRRORS,
+    assertStickyColumns,
+} = await import('../src/db/pgDescriptors');
 const { registry } = await import('../src/telemetry/metrics');
 const {
     InMemoryStoreChangeHub,
@@ -1284,6 +1290,40 @@ test('U4b: init boots on a schema behind the code, leaving out the steps whose t
     }
 });
 
+test('U4c: a STICKY_COLUMNS column the table lacks makes init reject, though no patch writes that table', async () => {
+    await withWorld(0, 'hub', async (w) => {
+        const sticky = STICKY_COLUMNS as Record<string, string[]>;
+        const saved = sticky.passwordResetTokens;
+        const patched = Object.values(MUTATOR_SPECS).some(
+            (s) =>
+                s.kind === 'targeted' &&
+                s.steps.some((st) => st.op === 'patch' && st.map === 'passwordResetTokens')
+        );
+        assert.equal(patched, false, 'no patch writes password_reset_tokens');
+        try {
+            sticky.passwordResetTokens = ['consumed_at', 'no_such_column'];
+            await assert.rejects(
+                w.boot(),
+                /STICKY_COLUMNS\.passwordResetTokens names no_such_column, which password_reset_tokens lacks/
+            );
+            sticky.passwordResetTokens = saved;
+            sticky.noSuchMap = ['x'];
+            assert.throws(
+                () => assertStickyColumns(new Map()),
+                /STICKY_COLUMNS names noSuchMap, which no table descriptor names/
+            );
+        } finally {
+            sticky.passwordResetTokens = saved;
+            delete sticky.noSuchMap;
+        }
+        // The real list boots, and a listed map whose table is missing is
+        // skipped (U4b boots schemas without invitation_admissions).
+        assert.doesNotThrow(() => assertStickyColumns(new Map()));
+        const db = await w.boot();
+        await db.shutdown();
+    });
+});
+
 test('U5: a spec naming a method InMemoryDb does not define throws when the store is built', async () => {
     await withSpec(
         'deleteNoSuchRecord',
@@ -2335,4 +2375,379 @@ test('X12: the pin sweeper deletes a pin it judged unchanged, keeps one a peer r
         );
         assert.equal(A.db.coalitionSpatialItems.has(bare), false);
     });
+});
+
+// ------------------------------------------------------------------ patch and insert-only
+
+/** Lines the logger wrote at warn while `fn` ran, parsed. */
+async function warnings(fn: () => Promise<void>): Promise<Array<Record<string, unknown>>> {
+    const lines: Array<Record<string, unknown>> = [];
+    const original = console.warn;
+    console.warn = (line: unknown) => {
+        try {
+            lines.push(JSON.parse(String(line)) as Record<string, unknown>);
+        } catch {
+            lines.push({ msg: String(line) });
+        }
+    };
+    try {
+        await fn();
+    } finally {
+        console.warn = original;
+    }
+    return lines;
+}
+
+for (const mode of ['hub', 'pg'] as const) {
+    test(`X20b (${mode}): an upsert whose call wrote nothing queues nothing; one that re-sets its row still writes it`, async () => {
+        // A plain upsert on a method that returns a stored record unchanged.
+        // No method on a map PR 2 leaves on upsert does that, so this one is
+        // given the plain spec here; markGreeted and addCircleEdge keep theirs.
+        await withSpec(
+            'markBillingWebhookEventProcessed',
+            { kind: 'upsert', map: 'processedBillingWebhookEvents' },
+            () =>
+                withWorld(2, mode, async (w) => {
+                    const [A] = w.procs;
+                    const writes = (table: string) =>
+                        A.ctl.log.filter((q) => q.startsWith(`INSERT INTO ${table} `)).length;
+                    const told = (m: string) => A.tap.sent.filter((p) => p.m === m).length;
+                    A.ctl.log.length = 0;
+
+                    const room = `!r-${randomUUID()}:x`;
+                    const user = randomUUID();
+                    const greeted = A.db.markGreeted(room, user);
+                    assert.equal(
+                        A.db.markGreeted(room, user),
+                        greeted,
+                        'the second call returns the first'
+                    );
+                    await quiesce(w);
+                    assert.equal(writes('den_greetings'), 1, 'one INSERT for two calls');
+                    assert.equal(told('denGreetings'), 1);
+
+                    const f = `f-${randomUUID()}`;
+                    const edge = A.db.addCircleEdge({
+                        id: randomUUID(),
+                        followerId: f,
+                        followeeId: 'g',
+                    });
+                    await quiesce(w);
+                    A.ctl.log.length = 0;
+                    const sent = told('circleEdges');
+                    assert.equal(
+                        A.db.addCircleEdge({ id: randomUUID(), followerId: f, followeeId: 'g' }),
+                        edge
+                    );
+                    await quiesce(w);
+                    assert.deepEqual(
+                        A.ctl.log.filter((q) => q.includes('circle_edges')),
+                        [],
+                        'no statement for an edge that exists'
+                    );
+                    assert.equal(told('circleEdges'), sent, "no 'u'");
+
+                    const event = `evt-${randomUUID()}`;
+                    const processed = A.db.markBillingWebhookEventProcessed(event);
+                    await quiesce(w);
+                    assert.equal(A.db.markBillingWebhookEventProcessed(event), processed);
+                    await quiesce(w);
+                    assert.equal(writes('processed_billing_webhook_events'), 1);
+
+                    // What G1 does not silence: a call that sets the row again,
+                    // even with the body it already had, still writes it.
+                    const body = {
+                        streamId: `s-${randomUUID()}`,
+                        slowModeSeconds: 5,
+                        bannedUserIds: ['x'],
+                        keywordFilters: [],
+                    };
+                    A.db.upsertStreamModeration(body);
+                    await quiesce(w);
+                    A.db.upsertStreamModeration(body);
+                    await quiesce(w);
+                    assert.equal(writes('stream_moderation'), 2, 'each PUT writes its row');
+                    assert.equal(told('streamModeration'), 2);
+                })
+        );
+    });
+
+    test(`X32 (${mode}): a refused patch announces nothing and re-reads; a committed one announces 'k' inside its transaction; a refused insert-only upsert sends no 'u' and re-reads`, async () => {
+        await withSpec(
+            'updateVaultItem',
+            { kind: 'targeted', steps: [{ op: 'patch', map: 'vaultItems' }] },
+            () =>
+                withSpec(
+                    'addCircleEdge',
+                    { kind: 'upsert', map: 'circleEdges', insertOnly: true },
+                    () =>
+                        withWorld(2, mode, async (w) => {
+                            const [A, B] = w.procs;
+                            const u = mkUser(A.db);
+                            const [gone, kept] = [mkVault(A.db, u), mkVault(A.db, u)];
+                            await deafen(w, B);
+                            assert.equal(A.db.deleteVaultItem(gone), true);
+                            await quiesce(w);
+                            assert.ok(B.db.getVaultItem(gone), 'B has not heard of the delete');
+
+                            // B's stale edit of the gone row: refused, re-read, silent.
+                            const conflicts = metric('db_targeted_write_conflicts_total', {
+                                map: 'vaultItems',
+                                method: 'updateVaultItem',
+                            });
+                            const sentB = B.tap.sent.length;
+                            B.ctl.log.length = 0;
+                            assert.ok(B.db.updateVaultItem(gone, { label: 'stale' }));
+                            await quiesce(w);
+                            const update = B.ctl.log.find((q) =>
+                                q.startsWith('UPDATE vault_items')
+                            );
+                            assert.match(
+                                update ?? '',
+                                /^UPDATE vault_items SET label = \$1::varchar, updated_at = \$2::timestamptz WHERE id = \$3 RETURNING id$/,
+                                'only the changed columns'
+                            );
+                            assert.deepEqual(
+                                B.tap.sent.slice(sentB),
+                                [],
+                                'a refused patch announces nothing'
+                            );
+                            assert.equal(await vaultCount(w, gone), 0, 'nothing was inserted');
+                            assert.equal(
+                                B.db.getVaultItem(gone),
+                                undefined,
+                                'B re-read the key and dropped it'
+                            );
+                            assert.equal(
+                                metric('db_targeted_write_conflicts_total', {
+                                    map: 'vaultItems',
+                                    method: 'updateVaultItem',
+                                }),
+                                conflicts + 1
+                            );
+
+                            // A committed patch: its 'k' is published before COMMIT
+                            // where the transport can (pg), after it otherwise (hub).
+                            const sentA = A.tap.sent.length;
+                            let atCommit: Payload[] | null = null;
+                            A.ctl.delay = (sql) => {
+                                if (sql === 'COMMIT' && atCommit === null) {
+                                    atCommit = A.tap.sent.slice(sentA);
+                                }
+                                return 0;
+                            };
+                            A.db.updateVaultItem(kept, { label: 'new' });
+                            await quiesce(w);
+                            A.ctl.delay = () => 0;
+                            const told = A.tap.sent.slice(sentA);
+                            assert.equal(told.length, 1);
+                            assert.equal(told[0].m, 'vaultItems');
+                            assert.equal(told[0].op, 'k');
+                            assert.deepEqual((told[0] as { kvs: unknown[] }).kvs, [[kept]]);
+                            assert.deepEqual(
+                                atCommit,
+                                mode === 'pg' ? told : [],
+                                mode === 'pg'
+                                    ? "the 'k' went out inside the transaction"
+                                    : 'the hub is told after COMMIT'
+                            );
+                            assert.deepEqual(await vaultRow(w, kept), {
+                                label: 'new',
+                                ciphertext: 'c0',
+                            });
+
+                            // B (deaf) adds an edge A already wrote: Postgres keeps
+                            // A's row, B sends no 'u' and takes A's row.
+                            const f = `f-${randomUUID()}`;
+                            const first = A.db.addCircleEdge({
+                                id: randomUUID(),
+                                followerId: f,
+                                followeeId: 'g',
+                            });
+                            await quiesce(w);
+                            assert.equal(B.db.getCircleEdge(f, 'g'), undefined, 'B has not heard');
+                            const sentB2 = B.tap.sent.length;
+                            const mine = B.db.addCircleEdge({
+                                id: randomUUID(),
+                                followerId: f,
+                                followeeId: 'g',
+                            });
+                            assert.notEqual(mine.id, first.id);
+                            await quiesce(w);
+                            assert.deepEqual(
+                                B.tap.sent.slice(sentB2),
+                                [],
+                                "a refused insert sends no 'u'"
+                            );
+                            assert.deepEqual(
+                                (
+                                    await w.sql(
+                                        'SELECT id FROM circle_edges WHERE follower_id = $1',
+                                        [f]
+                                    )
+                                ).map((r) => r.id),
+                                [first.id]
+                            );
+                            const held = B.db.getCircleEdge(f, 'g');
+                            assert.equal(held?.id, first.id, "B's mirror took Postgres's row");
+                            assert.equal(held?.createdAt, first.createdAt);
+                        })
+                )
+        );
+    });
+
+    test(`G2 retry (${mode}): an insert-only upsert whose first reply was lost is still announced when its retry finds the row`, async () => {
+        await withSpec(
+            'addCircleEdge',
+            { kind: 'upsert', map: 'circleEdges', insertOnly: true },
+            () =>
+                withWorld(2, mode, async (w) => {
+                    const [A, B] = w.procs;
+                    await quiesce(w);
+                    let inserts = 0;
+                    A.ctl.fault = (sql) =>
+                        sql.startsWith('INSERT INTO circle_edges ') && ++inserts === 1
+                            ? 'after'
+                            : undefined;
+                    const f = `f-${randomUUID()}`;
+                    const edge = A.db.addCircleEdge({
+                        id: randomUUID(),
+                        followerId: f,
+                        followeeId: 'g',
+                    });
+                    await quiesce(w);
+                    assert.equal(inserts, 2, 'the write was retried');
+                    assert.equal(await count(w, 'circle_edges', 'follower_id = $1', [f]), 1);
+                    assert.equal(A.db.getCircleEdge(f, 'g')?.id, edge.id);
+                    assert.equal(B.db.getCircleEdge(f, 'g')?.id, edge.id, 'the peer was told');
+                })
+        );
+    });
+}
+
+test('X35: a refused statement is counted once and rolls nothing else in its op back; after an uncertain COMMIT it is logged, not counted', async () => {
+    let other = '';
+    await withSpec(
+        'updateVaultItem',
+        {
+            kind: 'targeted',
+            steps: [
+                { op: 'patch', map: 'vaultItems', where: "label <> 'frozen'" },
+                {
+                    op: 'updateWhere',
+                    map: 'vaultItems',
+                    set: "label = 'touched'",
+                    where: 'id = $1',
+                    params: () => [other],
+                },
+            ],
+        },
+        () =>
+            withWorld(1, 'pg', async (w) => {
+                const [A] = w.procs;
+                const u = mkUser(A.db);
+                const v = mkVault(A.db, u);
+                other = mkVault(A.db, u);
+                await quiesce(w);
+                // Postgres's row moved where A did not hear of it.
+                await w.sql(`UPDATE vault_items SET label = 'frozen' WHERE id = $1`, [v]);
+                const conflicts = metric('db_targeted_write_conflicts_total', {
+                    map: 'vaultItems',
+                    method: 'updateVaultItem',
+                });
+                A.ctl.log.length = 0;
+                A.db.updateVaultItem(v, { label: 'mine' });
+                await quiesce(w);
+                assert.equal(A.ctl.log.filter((q) => q === 'COMMIT').length, 1, 'the op committed');
+                assert.ok(!A.ctl.log.includes('ROLLBACK'), 'nothing was rolled back');
+                assert.equal(
+                    (await vaultRow(w, v)).label,
+                    'frozen',
+                    'the refused row is as Postgres had it'
+                );
+                assert.equal(
+                    (await vaultRow(w, other)).label,
+                    'touched',
+                    "the op's other statement stands"
+                );
+                assert.equal(
+                    metric('db_targeted_write_conflicts_total', {
+                        map: 'vaultItems',
+                        method: 'updateVaultItem',
+                    }),
+                    conflicts + 1,
+                    'counted once'
+                );
+                assert.equal(A.db.getVaultItem(v)?.label, 'frozen', 'A re-read the refused key');
+                assert.equal(
+                    A.db.getVaultItem(other)?.label,
+                    'touched',
+                    'and the row the other statement reached'
+                );
+            })
+    );
+
+    // The retry of an op whose first COMMIT reply was lost finds its own
+    // sticky write: refused, but not another process's doing.
+    await withSpec(
+        'markBurnerIdentityBurned',
+        { kind: 'targeted', steps: [{ op: 'patch', map: 'burnerIdentities' }] },
+        () =>
+            withWorld(1, 'pg', async (w) => {
+                const [A] = w.procs;
+                const id = randomUUID();
+                A.db.createBurnerIdentity({
+                    id,
+                    ownerUserId: randomUUID(),
+                    burnerUserId: `b-${id}`,
+                    label: 'p',
+                });
+                await quiesce(w);
+                const conflicts = metric('db_targeted_write_conflicts_total', {
+                    map: 'burnerIdentities',
+                    method: 'markBurnerIdentityBurned',
+                });
+                let commits = 0;
+                A.ctl.log.length = 0;
+                A.ctl.fault = (sql) => (sql === 'COMMIT' && ++commits === 1 ? 'after' : undefined);
+                const logged = await warnings(async () => {
+                    assert.ok(A.db.markBurnerIdentityBurned(id)?.burnedAt);
+                    await quiesce(w);
+                });
+                assert.equal(
+                    A.ctl.log.filter((q) => q === 'BEGIN').length,
+                    2,
+                    'the op was retried'
+                );
+                assert.equal(
+                    A.ctl.log.filter((q) => q.startsWith('UPDATE burner_identities SET burned_at'))
+                        .length,
+                    2
+                );
+                const [row] = await w.sql('SELECT burned_at FROM burner_identities WHERE id = $1', [
+                    id,
+                ]);
+                assert.equal(iso(row.burned_at), A.db.burnerIdentities.get(id).burnedAt);
+                assert.equal(
+                    metric('db_targeted_write_conflicts_total', {
+                        map: 'burnerIdentities',
+                        method: 'markBurnerIdentityBurned',
+                    }),
+                    conflicts,
+                    'not counted'
+                );
+                assert.deepEqual(
+                    logged
+                        .filter((l) => String(l.msg).startsWith('db_targeted_write_conflict'))
+                        .map((l) => [l.msg, l.map, l.method]),
+                    [
+                        [
+                            'db_targeted_write_conflict_after_uncertain_commit',
+                            'burnerIdentities',
+                            'markBurnerIdentityBurned',
+                        ],
+                    ]
+                );
+            })
+    );
 });

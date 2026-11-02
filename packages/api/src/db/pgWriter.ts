@@ -93,6 +93,11 @@ export interface TableDescriptor {
     /** Override the default reflection mapping (e.g. nested fields). */
     toRow?: (record: Record<string, unknown>) => Row;
     fromRow?: (row: Row) => Record<string, unknown>;
+    /**
+     * Columns that move one way (pgDescriptors' STICKY_COLUMNS): a patch sets
+     * one only where it is still NULL, so Postgres keeps the first writer.
+     */
+    sticky?: string[];
 }
 
 export interface TablePlan {
@@ -167,32 +172,102 @@ export function kvOf(plan: TablePlan, record: Record<string, unknown>): unknown[
     });
 }
 
-export function buildUpsertSql(plan: TablePlan, columns: string[]): string {
+/**
+ * `INSERT ... ON CONFLICT ... DO UPDATE`. With `guardColumns`, the update
+ * applies only where the stored row's columns equal the values that follow
+ * the record's in the parameters (`DO UPDATE ... WHERE`): a compare-and-set,
+ * so a write does not land over a row another process changed meanwhile.
+ * With `insertOnly`, `ON CONFLICT ... DO NOTHING`: the record is written only
+ * where no row has its key, and a stored row is never changed.
+ *
+ * Each guard column is compared by its type (guardExpr: a timestamp at
+ * millisecond precision, JSON as jsonb, NULL-safe), as a targeted step's
+ * guard is: the mirror keeps ISO strings while a `DEFAULT NOW()` stores
+ * microseconds, so plain equality would refuse almost every such row. The
+ * statement has no RETURNING; upsertRecord adds the key columns.
+ */
+export function buildUpsertSql(
+    plan: TablePlan,
+    columns: string[],
+    guardColumns: string[] = [],
+    insertOnly = false
+): string {
     const conflict = plan.descriptor.conflictColumns;
+    const table = plan.descriptor.tableName;
     const placeholders = columns.map((_, i) => `$${i + 1}`).join(', ');
-    const updates = columns.filter((c) => !conflict.includes(c)).map((c) => `${c} = EXCLUDED.${c}`);
+    const updates = insertOnly
+        ? []
+        : columns.filter((c) => !conflict.includes(c)).map((c) => `${c} = EXCLUDED.${c}`);
     const doClause = updates.length > 0 ? `DO UPDATE SET ${updates.join(', ')}` : 'DO NOTHING';
+    const guard =
+        updates.length > 0 && guardColumns.length > 0
+            ? ` WHERE ${guardColumns
+                  .map((c, i) => {
+                      const meta = columnMeta(plan, c);
+                      if (!meta) throw new Error(`upsert guard on ${table}: no column ${c}`);
+                      return guardCondition(
+                          meta,
+                          `${table}.${c}`,
+                          `$${columns.length + i + 1}`,
+                          undefined
+                      );
+                  })
+                  .join(' AND ')}`
+            : '';
     return (
-        `INSERT INTO ${plan.descriptor.tableName} (${columns.join(
-            ', '
-        )}) VALUES (${placeholders}) ` + `ON CONFLICT (${conflict.join(', ')}) ${doClause}`
+        `INSERT INTO ${table} (${columns.join(', ')}) VALUES (${placeholders}) ` +
+        `ON CONFLICT (${conflict.join(', ')}) ${doClause}${guard}`
     );
 }
 
-/** Insert-or-update a single record. */
+/**
+ * Insert-or-update a single record. With `guard` (record fields and the
+ * values the stored row must still hold), an existing row is updated only if
+ * it holds them; each guard field must have a column and a value, or nothing
+ * is written and this throws, rather than drop the condition. With
+ * `insertOnly`, an existing row is left as it is (a guard is then refused
+ * too, since it could only ever compare an update).
+ *
+ * Resolves true when Postgres wrote the row, and false when it did not: an
+ * insert-only write found a row with the key, or the guard no longer held
+ * (or the record has no column at all). The write-behind queue re-reads a
+ * refused write's key instead of announcing it.
+ */
 export async function upsertRecord(
     client: PgClient,
     plan: TablePlan,
-    record: Record<string, unknown>
-): Promise<void> {
+    record: Record<string, unknown>,
+    guard?: Record<string, unknown>,
+    insertOnly = false
+): Promise<boolean> {
     const row = recordToRow(plan, record);
     const columns = Object.keys(row);
-    if (columns.length === 0) return;
-    const sql = buildUpsertSql(plan, columns);
-    await client.query(
-        sql,
-        columns.map((c) => row[c])
-    );
+    if (columns.length === 0) return false;
+    if (insertOnly && guard) {
+        throw new Error(`insert-only write on ${plan.descriptor.tableName} carries a guard`);
+    }
+    const guardRow = guard ? recordToRow(plan, guard) : {};
+    const guardColumns = Object.keys(guardRow);
+    if (
+        guard &&
+        (guardColumns.length !== Object.keys(guard).length ||
+            guardColumns.some((c) => guardRow[c] === null))
+    ) {
+        throw new Error(
+            `upsert guard on ${plan.descriptor.tableName} names a field with no column or value`
+        );
+    }
+    const sql = `${buildUpsertSql(
+        plan,
+        columns,
+        guardColumns,
+        insertOnly
+    )} RETURNING ${plan.descriptor.conflictColumns.join(', ')}`;
+    const res = await client.query(sql, [
+        ...columns.map((c) => row[c]),
+        ...guardColumns.map((c) => guardRow[c]),
+    ]);
+    return res.rows.length > 0;
 }
 
 /** Load every row of a table and write it into the in-memory map via keyOf. */
@@ -291,6 +366,44 @@ export type TargetedStep =
           records: (ctx: StepContext) => ReadonlyArray<Record<string, unknown>>;
           /** Per-column ON CONFLICT expressions that replace `c = EXCLUDED.c` (e.g. a set union). */
           onConflictSet?: Readonly<Record<string, string>>;
+          /**
+           * A literal condition over the stored row (the table's name) and
+           * EXCLUDED, appended as `DO UPDATE SET ... WHERE <literal>`: where it
+           * is false the stored row stays as it is, the statement returns no
+           * row, and the key is counted as a conflict and re-read (refusable).
+           */
+          onConflictWhere?: string;
+          /** The arbiter after ON CONFLICT, replacing `(<conflict columns>)`: a column list, optionally with a partial index's predicate. */
+          conflictTarget?: string;
+      })
+    | (StepBase & {
+          /**
+           * Write only the columns the call changed, to each row it changed
+           * (the diff of the two records as recordToRow writes them). A
+           * descriptor's sticky column is set only where it is still NULL,
+           * so Postgres keeps the first writer. A row Postgres refuses to
+           * change (gone, a predicate false) is counted and re-read, never
+           * inserted, and the op's other statements still commit.
+           */
+          op: 'patch';
+          /** Compare-and-set: columns that must still hold the value the mirror held before the call (guardExpr: ms timestamps, jsonb, NULL-safe). */
+          cas?: string[];
+          /** A literal predicate over this table's columns, with no parameter, ANDed to the key match (`status = 'pending'`). */
+          where?: string;
+          /** Counter columns written as `c = c + (after - before)` instead of `c = after`; an absent prior value counts as 0. */
+          delta?: string[];
+          /** Sticky columns this step may set even where the stored row already has them: `c = COALESCE(c, $n)` replaces the `c IS NULL` predicate. */
+          keepStored?: string[];
+          /**
+           * What to do with a key the call added (the mirror had no row). Default: a bind error (a patch
+           * spec on a creating method is a spec bug, made loud). 'nothing': insert, or leave the stored
+           * row as it is (a true create). 'add': insert, or add this record's `delta` columns to the
+           * stored row and touch nothing else (needs `delta`). 'replace': insert, or overwrite the
+           * stored row's columns this record carries, keeping its id and created_at.
+           */
+          insertWhenAbsent?: 'nothing' | 'add' | 'replace';
+          /** The insert branch's arbiter, replacing `(<conflict columns>)` after ON CONFLICT: a column list, optionally with a partial-index predicate. */
+          conflictTarget?: string;
       });
 
 /** One statement ready to run: literal SQL and its bound parameters. */
@@ -301,21 +414,37 @@ export interface BoundStatement {
     required: boolean;
     /**
      * The row Postgres keeps may differ from the record bound (an upsertEach
-     * whose onConflictSet merges the two), so the keys this statement returns
-     * are re-read into the writer's own mirror.
+     * whose onConflictSet merges the two, a patch that adds to a counter or
+     * keeps the stored id), so the keys this statement returns are re-read
+     * into the writer's own mirror.
      */
     merges?: boolean;
+    /**
+     * Postgres may refuse the row (a patch whose predicate no longer holds,
+     * an upsertEach whose onConflictWhere is false). No row returned is
+     * counted as a conflict and the key is re-read, but unlike `required`
+     * nothing is rolled back: the op's other statements still commit.
+     */
+    refusable?: true;
 }
 
 export interface CompiledStep {
     step: TargetedStep;
     plan: TablePlan;
     /**
-     * The statement as PREPAREd at boot and, except for upsertEach, as run.
-     * upsertEach runs one INSERT per record over that record's columns; its
-     * check statement names every column of the table.
+     * The statement as PREPAREd at boot and, except for upsertEach and
+     * patch, as run. upsertEach runs one INSERT per record over that record's
+     * columns, and patch one UPDATE per changed key over the columns the call
+     * changed; their check statements name every column of the table.
      */
     checkSql: string;
+    /**
+     * A patch with insertWhenAbsent only: its insert branch over every column
+     * of the table, PREPAREd at boot beside checkSql, so an arbiter no index
+     * backs refuses the boot. It is an INSERT, bounded by its conflict target,
+     * not by a WHERE.
+     */
+    insertCheckSql?: string;
 }
 
 const SIMPLE_IDENTIFIER = /^[a-z_][a-z0-9_]*$/;
@@ -365,24 +494,236 @@ function keyCondition(column: ColumnMeta, columnRef: string, valueRef: string): 
         : `${columnRef} = ${valueRef}`;
 }
 
-function buildTargetedUpsertSql(
+interface TargetedUpsertOptions {
+    /** The arbiter after ON CONFLICT, instead of the conflict columns. */
+    conflictTarget?: string;
+    /** `DO UPDATE SET ... WHERE <literal>`. */
+    onConflictWhere?: string;
+    /** `DO NOTHING`, whatever the columns. */
+    insertOnly?: boolean;
+}
+
+function insertHead(
     plan: TablePlan,
     columns: string[],
-    onConflictSet: Readonly<Record<string, string>> | undefined
+    conflictTarget: string | undefined
 ): string {
     const keys = plan.descriptor.conflictColumns;
-    const sets = columns
-        .filter((c) => !keys.includes(c))
-        .map((c) => `${c} = ${onConflictSet?.[c] ?? `EXCLUDED.${c}`}`);
-    for (const [c, expr] of Object.entries(onConflictSet ?? {})) {
-        if (!columns.includes(c)) sets.push(`${c} = ${expr}`);
-    }
-    const action = sets.length > 0 ? `DO UPDATE SET ${sets.join(', ')}` : 'DO NOTHING';
     return (
         `INSERT INTO ${plan.descriptor.tableName} (${columns.join(', ')}) ` +
         `VALUES (${columns.map((_, i) => `$${i + 1}`).join(', ')}) ` +
-        `ON CONFLICT (${keys.join(', ')}) ${action} RETURNING ${keys.join(', ')}`
+        `ON CONFLICT ${conflictTarget ?? `(${keys.join(', ')})`}`
     );
+}
+
+function buildTargetedUpsertSql(
+    plan: TablePlan,
+    columns: string[],
+    onConflictSet: Readonly<Record<string, string>> | undefined,
+    options: TargetedUpsertOptions = {}
+): string {
+    const keys = plan.descriptor.conflictColumns;
+    const sets = options.insertOnly
+        ? []
+        : columns
+              .filter((c) => !keys.includes(c))
+              .map((c) => `${c} = ${onConflictSet?.[c] ?? `EXCLUDED.${c}`}`);
+    if (!options.insertOnly) {
+        for (const [c, expr] of Object.entries(onConflictSet ?? {})) {
+            if (!columns.includes(c) && !keys.includes(c)) sets.push(`${c} = ${expr}`);
+        }
+    }
+    const where = options.onConflictWhere ? ` WHERE ${options.onConflictWhere}` : '';
+    const action = sets.length > 0 ? `DO UPDATE SET ${sets.join(', ')}${where}` : 'DO NOTHING';
+    return `${insertHead(plan, columns, options.conflictTarget)} ${action} RETURNING ${keys.join(
+        ', '
+    )}`;
+}
+
+/** A patch's 'add' insert: on conflict only the counters are summed, and nothing else is touched. */
+function buildInsertOrAddSql(
+    plan: TablePlan,
+    columns: string[],
+    deltaColumns: readonly string[],
+    conflictTarget: string | undefined
+): string {
+    const table = plan.descriptor.tableName;
+    const keys = plan.descriptor.conflictColumns;
+    const sums = deltaColumns.map((c) => `${c} = ${table}.${c} + EXCLUDED.${c}`);
+    return `${insertHead(plan, columns, conflictTarget)} DO UPDATE SET ${sums.join(
+        ', '
+    )} RETURNING ${keys.join(', ')}`;
+}
+
+type PatchStep = Extract<TargetedStep, { op: 'patch' }>;
+
+/** `udt_name`s a delta column may have: arithmetic on them is exact. */
+const COUNTER_TYPES = new Set(['int2', 'int4', 'int8', 'numeric']);
+
+/** A 'replace' insert keeps the stored row's id and created_at (those the table has, outside its key). */
+function replaceKeeps(plan: TablePlan): Record<string, string> {
+    const table = plan.descriptor.tableName;
+    const keep: Record<string, string> = {};
+    for (const c of ['id', 'created_at']) {
+        if (plan.columnNames.has(c) && !plan.descriptor.conflictColumns.includes(c)) {
+            keep[c] = `${table}.${c}`;
+        }
+    }
+    return keep;
+}
+
+/** A patch's insert branch over `columns`, by its insertWhenAbsent mode. */
+function patchInsertSql(plan: TablePlan, step: PatchStep, columns: string[]): string {
+    switch (step.insertWhenAbsent) {
+        case 'add':
+            return buildInsertOrAddSql(plan, columns, step.delta ?? [], step.conflictTarget);
+        case 'replace':
+            return buildTargetedUpsertSql(plan, columns, replaceKeeps(plan), {
+                conflictTarget: step.conflictTarget,
+            });
+        default:
+            return buildTargetedUpsertSql(plan, columns, undefined, {
+                insertOnly: true,
+                conflictTarget: step.conflictTarget,
+            });
+    }
+}
+
+/**
+ * A patch's UPDATE. Parameters: the SET values in order, then the key, then
+ * each `cas` column's prior value. A sticky column the SET writes plainly
+ * gets `c IS NULL`; one written as `keep` is COALESCEd instead.
+ */
+function patchUpdateSql(
+    plan: TablePlan,
+    sets: ReadonlyArray<{ column: ColumnMeta; how: 'value' | 'delta' | 'keep' }>,
+    stickyUnset: readonly string[],
+    cas: readonly ColumnMeta[],
+    where: string | undefined
+): string {
+    const keys = plan.descriptor.conflictColumns.map((c) => columnMeta(plan, c)!);
+    let n = 0;
+    const next = () => `$${++n}`;
+    const assignments = sets.map(({ column: c, how }) => {
+        const v = `${next()}::${sqlTypeOf(c)}`;
+        if (how === 'delta') return `${c.name} = ${c.name} + ${v}`;
+        if (how === 'keep') return `${c.name} = COALESCE(${c.name}, ${v})`;
+        return `${c.name} = ${v}`;
+    });
+    const conds = keys.map((k) => keyCondition(k, k.name, next()));
+    for (const s of stickyUnset) conds.push(`${s} IS NULL`);
+    for (const c of cas) conds.push(guardExpr(c, c.name, next()));
+    if (where !== undefined) conds.push(`(${where})`);
+    return (
+        `UPDATE ${plan.descriptor.tableName} SET ${assignments.join(', ')} ` +
+        `WHERE ${conds.join(' AND ')} RETURNING ${keys.map((k) => k.name).join(', ')}`
+    );
+}
+
+const hasColumn = (row: Row, c: string) => Object.prototype.hasOwnProperty.call(row, c);
+
+/** Serialized column values compared as written: scalars by value, arrays (and anything else) by JSON. */
+function sameValue(a: unknown, b: unknown): boolean {
+    if (a === b) return true;
+    if (typeof a === 'object' && a !== null && typeof b === 'object' && b !== null) {
+        return JSON.stringify(a) === JSON.stringify(b);
+    }
+    return false;
+}
+
+/** Bind a patch for each key the call changed in its map (bindStep). */
+function bindPatch(compiled: CompiledStep, step: PatchStep, ctx: StepContext): BoundStatement[] {
+    const { plan } = compiled;
+    const table = plan.descriptor.tableName;
+    const keys = plan.descriptor.conflictColumns;
+    const fail = (why: string) => new Error(`targeted patch on ${table}: ${why}`);
+    const delta = new Set(step.delta ?? []);
+    const keep = new Set(step.keepStored ?? []);
+    const sticky = new Set(plan.descriptor.sticky ?? []);
+    const counter = (v: unknown, what: string): number => {
+        if (typeof v === 'number' && Number.isFinite(v)) return v;
+        throw fail(`${what} is ${String(v)}, not a finite number`);
+    };
+    const out: BoundStatement[] = [];
+    for (const { key, before, after } of ctx.changed(step.map)) {
+        if (!after) throw fail(`the call removed ${key}; a patch never deletes`);
+        const is = recordToRow(plan, after);
+        for (const k of keys) if (!hasColumn(is, k)) throw fail(`record has no ${k}`);
+        if (!before) {
+            if (!step.insertWhenAbsent) {
+                throw fail(
+                    `the call added ${key}, which the mirror did not hold (no insertWhenAbsent)`
+                );
+            }
+            // A counter the record lacks is inserted as 0, its column's default.
+            for (const d of delta) {
+                is[d] = hasColumn(is, d) && is[d] !== null ? counter(is[d], `${d} of ${key}`) : 0;
+            }
+            const columns = Object.keys(is);
+            out.push({
+                map: step.map,
+                sql: patchInsertSql(plan, step, columns),
+                params: columns.map((c) => is[c]),
+                required: step.required === true,
+                refusable: true,
+                ...(step.insertWhenAbsent === 'nothing' ? {} : { merges: true }),
+            });
+            continue;
+        }
+        const was = recordToRow(plan, before);
+        const sets: Array<{ column: ColumnMeta; how: 'value' | 'delta' | 'keep'; value: unknown }> =
+            [];
+        const stickyUnset: string[] = [];
+        for (const column of plan.columns) {
+            const c = column.name;
+            if (keys.includes(c)) continue;
+            const inWas = hasColumn(was, c);
+            const inIs = hasColumn(is, c);
+            if (!inIs) {
+                // A patch carries every column its prior row had; a method
+                // clears one by setting the field to undefined or null.
+                if (inWas) throw fail(`the call dropped ${c} from ${key}`);
+                continue;
+            }
+            if (delta.has(c)) {
+                const prior = inWas && was[c] !== null ? counter(was[c], `prior ${c}`) : 0;
+                const d = counter(is[c], `${c}`) - prior;
+                if (!Number.isFinite(d)) throw fail(`${c} changes by ${d}`);
+                if (d !== 0) sets.push({ column, how: 'delta', value: d });
+                continue;
+            }
+            if (inWas && sameValue(was[c], is[c])) continue;
+            if (sticky.has(c)) {
+                if (is[c] === null) {
+                    // One-way: writing it back over a value the mirror held is a
+                    // revert; over a copy that lacked it, a no-op (dropped).
+                    if (inWas && was[c] !== null)
+                        throw fail(`the call clears ${c}, which moves one way`);
+                    continue;
+                }
+                if (keep.has(c)) {
+                    sets.push({ column, how: 'keep', value: is[c] });
+                    continue;
+                }
+                stickyUnset.push(c);
+            }
+            sets.push({ column, how: 'value', value: is[c] });
+        }
+        if (sets.length === 0) continue;
+        const cas = (step.cas ?? []).map((c) => columnMeta(plan, c)!);
+        out.push({
+            map: step.map,
+            sql: patchUpdateSql(plan, sets, stickyUnset, cas, step.where),
+            params: [
+                ...sets.map((s) => s.value),
+                ...keys.map((k) => is[k]),
+                ...cas.map((c) => (hasColumn(was, c.name) ? was[c.name] : null)),
+            ],
+            required: step.required === true,
+            refusable: true,
+        });
+    }
+    return out;
 }
 
 /**
@@ -391,6 +732,13 @@ function buildTargetedUpsertSql(
  * UPDATE or DELETE that could only ever match every row or none), or when a
  * literal holds a statement separator. Column names inside `where`/`set`
  * literals are checked by prepareCheck at boot.
+ *
+ * A patch also throws when a cas, delta, keepStored or sticky column is
+ * missing (or, but for sticky, is a key column), a delta column is not a
+ * number, a keepStored column is not sticky, its where literal takes a
+ * parameter, 'add' has no delta, or conflictTarget comes without
+ * insertWhenAbsent. Its key match carries the parameter, so a literal such as
+ * `status = 'pending'` is allowed on it.
  */
 export function compileStep(plan: TablePlan, step: TargetedStep): CompiledStep {
     const table = plan.descriptor.tableName;
@@ -409,9 +757,15 @@ export function compileStep(plan: TablePlan, step: TargetedStep): CompiledStep {
         literal('where', where);
         if (!/\$[1-9]\d*/.test(where)) throw fail(`where uses no parameter: ${where}`);
     };
+    /** A literal that takes no parameter: its statement's numbering is the builder's. */
+    const unbound = (what: string, text: string) => {
+        literal(what, text);
+        if (/\$\d/.test(text)) throw fail(`${what} takes no parameter: ${text}`);
+    };
     const keyMeta = keys.map(column);
     const returning = (alias: string) => keys.map((k) => `${alias}${k}`).join(', ');
     let checkSql: string;
+    let insertCheckSql: string | undefined;
     switch (step.op) {
         case 'deleteKey': {
             const conds = keyMeta.map((c, i) => keyCondition(c, c.name, `$${i + 1}`));
@@ -459,14 +813,72 @@ export function compileStep(plan: TablePlan, step: TargetedStep): CompiledStep {
                 column(c);
                 literal(`onConflictSet.${c}`, expr);
             }
+            if (step.onConflictWhere !== undefined)
+                unbound('onConflictWhere', step.onConflictWhere);
+            if (step.conflictTarget !== undefined) unbound('conflictTarget', step.conflictTarget);
             checkSql = buildTargetedUpsertSql(
                 plan,
                 plan.columns.map((c) => c.name),
-                step.onConflictSet
+                step.onConflictSet,
+                { conflictTarget: step.conflictTarget, onConflictWhere: step.onConflictWhere }
             );
             break;
+        case 'patch': {
+            // Option columns must exist and lie outside the key; the boot
+            // PREPARE then checks the where literal and the arbiter.
+            const outsideKey = (what: string, names: readonly string[] | undefined) =>
+                (names ?? []).map((name) => {
+                    const meta = column(name);
+                    if (keys.includes(name)) throw fail(`${what} names the key column ${name}`);
+                    return meta;
+                });
+            const cas = outsideKey('cas', step.cas);
+            const delta = outsideKey('delta', step.delta);
+            for (const d of delta) {
+                if (!COUNTER_TYPES.has(d.udtName)) {
+                    throw fail(`delta column ${d.name} is ${d.udtName}, not a number`);
+                }
+            }
+            const sticky = (plan.descriptor.sticky ?? []).map(column);
+            const keep = outsideKey('keepStored', step.keepStored);
+            for (const k of keep) {
+                if (!sticky.includes(k)) throw fail(`keepStored column ${k.name} is not sticky`);
+            }
+            // Its key match always carries a parameter; the literals take
+            // none (the SET's columns, and so its numbering, differ from call
+            // to call).
+            if (step.where !== undefined) unbound('where', step.where);
+            if (step.conflictTarget !== undefined) {
+                unbound('conflictTarget', step.conflictTarget);
+                if (!step.insertWhenAbsent) throw fail('conflictTarget without insertWhenAbsent');
+            }
+            if (step.insertWhenAbsent === 'add' && delta.length === 0) {
+                throw fail("insertWhenAbsent 'add' without a delta column");
+            }
+            const nonKey = plan.columns.filter((c) => !keys.includes(c.name));
+            if (nonKey.length === 0) throw fail('the table has no column outside its key');
+            const how = (c: ColumnMeta): 'value' | 'delta' | 'keep' =>
+                delta.includes(c) ? 'delta' : keep.includes(c) ? 'keep' : 'value';
+            checkSql = patchUpdateSql(
+                plan,
+                nonKey.map((c) => ({ column: c, how: how(c) })),
+                sticky
+                    .filter((s) => !keep.includes(s) && !keys.includes(s.name))
+                    .map((s) => s.name),
+                cas,
+                step.where
+            );
+            if (step.insertWhenAbsent) {
+                insertCheckSql = patchInsertSql(
+                    plan,
+                    step,
+                    plan.columns.map((c) => c.name)
+                );
+            }
+            break;
+        }
     }
-    return { step, plan, checkSql };
+    return { step, plan, checkSql, ...(insertCheckSql !== undefined ? { insertCheckSql } : {}) };
 }
 
 /** Bind a compiled step for one call: zero statements when the step does not apply to it. */
@@ -511,8 +923,14 @@ export function bindStep(compiled: CompiledStep, ctx: StepContext): BoundStateme
             const params = step.params(ctx);
             return params ? bound([...params]) : [];
         }
+        case 'patch':
+            return bindPatch(compiled, step, ctx);
         case 'upsertEach': {
             const merges = Object.keys(step.onConflictSet ?? {}).length > 0;
+            const options = {
+                conflictTarget: step.conflictTarget,
+                onConflictWhere: step.onConflictWhere,
+            };
             return step.records(ctx).map((record) => {
                 const row = recordToRow(plan, record);
                 const columns = Object.keys(row);
@@ -525,10 +943,11 @@ export function bindStep(compiled: CompiledStep, ctx: StepContext): BoundStateme
                 }
                 return {
                     map: step.map,
-                    sql: buildTargetedUpsertSql(plan, columns, step.onConflictSet),
+                    sql: buildTargetedUpsertSql(plan, columns, step.onConflictSet, options),
                     params: columns.map((c) => row[c]),
                     required,
                     ...(merges ? { merges } : {}),
+                    ...(step.onConflictWhere !== undefined ? { refusable: true as const } : {}),
                 };
             });
         }
@@ -567,6 +986,13 @@ export async function selectByKeys(
  * rejects an unknown table or column and a parameter whose type cannot be
  * inferred, which are exactly the errors the statement would otherwise first
  * raise in the write-behind queue, after the mirror had already changed.
+ *
+ * PREPARE parses and analyses a statement but does not plan it, and an
+ * INSERT's ON CONFLICT arbiter is matched to a unique index only when it is
+ * planned, so an INSERT is also EXPLAINed (planned, not run) with NULL for
+ * each parameter: an arbiter no index backs is refused here, not by the
+ * first write. Its literals take no parameter (compileStep), so every `$n`
+ * in it is a VALUES placeholder.
  */
 export async function prepareCheck(
     client: PgClient,
@@ -575,4 +1001,5 @@ export async function prepareCheck(
 ): Promise<void> {
     await client.query(`PREPARE ${name} AS ${sql}`);
     await client.query(`DEALLOCATE ${name}`);
+    if (/^INSERT\b/.test(sql)) await client.query(`EXPLAIN ${sql.replace(/\$\d+/g, 'NULL')}`);
 }

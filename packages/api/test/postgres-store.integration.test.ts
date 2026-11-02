@@ -62,6 +62,8 @@ test('every mutator spec targets a real method and a real map', () => {
     const mapNames = new Set(TABLE_DESCRIPTORS.map((d) => d.mapName));
     for (const [method, spec] of Object.entries(MUTATOR_SPECS)) {
         assert.equal(typeof store[method], 'function', `mutator ${method} must exist on the store`);
+        // Two kinds: an upsert of one map (insert-only and guarded ones
+        // included), and targeted steps (a patch among them), each on one map.
         if (spec.kind === 'upsert') {
             assert.ok(mapNames.has(spec.map), `spec ${method} → unknown map ${spec.map}`);
         } else if (spec.kind === 'targeted') {
@@ -69,8 +71,7 @@ test('every mutator spec targets a real method and a real map', () => {
             for (const step of spec.steps)
                 assert.ok(mapNames.has(step.map), `spec ${method} → unknown map ${step.map}`);
         } else {
-            for (const m of spec.maps)
-                assert.ok(mapNames.has(m), `spec ${method} → unknown map ${m}`);
+            assert.fail(`spec ${method} has no known kind: ${JSON.stringify(spec)}`);
         }
     }
 });

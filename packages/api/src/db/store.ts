@@ -195,7 +195,12 @@ import {
     type StepContext,
     type TablePlan,
 } from './pgWriter';
-import { MUTATOR_SPECS, TABLE_DESCRIPTORS, type MutatorSpec } from './pgDescriptors';
+import {
+    MUTATOR_SPECS,
+    TABLE_DESCRIPTORS,
+    assertStickyColumns,
+    type MutatorSpec,
+} from './pgDescriptors';
 import { WriteBehindQueue, type KeySet } from './writeBehindQueue';
 import { PgNotifyTransport, type StoreChangePayload, type StoreChangeTransport } from './pgNotify';
 import type { PgClient, PgPool } from './migrate';
@@ -8377,11 +8382,15 @@ export class FileBackedDb extends InMemoryDb {
  * predicate Postgres evaluates, in one transaction. No write reconciles a
  * whole table against this mirror, so a row another process wrote is never
  * deleted because this one has not heard of it. A targeted op writes only the
- * rows its call changed. An upsert writes the one row the call returned,
- * whole, even when the call left it unchanged (markUserEmailVerified on a
- * verified account rewrites the row, password_hash included, from this
- * mirror's copy), so it can overwrite a newer version of that row (the last
- * writer wins).
+ * rows its call changed. A call that leaves its row untouched writes nothing
+ * (markUserEmailVerified on a verified account returns the row it read, and
+ * nothing is queued). An upsert writes the one row the call returned, whole,
+ * whenever the call set it, changed or not (a moderation PUT that repeats the
+ * stored body still rewrites the row; updateUserPassword writes the account's
+ * whole row from this mirror's copy), so it can overwrite a newer version of
+ * that row (the last writer wins). An upsert Postgres refuses (insert-only
+ * and the row exists, or a guard that no longer holds) is re-read into this
+ * mirror and not announced.
  *
  * Multi-replica consistency: when a change transport is supplied — Postgres
  * LISTEN/NOTIFY, ON BY DEFAULT (BLACKOUT_DB_PG_NOTIFY=1) — each replica
@@ -8496,7 +8505,12 @@ export class PostgresBackedDb extends InMemoryDb {
         return (this as unknown as Record<string, MutableMap>)[name];
     }
 
-    /** Shadow each mutator with a wrapper that calls the original then enqueues a write. */
+    /**
+     * Shadow each mutator with a wrapper that calls the original then enqueues
+     * a write. An upsert is queued only when the call wrote its map (a set or
+     * delete the capture saw): a call that read a record and returned it
+     * unchanged writes nothing, so it cannot rewrite the row from a stale copy.
+     */
     private installWriteThrough(): void {
         const proto = InMemoryDb.prototype as unknown as Record<
             string,
@@ -8514,9 +8528,26 @@ export class PostgresBackedDb extends InMemoryDb {
                 continue;
             }
             self[method] = (...args: unknown[]): unknown => {
-                const result = original.apply(this, args);
-                if (this.queue && result && typeof result === 'object') {
-                    this.queue.enqueueUpsert(spec.map, result as Record<string, unknown>);
+                const capture = this.queue ? captureWrites(this.mapByName(spec.map)) : null;
+                let result: unknown;
+                try {
+                    result = original.apply(this, args);
+                } finally {
+                    capture?.stop();
+                }
+                if (
+                    this.queue &&
+                    capture &&
+                    capture.prior.size > 0 &&
+                    result &&
+                    typeof result === 'object'
+                ) {
+                    this.queue.enqueueUpsert(
+                        spec.map,
+                        result as Record<string, unknown>,
+                        spec.guardOf?.(args),
+                        spec.insertOnly
+                    );
                 }
                 return result;
             };
@@ -8647,8 +8678,10 @@ export class PostgresBackedDb extends InMemoryDb {
 
     /**
      * Compile every targeted spec against this database's tables and PREPARE
-     * each statement, so a spec naming a column or type the schema lacks fails
-     * the boot instead of every later write.
+     * each statement (a patch's insert branch too), so a spec naming a column
+     * or type the schema lacks fails the boot instead of every later write.
+     * Every STICKY_COLUMNS column is checked against its table first, whether
+     * or not a patch writes that table (assertStickyColumns).
      *
      * A step on a map whose table this database does not have yet (a
      * migration not applied, which init has already logged as
@@ -8658,6 +8691,7 @@ export class PostgresBackedDb extends InMemoryDb {
      * fails the boot.
      */
     private async compileTargetedSpecs(client: PgClient): Promise<void> {
+        assertStickyColumns(this.plans);
         const compiled = new Map<string, CompiledStep[]>();
         const described = new Set(TABLE_DESCRIPTORS.map((d) => d.mapName));
         for (const [method, spec] of Object.entries(MUTATOR_SPECS)) {
@@ -8694,16 +8728,21 @@ export class PostgresBackedDb extends InMemoryDb {
         try {
             for (const [method, steps] of compiled) {
                 for (const [i, c] of steps.entries()) {
-                    try {
-                        await prepareCheck(client, c.checkSql);
-                    } catch (err) {
-                        throw new Error(
-                            `MUTATOR_SPECS.${method} step ${i + 1} (${c.step.op} on ${
-                                c.plan.descriptor.tableName
-                            }) does not fit the schema: ${
-                                err instanceof Error ? err.message : String(err)
-                            }: ${c.checkSql}`
-                        );
+                    const checks: Array<[string, string]> = [['', c.checkSql]];
+                    // A patch's insert branch, when it has one.
+                    if (c.insertCheckSql) checks.push([', its insert', c.insertCheckSql]);
+                    for (const [which, sql] of checks) {
+                        try {
+                            await prepareCheck(client, sql);
+                        } catch (err) {
+                            throw new Error(
+                                `MUTATOR_SPECS.${method} step ${i + 1} (${c.step.op} on ${
+                                    c.plan.descriptor.tableName
+                                }${which}) does not fit the schema: ${
+                                    err instanceof Error ? err.message : String(err)
+                                }: ${sql}`
+                            );
+                        }
                     }
                 }
             }
