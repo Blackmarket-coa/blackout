@@ -4,6 +4,19 @@ Release: `1.98.0-blackout.1`
 Date: `2026-03-19`  
 Audience: platform operators / SRE / release engineering
 
+> **2026-11-02.** The image these commands roll out and roll back,
+> `ghcr.io/blackmarket-coa/blackout-server`, is the one
+> `.github/workflows/blackout-image-lifecycle.yml` was written to build from
+> `services/blackout-server/Dockerfile`. Both were removed with the Railway
+> template in `42f68f2`, and so was that image's `entrypoint.sh`, which read
+> `BLACKOUT_PROFILE` at container startup; the operator chose removal over
+> fixing the template. No workflow in the tree builds or publishes that image
+> now, and the `scripts-dev/` smoke commands below could run inside it only
+> because that Dockerfile copied `scripts-dev/`. The fork image built today is
+> `blackout-synapse:stable`, from `docker/Dockerfile`, by
+> `infra/single-server-baseline/deploy.sh`, and this page is not a rollout
+> procedure for it. The page is kept as the RC1 record.
+
 ## Scope
 
 RC1 packages fork release-train controls, profile-aware startup defaults, managed-hosting readiness checks, and image lifecycle automation needed for first controlled rollout.

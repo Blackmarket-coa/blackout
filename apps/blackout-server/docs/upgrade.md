@@ -275,8 +275,9 @@ When `BLACKOUT_PROFILE=managed`, startup now executes:
 > `services/blackout-server/entrypoint.sh`, the Railway template's
 > entrypoint, which was removed with the template in `42f68f2`; the operator chose
 > removal over fixing the template. No image in the tree selects a profile at
-> startup now, and nothing in this fork outside its tests reads
-> `BLACKOUT_PROFILE`. The `synapse.util.blackout_profiles` helpers remain.
+> startup now, and nothing in this fork outside its tests calls
+> `determine_profile`, the helper in `synapse.util.blackout_profiles` that
+> reads `BLACKOUT_PROFILE`. Those helpers remain.
 
 Startup now uses deterministic profile selection:
 
