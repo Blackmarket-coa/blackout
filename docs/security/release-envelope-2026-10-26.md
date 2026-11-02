@@ -7167,6 +7167,25 @@ they are: the pre-commit hook formats every staged file with that
 configuration, so they cannot be put back through it, and the brief does not
 allow skipping the hook.
 
+`origin/develop` moved to `0367abdd69` during the round (#996, the desktop
+build check, and #997, the Railway template's removal) and was merged in
+(`eeb91be2ce`, no conflict: the one file both sides change is
+`KNOWN_LIMITATIONS.md`, in different sections). The gates on `eeb91be2ce`
+(`fix/gates-r13`, against `origin/develop` at `0367abdd69`) all finished and
+passed: API lint and typecheck; the pr-gate suite 2,082 of 2,082 and the
+post-merge suite 2,202 of 2,202 (round 12's check's 2,075 and 2,195, plus
+the seven new tests of the switch-writes file, 21 to 27); launch smoke 14 of
+14; the core and design builds; the client's typecheck and lint; the client
+suite 3,643 passed and 3 skipped in 519 files (develop's two pull requests
+add no client test); the protocol and SDK typechecks; dead-drop parity 2 of
+2; the migration guard and the ephemeral migration run; the trust page; room
+encryption; the feature registry; auth secrets; prettier over the 90 files
+the branch changes (the 46 reformatted ones among them); and gitleaks over
+the branch and over the brief's range. A first run on `f1522a8386` was
+stopped after the API's lint and typecheck, once it showed that develop had
+moved. The commit that adds this paragraph changes this record alone;
+prettier and gitleaks were run again on it.
+
 ### Still open
 
 -   **A recipient-side refusal of an owner** (decision 19), which the
