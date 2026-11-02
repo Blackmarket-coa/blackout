@@ -65,9 +65,14 @@ def _ephemeral_rsa_key() -> Key:
     """
     from cryptography.hazmat.primitives.asymmetric import rsa
 
-    return Key.fromCryptographyKey(
-        rsa.generate_private_key(public_exponent=65537, key_size=2048)
-    )
+    # `Key(keyObject)` is how twisted.conch wraps a cryptography key: its
+    # constructor takes "a private or public cryptography.hazmat.primitives
+    # .asymmetric key" (twisted/conch/ssh/keys.py). From 2026-09-13 to
+    # 2026-11-02 this line called `Key.fromCryptographyKey()`, a method the
+    # class has never had, so a homeserver with a `type: manhole` listener and
+    # no configured key raised AttributeError in `start_listening` and never
+    # came up. Tested in tests/blackout_runtime/test_manhole.py.
+    return Key(rsa.generate_private_key(public_exponent=65537, key_size=2048))
 
 
 def manhole(settings: ManholeConfig, globals: Dict[str, Any]) -> ServerFactory:

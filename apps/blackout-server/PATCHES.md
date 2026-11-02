@@ -1018,15 +1018,38 @@ requires `zope-interface>=8`).
   zope-schema). 151 packages before and after; the image's `--extras all`
   export differs by those two lines. The fork uses `zope.interface`'s
   `implementer`, `provider` and `Interface` only.
-- No fork source file changed. 26.10.0's removals and behaviour changes were
-  read against the fork: `tcp.Connection` now ignores a non-None return from
-  `dataReceived` (`synapse/http/connectproxyclient.py` returns the wrapped
-  protocol's own return, which is None, as upstream's file does);
-  `LoggingFile.fileno()` raises `io.UnsupportedOperation` instead of
-  returning -1 (`synapse/app/_base.py` installs `LoggingFile` on stdout and
-  stderr; nothing in the fork calls `fileno()` on them); `SSHSession` accepts
-  one shell, exec or subsystem request per channel (the manhole's
-  `TerminalRealm` uses it; ordinary SSH clients send one); the removed
+- No fork source file changed for the bump itself. 26.10.0's removals and
+  behaviour changes were read against the fork: `tcp.Connection` now ignores
+  a non-None return from `dataReceived` (`synapse/http/connectproxyclient.py`
+  returns the wrapped protocol's own return, which is None, as upstream's
+  file does); `LoggingFile.fileno()` raises `io.UnsupportedOperation` instead
+  of returning -1 (`synapse/app/_base.py` installs `LoggingFile` on stdout
+  and stderr; nothing in the fork calls `fileno()` on them); `SSHSession`
+  accepts one shell, exec or subsystem request per channel (the manhole's
+  `TerminalRealm` uses it; probed on a running homeserver from this branch, a
+  second shell request on one channel is refused and logged under 26.10.0
+  and accepted under 26.4.0; ordinary SSH clients send one); the removed
   `PotentialZombieWarning`, `_makeGetterFactory`, `ThreadedResolver`,
   `dns.Message` class attributes and `IProcessProtocol` without
   `processExited` are not used.
+- `synapse/util/manhole.py` (`_ephemeral_rsa_key`), found by the second
+  review of this change and fixed in its own commit: `Key(keyObject)` in
+  place of `Key.fromCryptographyKey(...)`, a method
+  `twisted.conch.ssh.keys.Key` has never had (26.4.0 and 26.10.0 both offer
+  `fromFile`, `fromString` and the constructor, which takes a cryptography
+  key). Since the 2026-09-13 SAST triage replaced upstream's hardcoded
+  manhole host key with a generated one, a homeserver with a `type: manhole`
+  listener and no `ssh_priv_key_path` raised AttributeError in
+  `start_listening` and never came up (`synapse.app._base - 267 - CRITICAL -
+Error during startup`), under either Twisted; a configured key pair never
+  reached the helper. That file's divergence from upstream (the removed key,
+  the generated one, the startup warning;
+  `docs/security/semgrep-triage-2026-09-13.md`) had no entry here until now.
+  Keep both the generated key and this constructor through a reconciliation:
+  upstream still ships the hardcoded key. Tests:
+  `tests/blackout_runtime/test_manhole.py` (the helper's key, the factory's
+  matching pair, a configured pair passed through unchanged, and a real SSH
+  session over loopback TCP: password authentication, pty, shell, an
+  expression evaluated in the manhole namespace), passing under 26.4.0 and
+  26.10.0 and erroring with the AttributeError against the file before the
+  fix.
