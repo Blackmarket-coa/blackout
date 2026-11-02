@@ -1199,3 +1199,88 @@ content); the record's section names both.
   - `4d60ec0` says the record now says what a Railway service at
     `apps/blackout-server` would read. That account left out this
     directory's `Dockerfile` (above).
+
+## 2026-11-02 the Nixpacks path and the hosting helpers are removed
+
+The operator decided on 2026-11-02 ("remove both") to remove the two things
+the entry above left for them: the fork's separate Nixpacks path for
+Railway, and the profile and managed-hosting helpers that the removed
+`entrypoint.sh` called at startup. The removed files are Blackout's own and
+have no upstream counterpart. `README.rst` and `.dockerignore` are upstream
+files with Blackout lines, and only Blackout lines leave them. Record:
+`docs/security/dependency-advisories-server-desktop-2026-10-30.md`
+(repository root), section "2026-11-02: the Nixpacks path and the hosting
+helpers are removed".
+
+- Removed, the Nixpacks path: `nixpacks.toml`, `scripts-dev/railway/start.sh`
+  (`scripts-dev/railway/` goes with it), `docs/railway_deploy.md`,
+  `README.rst`'s "Railway deployment" link to that how-to, and the six
+  `.dockerignore` lines the entry above restored (`!.nixpacks`,
+  `!nixpacks.toml`, `!railway.json`, `!scripts-dev`, `!.nixpacks/**`,
+  `!scripts-dev/**`). `.dockerignore` and `README.rst` are now as `42f68f2`
+  left them. `!services` and `!services/**` stay:
+  `infra/single-server-baseline/deploy.sh` builds
+  `services/blackout-api/Dockerfile` with this directory as the context. That
+  build and the other one with this directory as the context, `docker/Dockerfile`
+  (the same script, and upstream's `contrib/docker/docker-compose.yml`), copy
+  none of `scripts-dev`, `.nixpacks`, `nixpacks.toml` or `railway.json`.
+  Builds with the repository root as the context are not governed by this
+  file.
+- Removed, the helpers: `synapse/util/blackout_profiles.py`
+  (`determine_profile`, `get_missing_managed_env_vars`,
+  `apply_profile_overrides` and its `python -m` command),
+  `synapse/util/managed_hosting.py` (`run_readiness_checks`,
+  `run_verification_hooks`, `check_health_endpoint` and the `python -m`
+  commands `readiness`, `run-hooks` and `health`) and
+  `synapse/util/hosting_smoke.py` (`run_hosting_smoke_checks`), and the three
+  scripts that call them: `scripts-dev/blackout/managed_hosting_smoke.sh`,
+  `scripts-dev/blackout/ci_hosting_smoke.py` and
+  `scripts-dev/blackout/managed_readiness_integration_smoke.py`.
+  `scripts-dev/blackout/` keeps its other five scripts. Before the removal
+  nothing outside these files and the tests below imported or ran a helper:
+  not `synapse/` outside them, `blackout_runtime/`, `docker/`, `services/`,
+  the repository root's `deploy/`, `infra/`, TypeScript packages or CI
+  (`git grep` by path, module name, every exported name, the `python -m`
+  form, the environment variables they read and the `[managed-hosting]` log
+  prefix). `managed_hosting.py`'s `nosemgrep` for
+  `dynamic-urllib-use-detected` (the 2026-10-11 entry) goes with the file.
+- Tests removed, 13, each in a module whose only subject is a removed helper:
+  - `tests/util/test_blackout_profiles.py`, 7:
+    `BlackoutProfileSelectionTestCase`'s
+    `test_explicit_profile_is_deterministic`,
+    `test_auto_falls_back_to_standalone_when_managed_deps_missing` and
+    `test_auto_selects_managed_when_dependencies_present`, and
+    `BlackoutProfileConfigMutationTestCase`'s
+    `test_profile_overrides_keep_client_and_federation_resources`,
+    `test_standalone_overrides_for_sqlite_and_health_listener`,
+    `test_constrained_adds_conservative_defaults` and `test_cli_smoke`.
+  - `tests/util/test_managed_hosting.py`, 5, all
+    `ManagedHostingReadinessTestCase`:
+    `test_readiness_passes_when_dependencies_are_reachable`,
+    `test_readiness_returns_fail_fast_diagnostics`,
+    `test_optional_hook_failure_warns_but_does_not_error`,
+    `test_required_hook_failure_errors` and
+    `test_health_endpoint_failure_returns_message`.
+  - `tests/util/test_hosting_smoke.py`, 1:
+    `HostingSmokeTestCase.test_hosting_smoke_checks_pass`.
+- `.github/workflows/release-train-gate.yml` (job
+  `verify-release-train-artifacts`): the steps "Run hosting profile smoke
+  checks" (`ci_hosting_smoke.py`) and "Run managed readiness integration
+  smoke" (`managed_readiness_integration_smoke.py`, with its `DATABASE_*`,
+  `REDIS_*` and `BLACKOUT_READINESS_*` variables) are removed, and so is the
+  job's `services` block (`postgres:16`, `redis:7`), which only the second
+  step used. The steps left still check something: the release-train gate,
+  the divergence markers, the tracker evidence and the protocol smoke
+  (`test_versions_smoke_compatibility`, on SQLite). GitHub registers
+  workflows only from the repository root's `.github/workflows/`, and the
+  repository's list (34 workflows, read on 2026-11-02) has none under
+  `apps/`, so this job has never run in this repository: the edit keeps the
+  file from naming removed scripts and changes no CI run. That none of its
+  steps runs in CI is older than this change.
+- Not changed, because none of them reads a removed file:
+  `scripts-dev/check_release_train_gate.py` and
+  `synapse/util/release_train.py` (they read `release/train/`),
+  `scripts-dev/check_divergence_markers.py`,
+  `scripts-dev/blackout/validate_tracker_evidence.sh` and the root workflow
+  that runs it, `mypy.ini` and `pyproject.toml` (they name `scripts-dev/`
+  and `tests/` as directories), and the root feature registry and its guard.
