@@ -170,11 +170,13 @@ export class WriteBehindQueue {
         dbWriteBehindDepth.set(this.pending);
         // After the tail, as every write, and after a scoped call on its row
         // (or, for a resync, on any row of its map) that is still running.
+        const keyOf = this.plans.get(op.mapName)?.descriptor.keyOf;
         const scope: CallScope =
             op.kind === 'upsert'
                 ? {
                       mapName: op.mapName,
-                      key: this.plans.get(op.mapName)?.descriptor.keyOf(op.record),
+                      // A plan without a key (a test's stub) keys the write by its map alone.
+                      key: typeof keyOf === 'function' ? keyOf(op.record) : undefined,
                   }
                 : { mapName: op.mapName };
         const run = Promise.allSettled([this.tail, this.before(scope)]).then(() => this.run(op));
