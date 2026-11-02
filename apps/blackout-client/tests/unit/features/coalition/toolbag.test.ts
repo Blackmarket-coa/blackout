@@ -5,7 +5,7 @@ import {
     TOOL_BAG_ENTRIES,
     TOOL_BAG_IDS,
     isToolBagId,
-} from '../../../../src/app/features/coalition/toolbag/toolbag';
+} from '../../../../src/app/features/coalition/toolbag/toolBagEntries';
 
 const ids = (entries: ReturnType<typeof resolveToolBag>) => entries.map((entry) => entry.id);
 

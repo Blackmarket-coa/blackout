@@ -1,5 +1,13 @@
 # Week 3 packaging/image lifecycle completion report — 2026-03-19
 
+> **2026-11-02.** The workflow item 1 lists,
+> `.github/workflows/blackout-image-lifecycle.yml`, and the Dockerfile it was
+> written to build, `services/blackout-server/Dockerfile`, were removed with
+> the Railway template in `42f68f2`; the operator chose removal over fixing
+> the template. The workflow never ran in this repository: GitHub does not
+> read `apps/blackout-server/.github/workflows/`, and the file does not parse
+> as YAML. The report is kept as written, as the record of that week.
+
 ## Completed items
 
 1. Added fork-owned image lifecycle workflow:

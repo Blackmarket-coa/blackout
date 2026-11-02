@@ -26,6 +26,13 @@ this record's statement that no Blackout template enables `jwt_config` was
 false. It also found five smaller gaps. The answers to both reviews are in
 [What the review changed](#what-the-review-changed).
 
+On 2026-11-02 the operator decided to remove the Railway template rather than
+fix it, and `42f68f2` removed it, with its image, its entrypoint and the test
+that rendered it. The passages below that describe the template are kept as
+they were, each with a dated note in it or beside it;
+[the 2026-11-02 section](#2026-11-02-the-railway-template-is-removed) says what
+went and what stays.
+
 | Package (lock)        | Advisory                              | Severity | Fixed in   | Outcome                                         |
 | --------------------- | ------------------------------------- | -------- | ---------- | ----------------------------------------------- |
 | authlib 1.6.12 (fork) | GHSA-6v38-4h7w-rj9h (CVE-2026-96760)  | Critical | 1.9.0      | bumped to 1.9.1                                 |
@@ -80,7 +87,9 @@ false. It also found five smaller gaps. The answers to both reviews are in
     they are. `JWTConfig` now refuses an `enabled` that is not a YAML
     boolean, and the template writes `enabled: false`. Every other
     `${VAR:-default}` in the template, all deploy defects, is
-    [found outside scope](#found-outside-scope-not-fixed-here).
+    [found outside scope](#found-outside-scope-not-fixed-here). (2026-11-02:
+    the template was removed in `42f68f2`; the `enabled` refusal stays.
+    [Below](#2026-11-02-the-railway-template-is-removed).)
 -   **JWT login and the logout token change too.** The first two versions of
     this record said they did not. Under 1.9.1 both refuse a boolean `exp`,
     `nbf` or `iat`, and an HMAC secret that is empty or holds PEM or SSH key
@@ -175,15 +184,20 @@ false. It also found five smaller gaps. The answers to both reviews are in
     nothing was built for Windows, where zip is compiled, or macOS. No CI
     job builds the desktop app before a release tag, so the release job's
     own build is still the first on ubuntu-22.04 and the other platforms;
-    see [Before merge or release](#before-merge-or-release).
+    see [Before merge or release](#before-merge-or-release). On 2026-11-02
+    a build-only check was set up to build it on pull requests (its first
+    run is pending), and two `tauri.conf.json` faults were fixed, one of
+    which, the bundle category, stopped every `tauri build` that bundles
+    (same section).
 -   **The two id_token gaps are now in `KNOWN_LIMITATIONS.md`** ("OIDC sign-in
     checks") and in `THREAT_MODEL.md`'s OIDC tokens row, which said only "OIDC
     sigs". Since the fourth review the same `KNOWN_LIMITATIONS.md` section
     also says what the bump refuses: an id_token whose `sub` or `jti` is not
     a string, or whose `aud` has a non-string member.
 -   **Found outside scope, not fixed here:** the desktop updater's public key
-    in `tauri.conf.json` is a literal `${TAURI_UPDATER_PUBKEY}` placeholder; no
-    PR job compiles the desktop crate; and two older ignores rested on reasons
+    in `tauri.conf.json` is a literal `${TAURI_UPDATER_PUBKEY}` placeholder;
+    until 2026-11-02 no PR job was set up to compile the desktop crate (item
+    2); and two older ignores rested on reasons
     the advisory data no longer supports. The `-v47` branch (PR #994) fixes
     the react-router one (react-router 7.18.2, `71548f0350`) and corrects
     `.trivyignore`'s header (`26e6ce5`). The plan is to merge this branch
@@ -195,7 +209,11 @@ false. It also found five smaller gaps. The answers to both reviews are in
     GHSA-rated Moderate and Low advisories, and every other
     `${VAR:-default}` in the Railway template: the listener port, the
     database name, user and port, the Redis port and TURN render as text,
-    so that service cannot start as rendered. See
+    so that service cannot start as rendered (2026-11-02: that service was
+    removed in `42f68f2` instead of fixed). On 2026-11-02 it also has
+    the desktop release workflow, which is configured to publish a public
+    release named after whatever ref runs it once its build passes
+    (item 6). See
     [Found outside scope](#found-outside-scope-not-fixed-here).
 
 Commits, on top of `ff7d08b`: `21c9591` (authlib, with the `PATCHES.md`
@@ -222,7 +240,29 @@ type, with the authlib `PATCHES.md` entry), then `05dfc10` (the record).
 After the sixth review: `48ab32d` (`jwt_config.enabled` must be a boolean,
 and the Railway template's JWT login is off, with `PATCHES.md`), `ae70358`
 (the operator notes in `docs/upgrade.md`), then this version of the record,
-with one sentence of `PATCHES.md` corrected (below).
+with one sentence of `PATCHES.md` corrected (below). After the operator's
+decision of 2026-11-02: `42f68f2` (the template's removal, with its
+`PATCHES.md` entry), `b39883a` (dated notes in the fork's documents),
+`91ea92a` (this record's notes, the section name that `PATCHES.md`'s entry
+cites, and the secrets-manager inventory's note, with `lint-staged`'s Prettier
+re-padding of that file), `bacd26c` (notes in four more of the
+fork's documents, and corrections to the `PATCHES.md` entry), `c83dc9b`
+(corrections to this record's notes, and the encryption audit's note), `d1936c9` (the Nixpacks files, which
+are not the template, restored), `d1f1589` (two notes corrected, and dated
+notes in the RC1 release-train changelog and checklist), `4d60ec0` (this
+record's 2026-11-02 section brought up to date), then a commit that corrects
+that section's and `PATCHES.md`'s list of commit-message errors and their
+account of a Railway service at `apps/blackout-server`
+([the 2026-11-02 section](#2026-11-02-the-railway-template-is-removed)).
+Also on 2026-11-02, for the desktop build check (#996):
+`6bea1c9` (the two `tauri.conf.json` fixes), `659f6ed` (the desktop build
+check, with `KNOWN_LIMITATIONS.md`), then `ddd4a41` (the record). After a
+review of those three: `b5f4398` (the check's comments and
+`KNOWN_LIMITATIONS.md` corrected), then `a29c3bf` (the record). After a
+second review: `1296b78` (the check's comments), then `f0b6469` (the
+record). The two versions since `ddd4a41` also correct what this branch's
+commit messages got wrong
+([Before merge or release](#before-merge-or-release), last bullet).
 
 ## What the review changed
 
@@ -299,7 +339,9 @@ A sixth review found six more. Each is answered here:
 `48ab32d`'s commit message says that fixing either of the Railway service's
 two faults would have opened JWT login. Each alone stops startup, so it would
 take both; the `PATCHES.md` entry it added said the same and is corrected in
-this version.
+this version. (2026-11-02: the template that the table's first row and this
+paragraph describe was removed in `42f68f2`, with its image, instead of
+fixed. The `enabled` check stays.)
 
 A seventh review found no medium or high problem and three low ones:
 
@@ -316,7 +358,8 @@ A seventh review found no medium or high problem and three low ones:
     `SYNAPSE_JWT_LOGIN_SECRET`, as do `.env.example`, `docs/upgrade.md` and
     `PATCHES.md`. A test renders the template with only `JWT_SECRET` set and
     requires an empty secret; with the previous template it gets the API's
-    value.
+    value. (2026-11-02: the template, its `.env.example` and that test were
+    removed in `42f68f2`.)
 -   **`48ab32d`'s commit message**, already corrected in the paragraph above.
 
 ---
@@ -362,7 +405,8 @@ A seventh review found no medium or high problem and three low ones:
 -   **envsubst (sixth review):** gettext-base 0.21-14ubuntu2 from Ubuntu's
     archive, fetched with `apt-get download` into a scratch directory and
     not installed; its sha256 matches apt's index. The Railway image installs
-    Debian bookworm's gettext-base 0.21-12, the same upstream release. Each
+    Debian bookworm's gettext-base 0.21-12, the same upstream release
+    (2026-11-02: its Dockerfile was removed in `42f68f2`). Each
     render was parsed with `HomeServerConfig`, on this branch's code and with
     `05dfc10`'s `config/jwt.py`.
 -   **Tests:** trial under Python 3.11.17 (the image builds on 3.11), in two
@@ -432,6 +476,7 @@ and that stack's `homeserver.yaml.template` configures `oidc_providers`.
 `services/blackout-server/Dockerfile` exports without extras, so it has no
 authlib, and Synapse stops at startup on that service's own `jwt_config`
 (`DependencyException ['authlib']`, with `enabled: false` too; sixth review).
+(2026-11-02: that Dockerfile was removed with the template in `42f68f2`.)
 `deploy/docker/blackout-backend` runs the upstream image, not the fork.
 
 **That upstream image still ships authlib 1.6.12** (added after the fourth
@@ -488,7 +533,10 @@ Per advisory:
     image has no authlib, so `check_requirements("jwt")` stops startup.
     Since `48ab32d` the template writes `enabled: false`, and `JWTConfig`
     refuses an `enabled` that is not a boolean, so fixing both faults no
-    longer opens JWT login. OIDC id_tokens are checked only against the provider's
+    longer opens JWT login. (2026-11-02: the template and its image were
+    removed in `42f68f2`, so no Blackout template in the tree has a
+    `jwt_config` now; the `enabled` refusal stays for any other.)
+    OIDC id_tokens are checked only against the provider's
     JWKS, never against `client_secret`. With 1.9.1 such a configuration fails
     closed. authlib raises `ValueError` for the empty key, which `jwt.py` does
     not catch (it catches `JoseError`), so each JWT login ends in an error
@@ -684,7 +732,8 @@ them). The release each change arrived in was read from the 1.7.2, 1.8.0 and
         public key and so contains `-----BEGIN `, and disabled JWT login are
         not checked. (Until the sixth review this item ended "No Blackout
         template enables `jwt_config`"; the Railway one did. See the
-        `enabled` item below.)
+        `enabled` item below. That template was removed on 2026-11-02 in
+        `42f68f2`.)
     -   **What `5bad47c` missed (third review).** It imported the secret with
         `OctKey.import_key`, and for a JWK that call puts off the empty-key
         and PEM checks until each verify. The review parsed
@@ -815,7 +864,10 @@ them). The release each change arrived in was read from the 1.7.2, 1.8.0 and
         `false` and none, and render the template as `envsubst` does: it has
         `enabled: false` whatever the environment. On `05dfc10`'s
         `config/jwt.py` the refusal test fails, and with `05dfc10`'s
-        template the template test does. This refuses configurations that
+        template the template test does. (2026-11-02: the template and its
+        render test, `test_railway_template_leaves_jwt_login_off`, were
+        removed in `42f68f2`; the refusal and its test stay.) This refuses
+        configurations that
         `develop` starts: there a quoted `"true"`, `"false"` or `1` ran JWT
         login, and `null`, `""` or `0` left it off.
 -   **Loopback `http` metadata (1.8.0).** `is_secure_transport`, which
@@ -1371,7 +1423,8 @@ The effective minimum Rust becomes 1.90, from 1.88 before. `Cargo.toml` says
 
 ### Before merge or release
 
-No CI job builds this lock before a release does.
+Until 2026-11-02 no CI job was set up to build this lock before a release
+does (the dated bullets below; the build check's first run is pending).
 `blackout-desktop-tauri.yml` runs on pull requests to `main` only, and only
 its toolchain-free notification harness; its `build` job has
 `if: github.event_name != 'pull_request'` and runs on pushes to `main`, on
@@ -1390,8 +1443,9 @@ job. They have been linked once outside CI, after the third review, on Ubuntu
     when both are installed. `blackout-desktop/package.json` has only
     `@tauri-apps/cli`, and `pnpm-lock.yaml` has no `@tauri-apps/api` or
     plugin package, so the check has nothing to compare and does not stop
-    the build. The 2.10.1 CLI and the 2.12.5 crate have still never been
-    built together.
+    the build. The 2.10.1 CLI and the 2.12.5 crate had never been built
+    together until 2026-11-02, when they were, on Ubuntu 24.04 only (the
+    2026-11-02 bullets below).
 -   **What to run.** An unsigned build on ubuntu-22.04 with the workflow's apt
     packages (`libwebkit2gtk-4.1-dev libxdo-dev libssl-dev
 libayatana-appindicator3-dev librsvg2-dev`):
@@ -1402,8 +1456,9 @@ libayatana-appindicator3-dev librsvg2-dev`):
 -   **What not to run.** Do not start `workflow_dispatch` on
     `blackout-desktop-tauri.yml` from this branch. Its `tauri-action` step has
     `tagName: ${{ github.ref_name }}`, `releaseDraft: false` and
-    `prerelease: false`, so it would publish a release named after the
-    branch.
+    `prerelease: false`, so once its build passes it would publish a
+    release named after the branch (item 6 of
+    [Found outside scope](#found-outside-scope-not-fixed-here)).
 -   **Done here, after the third review: the Linux half of the Rust build**
     (see [Verification](#verification)), on Ubuntu 24.04 rather than 22.04,
     with a placeholder frontend and without `tauri build`'s bundling. The
@@ -1411,6 +1466,212 @@ libayatana-appindicator3-dev librsvg2-dev`):
     `@tauri-apps/cli` was not moved to 2.12.x: the mismatch check does
     not require it, and `pnpm-lock.yaml` belongs to the `-v47` branch's
     change. Moving it with the build above is reasonable.
+-   **2026-11-02: the three-platform build is set up to run on pull
+    requests (`659f6ed`, its comments corrected in `b5f4398` and
+    `1296b78`).** `.github/workflows/blackout-desktop-build-check.yml`
+    builds the release job's bundles on its three runners with its setup,
+    unsigned (`--no-sign`) and with `createUpdaterArtifacts` off in the
+    CLI's bundler settings (tauri-cli 2.10.1, `interface/rust.rs` 837), and
+    fails a leg that produces an updater artifact or changes `Cargo.lock`.
+    The override does not change the compiled app on that point: the app
+    embeds `createUpdaterArtifacts` at its default whatever the config says
+    (tauri-utils 2.10.2, `config.rs` 4548), as the release's does. It runs
+    on pull requests to `develop` that touch the desktop app, the lockfile,
+    the root manifests, the client's build configuration or its desktop
+    bridge (`src/platform`), and on `workflow_dispatch`, which, once the
+    workflow is on `develop`, builds the head of any branch or tag that has
+    it. It has `contents: read`, references no secret and publishes
+    nothing: no release, no tag, no uploaded bundle (its job summary lists
+    the bundles' names and sizes). Where its triggers, permissions,
+    concurrency, steps or step settings differ from the release job's, the
+    file says why. The release reaches the same CLI through
+    `npm run tauri build -- --bundles <set>`, because tauri-action (v0.6.2,
+    `src/runner.ts` 23-67) looks for a `pnpm-lock.yaml` only in
+    `blackout-desktop`, while the check runs `pnpm tauri build`. The two
+    set different `npm_config_*` variables; the one tauri-cli reads,
+    `npm_config_user_agent`, picks the package manager for its
+    version-mismatch check. On Linux both passed that check, and a probe
+    hook with the same `--filter` found the client from `blackout-desktop`
+    (measured in review, with a stand-in cargo that stops before the
+    compile); the real client build has run only through pnpm. On Windows
+    the check starts the CLI from Git Bash, where tauri-action starts it
+    from node, and pnpm 9.15.4 runs the script through `cmd` with each
+    argument `JSON.stringify`'d; that the `--config` JSON arrives intact
+    there is unmeasured until the first Windows leg, and a mangled value
+    fails the CLI's parse rather than passing. The check also pins
+    setup-node v6.2.0 where the release has `@v4` (both install Node 22,
+    neither caches), pins pnpm/action-setup to the commit `v5` names on
+    2026-11-02 where the release has `@v5`, passes `--ci`, which the
+    release gets from `CI=true`, cancels a superseded run on the same ref,
+    caps a leg at 60 minutes where the release has GitHub's default of
+    360, and does not persist the checkout's credentials.
+    First run: pending.
+-   **2026-11-02: two `tauri.conf.json` faults, one of which, the bundle
+    category, stopped every `tauri build` that bundles, so it would also
+    have stopped the release job, which has never run (`6bea1c9`).**
+    `bundle.category` "Network" is not a Tauri category, and the bundler
+    stopped after the compile with "invalid category" (measured on Linux;
+    tauri-cli parses the category with no platform gate, so macOS and
+    Windows would stop the same way, read, not run). It is now "Social
+    Networking", which Tauri maps to the freedesktop `Network;` category
+    that "Network" meant, and on macOS to
+    `public.app-category.social-networking`.
+
+    The CLI runs the frontend hooks in `blackout-desktop`, so their
+    `cd ../..` left the checkout, and what the hook then built depended on
+    what lies above the checkout. With a pnpm workspace above it, as for
+    this machine's worktrees, the filter matched that workspace's client,
+    another checkout's, not this one's. With none, pnpm finds no workspace
+    file and scans the directories below: on a GitHub runner, where
+    `/home/runner/work/blackout` lies above the checkout, that probably
+    matched this checkout's own client and built it, so only the category
+    stopped the release legs. Both were measured in review only as
+    `pnpm --filter @blackout/client exec pwd` (pnpm 9.15.4), the runner case
+    in a tree rebuilt from the tracked `package.json` files and
+    `pnpm-workspace.yaml`, not on a runner. The earlier measurement, in
+    which pnpm matched no project, exited 0, and `tauri build` stopped
+    before the compile at "Unable to find your web assets", was taken in an
+    export (`hooktest/repo`) whose `apps/blackout-client` was an empty
+    directory, a layout no checkout has. Both hooks now run
+    `pnpm --filter @blackout/client` from `blackout-desktop`, a workspace
+    member, so they build this checkout's client wherever it lies.
+
+    The fixes also change what the release workflow does, although its file is
+    unchanged. Before `6bea1c9` every leg of a dispatch, of a push to a future
+    `main` or of a `release-*` or `v*` tag stopped, at the latest, at the
+    bundle category after the compile, well before tauri-action creates the
+    release. After it the
+    Linux leg, which signs nothing but the updater, gets through the build and
+    bundling (given xdg-utils on the runner, inferred below) and stops only at
+    the CLI's updater signing, which cannot decode the placeholder pubkey (or,
+    with the signing-key secret unset, the key before it). The Windows leg stops
+    earlier, at signtool with the literal thumbprint; the macOS leg's Apple
+    signing was not analysed. So on the Linux leg the placeholder pubkey is now
+    the only barrier between a dispatch from `develop` and a public release that
+    becomes latest and serves `latest.json` (item 6 of
+    [Found outside scope](#found-outside-scope-not-fixed-here)). Item 6's
+    proposal, tags only and `releaseDraft: true`, needs to land before or with
+    any pubkey fix. Read from tauri-cli 2.10.1 (`bundle.rs` 226-292) and
+    tauri-action v0.6.2 (`src/index.ts`), not run.
+
+    Run here on Ubuntu 24.04 (not 22.04), with rustc 1.97.0 (the runner's
+    stable is 1.99.1 on 2026-11-02) and the release job's apt packages,
+    after `pnpm install --frozen-lockfile` and the icon step, the Linux
+    leg's command (`--bundles 'deb,rpm,appimage'`, own target directory,
+    3 jobs) ran the fixed hook, which built the real client; the compile
+    took 8 m 30 s. The AppImage step then stopped at "xdg-mime binary not
+    found": because the app registers deep-link schemes, the AppImage
+    bundler copies the host's `/usr/bin/xdg-mime` into the image, and this
+    host had no xdg-utils. The ubuntu-22.04 runner image installs Google
+    Chrome's deb with apt, and that deb depends on xdg-utils (read from the
+    image's install script and Chrome's package index, not seen on a
+    runner), so the workflow keeps the release job's package list. With
+    xdg-utils installed here the same command gave rc 0 in 231 s:
+    `Blackout_0.1.0_amd64.deb` (18,595,514 bytes),
+    `Blackout-0.1.0-1.x86_64.rpm` (18,595,795) and
+    `Blackout_0.1.0_amd64.AppImage` (94,054,904). The deb's desktop entry
+    has `Categories=Network;`. No `.sig`, updater archive or `latest.json`
+    was made, no signing key was asked for, `Cargo.lock` and
+    `pnpm-lock.yaml` were unchanged, and the workflow's own check step,
+    run on that output, passed. The one Rust build warning is
+    "STATIC_VCRUNTIME is deprecated", from the 2.10.1 CLI against
+    tauri-build 2.7.4. The log's other warnings are the CLI's notice that
+    `--no-sign` skips signing and the client build's Vite and Rolldown
+    notices (the deprecated `inlineDynamicImports` option,
+    `PREFER_BUILTIN_FEATURE` and `INEFFECTIVE_DYNAMIC_IMPORT`).
+
+    Run again after the review, from an empty target directory, at
+    `ddd4a41` (the build reads nothing `b5f4398` changed), with the same
+    host, compiler and xdg-utils: the same command gave rc 0 in 592 s, the
+    compile 7 m 33 s, and made `Blackout_0.1.0_amd64.deb` (18,595,430
+    bytes), `Blackout-0.1.0-1.x86_64.rpm` (18,595,700) and
+    `Blackout_0.1.0_amd64.AppImage` (94,054,904). The deb's desktop entry
+    has `Categories=Network;` and the `matrix` and `blackout` scheme
+    handlers. The workflow's check step, taken from the workflow file and
+    run on that output, passed: every expected bundle, no `.sig`, updater
+    archive or `latest.json`, and `Cargo.lock` unchanged (`pnpm-lock.yaml`
+    too, by checksum).
+
+    Run a third time after the second review, from an empty target
+    directory, at `a29c3bf` (the build reads nothing `1296b78` or this
+    version of the record changed), with the same host, compiler and
+    xdg-utils. The load was under 3.5 when it started and rose above it
+    while the build ran, from other work on the host. The same command
+    gave rc 0 in 548 s, the compile 6 m 45 s, with the hook building the
+    real client from this checkout, and made `Blackout_0.1.0_amd64.deb`
+    (18,595,426 bytes), `Blackout-0.1.0-1.x86_64.rpm` (18,595,700) and
+    `Blackout_0.1.0_amd64.AppImage` (94,054,904). The deb's desktop entry
+    has `Categories=Network;` and the two scheme handlers, and the binary
+    links WebKitGTK 4.1, GTK 3, libsoup 3 and libdbus. The check step,
+    taken from `1296b78`'s workflow file and run on that output, passed,
+    with the same three names and sizes in its summary; no updater
+    artifact was made, and `Cargo.lock` and `pnpm-lock.yaml` were unchanged
+    by checksum. The build also wrote `blackout-desktop/src-tauri/gen/schemas`,
+    which is neither tracked nor gitignored; it was removed here, and the
+    check step does not look at it. Not done here: the macOS and Windows
+    legs, ubuntu-22.04 itself, and a run of the app.
+
+-   **2026-11-02: what this branch's commit messages got wrong.** History
+    is not rewritten here, so the corrections are recorded instead.
+    -   `ddd4a41` says restricting the release job to `release-*` and `v*`
+        tags with `releaseDraft: true` "is written down as the operator's
+        decision". It is a proposal for the operator to decide (item 6 of
+        [Found outside scope](#found-outside-scope-not-fixed-here)), and the
+        operator has not decided it. It also says the release job "would
+        publish" a public, non-draft release that becomes latest and serves
+        `latest.json`, with no condition: it is configured to once its build
+        passes, and today the build fails first. And it says the record's
+        notes say the check "runs it on pull requests": they say it is set
+        up to, and its first run is pending.
+    -   `6bea1c9` says "No desktop build could finish", and `ddd4a41` that
+        the two faults "stopped every build". The category stopped every
+        `tauri build` that bundles; `cargo build --release --locked`
+        finished (third review). `a29c3bf`, and that version of this bullet,
+        add "and, on a fresh checkout, any `tauri build`", and `a29c3bf`
+        says that before `6bea1c9` the release legs stopped "at the frontend
+        hook or the bundle category". On a runner the old hook probably
+        built this checkout's client and did not stop the build (the
+        bullet above). `6bea1c9`'s account of the hook, that pnpm "matched
+        no project and exited 0, and on a fresh checkout `tauri build` then
+        stopped at 'Unable to find your web assets'", was measured only in
+        the scout's export, a layout no checkout has, and its "The build
+        check in the next commit needs both" holds for the category; the
+        hook fix makes the hook independent of what lies above the checkout.
+        `6bea1c9` says the bundler stopped with "invalid category" "on
+        Linux, macOS and Windows alike": only Linux was run, and macOS and
+        Windows were read from the code. It also presents the release-job
+        fix only as a benefit, though it takes the release job past its
+        build to updater signing (the bullet above), and says xdg-utils is
+        on the runner, which was inferred from the runner image's build
+        scripts, not seen.
+    -   `659f6ed` says a dispatch of the release workflow "would publish" a
+        release: it is configured to once its build passes, and today the
+        build fails first. It calls the check "the only CI build of the
+        client on macOS and Windows": it is the only pull-request build of
+        the client on macOS (`release.yml`, `blackout-mobile.yml` and
+        `mobile-native-ci.yml` build it there for iOS, on tags, dispatch and
+        pushes to `main`) and the only CI build of it on Windows. It says
+        `workflow_dispatch` "builds any other commit": once the workflow is
+        on `develop`, it builds the head of a branch or tag that has it. It
+        says the `--config` merge turns updater artifacts off "for the app
+        and the bundler alike": it changes the CLI's bundler settings, and
+        the compiled app embeds `createUpdaterArtifacts` at its default
+        either way (tauri-utils 2.10.2, `config.rs` 4548).
+    -   `b5f4398` says the release build fails first at "updater signing on
+        the placeholder pubkey on every leg, signtool on Windows". The
+        Windows leg stops earlier, at signtool during bundling, before
+        updater signing (tauri-bundler 2.8.1 runs `try_sign` while bundling,
+        and tauri-cli 2.10.1 runs `sign_updaters` after `bundle_project`
+        returns, `bundle.rs` 219-221), and the macOS leg's
+        Apple signing was not analysed. `b5f4398` and `a29c3bf` give the
+        release's command as `npm run tauri --`; tauri-action builds
+        `npm run tauri build -- <args>`. `b5f4398` says the npm and pnpm
+        paths "differ in `npm_config_user_agent` and were measured to behave
+        the same on Linux for the version-mismatch check and the hook": they
+        set different `npm_config_*` variables, of which
+        `npm_config_user_agent` is the one the CLI reads, and the hook was
+        checked on the npm path with a probe using the same `--filter`, not
+        with the client build.
 
 ## The gate
 
@@ -1608,7 +1869,9 @@ The record's own commit changes no file Trivy reads.
     one annotation, and the targeted run covers each. Nor after the sixth:
     that round changed how `config/jwt.py` reads `enabled`, its test module,
     a template and an example file that no test but the new one reads, and
-    documents.
+    documents. (2026-11-02: that template and its `.env.example` were
+    removed in `42f68f2`, and so was the new test that read the template,
+    `test_railway_template_leaves_jwt_login_off`.)
 
 -   **The new tests against the code they pin:**
 
@@ -1669,7 +1932,9 @@ The record's own commit changes no file Trivy reads.
         forms, as before. The test's `_envsubst` gave output byte-identical
         to gettext-base 0.21's `envsubst` for the old and the new template,
         each with no variable set and with `.env.example`'s values plus
-        `JWT_ENABLED=true`.
+        `JWT_ENABLED=true`. (2026-11-02: that test and `_envsubst` were
+        removed with the template in `42f68f2`; the module runs 14 tests,
+        [below](#2026-11-02-the-railway-template-is-removed).)
 
 -   **`blackout_runtime_tests`:** 85 passed before and after, and again after
     each of the six reviews, run with `pytest -q` as the fork's
@@ -1733,14 +1998,19 @@ The record's own commit changes no file Trivy reads.
     nothing else substitutes it, the shipped key is the literal string, which
     is not base64 minisign. Every update would then fail verification: closed,
     not open. Not verified against a release build.
-2.  **No PR job compiles the desktop crate.** `blackout-desktop-tauri.yml`
+2.  **Until 2026-11-02, no PR job was set up to compile the desktop
+    crate.** `blackout-desktop-tauri.yml`
     runs a toolchain-free harness on pull requests to `main`. It runs the
     bundle build only on pushes to `main` and on tags, and the default branch
     is `develop`. The stub-library `cargo check` above found no compile error
     from this update, but in CI one would first show on a release build.
     For this change, see [Before merge or release](#before-merge-or-release).
     Making the workflow build on pull requests to `develop` is the lasting
-    fix, and is left to whoever owns that workflow. Until the fourth review
+    fix, and is left to whoever owns that workflow. Since 2026-11-02 a
+    separate build-only workflow, `blackout-desktop-build-check.yml`, is set
+    up to build the desktop app on pull requests to `develop` that touch it
+    ([Before merge or release](#before-merge-or-release)); the release
+    workflow's own settings are item 6. Until the fourth review
     no PR job scanned the desktop lock either: `security.yml`'s paths filter
     did not list `blackout-desktop/**`. It does now (`b3cd1b3`), with
     `services/**` and `.trivyignore`.
@@ -1881,7 +2151,8 @@ The record's own commit changes no file Trivy reads.
     are not triaged here.
 
 5.  **The Railway template renders every `${VAR:-default}` as text (sixth
-    review).** `apps/blackout-server/services/blackout-server/entrypoint.sh`
+    review).** (Removed on 2026-11-02 in `42f68f2`; see the end of this item.)
+    `apps/blackout-server/services/blackout-server/entrypoint.sh`
     renders `homeserver.yaml.template` with plain `envsubst` at every start
     of the `managed` profile; it is the only `envsubst` user under
     `apps/blackout-server` (`git grep`). gettext's `envsubst` expands only
@@ -1921,12 +2192,107 @@ The record's own commit changes no file Trivy reads.
     `apps/blackout-server`, rendered by hand as their README says, and were
     not analysed here.
 
+    **Removed on 2026-11-02 in `42f68f2`.** The operator chose removal over
+    fixing the template: `entrypoint.sh`, `homeserver.yaml.template`, the
+    service's `Dockerfile` and `.env.example`, and `railway.toml` are gone,
+    with the rest listed [below](#2026-11-02-the-railway-template-is-removed).
+    None of the deploy faults in the table was fixed; they went with the
+    files. The `jwt_config` fault had been fixed in `48ab32d`. The table
+    stays as the record of why that service could not start.
+
+6.  **The desktop release workflow is configured to publish a public,
+    non-draft release named after whatever ref runs it, once its build
+    passes (2026-11-02).** Nothing was run, dispatched or changed in that
+    workflow. `blackout-desktop-tauri.yml`'s `build` job runs
+    `tauri-apps/tauri-action@v0` with
+    `tagName: ${{ github.ref_name }}`, a `releaseName` of "Blackout
+    Desktop" and the ref name, `releaseDraft: false`, `prerelease: false` and
+    `includeUpdaterJson: true`, with the signing secrets, on pushes to
+    `main`, on `release-*` and `v*` tags, and on `workflow_dispatch` from
+    any branch. The app's updater endpoint is
+    `https://github.com/blackmarket-coa/blackout/releases/latest/download/latest.json`.
+
+    -   **The repository today.** From the GitHub API on 2026-11-02: the
+        repository is public and its default branch is `develop`; there is
+        no `main` branch, there are 0 tags and 0 releases
+        (`/releases/latest` is 404); `blackout-desktop-tauri.yml`,
+        `release.yml` and `release-drafter.yml` have 0 runs each, and
+        nothing in the repository has run on `workflow_dispatch`.
+    -   **What tauri-action does with those settings.** Read at `v0`, which
+        is v0.6.2 (commit `84b9d35b5f`). It builds first and creates the
+        release after (`src/index.ts` 99-111, then 193). With
+        `releaseDraft: false` it looks the release up by tag; on a 404 it
+        creates one with `tag_name` the ref name, `draft: false`,
+        `prerelease: false`, `target_commitish` the run's commit, and no
+        `make_latest` (`src/create-release.ts` 86-115). GitHub's REST docs
+        say `make_latest` defaults to true for a newly published release,
+        and that the latest release is the newest non-draft, non-prerelease
+        one by `created_at`.
+    -   **A dispatch from `develop`**, once the build passes, would create a tag
+        `develop` at the run's commit and a public release "Blackout Desktop
+        develop". It would become latest and carry `latest.json`, which the
+        updater endpoint would then serve. A dispatch from any other branch does
+        the same under that branch's name. A tag named like a branch makes the
+        name ambiguous, and git resolves the tag first: in a scratch repository
+        `git rev-parse develop` printed the tag's commit, with a "refname
+        'develop' is ambiguous" warning, so `git log`, `git merge` and
+        `git diff` against `develop` would read the frozen tag (`origin/develop`
+        is unaffected).
+    -   **A push to `main`** cannot run it today, because `main` does not
+        exist. If `main` is created, its first push makes tag and release
+        "main" (latest). Later pushes find that release by tag, replace its
+        same-named assets (`src/upload-release-assets.ts` 56-73; the version
+        is fixed at 0.1.0, so the names repeat) and re-merge `latest.json`,
+        while the tag stays on the first commit. `turborepo-ci.yml`'s
+        `release-tag` job pushes its `release-*` tag with `GITHUB_TOKEN`, so
+        that tag starts no workflow.
+    -   **A tag pushed by a person.** A `release-*` tag makes a desktop-only
+        release that becomes latest. A `v*` tag also runs `release.yml`, on
+        the same tag's release.
+    -   The three legs can race to create the release, and a leg that loses
+        can get a 422 (read from the code, not run).
+    -   **What stops an update today is accidental.** There are no releases,
+        so no installed desktops from this repository; nothing calls the
+        updater (`main.rs` only registers it); and the pubkey is the
+        placeholder of item 1, so any verification fails closed. As
+        written, the release job also fails before it publishes anything,
+        because tauri-action builds before it creates the release. Until
+        `6bea1c9` it failed after the compile at the bundle category; on a
+        runner the old frontend hook probably built this checkout's client
+        and did not stop it
+        ([Before merge or release](#before-merge-or-release)). This branch
+        fixes the category, which the build check needs, and the hook, so
+        that it builds this checkout's client wherever the checkout lies. What is
+        left is the CLI's updater signing (`sign_updaters`, tauri-cli
+        2.10.1 `bundle.rs` 254-292, read, not run), which cannot decode the
+        placeholder pubkey (or, if the signing-key secret is unset, stops at
+        the key before it), and on Windows signtool, which would get `/sha1`
+        with the literal `${WINDOWS_CERTIFICATE_THUMBPRINT}`
+        (`certificate.pfx` is written but never imported). Neither is a
+        control, and a real release has to fix both. Since `6bea1c9` the
+        Linux leg stops only at the pubkey, so with the signing-key secret
+        set, fixing the pubkey alone would let a dispatch from `develop`
+        publish a release that becomes latest and serves `latest.json`.
+
+    **Proposed, for the operator to decide; not done here, and not decided as of
+    2026-11-02:** run the release job only on `release-*` and `v*` tags (drop
+    the `push` to `main` and the `workflow_dispatch` paths), and set
+    `releaseDraft: true`, so that a person publishes each release and
+    `latest.json` reaches installed desktops only then. Change these before
+    anyone fixes the pubkey. Building a commit to test it needs none of this:
+    `blackout-desktop-build-check.yml` does that without publishing.
+
 ## Not verified
 
 -   A desktop build on Windows, macOS or ubuntu-22.04, a bundle, a build with
     the real client, a run on any platform, and the updater against a real
     release. Only the Linux release build above ran. See
-    [Before merge or release](#before-merge-or-release).
+    [Before merge or release](#before-merge-or-release). 2026-11-02: the
+    ubuntu-22.04, macOS and Windows builds, with their bundles and the real
+    client, are set up to run in `blackout-desktop-build-check.yml` on pull
+    requests, and the Linux bundles were built here with the real client,
+    on Ubuntu 24.04 (same section). First run: pending. A run of the app and the
+    updater against a real release are still not verified.
 -   That libdbus-1-dev is installed on the runner was read from jammy's
     package dependencies, not from a run of the job.
 -   A Docker build of the fork image, and Synapse against a real OIDC provider.
@@ -1945,14 +2311,17 @@ The record's own commit changes no file Trivy reads.
 -   The JWT checks against an operator's real configuration. The one
     Blackout template with a `jwt_config`, the Railway one, has JWT login
     off now; it was rendered and parsed, not run in its image, which cannot
-    start ([Found outside scope](#found-outside-scope-not-fixed-here)). Until
+    start ([Found outside scope](#found-outside-scope-not-fixed-here)).
+    (2026-11-02: that template was removed in `42f68f2`; no Blackout template in
+    the tree has a `jwt_config` now.) Until
     the sixth review this item said no Blackout template enables
     `jwt_config`. Nor was the key-set warning tried with a real identity
     provider's JWKS; the test's EC key is made at run time.
 -   The Railway image itself, neither built nor started. Its template was
     rendered with Ubuntu's gettext-base 0.21, which matches the image's
     Debian package in upstream release only, and what psycopg2 does with the
-    database values was not run.
+    database values was not run. (2026-11-02: the image was removed in
+    `42f68f2`, so none of this will be verified.)
 -   pyasn1's decode through a real TLS handshake, or the reactor stalling on
     one. The cost was measured on `extract_patterns` directly. That the
     hostname check runs only after the chain has validated, on the reactor
@@ -1967,3 +2336,180 @@ The record's own commit changes no file Trivy reads.
 -   Whether Trivy's database of 2026-10-31 01:14 UTC adds advisories against
     `pnpm-lock.yaml` is for `-v47` to see; on this branch it adds none
     above the ignored seven.
+
+## 2026-11-02: the Railway template is removed
+
+The operator decided on 2026-11-02 to remove the Railway template rather than
+fix it ([Found outside scope](#found-outside-scope-not-fixed-here), item 5).
+`42f68f2` removed, under `apps/blackout-server/`:
+
+-   `railway.toml`, and `services/blackout-server/`: the `Dockerfile`,
+    `entrypoint.sh`, `homeserver.yaml.template` and `.env.example`.
+    `services/blackout-api/` stays.
+-   `.github/workflows/blackout-image-lifecycle.yml`, whose one job was
+    written to build that `Dockerfile`. GitHub reads workflows only from the
+    repository root's `.github/workflows/`, and every workflow the
+    repository registers (read on 2026-11-02, before and after a new one was
+    registered that day) is there, so it never ran
+    in this repository. Nor could this version have run anywhere: it does not
+    parse as YAML (`ScannerError` at line 23, where a heredoc's body starts at
+    column 1 inside a `run: |` block), and it was byte-identical from the
+    fork's arrival in `e0f3065e31` (2026-04-10) to its removal. Whether an
+    earlier version ran in the fork's former repository was not checked.
+    `release/train/image_provenance.json` names it as the builder of the RC1
+    image; that is the RC1 record's statement, not evidence of a run.
+-   `scripts-dev/railway/start.sh`, `nixpacks.toml` and
+    `docs/railway_deploy.md`, with `README.rst`'s link to that how-to and six
+    `.dockerignore` lines (`!.nixpacks`, `!nixpacks.toml`, `!railway.json`,
+    `!scripts-dev`, `!.nixpacks/**` and `!scripts-dev/**`). (2026-11-02:
+    restored in `d1936c9`, so all five files are as on `develop`. They are a
+    separate Synapse-on-Railway path, not the template: `start.sh` generates
+    its own config and patches its listener, reads neither the template nor
+    `railway.toml`, and nothing in the tree runs it. Removing them went beyond
+    the decision as given. The six `.dockerignore` lines are one whitelist
+    for a Nixpacks build: Nixpacks' source (`main` at `144b4f9ab1`) copies
+    the app directory with no ignore filters and runs `docker build` on the
+    copy, so Docker applies that `.dockerignore`, whose first rule is `*`,
+    and without `!scripts-dev` the build would leave `start.sh` out. Of the
+    Dockerfiles built with `apps/blackout-server` as the context, only the
+    removed one copied `scripts-dev`; four built with the repository root as
+    the context copy all of `apps/`, and that `.dockerignore` does not
+    govern them. Whether Railway builds with that version of Nixpacks was
+    not checked. Until `4d60ec0` this bullet called these files "an
+    earlier" path and said they waited on the operator's confirmation;
+    "earlier" is not known, since all of these files, the template's included,
+    arrived in `e0f3065e31`.)
+-   The test `test_railway_template_leaves_jwt_login_off`, in
+    `tests/blackout_runtime/test_jwt_secret_config.py`, with the `_envsubst`
+    helper that only it used. Its only subject was the template. The module
+    ran 15 tests and runs 14.
+
+What stays: `JWTConfig._check_enabled`, which refuses an `enabled` that is not
+a YAML boolean, and `test_non_boolean_enabled_is_refused`, which still refuses
+`${JWT_ENABLED:-false}` among its seven values. No Blackout template in the
+tree has a `jwt_config` now (`git grep`). None of the deploy faults in item 5
+was fixed; they went with the files. The `jwt_config` fault had been fixed in
+`48ab32d`.
+
+The passages above that describe the template are kept as written, each with
+a dated note in it or beside it. `b39883a`, `bacd26c` and `d1f1589` add the
+same kind of note to the fork's documents that described the template, its
+image or what its entrypoint ran: `docs/upgrade.md`, four ops pages (among
+them the RC1 rollout and rollback of `ghcr.io/blackmarket-coa/blackout-server`),
+the deployment checklist review and its copy, two trackers, the Railway
+hardening guide, the BMC server execution plan, the week 3 report, the
+product-fork execution plan and prompts, and the RC1 release-train
+changelog and checklist. `release/train/image_provenance.json`, which the
+release gate reads as JSON, stays as written as the RC1 record.
+`PATCHES.md`'s 2026-11-02 entry lists each of these. Outside the fork, the
+2026-08-10 encryption audit
+(`docs/audits/2026-08-10-encryption-audit.md`) counted this template among
+the three that set `encryption_enabled_by_default_for_room_type: invite`; it
+has a dated note, and two templates carry that setting now. The 2026-05-10
+secrets-manager inventory walked the template's `.env.example`; that line has
+a dated note (`91ea92a`), and Prettier re-padded the rest of that file when
+the note was staged (it was not Prettier-clean on `develop`; no other content
+changed). `THREAT_MODEL.md` and `TRUST.md` never described the
+template. `KNOWN_LIMITATIONS.md` says the encryption backstop is in "both
+in-repo homeserver templates". The audit checked four rendered templates;
+with the Railway one gone three remain, and two of them carry the setting.
+The third, `apps/blackout-server/docker/conf/`'s `homeserver.yaml` (the
+`blackout-synapse` image's), does not, so "both" is exact only for the two
+that set it, as it was before.
+
+Not this template, and left in place: the restored Nixpacks files above, the
+client's `railway.json` and `README.md`'s "Deploy to Railway", the "Deploy to
+Railway" step in `.github/workflows/deploy-web.yml`, `infra/railway/`, the
+Railway section of `docs/deployment/production.md`, and
+`services/blackout-api/railway.toml` (the legacy FastAPI service). None of
+them names a removed file. `infra/railway/README.md` and
+`docs/deployment/production.md` put a Railway service at
+`apps/blackout-server`, where `railway.toml` was and `nixpacks.toml` and
+that directory's `Dockerfile` still are. Railway's documentation (read on
+2026-11-02) says the config file "does not follow the Root Directory path",
+so a service rooted there read `railway.toml` only if its settings gave that
+path; that Railway looks for a `Dockerfile` at the root of the source
+directory; and that it "will always build with a Dockerfile if it finds
+one". By those pages, a service rooted there with no `railway.toml` builds
+`apps/blackout-server/Dockerfile` unless its settings name another
+(`RAILWAY_DOCKERFILE_PATH`), as it already did before the removal if it
+never read `railway.toml`. The pages do not say where the default
+config-file lookup happens; if it is the repository root, such a service may
+read the root `railway.json` (the client's) instead. Not checked. That `Dockerfile` is the `@blackout/api` Node
+image, written for the repository root as its context: its first `COPY`
+names `pnpm-lock.yaml`, `pnpm-workspace.yaml` and `turbo.json`, and none of
+them is in `apps/blackout-server`. `nixpacks.toml` is read only by a
+Nixpacks build, and has no start command. Whether a service set to Nixpacks
+would still take the `Dockerfile` was not checked, and the live service's
+settings are not in the tree and were not checked. Nor were
+`synapse/util/blackout_profiles.py`, `managed_hosting.py` and
+`hosting_smoke.py` removed: `entrypoint.sh` was the
+only caller of the first two at startup, and their tests, `hosting_smoke.py`
+and the smoke scripts still call them. Whether they go is the operator's
+call.
+
+Corrections of 2026-11-02 to what this branch's commit messages said, since
+they are not amended:
+
+-   `42f68f2` removed `start.sh` and `nixpacks.toml`, "the earlier
+    Synapse-on-Railway path", with `docs/railway_deploy.md`, its how-to;
+    `d1936c9` restores all three, and "earlier" is not known. It dropped the
+    `!scripts-dev` lines because only the removed `Dockerfile` copied
+    `scripts-dev`, which holds only for Dockerfiles built with
+    `apps/blackout-server` as the context, and the six lines are one
+    Nixpacks whitelist (above). Its "so it never ran", of the lifecycle
+    workflow, holds for this repository, as `bacd26c` says, and its "whose
+    one job built that Dockerfile" means the job was written to build it.
+-   `b39883a` said all four of FR-002's evidence targets were gone and that
+    no Railway path for the Synapse homeserver remained. Two of the four are
+    the restored Nixpacks files, and `d1936c9` corrects the four notes that
+    said so.
+-   `bacd26c` and `c83dc9b` also call the Nixpacks files "the earlier" and
+    "an earlier" Synapse-on-Railway path. `bacd26c` said the `PATCHES.md`
+    entry "now says only what docs/railway_deploy.md and the checklist review
+    say"; the entry it left read the review's "consolidated to
+    `railway.toml`" as a `railway.json` consolidated away, which the review
+    does not say, and it quotes the review now.
+-   The claim that the RC1 rollout page's `scripts-dev/` smoke commands could
+    run in the removed image only because its `Dockerfile` copied
+    `scripts-dev` was in `bacd26c`'s note on that page, not in its message.
+    `d1f1589` corrected the note, which now says why they could not run
+    there. So `d1f1589`'s "bacd26c's message makes the same claim" and
+    "corrects bacd26c's two claims: the RC1 smoke commands", and `4d60ec0`'s
+    "bacd26c: the RC1 smoke commands", are wrong.
+-   `c83dc9b`'s subject says every passage of this record on the template
+    has its dated note. One, the full-suite bullet's sentence on the sixth
+    round under Validation, had none until the commit after `4d60ec0`.
+-   `d1936c9`'s "That holds for the Dockerfiles in the tree" holds only for
+    those built with `apps/blackout-server` as the context, and that
+    `.dockerignore` does not start with `*`: its first line is a comment,
+    and `*` is its first rule.
+-   `d1f1589` said the release gate "checks only for files, headings and
+    provenance fields", then two sentences later that it also checks for a
+    backticked commit hash. It also said the image lifecycle note said
+    "never ran" two sentences after "built"; it was the next sentence.
+-   `4d60ec0` said this section now says what a Railway service at
+    `apps/blackout-server` would read. That account left out the
+    `Dockerfile` in that directory (above).
+
+Run on this branch, with Python 3.11.17 and the lock above:
+`test_jwt_secret_config` under trial, 15 tests passed before the removal and
+14 after; trial `tests.blackout_runtime`, 51 passed; trial
+`tests.util.test_blackout_profiles`, `test_managed_hosting`,
+`test_hosting_smoke`, `test_release_train` and `tests.config`, 121 passed;
+`pytest -q blackout_runtime_tests`, 85 passed; and the release-train gate,
+`ci_hosting_smoke.py` and `validate_tracker_evidence.sh` passed. No image was
+built: none of the remaining ones reads the removed files. Run again on
+`bacd26c`, after which no Python code or test changes: `test_jwt_secret_config`, 14
+passed; trial `tests.blackout_runtime`, 51 passed; the same five trial
+modules, 121 passed; `pytest -q blackout_runtime_tests`, 85 passed; and the
+release-train gate, `ci_hosting_smoke.py` and `validate_tracker_evidence.sh`
+passed. Run again on `d1f1589`, after the restore (a shell script, a
+Nixpacks file, `.dockerignore` and two documents, none of which these runs
+read) and the release-train notes, which the release-train gate reads: `test_jwt_secret_config`, 14 passed; trial
+`tests.blackout_runtime`, 51 passed; the same five trial modules, 121 passed;
+`pytest -q blackout_runtime_tests`, 85 passed; and the release-train gate,
+`ci_hosting_smoke.py` and `validate_tracker_evidence.sh` passed. Run again on
+the tree of the commit after `4d60ec0`, which changes only this record and
+`PATCHES.md`: the same seven runs, with the same counts (14, 51, 121 and
+85), all passed.

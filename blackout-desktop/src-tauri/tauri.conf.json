@@ -4,8 +4,8 @@
     "version": "0.1.0",
     "identifier": "co.bmc.blackout",
     "build": {
-        "beforeDevCommand": "cd ../.. && pnpm --filter @blackout/client dev",
-        "beforeBuildCommand": "cd ../.. && pnpm --filter @blackout/client build",
+        "beforeDevCommand": "pnpm --filter @blackout/client dev",
+        "beforeBuildCommand": "pnpm --filter @blackout/client build",
         "devUrl": "http://localhost:5173",
         "frontendDist": "../../apps/blackout-client/dist"
     },
@@ -29,7 +29,7 @@
     "bundle": {
         "active": true,
         "targets": ["app", "dmg", "msi", "nsis", "deb", "rpm", "appimage"],
-        "category": "Network",
+        "category": "Social Networking",
         "shortDescription": "Blackout secure messaging desktop client",
         "createUpdaterArtifacts": true,
         "icon": [

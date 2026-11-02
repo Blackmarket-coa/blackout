@@ -10,6 +10,8 @@ Owner: `@blackout-release-eng`
 - [x] Documented intentionally diverged patches: release-train gating, image lifecycle, hosting profiles, managed readiness helpers, and opt-in monetization foundations.
 - [x] Verified protocol-compatibility impact summary: `/_matrix/client/versions` compatibility smoke exercised in release gate.
 
+> **2026-11-02.** Of the patches the second item names, the image lifecycle workflow (`.github/workflows/blackout-image-lifecycle.yml`) and the entrypoint that selected a hosting profile at startup (`services/blackout-server/entrypoint.sh`) were removed with the Railway template in commit 42f68f2; the operator chose removal over fixing the template. The profile and managed-readiness helpers remain. This checklist is kept as the RC1 record.
+
 ## CVE Review
 
 - [x] Reviewed upstream and distro CVE feeds relevant to this release train.

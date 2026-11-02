@@ -1,5 +1,12 @@
 # Managed-hosting readiness and operator controls
 
+> **2026-11-02.** The startup runner this page describes,
+> `services/blackout-server/entrypoint.sh`, and the Railway service it ran in
+> were removed with the Railway template in `42f68f2`; the operator chose removal
+> over fixing the template. Nothing in the tree runs these checks at startup
+> now. The `python -m synapse.util.managed_hosting` commands and the smoke
+> scripts below remain and can be run by hand.
+
 This runbook covers readiness checks, verification hooks, and deployment profile guidance
 for managed Blackout/Synapse hosting (Railway and generic containers).
 

@@ -39,6 +39,12 @@ Deliverables:
 
 ## Phase 1: Runtime profile completion (`managed` / `standalone` / `constrained`)
 
+> **2026-11-02.** The profile handling this prompt asked for ran at startup
+> in `services/blackout-server/entrypoint.sh`, which was removed with the
+> Railway template in `42f68f2`; the operator chose removal over fixing the
+> template. The `synapse.util.blackout_profiles` helpers and their tests
+> remain. The prompt is kept as written.
+
 ```text
 Implement explicit BLACKOUT_PROFILE handling in blackout-server startup.
 
