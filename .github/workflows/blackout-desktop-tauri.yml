@@ -1,138 +1,138 @@
 name: blackout-desktop-tauri
 
 on:
-  pull_request:
-    branches: [main]
-    paths:
-      - 'blackout-desktop/**'
-      - 'apps/blackout-client/src/platform/**'
-      - '.github/workflows/blackout-desktop-tauri.yml'
-  push:
-    branches: [main]
-    tags:
-      - 'release-*'
-      - 'v*'
-  workflow_dispatch:
+    pull_request:
+        branches: [main]
+        paths:
+            - 'blackout-desktop/**'
+            - 'apps/blackout-client/src/platform/**'
+            - '.github/workflows/blackout-desktop-tauri.yml'
+    push:
+        branches: [main]
+        tags:
+            - 'release-*'
+            - 'v*'
+    workflow_dispatch:
 
 permissions:
-  contents: write
+    contents: write
 
 jobs:
-  # Fast, toolchain-free gate: proves a desktop notification / deep link routes
-  # to the right in-app location. Runs on PRs (the heavy bundle build below does
-  # not) so routing regressions are caught without a full Tauri build.
-  notification-harness:
-    name: Notification routing harness
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - name: Checkout
-        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+    # Fast, toolchain-free gate: proves a desktop notification / deep link routes
+    # to the right in-app location. Runs on PRs (the heavy bundle build below does
+    # not) so routing regressions are caught without a full Tauri build.
+    notification-harness:
+        name: Notification routing harness
+        runs-on: ubuntu-latest
+        permissions:
+            contents: read
+        steps:
+            - name: Checkout
+              uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v5
-        with:
-          version: 9.15.4
+            - name: Setup pnpm
+              uses: pnpm/action-setup@v5
+              with:
+                  version: 9.15.4
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
+            - name: Setup Node
+              uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+                  cache: pnpm
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+            - name: Install dependencies
+              run: pnpm install --frozen-lockfile
 
-      - name: Run notification-routing harness (Tauri)
-        run: pnpm --filter blackout-desktop test:unit
+            - name: Run notification-routing harness (Tauri)
+              run: pnpm --filter blackout-desktop test:unit
 
-  build:
-    # Release build only — never on PRs (needs signing secrets + Rust toolchain).
-    if: github.event_name != 'pull_request'
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-22.04
-            bundle: 'deb,rpm,appimage'
-          - os: macos-latest
-            bundle: 'app,dmg'
-          - os: windows-latest
-            bundle: 'msi,nsis'
-    runs-on: ${{ matrix.os }}
+    build:
+        # Release build only — never on PRs (needs signing secrets + Rust toolchain).
+        if: github.event_name != 'pull_request'
+        strategy:
+            fail-fast: false
+            matrix:
+                include:
+                    - os: ubuntu-22.04
+                      bundle: 'deb,rpm,appimage'
+                    - os: macos-latest
+                      bundle: 'app,dmg'
+                    - os: windows-latest
+                      bundle: 'msi,nsis'
+        runs-on: ${{ matrix.os }}
 
-    steps:
-      - name: Checkout
-        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+        steps:
+            - name: Checkout
+              uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
+            - name: Setup Node
+              uses: actions/setup-node@v4
+              with:
+                  node-version: 22
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v5
-        with:
-          version: 9.15.4
+            - name: Setup pnpm
+              uses: pnpm/action-setup@v5
+              with:
+                  version: 9.15.4
 
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+            - name: Setup Rust
+              uses: dtolnay/rust-toolchain@stable
 
-      - name: Install Linux deps
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+            - name: Install Linux deps
+              if: runner.os == 'Linux'
+              run: |
+                  sudo apt-get update
+                  sudo apt-get install -y libwebkit2gtk-4.1-dev libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+            - name: Install dependencies
+              run: pnpm install --frozen-lockfile
 
-      # tauri.conf.json references icons/32x32.png, icon.ico, icon.icns, etc.,
-      # which are generated from src-tauri/icons/blackout.svg and gitignored.
-      # Generate them here (cross-platform CLI invocation) before tauri build.
-      - name: Generate app icons
-        working-directory: blackout-desktop
-        run: pnpm tauri icon src-tauri/icons/blackout.svg --output src-tauri/icons
+            # tauri.conf.json references icons/32x32.png, icon.ico, icon.icns, etc.,
+            # which are generated from src-tauri/icons/blackout.svg and gitignored.
+            # Generate them here (cross-platform CLI invocation) before tauri build.
+            - name: Generate app icons
+              working-directory: blackout-desktop
+              run: pnpm tauri icon src-tauri/icons/blackout.svg --output src-tauri/icons
 
-      - name: Import Apple certificate
-        if: runner.os == 'macOS'
-        env:
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          KEYCHAIN_PASSWORD: ${{ secrets.APPLE_KEYCHAIN_PASSWORD }}
-        run: |
-          echo "$APPLE_CERTIFICATE" | base64 --decode > certificate.p12
-          security create-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
-          security default-keychain -s build.keychain
-          security unlock-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
-          security import certificate.p12 -k build.keychain -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
-          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" build.keychain
+            - name: Import Apple certificate
+              if: runner.os == 'macOS'
+              env:
+                  APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+                  APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+                  KEYCHAIN_PASSWORD: ${{ secrets.APPLE_KEYCHAIN_PASSWORD }}
+              run: |
+                  echo "$APPLE_CERTIFICATE" | base64 --decode > certificate.p12
+                  security create-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+                  security default-keychain -s build.keychain
+                  security unlock-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+                  security import certificate.p12 -k build.keychain -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+                  security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" build.keychain
 
-      - name: Setup Windows signing
-        if: runner.os == 'Windows'
-        shell: pwsh
-        env:
-          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
-        run: |
-          [IO.File]::WriteAllBytes('certificate.pfx', [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE))
+            - name: Setup Windows signing
+              if: runner.os == 'Windows'
+              shell: pwsh
+              env:
+                  WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+              run: |
+                  [IO.File]::WriteAllBytes('certificate.pfx', [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE))
 
-      - name: Build Tauri bundles
-        uses: tauri-apps/tauri-action@v0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          WINDOWS_CERTIFICATE_THUMBPRINT: ${{ secrets.WINDOWS_CERTIFICATE_THUMBPRINT }}
-          TAURI_UPDATER_PUBKEY: ${{ secrets.TAURI_UPDATER_PUBKEY }}
-        with:
-          projectPath: blackout-desktop
-          tagName: ${{ github.ref_name }}
-          releaseName: Blackout Desktop ${{ github.ref_name }}
-          releaseDraft: false
-          prerelease: false
-          includeUpdaterJson: true
-          args: --bundles ${{ matrix.bundle }}
+            - name: Build Tauri bundles
+              uses: tauri-apps/tauri-action@v0
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+                  TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+                  APPLE_ID: ${{ secrets.APPLE_ID }}
+                  APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+                  APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+                  WINDOWS_CERTIFICATE_THUMBPRINT: ${{ secrets.WINDOWS_CERTIFICATE_THUMBPRINT }}
+                  TAURI_UPDATER_PUBKEY: ${{ secrets.TAURI_UPDATER_PUBKEY }}
+              with:
+                  projectPath: blackout-desktop
+                  tagName: ${{ github.ref_name }}
+                  releaseName: Blackout Desktop ${{ github.ref_name }}
+                  releaseDraft: false
+                  prerelease: false
+                  includeUpdaterJson: true
+                  args: --bundles ${{ matrix.bundle }}

@@ -46,12 +46,12 @@ pnpm dev                 # run the app against the Vite dev server
 pnpm bundle              # produce real installers → src-tauri/target/release/bundle
 ```
 
-- `pnpm build` is an **intentional no-op** so the monorepo-wide `turbo run build`
-  stays portable (it must not require the Rust/Tauri toolchain on every lane).
-  Use **`pnpm bundle`** for actual packaging.
-- Bundles are per-OS: build macOS on macOS, Windows on Windows, Linux on Linux.
-- Auto-update is configured; the updater endpoint in `tauri.conf.json` points at
-  `https://github.com/blackmarket-coa/blackout/releases/...`.
+-   `pnpm build` is an **intentional no-op** so the monorepo-wide `turbo run build`
+    stays portable (it must not require the Rust/Tauri toolchain on every lane).
+    Use **`pnpm bundle`** for actual packaging.
+-   Bundles are per-OS: build macOS on macOS, Windows on Windows, Linux on Linux.
+-   Auto-update is configured; the updater endpoint in `tauri.conf.json` points at
+    `https://github.com/blackmarket-coa/blackout/releases/...`.
 
 **CI / release:** `.github/workflows/blackout-desktop-tauri.yml` is the sole owner
 of desktop bundles. It builds + signs all three OSes via `tauri-action`, attaches
@@ -74,23 +74,25 @@ cd android && ./gradlew assembleDebug   # unsigned debug APK (needs Android SDK)
 ```
 
 Native customizations applied in the committed project:
-- `android/app/src/main/AndroidManifest.xml` — `matrix`/`blackout` deep-link
-  intent filters; `CAMERA`, `RECORD_AUDIO`, `POST_NOTIFICATIONS`, `VIBRATE`.
-- `android/app/build.gradle` — `applicationId co.bmc.blackout`; an **optional**
-  release `signingConfig` that activates only when `android/keystore.properties`
-  exists, so unsigned release builds still succeed locally/in PR CI.
-- App icons / splash: generate from a 1024px master with `@capacitor/assets`
-  (reuse the artwork under `apps/blackout-client/public/res/`). Until a master is
-  added the app uses Capacitor's default launcher icons.
-- FCM push needs `android/app/google-services.json` (user-supplied, gitignored;
-  see `google-services.json.example`).
+
+-   `android/app/src/main/AndroidManifest.xml` — `matrix`/`blackout` deep-link
+    intent filters; `CAMERA`, `RECORD_AUDIO`, `POST_NOTIFICATIONS`, `VIBRATE`.
+-   `android/app/build.gradle` — `applicationId co.bmc.blackout`; an **optional**
+    release `signingConfig` that activates only when `android/keystore.properties`
+    exists, so unsigned release builds still succeed locally/in PR CI.
+-   App icons / splash: generate from a 1024px master with `@capacitor/assets`
+    (reuse the artwork under `apps/blackout-client/public/res/`). Until a master is
+    added the app uses Capacitor's default launcher icons.
+-   FCM push needs `android/app/google-services.json` (user-supplied, gitignored;
+    see `google-services.json.example`).
 
 **CI / release:**
-- `mobile-native-ci.yml` builds a signed **AAB** and uploads to the Play
-  **internal** track on `main` pushes touching `mobile/**` or `blackout-mobile/**`.
-- `blackout-mobile.yml` builds signed AAB + APK on `mobile-release-*` tags.
-- `release.yml` attaches an unsigned APK to the `v*` GitHub release as a
-  buildable proof artifact.
+
+-   `mobile-native-ci.yml` builds a signed **AAB** and uploads to the Play
+    **internal** track on `main` pushes touching `mobile/**` or `blackout-mobile/**`.
+-   `blackout-mobile.yml` builds signed AAB + APK on `mobile-release-*` tags.
+-   `release.yml` attaches an unsigned APK to the `v*` GitHub release as a
+    buildable proof artifact.
 
 Release signing reads `ANDROID_UPLOAD_KEYSTORE_B64` (+ password/alias secrets),
 which CI decodes into a keystore and a generated `android/keystore.properties`.
@@ -114,13 +116,14 @@ pnpm open:ios                 # open in Xcode → Signing & Capabilities, then R
 `cap add ios` writes into `ios/App/`, leaving the existing `ios/fastlane/` lanes
 intact. `scripts/apply-ios-config.sh` applies most native config automatically;
 review and commit the result. Customizations (commit them after generation):
-- `ios/App/App/Info.plist` — `matrix`/`blackout` URL schemes (`CFBundleURLTypes`);
-  `NSCameraUsageDescription`, `NSMicrophoneUsageDescription`,
-  `NSPhotoLibraryUsageDescription`; `UIBackgroundModes: remote-notification`.
-  (All applied by `scripts/apply-ios-config.sh`.)
-- Push Notifications entitlement (`ios/App/App/App.entitlements`, `aps-environment`)
-  — add via Xcode → Signing & Capabilities.
-- App icons / splash via the same `@capacitor/assets` run (`--ios`).
+
+-   `ios/App/App/Info.plist` — `matrix`/`blackout` URL schemes (`CFBundleURLTypes`);
+    `NSCameraUsageDescription`, `NSMicrophoneUsageDescription`,
+    `NSPhotoLibraryUsageDescription`; `UIBackgroundModes: remote-notification`.
+    (All applied by `scripts/apply-ios-config.sh`.)
+-   Push Notifications entitlement (`ios/App/App/App.entitlements`, `aps-environment`)
+    — add via Xcode → Signing & Capabilities.
+-   App icons / splash via the same `@capacitor/assets` run (`--ios`).
 
 **CI / release:** the macOS jobs in `mobile-native-ci.yml` (internal TestFlight)
 and `blackout-mobile.yml` (beta) bootstrap `cap add ios` if the project is absent,
@@ -129,9 +132,9 @@ key secrets. `release.yml` produces an unsigned simulator build as a proof artif
 
 ## Bundle identifiers
 
-| Surface | Identifier |
-|---|---|
-| Desktop (`tauri.conf.json`) | `co.bmc.blackout` |
+| Surface                                              | Identifier        |
+| ---------------------------------------------------- | ----------------- |
+| Desktop (`tauri.conf.json`)                          | `co.bmc.blackout` |
 | Mobile Android + iOS (`capacitor.config.ts` `appId`) | `co.bmc.blackout` |
 
 Keep `capacitor.config.ts` `appId`, the iOS `Appfile` `app_identifier`, and the
@@ -140,12 +143,12 @@ the exact id.
 
 ## Workflow ownership
 
-| Workflow | Trigger | Owns |
-|---|---|---|
-| `blackout-desktop-tauri.yml` | `main`, `release-*`, `v*` | Signed desktop bundles (all OSes) + updater JSON |
-| `mobile-native-ci.yml` | PR + `main` (mobile paths) | Mobile contract checks; internal-track AAB → Play, IPA → TestFlight |
-| `blackout-mobile.yml` | `mobile-release-*` tags | Signed beta/production AAB+APK and TestFlight |
-| `release.yml` | `v*` tags | Web SBOM artifact, Docker image, GitHub release aggregation, unsigned mobile proof builds |
+| Workflow                     | Trigger                    | Owns                                                                                      |
+| ---------------------------- | -------------------------- | ----------------------------------------------------------------------------------------- |
+| `blackout-desktop-tauri.yml` | `main`, `release-*`, `v*`  | Signed desktop bundles (all OSes) + updater JSON                                          |
+| `mobile-native-ci.yml`       | PR + `main` (mobile paths) | Mobile contract checks; internal-track AAB → Play, IPA → TestFlight                       |
+| `blackout-mobile.yml`        | `mobile-release-*` tags    | Signed beta/production AAB+APK and TestFlight                                             |
+| `release.yml`                | `v*` tags                  | Web SBOM artifact, Docker image, GitHub release aggregation, unsigned mobile proof builds |
 
 ## Credentials the maintainer must supply (secrets)
 
@@ -167,7 +170,7 @@ These are never committed; CI references them by name.
 
 ## Related runbooks
 
-- `docs/operations/runbooks/mobile_release_hardening_checklist.md` — signing
-  rotation, version/build governance, store metadata, rollout channels.
-- `mobile/docs/release-criteria.md` — staged-rollout gates referenced by the
-  `rollout-promotion` job in `mobile-native-ci.yml`.
+-   `docs/operations/runbooks/mobile_release_hardening_checklist.md` — signing
+    rotation, version/build governance, store metadata, rollout channels.
+-   `mobile/docs/release-criteria.md` — staged-rollout gates referenced by the
+    `rollout-promotion` job in `mobile-native-ci.yml`.
