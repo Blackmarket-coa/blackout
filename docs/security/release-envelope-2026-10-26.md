@@ -6743,6 +6743,20 @@ the new "waited for" assertion.
 | RC08: the deletion writes each switch from the deleting process's mirror (round 11)       | `deadman-switch-writes-postgres.integration.test.ts` | test 18: no erase statement sent                                            |
 | RC09: a failed arm answered armed whatever owner the switch found has                     | `deadman-switch-writes-postgres.integration.test.ts` | test 20: 201 where 409                                                      |
 
+The gates on `814a557630`, the head of the two commits above
+(`fix/gates-r12-check`, against `origin/develop` at `f6da7b7d16`, which had
+not moved, so nothing was merged), all finished and passed: API lint and
+typecheck; the pr-gate suite 2,075 of 2,075 and the post-merge suite 2,195
+of 2,195 (round 12's 2,073 and 2,193 on `e6530e54b4`, plus tests 19 and 20
+of the switch-writes file); launch smoke 14 of 14; the core and design
+builds; the client's typecheck and lint; the client suite 3,643 passed and 3
+skipped in 519 files; the protocol and SDK typechecks; dead-drop parity 2 of
+2; the migration guard and the ephemeral migration run; the trust page;
+room encryption; the feature registry; auth secrets; prettier over the 42
+files the branch changes; and gitleaks over the branch and over the brief's
+range. The commit that adds this paragraph changes this record alone;
+prettier and gitleaks were run again on it.
+
 ### Still open
 
 -   **A recipient-side refusal of an owner** (decision 19), which the
