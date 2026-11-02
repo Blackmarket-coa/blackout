@@ -291,6 +291,9 @@ during any reconciliation with upstream.
   `scripts-dev/schema_versions.py`, `scripts-dev/release.py`.
 - `synapse/util/managed_hosting.py`. This is a Blackout file that lives outside
   `blackout_runtime/` and was not listed here before; it should be.
+  (2026-11-02: removed in `9493f41`, with its `nosemgrep`; the operator chose
+  removal, as the entry "2026-11-02 the Nixpacks path and the hosting helpers
+  are removed" says.)
 - `debian/hash_password.ronn`: each annotation sits outside its example's code
   block so that ronn does not render it. Each example now renders as two
   adjacent blocks (command, then output). `debian/hash_password.1` was not
@@ -1019,7 +1022,8 @@ JWT login, which the same render had turned on, was turned off in `48ab32d`
 no upstream counterpart; `docs/upgrade.md` is an upstream file with Blackout
 lines. `.dockerignore` and `README.rst`, also upstream files with Blackout
 lines, were changed in `42f68f2` and are back as on `develop` (the restored
-Nixpacks path below). Record:
+Nixpacks path below). (2026-11-02: `d88e884` takes their Blackout lines out
+again; the next entry.) Record:
 `docs/security/dependency-advisories-server-desktop-2026-10-30.md`
 (repository root), "Found outside scope", item 5, and the section
 "2026-11-02: the Railway template is removed". Outside this directory,
@@ -1056,6 +1060,8 @@ content); the record's section names both.
   `.dockerignore` lines (`!.nixpacks`, `!nixpacks.toml`, `!railway.json`,
   `!scripts-dev`, `!.nixpacks/**`, `!scripts-dev/**`). All five files are as
   on `develop` again, and they are left in place for the operator.
+  (2026-11-02: the operator chose removal ("remove both"), and `d88e884`
+  removed them again, with the six lines and the link; the next entry.)
   - They are a separate Synapse-on-Railway path. `nixpacks.toml` sets
     Nixpacks' setup and install phases, and `start.sh` generates a config
     with `--generate-config` and patches its listener; neither reads the
@@ -1091,6 +1097,7 @@ content); the record's section names both.
   (`synapse/config/jwt.py`), which stays and refuses that text from any
   template.
 - `.dockerignore` and `README.rst`: as on `develop`, after the restore above.
+  (2026-11-02: `d88e884` takes the six lines and the link out again.)
   `!services` and `!services/**` were not touched at any point:
   `infra/single-server-baseline/deploy.sh` builds
   `services/blackout-api/Dockerfile` with this directory as the context.
@@ -1124,7 +1131,10 @@ content); the record's section names both.
   `ci_hosting_smoke.py` and `managed_readiness_integration_smoke.py`.
   `entrypoint.sh` was the only runtime caller of the first two; the tests,
   `synapse/util/hosting_smoke.py` and the smoke scripts call them
-  (`ci_hosting_smoke.py` through `hosting_smoke.py`).
+  (`ci_hosting_smoke.py` through `hosting_smoke.py`). (2026-11-02: the
+  operator chose removal ("remove both"), and `9493f41` removed all of them,
+  with their 13 tests and the two `release-train-gate.yml` steps written to
+  run two of the scripts; the next entry.)
 - Kept as written, as records: `release/train/image_provenance.json`, which
   names the `blackout-image-lifecycle` workflow as the builder of the RC1
   image (the RC1 record's statement, not evidence of a run; it is JSON, and
@@ -1157,6 +1167,10 @@ content); the record's section names both.
   is read only by a Nixpacks build, and has no start command. Whether a
   service set to Nixpacks would still take the `Dockerfile` was not checked,
   and the live service's settings are not in the tree and were not checked.
+  (2026-11-02: the Nixpacks path, `nixpacks.toml` with it, was removed in
+  `d88e884`; the operator chose removal. The other paths in this bullet are
+  unchanged and still the operator's, and of the two files said to be here,
+  only this directory's `Dockerfile` is.)
 - Corrections to commit messages on this branch, which are not amended:
   - `42f68f2` removes `start.sh` and `nixpacks.toml`, "the earlier
     Synapse-on-Railway path", with `docs/railway_deploy.md`, its how-to;
@@ -1171,7 +1185,9 @@ content); the record's section names both.
     no Railway path for the Synapse homeserver remains. Two of the four
     (`railway.toml`, `services/blackout-server/Dockerfile`) are gone; the
     other two are the restored Nixpacks path, and `d1936c9` corrects the
-    four notes that said so.
+    four notes that said so. (2026-11-02: since `d88e884` none of the four
+    is in the tree, and no file in it configures Railway to build or start
+    the Synapse homeserver.)
   - `bacd26c` and `c83dc9b` also call the Nixpacks files "the earlier" and
     "an earlier" Synapse-on-Railway path. `bacd26c` says the entry "now
     says only what docs/railway_deploy.md and the checklist review say"; the
@@ -1212,21 +1228,21 @@ files with Blackout lines, and only Blackout lines leave them. Record:
 (repository root), section "2026-11-02: the Nixpacks path and the hosting
 helpers are removed".
 
-- Removed, the Nixpacks path: `nixpacks.toml`, `scripts-dev/railway/start.sh`
-  (`scripts-dev/railway/` goes with it), `docs/railway_deploy.md`,
-  `README.rst`'s "Railway deployment" link to that how-to, and the six
-  `.dockerignore` lines the entry above restored (`!.nixpacks`,
-  `!nixpacks.toml`, `!railway.json`, `!scripts-dev`, `!.nixpacks/**`,
-  `!scripts-dev/**`). `.dockerignore` and `README.rst` are now as `42f68f2`
-  left them. `!services` and `!services/**` stay:
+- Removed in `d88e884`, the Nixpacks path: `nixpacks.toml`,
+  `scripts-dev/railway/start.sh` (`scripts-dev/railway/` goes with it),
+  `docs/railway_deploy.md`, `README.rst`'s "Railway deployment" link to that
+  how-to, and the six `.dockerignore` lines the entry above restored
+  (`!.nixpacks`, `!nixpacks.toml`, `!railway.json`, `!scripts-dev`,
+  `!.nixpacks/**`, `!scripts-dev/**`). `.dockerignore` and `README.rst` are
+  now as `42f68f2` left them. `!services` and `!services/**` stay:
   `infra/single-server-baseline/deploy.sh` builds
-  `services/blackout-api/Dockerfile` with this directory as the context. That
-  build and the other one with this directory as the context, `docker/Dockerfile`
-  (the same script, and upstream's `contrib/docker/docker-compose.yml`), copy
-  none of `scripts-dev`, `.nixpacks`, `nixpacks.toml` or `railway.json`.
-  Builds with the repository root as the context are not governed by this
-  file.
-- Removed, the helpers: `synapse/util/blackout_profiles.py`
+  `services/blackout-api/Dockerfile` with this directory as the context.
+  That build and the other one with this directory as the context,
+  `docker/Dockerfile` (the same script, and upstream's
+  `contrib/docker/docker-compose.yml`), copy none of `scripts-dev`,
+  `.nixpacks`, `nixpacks.toml` or `railway.json`. Builds with the repository
+  root as the context are not governed by this file.
+- Removed in `9493f41`, the helpers: `synapse/util/blackout_profiles.py`
   (`determine_profile`, `get_missing_managed_env_vars`,
   `apply_profile_overrides` and its `python -m` command),
   `synapse/util/managed_hosting.py` (`run_readiness_checks`,
@@ -1237,14 +1253,16 @@ helpers are removed".
   `scripts-dev/blackout/ci_hosting_smoke.py` and
   `scripts-dev/blackout/managed_readiness_integration_smoke.py`.
   `scripts-dev/blackout/` keeps its other five scripts. Before the removal
-  nothing outside these files and the tests below imported or ran a helper:
+  nothing outside these files and the tests below imported a helper or ran
+  one of these files, except the two `release-train-gate.yml` steps below:
   not `synapse/` outside them, `blackout_runtime/`, `docker/`, `services/`,
-  the repository root's `deploy/`, `infra/`, TypeScript packages or CI
+  the repository root's `deploy/`, `infra/`, TypeScript packages or root CI
   (`git grep` by path, module name, every exported name, the `python -m`
   form, the environment variables they read and the `[managed-hosting]` log
   prefix). `managed_hosting.py`'s `nosemgrep` for
   `dynamic-urllib-use-detected` (the 2026-10-11 entry) goes with the file.
-- Tests removed, 13, each in a module whose only subject is a removed helper:
+- Tests removed in `9493f41`, 13, each in a module whose only subject is a
+  removed helper:
   - `tests/util/test_blackout_profiles.py`, 7:
     `BlackoutProfileSelectionTestCase`'s
     `test_explicit_profile_is_deterministic`,
@@ -1264,14 +1282,14 @@ helpers are removed".
   - `tests/util/test_hosting_smoke.py`, 1:
     `HostingSmokeTestCase.test_hosting_smoke_checks_pass`.
 - `.github/workflows/release-train-gate.yml` (job
-  `verify-release-train-artifacts`): the steps "Run hosting profile smoke
-  checks" (`ci_hosting_smoke.py`) and "Run managed readiness integration
-  smoke" (`managed_readiness_integration_smoke.py`, with its `DATABASE_*`,
-  `REDIS_*` and `BLACKOUT_READINESS_*` variables) are removed, and so is the
-  job's `services` block (`postgres:16`, `redis:7`), which only the second
-  step used. The steps left still check something: the release-train gate,
-  the divergence markers, the tracker evidence and the protocol smoke
-  (`test_versions_smoke_compatibility`, on SQLite). GitHub registers
+  `verify-release-train-artifacts`), in `9493f41`: the steps "Run hosting
+  profile smoke checks" (`ci_hosting_smoke.py`) and "Run managed readiness
+  integration smoke" (`managed_readiness_integration_smoke.py`, with its
+  `DATABASE_*`, `REDIS_*` and `BLACKOUT_READINESS_*` variables) are removed,
+  and so is the job's `services` block (`postgres:16`, `redis:7`), which
+  only the second step used. The steps left still check something: the
+  release-train gate, the divergence markers, the tracker evidence and the
+  protocol smoke (`test_versions_smoke_compatibility`, on SQLite). GitHub registers
   workflows only from the repository root's `.github/workflows/`, and the
   repository's list (34 workflows, read on 2026-11-02) has none under
   `apps/`, so this job has never run in this repository: the edit keeps the
@@ -1284,3 +1302,36 @@ helpers are removed".
   `scripts-dev/blackout/validate_tracker_evidence.sh` and the root workflow
   that runs it, `mypy.ini` and `pyproject.toml` (they name `scripts-dev/`
   and `tests/` as directories), and the root feature registry and its guard.
+- Dated notes, not rewrites, where a document said these files stay or
+  remain, or describes what they did: `docs/upgrade.md` (the managed-preflight
+  and `BLACKOUT_PROFILE` sections), `docs/ops/managed_hosting_readiness.md`,
+  `docs/ops/blackout_profile_startup.md`,
+  `docs/ops/release_candidate_rc1_2026-03-19.md`,
+  `docs/development/product_fork_ai_prompts.md` (Phases 1 and 4),
+  `docs/development/product_fork_execution_plan.md` (Weeks 2 and 6, and the
+  backlog),
+  `docs/reports/phase6_ci_release_hardening_completion_report_2026-03-19.md`,
+  `docs/reports/week3_packaging_image_lifecycle_completion_report_2026-03-19.md`,
+  `docs/railway_deployment_hardening.md`, `docs/bmc_server_execution_plan.md`,
+  `docs/development/phase0_railway_standalone_tracker.md`,
+  `docs/development/blackout_feature_registry_update_tracker.md` (FR-002),
+  `release/train/checklist.md` and `release/train/changelog.md`, and seven
+  passages in this file: the 2026-10-11 Semgrep entry's comment-only list,
+  and six in the entry above (its opening paragraph, what it restored,
+  `.dockerignore` and `README.rst`, what it left in place, the other Railway
+  paths, and its correction of `b39883a`). The two release-train
+  notes name `9493f41` without backticks, for the reason the entry above
+  gives: the release gate passes the changelog on any backticked commit
+  hash, so a backticked hash in a note would meet that check on its own.
+  Outside this directory, where an upstream sync does not reach, the record
+  named above and `docs/security/semgrep-triage-2026-10-11.md` get dated
+  notes.
+- Out of scope, unchanged, and still the operator's: the client's root
+  `railway.json` and `index.js`, `README.md`'s "Deploy to Railway", the
+  Railway step in `.github/workflows/deploy-web.yml`, `infra/railway/`, the
+  Railway section of `docs/deployment/production.md`,
+  `services/blackout-api/railway.toml` and the live Railway dashboard. None
+  of them names a removed file. The dashboard was not read: a Railway service
+  rooted here changes with this only if its settings force a Nixpacks build
+  or name `start.sh` as its start command, and the tree points to neither
+  (`infra/railway/README.md` gives `pnpm --filter @blackout/server start`).

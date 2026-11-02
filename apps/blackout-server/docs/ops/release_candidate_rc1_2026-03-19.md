@@ -19,6 +19,15 @@ Audience: platform operators / SRE / release engineering
 > `blackout-synapse:stable`, from `docker/Dockerfile`, by
 > `infra/single-server-baseline/deploy.sh`, and this page is not a rollout
 > procedure for it. The page is kept as the RC1 record.
+>
+> **2026-11-02.** `tests/util/test_hosting_smoke.py` and
+> `scripts-dev/blackout/ci_hosting_smoke.py`, which the pre-promotion checks
+> and the smoke probes below run, were removed on 2026-11-02 in `9493f41`, with
+> the profile and managed-hosting helpers they checked; the operator chose
+> removal ("remove both"). Run from this directory, those commands now fail
+> on a missing file.
+> `scripts-dev/check_release_train_gate.py`, `tests/util/test_release_train.py`
+> and `test_versions_smoke_compatibility` remain.
 
 ## Scope
 

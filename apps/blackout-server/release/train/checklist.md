@@ -12,6 +12,8 @@ Owner: `@blackout-release-eng`
 
 > **2026-11-02.** Of the patches the second item names, the image lifecycle workflow (`.github/workflows/blackout-image-lifecycle.yml`) and the entrypoint that selected a hosting profile at startup (`services/blackout-server/entrypoint.sh`) were removed with the Railway template in commit 42f68f2; the operator chose removal over fixing the template. The profile and managed-readiness helpers remain. This checklist is kept as the RC1 record.
 
+> **2026-11-02.** The profile and managed-readiness helpers the note above says remain were removed on 2026-11-02 in commit 9493f41, with their tests and smoke scripts; the operator chose removal ("remove both"). This checklist is kept as the RC1 record.
+
 ## CVE Review
 
 - [x] Reviewed upstream and distro CVE feeds relevant to this release train.
