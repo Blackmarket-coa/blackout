@@ -11,8 +11,11 @@ Audience: platform operators / SRE / release engineering
 > template in `42f68f2`, and so was that image's `entrypoint.sh`, which read
 > `BLACKOUT_PROFILE` at container startup; the operator chose removal over
 > fixing the template. No workflow in the tree builds or publishes that image
-> now, and the `scripts-dev/` smoke commands below could run inside it only
-> because that Dockerfile copied `scripts-dev/`. The fork image built today is
+> now. Nor could the `kubectl exec` smoke commands below have run inside it as
+> that Dockerfile built it: it copied `scripts-dev/` only into its build stage,
+> its runtime image held `/usr/local`, the entrypoint and the template, and
+> `pip install .` does not install `scripts-dev/` or `tests/`, which
+> `pyproject.toml` puts in the sdist only. The fork image built today is
 > `blackout-synapse:stable`, from `docker/Dockerfile`, by
 > `infra/single-server-baseline/deploy.sh`, and this page is not a rollout
 > procedure for it. The page is kept as the RC1 record.

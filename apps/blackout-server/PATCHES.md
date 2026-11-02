@@ -1041,7 +1041,7 @@ Nixpacks path below). Record:
     from the fork's arrival in `e0f3065e31` (2026-04-10) to its removal.
     Whether an earlier version ran in the fork's former repository was not
     checked.
-- Removed in `42f68f2` and restored on 2026-11-02, because they are not the
+- Removed in `42f68f2` and restored in `d1936c9`, because they are not the
   template and do not exist only to build, deploy, document or test it:
   `scripts-dev/railway/start.sh`, `nixpacks.toml`, `docs/railway_deploy.md`,
   `README.rst`'s "Railway deployment" link to that how-to, and six
@@ -1096,10 +1096,16 @@ Nixpacks path below). Record:
   `docs/railway_deployment_hardening.md`, `docs/bmc_server_execution_plan.md`,
   `docs/ops/release_candidate_rc1_2026-03-19.md` (an RC1 rollout of the
   removed image), `docs/reports/week3_packaging_image_lifecycle_completion_report_2026-03-19.md`,
-  `docs/development/product_fork_execution_plan.md` (Week 3) and
-  `docs/development/product_fork_ai_prompts.md` (Phase 1), and three entries
-  above in this file (the 2026-10-30 JWT secret entry, and the two
-  2026-10-31 entries on the template and the operator notes).
+  `docs/development/product_fork_execution_plan.md` (Week 3),
+  `docs/development/product_fork_ai_prompts.md` (Phase 1),
+  `release/train/changelog.md` (under "Runtime Defaults") and
+  `release/train/checklist.md` (under "Upstream Diff Review"), and three
+  entries above in this file (the 2026-10-30 JWT secret entry, and the two
+  2026-10-31 entries on the template and the operator notes). The two
+  release-train notes name `42f68f2` without backticks: the release gate
+  (`synapse/util/release_train.py`) passes the changelog if any backticked
+  commit hash is in it, and a backticked hash in the note would satisfy that
+  check on its own.
 - Left in place for the operator to decide: `synapse/util/blackout_profiles.py`,
   `synapse/util/managed_hosting.py` and `synapse/util/hosting_smoke.py`, their
   tests under `tests/util/`, and `scripts-dev/blackout/managed_hosting_smoke.sh`,
@@ -1107,13 +1113,11 @@ Nixpacks path below). Record:
   `entrypoint.sh` was the only runtime caller of the first two; the tests,
   `synapse/util/hosting_smoke.py` and the smoke scripts call them
   (`ci_hosting_smoke.py` through `hosting_smoke.py`).
-- Kept as written, as records: the RC1 release-train artifacts the release
-  gate reads, `release/train/changelog.md` ("profile-aware entrypoint
-  rendering", image lifecycle automation), `release/train/checklist.md` and
-  `release/train/image_provenance.json`, which names the
-  `blackout-image-lifecycle` workflow as the builder of the RC1 image (the
-  RC1 record's statement, not evidence of a run); and the next-step prompt
-  in `docs/reports/phase6_ci_release_hardening_completion_report_2026-03-19.md`
+- Kept as written, as records: `release/train/image_provenance.json`, which
+  names the `blackout-image-lifecycle` workflow as the builder of the RC1
+  image (the RC1 record's statement, not evidence of a run; it is JSON, and
+  the release gate reads its fields); and the next-step prompt in
+  `docs/reports/phase6_ci_release_hardening_completion_report_2026-03-19.md`
   that asked for that workflow.
 - The other Railway paths are not this template and stay: the Nixpacks path
   above, `services/blackout-api/railway.toml` (the legacy FastAPI service)
@@ -1142,3 +1146,15 @@ Nixpacks path below). Record:
     Nixpacks path, which remains. The notes in FR-002, the phase-0 tracker,
     `docs/railway_deployment_hardening.md` and
     `docs/bmc_server_execution_plan.md` say so now.
+  - `bacd26c` says the `scripts-dev/` smoke commands of the RC1 rollout page
+    worked in the removed image only because its `Dockerfile` copied
+    `scripts-dev`. They could not have: that `Dockerfile` copied
+    `scripts-dev` only into its `py-builder` stage (`WORKDIR /src`), its
+    runtime stage took `/usr/local` from that stage plus `entrypoint.sh` and
+    the template (`WORKDIR /data`), and `pyproject.toml` puts `scripts-dev`
+    and `tests` in the sdist only, so `pip install .` installed neither. The
+    page's note says so now.
+  - `bacd26c` also says this entry then said only what
+    `docs/railway_deploy.md` and the checklist review say. It read the
+    review's "consolidated to `railway.toml`" as a `railway.json` consolidated
+    away, which the review does not say; the entry quotes the review now.
