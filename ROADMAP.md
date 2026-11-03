@@ -27,6 +27,20 @@ proximity, feed quick-wins) are tracked with their file-level status in
 Historical build plans and superseded design docs live in
 [`docs/archive/`](docs/archive/README.md).
 
+## Product experience strategy (proposed sequencing)
+
+The [Blackout Habit & Participation Strategy](docs/BLACKOUT_HABIT_AND_PARTICIPATION_STRATEGY.md) defines the user-facing outcomes and staged product direction. It is **not** a replacement for the canonical operations milestones, nor a claim that the proposed capabilities are implemented.
+
+| Proposed stage | Outcome | Key dependencies |
+| --- | --- | --- |
+| 1. Daily-use foundation | Better discovery, feeds, sharing, groups, and useful return visits | Existing communication, safety, and client surfaces |
+| 2. Expression and choice | The Void, expanded Coliseum debates/factions, accountable moderation | Privacy, anonymity abuse controls, transparent community rules |
+| 3. Creator economics | Simplified creator distribution, collaboration, and FBM-linked monetization | Creator Hub, FBM contracts, attribution, payments |
+| 4. Community gameplay | Multiplayer and cooperative challenges, missions, group achievements | Social graph, governance, anti-abuse and reward integrity |
+| 5. Physical-world connections | Opt-in location discovery, local events, businesses, and projects | Location privacy, user consent, FBM and Blackstar integration |
+
+Evaluate work against tangible user value (relationships, knowledge, creator earnings, projects, and offline participation), not screen time alone. Confirm implementation readiness and dependencies in the existing operational trackers before scheduling releases.
+
 ## FBM-side companions
 
 The cooperative-economic substrate lives in the FBM repository at
