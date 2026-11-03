@@ -2,6 +2,12 @@
 
 -   [Introduction](../README.md)
 
+# Product direction
+
+-   [Habit & participation strategy](BLACKOUT_HABIT_AND_PARTICIPATION_STRATEGY.md)
+-   [Differentiation brief](blackout-differentiation-brief.md)
+-   [Roadmap](../ROADMAP.md)
+
 # Usage
 
 -   [Tester orientation](../TESTERS.md)
