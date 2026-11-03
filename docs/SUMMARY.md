@@ -5,6 +5,7 @@
 # Product direction
 
 -   [Habit & participation strategy](BLACKOUT_HABIT_AND_PARTICIPATION_STRATEGY.md)
+-   [Coalition field operations build plan](COALITION_FIELD_OPERATIONS_BUILD_PLAN.md)
 -   [Differentiation brief](blackout-differentiation-brief.md)
 -   [Roadmap](../ROADMAP.md)
 
