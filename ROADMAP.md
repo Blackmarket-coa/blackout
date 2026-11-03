@@ -41,6 +41,10 @@ The [Blackout Habit & Participation Strategy](docs/BLACKOUT_HABIT_AND_PARTICIPAT
 
 Evaluate work against tangible user value (relationships, knowledge, creator earnings, projects, and offline participation), not screen time alone. Confirm implementation readiness and dependencies in the existing operational trackers before scheduling releases.
 
+## Coalition field operations (proposed)
+
+The [privacy-first Coalition field operations build plan](docs/COALITION_FIELD_OPERATIONS_BUILD_PLAN.md) sequences scoping and authorization, a no-GPS status board, assets/supplies, operation lifecycles, check-ins, optional time-boxed encrypted location sharing, spot reports, and offline resilience. Its reported November 2 code findings must be revalidated; live location is gated on authorization, encryption reliability, privacy, and deployment readiness. This is a proposed workstream, not a shipped capability.
+
 ## FBM-side companions
 
 The cooperative-economic substrate lives in the FBM repository at
