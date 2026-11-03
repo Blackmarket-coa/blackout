@@ -244,3 +244,7 @@ Before adding a feature, ask:
 7. How will we know it improved users' lives rather than merely increasing time spent?
 
 **North star:** Blackout should make participation more rewarding than passive consumption elsewhere. It should give people a place to discover, express, connect, compete, learn, organize, and earn—while helping online activity produce tangible benefits in their communities and everyday lives.
+
+## Coalition field operations companion
+
+The [Coalition Field Operations Build Plan](COALITION_FIELD_OPERATIONS_BUILD_PLAN.md) translates community missions and real-world coordination into a privacy-first sequence: coalition-scoped authorization, manual status, resource/asset maps, operation lifecycles, safety check-ins, and only then carefully gated optional location sharing. It is a proposal, not an assertion that continuous tracking is implemented.
