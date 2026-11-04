@@ -4,6 +4,8 @@
 **Source baseline:** Review notes describing Blackout `develop` as of 2026-11-02; no runtime test was performed.  
 **Product connection:** [Blackout Habit & Participation Strategy](BLACKOUT_HABIT_AND_PARTICIPATION_STRATEGY.md).
 
+**First-release scope:** [Coalition Field Operations MVP](COALITION_FIELD_OPERATIONS_MVP.md) defines the minimum user journey and release gates; later phases in this document are not required for the MVP.
+
 ## Goal
 
 Extend Coalition's map-first coordination experience into useful, privacy-preserving field operations: status, supplies, operations, check-ins, verified reports, and eventually carefully scoped, optional live location. Prefer useful coordination without tracking people.
