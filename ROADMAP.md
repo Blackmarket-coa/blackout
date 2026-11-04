@@ -43,7 +43,7 @@ Evaluate work against tangible user value (relationships, knowledge, creator ear
 
 ## Coalition field operations (proposed)
 
-The [privacy-first Coalition field operations build plan](docs/COALITION_FIELD_OPERATIONS_BUILD_PLAN.md) sequences scoping and authorization, a no-GPS status board, assets/supplies, operation lifecycles, check-ins, optional time-boxed encrypted location sharing, spot reports, and offline resilience. Its reported November 2 code findings must be revalidated; live location is gated on authorization, encryption reliability, privacy, and deployment readiness. This is a proposed workstream, not a shipped capability.
+The [Coalition field operations MVP](docs/COALITION_FIELD_OPERATIONS_MVP.md) defines the first releasable scope, user journey, PR-sized delivery, and release gates. The [privacy-first Coalition field operations build plan](docs/COALITION_FIELD_OPERATIONS_BUILD_PLAN.md) sequences scoping and authorization, a no-GPS status board, assets/supplies, operation lifecycles, check-ins, optional time-boxed encrypted location sharing, spot reports, and offline resilience. Its reported November 2 code findings must be revalidated; live location is gated on authorization, encryption reliability, privacy, and deployment readiness. This is a proposed workstream, not a shipped capability.
 
 ## FBM-side companions
 
