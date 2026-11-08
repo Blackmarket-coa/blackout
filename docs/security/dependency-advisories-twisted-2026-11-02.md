@@ -584,8 +584,9 @@ that commit's record corrections
     `97756ff` when it started (2026-11-08 07:38 UTC), and
     `git merge-tree --write-tree HEAD origin/develop` is clean. It changes
     `docs/manhole.md`, the manhole paragraph of `config_documentation.md`,
-    PATCHES.md and docstrings in `synapse/config/server.py` and the test
-    module (commit `23ea07c`; no code, no lock file, no ignore file), and
+    PATCHES.md, docstrings in `synapse/config/server.py` and the test
+    module, and the comment over the test's listener constants (commit
+    `23ea07c`; no code, no lock file, no ignore file), and
     this record. Its checks ran with each venv's Python and this branch's
     tree first on `PYTHONPATH` (under both, `synapse` and `tests` import
     from the worktree), with `v52/finish/r7/` under the session's scratch
@@ -1150,8 +1151,9 @@ keys, run again here, counted 72 and 67, all rejected,
 `finish/r7/logs/q161-recheck.log`).
 The eleventh round's check, which this paragraph cited for "rejected all of
 them" (46 and 71), read r and s from bytes that still began with that
-string's 4-byte length, and so rejected the control's 200 valid signatures
-as well (eleventh list, item 1). A 1024-bit key loads in the
+string's 4-byte length. That check had no control key; the same decoding,
+applied in the twelfth round's check, rejects the control key's 200 valid
+signatures as well (eleventh list, item 1). A 1024-bit key loads in the
 OpenSSH format and signs; the seventh round's review got a session on one
 with Twisted's client. It is the one size `ssh-keygen` writes for DSA where
 it writes DSA at all: OpenSSH 9.9p1's `ssh-keygen.c` has "Invalid DSA key
@@ -1284,9 +1286,12 @@ entry of `listeners` or the `manhole` option, in a worker an entry of
 `worker_listeners` or the `worker_manhole` option, the listeners
 `synapse/app/homeserver.py` and `synapse/app/generic_worker.py` start.
 `WorkerConfig` parses the worker's listeners after `ServerConfig`, so the
-function reads them from the raw config, and it takes
-`worker_app: synapse.app.homeserver` for the main process, as `WorkerConfig`
-canonicalises it. It reads the config, not what the process goes on to
+function reads them from the raw config, and it takes a `worker_app` that
+is unset or empty, or `synapse.app.homeserver`, for the main process, as
+`synapse/app/homeserver.py` (which refuses only a truthy `worker_app`) and
+`WorkerConfig` treat it. Until the thirteenth round's commit it took only an
+unset `worker_app` or `synapse.app.homeserver`, so a main process with
+`worker_app: ""` skipped the check (twelfth list, item 1). It reads the config, not what the process goes on to
 start, which the eleventh round's wording ("a process that starts a manhole
 listener", here, in both documentation pages, PATCHES.md and the
 docstrings) did not say: `synapse.app.admin_cmd` starts no listener and
@@ -1894,7 +1899,7 @@ family not supported by protocol`, the same traceback apart from Twisted's
     under both venvs (`finish/r5/logs/lint-wip.txt`). The eleventh round's
     two (the same files) pass ruff, black and isort as written, under both
     venvs (`finish/r6/lint-*.log`). The twelfth round's two (the same files,
-    docstrings only) pass them as written, under both venvs
+    docstrings and a comment) pass them as written, under both venvs
     (`finish/r7/logs/lint.log`).
 -   **mypy, before and after, compared evenly from the third round on.** The
     second round ran mypy on the two manhole files from both venvs in the
@@ -3131,8 +3136,8 @@ three low, which reached this round in the task that carried them.
 `develop` had not moved from `97756ff`, so this round merges nothing
 ([Method](#method)). Each finding and what changed, in commit `23ea07c`
 (`docs/manhole.md`, the manhole paragraph of `config_documentation.md`,
-PATCHES.md, and docstrings in `synapse/config/server.py` and the test
-module) and in this record:
+PATCHES.md, docstrings in `synapse/config/server.py` and the test module,
+and the comment over the test's listener constants) and in this record:
 
 1.  **The eleventh round's q161 check read r and s from the wrong bytes**
     (medium). Its `probe/q161_check.py` took r and s from
@@ -3181,7 +3186,8 @@ module) and in this record:
     with and without `worker_manhole` ([Only when the config declares a
     manhole listener](#listener-condition)). `docs/manhole.md`, the config
     manual, PATCHES.md, the docstrings of `_starts_manhole_listener`,
-    `_check_manhole_host_key` and the test module, and this record (the
+    `_check_manhole_host_key` and the test module, the comment over the
+    test's listener constants, and this record (the
     opening paragraph, the first and fourth Result bullets, the paragraph
     now headed "Only when the config declares a manhole listener", the
     eleventh-round Method bullet's link and item 5 of the tenth list) now
@@ -3199,6 +3205,36 @@ Found while making these changes:
 
 5.  **The commit messages of `b1b91e8` and `c1a12e9`** carry sentences this
     round supersedes; see the note below.
+
+## Corrected after the twelfth review
+
+The twelfth round (commits `23ea07c` and `13bd9cf`) was reviewed on
+2026-11-08; the merge lens found it clean, and the manhole and claims lenses
+made four low findings. The thirteenth round answers them in one commit,
+which changes `synapse/config/server.py` (one condition and its docstring),
+the test module (one more process in the table), `docs/manhole.md` and this
+record. On that commit `test_manhole` passes 29 of 29 under both venvs, the
+listener test fails without the condition's change (the new empty
+`worker_app` case loads with no ConfigError), and ruff, black and isort pass
+on both Python files under both venvs.
+
+1.  **A main process with `worker_app: ""` skipped the host-key check.**
+    `synapse/app/homeserver.py` refuses to start only for a truthy
+    `worker_app`, so `""` starts as the main process and opens its
+    `listeners` manhole, but `_starts_manhole_listener` read it as a worker
+    name. It now takes any falsy `worker_app` as the main process, and the
+    test table has that case.
+2.  **`docs/manhole.md` said that before the Twisted change "only an RSA
+    host key worked"** and that an Ed25519 or ECDSA key "started without a
+    warning". That held only for a key pair; a key set alone stopped the
+    homeserver from starting, RSA included. The paragraph now says so.
+3.  **The DSA paragraph said the eleventh round's check rejected a control
+    key's 200 signatures.** That check had no control; the 200 rejections
+    come from the same decoding re-applied in the twelfth round's check.
+    The sentence now says that.
+4.  **"Docstrings only" for `23ea07c`** left out the comment it rewrote
+    over the test's listener constants. The Method bullet, the Lint bullet,
+    the eleventh list's opening and its item 3 now name it.
 
 ## Commit messages
 

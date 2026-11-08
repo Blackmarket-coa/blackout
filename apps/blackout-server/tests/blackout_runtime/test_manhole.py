@@ -254,6 +254,10 @@ _PROCESSES_WITH_A_MANHOLE: Dict[str, Dict[str, Any]] = {
         "worker_app": "synapse.app.homeserver",
         **_MAIN_MANHOLE,
     },
+    "main process with an empty worker_app, a listeners entry": {
+        "worker_app": "",
+        **_MAIN_MANHOLE,
+    },
     "main process, the manhole option": {"manhole": 9000},
     "worker, a worker_listeners entry": {
         **_WORKER,

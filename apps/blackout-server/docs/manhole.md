@@ -91,9 +91,10 @@ Until the change that locked Twisted 26.10.0 in this build, this page named
 these `ssh_priv_key` and `ssh_pub_key`. The configuration parser reads only the
 `_path` names and accepts unknown keys without complaint, so a config written
 from the old text runs on an ephemeral host key (and, before that change, did
-not start at all). Until the same change, only an RSA host key worked: with an
-Ed25519 or ECDSA key the manhole started without a warning and every connection
-to it failed, and a mismatched key pair was not refused.
+not start at all). Until the same change, only an RSA key pair worked: with an
+Ed25519 or ECDSA key pair (both paths set) the manhole started without a warning
+and every connection to it failed, with any key set alone the homeserver did not
+start, and a mismatched key pair was not refused.
 
 For example:
 

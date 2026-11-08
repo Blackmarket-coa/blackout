@@ -1100,15 +1100,16 @@ def _starts_manhole_listener(
     `worker_listeners`, with the one `worker_manhole` adds
     (`synapse/app/generic_worker.py`). `WorkerConfig` parses the worker's
     listeners after this class, so they are read from the raw config here, and
-    a `worker_app` of `synapse.app.homeserver` names the main process, as
-    `WorkerConfig` canonicalises it. It reads the config, not what the process
+    a `worker_app` that is unset or empty, or `synapse.app.homeserver`, names
+    the main process, as `synapse/app/homeserver.py` (which refuses only a
+    truthy `worker_app`) and `WorkerConfig` treat it. It reads the config, not what the process
     goes on to start: `synapse.app.admin_cmd` starts no listener, and loads the
     homeserver's config with no `worker_app` (setting its own afterwards), so
     it is checked as the main process, or, given a worker config, as that
     worker.
     """
     worker_app = config.get("worker_app")
-    if worker_app is None or worker_app == "synapse.app.homeserver":
+    if not worker_app or worker_app == "synapse.app.homeserver":
         return any(listener.type == "manhole" for listener in listeners)
     if config.get("worker_manhole"):
         return True

@@ -1592,7 +1592,10 @@ Error during startup`), under either Twisted; a configured key pair never
   `synapse.app.admin_cmd` starts no listener and loads the homeserver's
   config with no `worker_app`, setting its own afterwards
   (`synapse/app/admin_cmd.py`), so it is checked as the main process, or,
-  given a worker config, as that worker. Until the twelfth round (found by
+  given a worker config, as that worker. From the thirteenth round an unset
+  or empty `worker_app` counts as the main process, as
+  `synapse/app/homeserver.py` treats it (before, `worker_app: ""` was read as
+  a worker and skipped the check). Until the twelfth round (found by
   the review of the eleventh) this bullet and both documentation pages said
   the check ran only for a process that starts a manhole listener, which
   `admin_cmd` contradicts. Until the eleventh round it ran whatever the
