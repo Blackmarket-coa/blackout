@@ -20,54 +20,10 @@
 # minimatch 5.1.9. The lodash prototype-pollution advisory
 # (GHSA-f23m-r3pf-42rh) was resolved on 2026-11-08 by moving the
 # pnpm.overrides pin "lodash@4.17.23" from "^4.18.0" to "^4.18.1". No
-# minimatch entry remains; its history is below.
-
-# image-size 1.2.1 infinite-loop DoS, two advisories of the same class: crafted
-# JXL/HEIF box-types (GHSA-5p2g-fcmc-qvqq, 1.2.0 to 2.0.2) and a zero-length
-# ICNS entry (GHSA-w3rx-r6r6-pgpr, 0.6.3 to 2.0.2) each hang the parser and
-# block the event loop.
-#
-# A fix exists and is not taken. OSV and GitHub list both as fixed in 2.0.3
-# (npm, 2026-09-14); the 1.x line has no fixed release (1.2.1 is its newest,
-# npm's `legacy` tag). The one consumer, metro 0.83.5, requires image-size
-# ^1.0.2 and passes a file path to imageSize() in getAssetData; 2.x's
-# imageSize() takes a Uint8Array only (file reads moved to the async
-# image-size/fromFile), so a pnpm override to 2.x would break metro's asset
-# pipeline rather than fix it. metro 0.83.8 (the 0.83-stable tag, 2026-08-19)
-# dropped image-size for a parser of its own and is inside
-# @react-native/community-cli-plugin 0.82.1's ^0.83.1, so a metro update
-# within range removes the package and both entries. That update also
-# re-resolves build tools the web clients use (terser, which both vite
-# versions in the lock resolve, and workbox-build's @babel/preset-env) and is
-# its own change, due before ignoreUntil. Until the Twisted 26.10.0 change
-# this block and both reasons said no fixed version existed; that had been
-# false since 2026-09-14.
-#
-# Does not apply to our usage. image-size is reached only through
-# metro -> @react-native/community-cli-plugin, i.e. React Native's build-time
-# bundler, under react-native 0.82.1 in packages/ui and legacy/blackout-web;
-# no tracked file imports it, and no metro config, script or workflow in this
-# repository runs metro. If something did, metro would parse only image files
-# on disk at bundle time: files in this repository (packages/ui and
-# legacy/blackout-web track no image file) and files of installed packages,
-# such as react-native's LogBox PNGs. None of that is remote or user-supplied
-# input, so the "remote attacker supplies a crafted buffer" precondition has
-# no path here.
-#
-# ignoreUntil is the deadline for the metro update; it stops applying at
-# 2026-11-30T00:00Z on CI. Mirrored in .trivyignore (exp:2026-11-30) and
-# pnpm.auditConfig.ignoreGhsas. Records:
-# docs/security/dependency-advisories-2026-10-30.md and
-# docs/security/dependency-advisories-twisted-2026-11-02.md.
-[[IgnoredVulns]]
-id = "GHSA-5p2g-fcmc-qvqq"
-ignoreUntil = 2026-11-30
-reason = "Fixed in 2.0.3; not taken because the one consumer, metro 0.83.5, requires ^1.0.2 and passes a file path, which 2.x's imageSize() no longer accepts. metro 0.83.8 drops image-size; that update is due before ignoreUntil. Build-time only: nothing here runs metro, and if something did it would parse only image files on disk (this repo's and installed packages'), never remote input."
-
-[[IgnoredVulns]]
-id = "GHSA-w3rx-r6r6-pgpr"
-ignoreUntil = 2026-11-30
-reason = "Fixed in 2.0.3; not taken because the one consumer, metro 0.83.5, requires ^1.0.2 and passes a file path, which 2.x's imageSize() no longer accepts. metro 0.83.8 drops image-size; that update is due before ignoreUntil. Build-time only: nothing here runs metro, and if something did it would parse only image files on disk (this repo's and installed packages'), never remote input."
+# minimatch entry remains; its history is below. The two image-size
+# infinite-loop advisories (GHSA-5p2g-fcmc-qvqq, GHSA-w3rx-r6r6-pgpr) were
+# resolved on 2026-11-02 by moving metro to 0.83.8, which measures images
+# with a parser of its own and no longer depends on image-size.
 
 # deepmerge prototype poisoning (GHSA-gcqx-w48m-w2h4 / CVE-2026-93753): when a
 # source object has an own `__proto__` key (as JSON.parse produces) and the

@@ -20,13 +20,17 @@
 #     a regression below the override pins from Trivy (the OSV gates and pnpm
 #     audit would catch it), and the comment below names versions the lockfile
 #     no longer has.
+#   - image-size GHSA-5p2g-fcmc-qvqq and GHSA-w3rx-r6r6-pgpr were in all three
+#     lists until metro 0.83.8 took image-size out of the lockfile; the three
+#     copies were removed together.
 # Every entry below is against pnpm-lock.yaml. This file is also the only one
 # of the three that covers apps/blackout-server/poetry.lock (the OSV gates and
 # pnpm audit read pnpm-lock.yaml alone); the four Twisted 26.4.0 entries it
 # held for that lock left with the change that locked Twisted 26.10.0.
 # Records: docs/security/dependency-advisories-2026-10-30.md,
 # docs/security/dependency-advisories-2026-10-31.md,
-# docs/security/dependency-advisories-2026-11-08.md and
+# docs/security/dependency-advisories-2026-11-08.md,
+# docs/security/dependency-advisories-image-size-2026-11-02.md and
 # docs/security/dependency-advisories-twisted-2026-11-02.md.
 
 # brace-expansion ReDoS. The tree resolves to 1.1.16/2.1.2/5.0.8, all at or
@@ -36,38 +40,3 @@
 # CVE alias of GHSA-mh99-v99m-4gvg (Trivy matches by CVE); both are listed.
 GHSA-mh99-v99m-4gvg
 CVE-2026-14257
-
-# image-size 1.2.1 (pnpm-lock.yaml): infinite-loop DoS, two advisories of one
-# class: crafted JXL/HEIF box types (GHSA-5p2g-fcmc-qvqq, 1.2.0 to 2.0.2) and
-# a zero-length ICNS entry (GHSA-w3rx-r6r6-pgpr, 0.6.3 to 2.0.2). Both are
-# fixed in 2.0.3 (npm, 2026-09-14), which OSV and GitHub list as the fix; the
-# 1.x line has no fixed release (1.2.1 is its newest, npm's `legacy` tag).
-# Not taken: the one consumer, metro 0.83.5 (React Native's bundler, reached
-# through react-native 0.82.1 -> @react-native/community-cli-plugin 0.82.1 in
-# packages/ui and legacy/blackout-web), requires image-size ^1.0.2, and its
-# getAssetData passes a file path to imageSize(), which 2.x no longer accepts
-# (imageSize() takes a Uint8Array only; file reads moved to the async
-# image-size/fromFile), so an override to 2.x would break metro's asset
-# pipeline. metro 0.83.8 (the 0.83-stable tag, 2026-08-19) dropped image-size
-# for its own parser and is inside the plugin's ^0.83.1, so a metro update
-# within range removes the package and these entries. That update also
-# re-resolves build tools the web clients use (terser, which both vite
-# versions in the lock resolve, and workbox-build's @babel/preset-env), so it
-# is its own change, not done here and due before 2026-11-30.
-# Build-time only: no metro config, script or workflow in this repository runs
-# metro. If something did, metro would parse only image files on disk at
-# bundle time: files in this repository (packages/ui and legacy/blackout-web
-# track no image file) and files of installed packages, such as
-# react-native's LogBox PNGs; never remote or user-supplied input. Mirrored in
-# osv-scanner.toml (ignoreUntil 2026-11-30) and pnpm.auditConfig.ignoreGhsas
-# (no expiry there). Here each line carries exp:2026-11-30, which Trivy
-# honours; the Twisted 26.10.0 change added it, and before that only the OSV
-# gates enforced the date. Until that change this comment said no fixed
-# version existed, which had been false since 2026-09-14. CVE aliases listed
-# alongside the GHSAs because Trivy matches by CVE. Records:
-# docs/security/dependency-advisories-2026-10-30.md and
-# docs/security/dependency-advisories-twisted-2026-11-02.md.
-GHSA-5p2g-fcmc-qvqq exp:2026-11-30
-CVE-2025-71329 exp:2026-11-30
-GHSA-w3rx-r6r6-pgpr exp:2026-11-30
-CVE-2025-71330 exp:2026-11-30
