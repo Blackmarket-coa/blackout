@@ -245,6 +245,14 @@ rendered; the record lists them.
 > chose removal over fixing the template. No image in the tree runs them at
 > startup now. The `synapse.util.managed_hosting` commands remain, and can be
 > run by hand (`docs/ops/managed_hosting_readiness.md`).
+>
+> **2026-11-02.** Those commands were removed on 2026-11-02 in `9493f41`, with
+> the smoke scripts that called them; the operator chose removal ("remove
+> both"). Nothing in the tree runs these checks now, by hand or at startup.
+> Nothing in the tree reads `BLACKOUT_MANAGED_READINESS_CHECKS` or the hook
+> variables below, and nothing on the server reads `BLACKOUT_PROFILE` (the
+> web client reads a variable of that name, `true` or `false`, for its own
+> profile feature; the `BLACKOUT_PROFILE` section below has a note).
 
 When `BLACKOUT_PROFILE=managed`, startup now executes:
 
@@ -278,6 +286,12 @@ When `BLACKOUT_PROFILE=managed`, startup now executes:
 > startup now, and nothing in this fork outside its tests calls
 > `determine_profile`, the helper in `synapse.util.blackout_profiles` that
 > reads `BLACKOUT_PROFILE`. Those helpers remain.
+>
+> **2026-11-02.** Those helpers were removed on 2026-11-02 in `9493f41`, with
+> their tests; the operator chose removal ("remove both"). Nothing on the
+> server reads `BLACKOUT_PROFILE` now. The web client's feature flags read a
+> variable of the same name, `true` or `false`, for the client's own profile
+> feature; that is unrelated to this section.
 
 Startup now uses deterministic profile selection:
 

@@ -33,6 +33,12 @@ they were, each with a dated note in it or beside it;
 [the 2026-11-02 section](#2026-11-02-the-railway-template-is-removed) says what
 went and what stays.
 
+Later on 2026-11-02 the operator decided to remove the two things that section
+left for them ("remove both"): `d88e884` removed the fork's Nixpacks path for
+Railway, and `9493f41` the profile and managed-hosting helpers, with their 13
+tests and smoke scripts. [The section after it](#2026-11-02-the-nixpacks-path-and-the-hosting-helpers-are-removed)
+says what went and what is still the operator's.
+
 Also on 2026-11-02 the operator decided that the desktop release runs only on
 `release-*` and `v*` tags and makes a draft that a person publishes, which
 `9ff8159` does (with `27be012` for `release.yml`, which needs the operator's
@@ -276,6 +282,25 @@ record's 2026-11-02 section brought up to date), then a commit that corrects
 that section's and `PATCHES.md`'s list of commit-message errors and their
 account of a Railway service at `apps/blackout-server`
 ([the 2026-11-02 section](#2026-11-02-the-railway-template-is-removed)).
+After the operator's second decision of 2026-11-02 ("remove both"): `d88e884`
+(the Nixpacks path, with its `PATCHES.md` entry), `9493f41` (the hosting
+helpers, their tests and smoke scripts, and two steps of the fork's
+`release-train-gate.yml`), `4243a7a` (dated notes in the fork's documents and
+in `PATCHES.md`), then `2199e4c` (this record's section, with the Semgrep
+triage's note). After a review of those four: `c1b9f67` (`PATCHES.md`'s new
+entry counts the four Dockerfiles built with `apps/blackout-server` as the
+context, and four of the fork's notes are corrected), then `6d98b0a` (the
+same count, a note and three more commit-message corrections here, and the
+Semgrep triage's note corrected). After a second review: `0e54915`
+(`PATCHES.md`'s new entry and the fork's Phase 4 note: which gate steps
+left check something, when a Railway service rooted at
+`apps/blackout-server` builds with the fork's `.dockerignore` or with
+Nixpacks, and which helpers the removed entrypoint called), `952d5e3` (the
+same corrections in this record), the merge of `develop` (`387c64d`,
+docs-only), `8f9f789` (the divergence-marker gate on a checkout of depth 1,
+in `PATCHES.md`), then this version of the record (the same, the runs after
+the merge, and this list;
+[its section](#2026-11-02-the-nixpacks-path-and-the-hosting-helpers-are-removed)).
 Also on 2026-11-02, for the desktop build check (#996, merged at `9eab8c9`):
 `6bea1c9` (the two `tauri.conf.json` fixes), `659f6ed` (the desktop build
 check, with `KNOWN_LIMITATIONS.md`), then `ddd4a41` (the record). After a
@@ -3101,7 +3126,10 @@ fix it ([Found outside scope](#found-outside-scope-not-fixed-here), item 5).
     not checked. Until `4d60ec0` this bullet called these files "an
     earlier" path and said they waited on the operator's confirmation;
     "earlier" is not known, since all of these files, the template's included,
-    arrived in `e0f3065e31`.)
+    arrived in `e0f3065e31`.) (2026-11-02, later: the operator chose removal,
+    and `d88e884` removed the three files again and took the six lines and
+    the link out of the other two, `.dockerignore` and `README.rst`;
+    [the next section](#2026-11-02-the-nixpacks-path-and-the-hosting-helpers-are-removed).)
 -   The test `test_railway_template_leaves_jwt_login_off`, in
     `tests/blackout_runtime/test_jwt_secret_config.py`, with the `_envsubst`
     helper that only it used. Its only subject was the template. The module
@@ -3169,7 +3197,12 @@ settings are not in the tree and were not checked. Nor were
 `hosting_smoke.py` removed: `entrypoint.sh` was the
 only caller of the first two at startup, and their tests, `hosting_smoke.py`
 and the smoke scripts still call them. Whether they go is the operator's
-call.
+call. (2026-11-02, later: the operator chose removal ("remove both").
+`d88e884` removed the Nixpacks files, so of the two files said above to be at
+`apps/blackout-server` only the `Dockerfile` is there now, and `9493f41`
+removed the three helpers, their tests and the smoke scripts. The other
+Railway paths in this paragraph are unchanged and still the operator's;
+[the next section](#2026-11-02-the-nixpacks-path-and-the-hosting-helpers-are-removed).)
 
 Corrections of 2026-11-02 to what this branch's commit messages said, since
 they are not amended:
@@ -3186,7 +3219,8 @@ they are not amended:
 -   `b39883a` said all four of FR-002's evidence targets were gone and that
     no Railway path for the Synapse homeserver remained. Two of the four are
     the restored Nixpacks files, and `d1936c9` corrects the four notes that
-    said so.
+    said so. (Since `d88e884` none of the four is in the tree, and no file in
+    it configures Railway to build or start the Synapse homeserver.)
 -   `bacd26c` and `c83dc9b` also call the Nixpacks files "the earlier" and
     "an earlier" Synapse-on-Railway path. `bacd26c` said the `PATCHES.md`
     entry "now says only what docs/railway_deploy.md and the checklist review
@@ -3236,3 +3270,297 @@ read) and the release-train notes, which the release-train gate reads: `test_jwt
 the tree of the commit after `4d60ec0`, which changes only this record and
 `PATCHES.md`: the same seven runs, with the same counts (14, 51, 121 and
 85), all passed.
+
+## 2026-11-02: the Nixpacks path and the hosting helpers are removed
+
+Later on 2026-11-02 the operator decided to remove both things the section
+above left for them ("remove both"). `PATCHES.md`'s entry "2026-11-02 the
+Nixpacks path and the hosting helpers are removed" lists every path. Under
+`apps/blackout-server/`:
+
+-   `d88e884` removed the fork's Nixpacks path for Railway: `nixpacks.toml`,
+    `scripts-dev/railway/start.sh` and `docs/railway_deploy.md`, `README.rst`'s
+    link to that how-to, and the six `.dockerignore` lines (`!.nixpacks`,
+    `!nixpacks.toml`, `!railway.json`, `!scripts-dev`, `!.nixpacks/**` and
+    `!scripts-dev/**`). `.dockerignore` and `README.rst` are as `42f68f2` left
+    them. `!services` and `!services/**` stay for the `services/blackout-api`
+    build in `infra/single-server-baseline/deploy.sh`. The tree builds four
+    Dockerfiles with `apps/blackout-server` as the context, and none of them
+    copies a file those six lines let in: `services/blackout-api/Dockerfile`
+    (`deploy.sh`), `docker/Dockerfile` (`deploy.sh`,
+    `scripts-dev/complement.sh` and upstream's
+    `contrib/docker/docker-compose.yml`), and `docker/Dockerfile-workers` and
+    `docker/editable.Dockerfile` (`scripts-dev/complement.sh`). Their `COPY`
+    lines name only `services/blackout-api/`, files under `docker/`,
+    `synapse`, `rust` and the root build files (`pyproject.toml`,
+    `poetry.lock`, `README.rst`, `build_rust.py`, `Cargo.toml`,
+    `Cargo.lock`). No other build in the tree uses that `.dockerignore`:
+    `scripts-dev/build_debian_packages.py` builds
+    `docker/Dockerfile-dhvirtualenv` with `docker/` as the context,
+    `complement.sh` builds `docker/complement/Dockerfile` with
+    `docker/complement/`, and builds with the repository root as the context
+    use the root's `.dockerignore`. A Railway service rooted at
+    `apps/blackout-server` (the dashboard was not read) would build with it
+    too. By the section above's reading of Railway's documentation, such a
+    service builds `apps/blackout-server/Dockerfile` unless its settings name
+    another. That `Dockerfile`'s `COPY` lines name `package.json`,
+    `pnpm-lock.yaml`, `pnpm-workspace.yaml`, `turbo.json`, `apps`, `packages`
+    and `deploy/docker/backend/bin`, and neither it nor the four above copies
+    a file the six lines let in. A Nixpacks build there is the build those
+    lines were for, and it does change (below).
+-   `9493f41` removed the two helpers the removed `entrypoint.sh` called,
+    `synapse/util/blackout_profiles.py` and `synapse/util/managed_hosting.py`,
+    and `synapse/util/hosting_smoke.py`, which checks them, and the three
+    scripts that call them,
+    `scripts-dev/blackout/managed_hosting_smoke.sh`, `ci_hosting_smoke.py` and
+    `managed_readiness_integration_smoke.py`. Before it, nothing outside these
+    files and their tests imported a helper or ran one of these files, except
+    two steps of the fork's `release-train-gate.yml` (below). That was checked
+    with `git grep` by path, module name, every exported name, the `python -m`
+    form, the environment variables they read and the `[managed-hosting]` log
+    prefix, across the fork, the root, CI, `tools/ci`, `release/train`, the
+    feature registry, the Dockerfiles, `deploy/` and `infra/`. The Semgrep
+    finding in `managed_hosting.py` (`dynamic-urllib-use-detected`) and its
+    `nosemgrep` went with the file; `semgrep-triage-2026-10-11.md` has a dated
+    note.
+-   The tests that went with them, 13, each in a module whose only subject is
+    a removed helper:
+
+    -   `tests/util/test_blackout_profiles.py` (7):
+        `BlackoutProfileSelectionTestCase`'s
+        `test_explicit_profile_is_deterministic`,
+        `test_auto_falls_back_to_standalone_when_managed_deps_missing` and
+        `test_auto_selects_managed_when_dependencies_present`, and
+        `BlackoutProfileConfigMutationTestCase`'s
+        `test_profile_overrides_keep_client_and_federation_resources`,
+        `test_standalone_overrides_for_sqlite_and_health_listener`,
+        `test_constrained_adds_conservative_defaults` and `test_cli_smoke`.
+    -   `tests/util/test_managed_hosting.py` (5), all
+        `ManagedHostingReadinessTestCase`:
+        `test_readiness_passes_when_dependencies_are_reachable`,
+        `test_readiness_returns_fail_fast_diagnostics`,
+        `test_optional_hook_failure_warns_but_does_not_error`,
+        `test_required_hook_failure_errors` and
+        `test_health_endpoint_failure_returns_message`.
+    -   `tests/util/test_hosting_smoke.py` (1):
+        `HostingSmokeTestCase.test_hosting_smoke_checks_pass`.
+
+    Root CI runs no Synapse trial or pytest suite. These tests were written
+    to run in the fork's own `tests.yml`, in its
+    `poetry run trial --jobs=6 tests` step, but GitHub has never registered
+    that workflow in this repository, so here nothing but a hand run ran
+    them, such as the runs below. Whether it ran them in the fork's former
+    repository was not checked.
+
+-   `9493f41` also removed two steps from
+    `apps/blackout-server/.github/workflows/release-train-gate.yml`, "Run
+    hosting profile smoke checks" (`ci_hosting_smoke.py`) and "Run managed
+    readiness integration smoke" (`managed_readiness_integration_smoke.py`),
+    and the job's `postgres:16` and `redis:7` services, which only the second
+    step used. GitHub registers workflows only from the repository root's
+    `.github/workflows/`, and the repository's list, read on 2026-11-02 and
+    again on 2026-11-08, has 34 workflows, none under `apps/`. So this job
+    has never run in this repository, and the edit changes the file, not any
+    CI run. That its
+    remaining steps do not run in CI either is older than this change and is
+    not fixed here. Of the four steps left after `pip install .`, two check
+    something: the release-train gate, which reads `release/train/`, and the
+    tracker evidence validator, which reads the documents it lists. The other
+    two check nothing, as written. Found on 2026-11-02; both are older than
+    this change, are not fixed here, and are left for the operator, since
+    fixing either changes fork files outside `blackout_runtime/` and needs its
+    own `PATCHES.md` entry:
+
+    -   The divergence-marker gate (`scripts-dev/check_divergence_markers.py`)
+        takes its paths from `git diff --name-only`, which prints them from
+        the repository root (`apps/blackout-server/synapse/...`).
+        `synapse/util/divergence_guardrails.py` matches them with
+        `startswith` against prefixes that begin at `synapse/`, so no path in
+        this repository is ever risky and the gate passes on any change, a
+        change to `synapse/federation/` included.
+        `validate_risky_changes_have_markers` returns no error for
+        `apps/blackout-server/synapse/federation/federation_server.py` and an
+        empty checklist, and the missing-heading error for the same path
+        without `apps/blackout-server/`. On a checkout of depth 1,
+        `actions/checkout@v4`'s default, the script's two diffs both fail
+        and it checks an empty list: in a `git clone --depth 1` of this
+        branch, `git diff --name-only origin/develop...HEAD` and
+        `HEAD~1..HEAD` each exit 128, and the gate prints its pass (checked
+        on 2026-11-08). So the job as written would pass even if the paths
+        matched. `git diff --relative` in the script, and a deeper checkout
+        in the job, are one way to fix it.
+    -   The protocol smoke (`test_versions_smoke_compatibility`) runs
+        `python -m pytest` after only `pip install .`. pytest is not a
+        dependency in `pyproject.toml` and has no package entry in
+        `poetry.lock` (the name appears there only inside other packages'
+        optional extras, which `pip install .` does not install), so the job
+        never installs the pytest the step needs.
+
+    No other gate runs a removed file: the release-train
+    gate reads only `release/train/`, the divergence-marker gate names none of
+    these paths, `validate_tracker_evidence.sh` (which the root's
+    `tracker-evidence-validation.yml` runs) reads none of them, and the
+    feature registry names no `apps/blackout-server` path.
+
+-   `4243a7a` added dated notes, not rewrites, to every fork document that said
+    these files stay or remain or that describes what they did, and to seven
+    passages of `PATCHES.md`; the new entry lists them. The notes in the
+    release-train checklist and changelog name `9493f41` without backticks, as
+    those for `42f68f2` do, so the changelog's 40-digit placeholder is still
+    what meets the release gate's backticked-hash check. `2199e4c` added the
+    notes above in this record and in `semgrep-triage-2026-10-11.md`.
+    `c1b9f67` corrects four of `4243a7a`'s notes. The RC1 rollout page's says
+    its commands fail when run from `apps/blackout-server/`, where it said
+    "this directory", the page's own. `docs/upgrade.md`'s managed-preflight
+    note says nothing in the tree reads `BLACKOUT_MANAGED_READINESS_CHECKS` or
+    the hook variables and nothing on the server reads `BLACKOUT_PROFILE`,
+    where it said nothing reads any of them. Two in `PATCHES.md`'s entry for
+    #997 name what `d88e884` took out of `.dockerignore` and `README.rst`, the
+    six lines and the link, where one said "their Blackout lines" and the
+    other that it removed all five files. `0e54915` corrects four passages
+    of the new `PATCHES.md` entry and of `product_fork_ai_prompts.md`, and
+    `952d5e3` the same passages here, all this branch's own text: which
+    steps left in `release-train-gate.yml` check something (above), which
+    builds `apps/blackout-server/.dockerignore` governs, when the tree
+    points a Railway service at a Nixpacks build (below), and that the
+    removed `entrypoint.sh` ran the readiness checks, the hooks and the
+    profile helper but no smoke check. `952d5e3` also says, where this
+    section said the removed tests ran in `tests.yml`, that in this
+    repository nothing but a hand run ran them. After it, `develop` was
+    merged (`387c64d`: fifteen docs-only commits, none touching a file this
+    branch changes or naming a removed file), `8f9f789` added to
+    `PATCHES.md`'s entry what the divergence-marker gate does on a checkout
+    of depth 1 (above), and this version of the record adds the same here,
+    with the runs after the merge and its place in the commit list above.
+
+`THREAT_MODEL.md`, `TRUST.md` and `KNOWN_LIMITATIONS.md` were checked and need
+no change: none describes these files, `BLACKOUT_PROFILE`, Nixpacks or the
+readiness helpers, and `KNOWN_LIMITATIONS.md`'s mention of Railway is about
+the web client host's framing headers. Nothing on the server reads
+`BLACKOUT_PROFILE` now. The web client's feature flags
+(`apps/blackout-client/src/app/core/features/featureFlags.ts`) read a variable
+of the same name, `true` or `false`, to turn the client's profile feature on or
+off. That is a different setting, and any other value, such as `managed`, is
+ignored there.
+
+Still the operator's, and unchanged: the client's root `railway.json` (builder
+`NIXPACKS`) and `index.js`, `README.md`'s "Deploy to Railway", the "Deploy to
+Railway" step in `.github/workflows/deploy-web.yml`, `infra/railway/`, the
+Railway section of `docs/deployment/production.md`,
+`services/blackout-api/railway.toml` (the legacy FastAPI service) and the live
+Railway dashboard. None of them names a removed file, and no file in the tree
+configures Railway to build or start the Synapse homeserver now. The dashboard
+was not read. A service rooted at `apps/blackout-server` changes with this only
+if its settings force a Nixpacks build or name `start.sh` as its start command.
+The tree points to neither (`infra/railway/README.md` gives
+`pnpm --filter @blackout/server start`, which starts `@blackout/api`), unless
+such a service reads the repository root's `railway.json`, the client's, whose
+builder is `NIXPACKS`. Whether it does is the question the section above leaves
+open, and it was not checked; so is whether a service set to Nixpacks still
+takes `apps/blackout-server/Dockerfile`. If such a service builds with Nixpacks,
+that build loses `apps/blackout-server/nixpacks.toml` and the six
+`.dockerignore` lines with `d88e884`, and what it does now was not checked.
+
+Corrections to this branch's commit messages, which are not amended:
+
+-   `d88e884` calls the workflow steps "the release-train-gate.yml steps that
+    ran two of the scripts". They were written to run them, and never ran in
+    this repository (above).
+-   `d88e884` also calls `docker/Dockerfile` "the other one with this
+    directory as the context", as if there were two such Dockerfiles. There
+    are four, the two `scripts-dev/complement.sh` builds included (above);
+    none copies the files the six lines let in, so its conclusion holds.
+-   `2199e4c` says that in `semgrep-triage-2026-10-11.md` "the
+    dynamic-urllib-use-detected row for managed_hosting.py and its nosemgrep
+    went with the file". The finding the row records and its `nosemgrep`
+    went with the file; the row stays in that document's table as the record
+    of the 2026-10-11 pass. That document's note said the row itself was
+    removed, and then that it is kept; the commit after `c1b9f67` corrects
+    the note.
+-   `c1b9f67`'s subject says three notes are corrected. It corrects four,
+    two of them in `PATCHES.md` (above).
+-   `d88e884` says a Railway service rooted at `apps/blackout-server` changes
+    only if its settings force Nixpacks or name `start.sh`, pointing to
+    `infra/railway/README.md`, and leaves out the root `railway.json`, whose
+    builder is `NIXPACKS` (above).
+-   `9493f41`'s subject calls all three helpers the ones the removed
+    entrypoint called. It called `blackout_profiles.py` and
+    `managed_hosting.py`, as the body says, and `hosting_smoke.py` checks
+    those two.
+-   `9493f41`'s body says the steps left in `release-train-gate.yml` still
+    check something, naming the divergence markers and the protocol smoke.
+    Only the release-train gate and the tracker evidence validator do
+    (above).
+-   `9493f41`'s body says the removed tests ran "in the fork's unregistered
+    tests.yml". They were written to run there, but in this repository
+    nothing but a hand run ran them (above).
+-   `6d98b0a` lists the divergence markers and the protocol smoke among the
+    gates that passed on `c1b9f67`. They did pass, but the divergence-marker
+    gate passes on any change here, and the protocol smoke passed with the
+    build venv's pytest, which the workflow does not install (above).
+
+Run before, on `0367abdd69` (`develop` with #997), with Python 3.11.17 and the
+lock above: trial `tests.util.test_blackout_profiles`, `test_managed_hosting`
+and `test_hosting_smoke`, 13 passed; trial `test_blackout_profiles`,
+`test_managed_hosting`, `test_hosting_smoke`, `test_release_train` and
+`tests.config`, 121 passed; trial `tests.util`, 242 run, 241 passed and 1
+skipped (upstream's "Requires Postgres"); trial `tests.blackout_runtime`, 51
+passed; `pytest -q blackout_runtime_tests`, 85 passed; trial
+`tests.rest.client.test_versions`, 3 passed. The release-train gate, the
+divergence markers (a pass the gate gives on any change here, above),
+`validate_tracker_evidence.sh` and `ci_hosting_smoke.py` passed;
+`managed_readiness_integration_smoke.py` passed against a real
+Postgres 16 and Redis, and failed as designed with no hosts set and with
+closed ports; `managed_hosting_smoke.sh` exited 1 with nothing on its default
+health URL and 0 against a local server answering 200.
+
+Run after, on `9493f41`, after which no Python code or test changes: trial
+`test_release_train` and `tests.config`, 108 passed (121 less the 13); trial
+`tests.util`, 229 run, 228 passed and the same 1 skipped; trial
+`tests.config`, 103 passed; trial `tests.blackout_runtime`, 51 passed;
+`pytest -q blackout_runtime_tests`, 85 passed; trial
+`tests.rest.client.test_versions`, 3 passed. On `4243a7a`, with the
+release-train notes: the release-train gate, the divergence markers and
+`validate_tracker_evidence.sh` passed; the divergence-marker gate read 30 files
+changed against `origin/develop`, but in this layout it cannot see a risky path
+(above), so its pass says nothing about them; `release-train-gate.yml` parses as
+YAML;
+and `pnpm guard:feature-registry` (24 features),
+`node tools/ci/check-deployment-readiness.mjs` and `pnpm guard:ops-artifacts`
+passed. On `c1b9f67`, with this record's corrections in the working tree
+(documents only): trial `tests.util`, 229 run, 228 passed and the same 1
+skipped; trial `tests.config`, 103 passed; trial `test_release_train`, 5
+passed; trial `tests.blackout_runtime`, 51 passed; trial
+`tests.rest.client.test_versions`, 3 passed;
+`pytest -q blackout_runtime_tests`, 85 passed. The release-train gate, the
+divergence markers (a pass it gives on any change here),
+`validate_tracker_evidence.sh` and the protocol smoke (with the build venv's
+pytest, which the workflow does not install) passed; `release-train-gate.yml`
+parses as YAML;
+`pnpm guard:feature-registry` (24 features),
+`node tools/ci/check-deployment-readiness.mjs` and `pnpm guard:ops-artifacts`
+passed; gitleaks 8.21.2 found no leaks in the branch's commits; and `git grep`
+finds the removed paths and module names only in documents, each of which has
+a dated note.
+
+Run on `8f9f789`, after `develop` was merged (`387c64d`), with this version of
+the record in the working tree (documents only), with Python 3.11.17 and the
+lock above, on 2026-11-08 with the 1-minute load under 1.5: trial `tests.util`,
+229 run, 228 passed and the same 1 skipped; trial `tests.config`, 103 passed;
+trial `test_release_train`, 5 passed; trial `tests.blackout_runtime`, 51
+passed; trial `tests.rest.client.test_versions`, 3 passed;
+`pytest -q blackout_runtime_tests`, 85 passed. The release-train gate, the
+divergence markers (the pass it gives on any change here; it read 32 files
+against `origin/develop`), `validate_tracker_evidence.sh` and the protocol
+smoke (with the build venv's pytest, which the workflow does not install)
+passed; `release-train-gate.yml` parses as YAML; `pnpm guard:feature-registry`
+(24 features), `node tools/ci/check-deployment-readiness.mjs` and
+`pnpm guard:ops-artifacts` (4 alert files, 7 dashboards) passed;
+`prettier --check` passes on the three changed files the root config formats
+(`PATCHES.md`, this record and `semgrep-triage-2026-10-11.md`; the rest of the
+fork is in `.prettierignore`); gitleaks 8.21.2 scanned 9 of the branch's 10
+commits (the merge shows no diff of its own) and found no leaks; and
+`git grep` for the removed paths and module names hits 15 files, every one a
+document with a dated note (13 under `apps/blackout-server/`, this record and
+the Semgrep triage) and none of them a `.py`, `.sh`, `.yml`, `.toml` or
+TypeScript file. `synapse` and `blackout_runtime` imported from the worktree.
