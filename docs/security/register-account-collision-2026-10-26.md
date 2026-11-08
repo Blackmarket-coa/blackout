@@ -84,11 +84,15 @@ itself.
     account first. The log reaches back only as far as the server keeps it.
     The homeserver template
     (`infra/single-server-baseline/synapse/homeserver.yaml.template`) points
-    `log_config` at a file on the server that the repository does not hold.
-    The logging configuration Synapse generates rotates the log at midnight
-    and keeps 3 earlier files, and the Docker image's template keeps 6, so
+    `log_config` at a file on the server that the repository does not hold,
+    and each default the repository's files would give keeps a bounded amount.
+    The logging configuration Synapse generates rotates its file at midnight
+    and keeps 3 earlier files. The Synapse Docker image's template keeps 6
+    when it writes a file and otherwise logs to the console only, and
+    `infra/single-server-baseline/docker-compose.yml` keeps the last 50 MB of
+    each container's console output (`max-size: '10m'`, `max-file: '5'`). So
     unless the server was set to keep more, or the log is shipped elsewhere,
-    it covers days, not months.
+    expect it to reach back days or weeks, not to March 2026.
 -   **The account's own trail.** An account written to this way was signed out
     of all its devices (Synapse keeps the token that made the request, so for
     the bot account: all but the API's own token), its display name was set to
