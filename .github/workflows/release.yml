@@ -42,16 +42,23 @@ jobs:
                   path: apps/blackout-client/dist
 
     # Desktop bundles are produced by the dedicated cross-OS workflow
-    # .github/workflows/blackout-desktop-tauri.yml, which also runs on v* tags.
-    # Its create-release job makes the tag's draft release seconds after the
-    # push (or reuses the oldest draft for the tag), and its legs sign and
-    # upload the installers and the updater's latest.json into that draft, so
-    # there is no build-desktop job here. The release job below uploads into
-    # the same draft and leaves it a draft (draft: true on both
-    # action-gh-release steps): a person checks it and publishes it, and only
-    # then can installed desktops get the update (operator decision of
-    # 2026-11-02; docs/security/dependency-advisories-server-desktop-2026-10-30.md,
-    # Found outside scope, item 6).
+    # .github/workflows/blackout-desktop-tauri.yml, on release-* tags only,
+    # so there is no build-desktop job here and a v* tag's release never
+    # holds a desktop file or the updater's latest.json. It used to run on
+    # v* tags too, into this tag's release: that is gone because this job
+    # uploads hundreds of files (every file of the web build, the mobile
+    # builds, then a signature, certificate and bundle for each) and
+    # tauri-action reads only the first page of a release's assets, so a
+    # shared release could lose latest.json (that workflow's header).
+    # The release job below keeps its GitHub release a draft (draft: true on
+    # both action-gh-release steps; operator decision of 2026-11-02 that a
+    # person publishes each release, pending the operator's yes for this
+    # workflow; docs/security/dependency-advisories-server-desktop-2026-10-30.md,
+    # Found outside scope, item 6). When publishing it, leave "Set as the
+    # latest release" unticked: the desktop updater reads
+    # releases/latest/download/latest.json, which this release does not
+    # have, so a v* release marked latest 404s every installed desktop's
+    # update check until the next desktop release is published.
 
     build-mobile-android:
         name: Build mobile artifact (Android)
@@ -132,12 +139,11 @@ jobs:
 
             # Pinned to the version whose behaviour was read (v2.6.2,
             # src/github.ts). It cannot find a draft by tag, so it creates
-            # one, then keeps the tag's oldest draft (the desktop one, if that
-            # came first), deletes its own empty duplicate and uploads into
-            # the one it kept. Without draft: true it would then publish that
-            # draft as latest (finalizeRelease), desktop files and all, with
-            # no person in between. When it keeps the desktop draft, that
-            # draft has no generated notes; generate them when publishing.
+            # one; if the tag already has a draft (one made by hand, or a
+            # re-run's) it keeps the oldest, deletes its own empty duplicate
+            # and uploads into the one it kept, which then has no generated
+            # notes. Without draft: true it would publish the release as
+            # latest (finalizeRelease), with no person in between.
             - name: Create GitHub Release with all artifacts
               uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
               with:
@@ -210,6 +216,9 @@ jobs:
                   done
 
             # The same draft as above, found the same way; still a draft.
+            # Together the two steps upload every file under artifacts/**
+            # and three more per file, so this release has hundreds of
+            # assets; nothing here reads them back by page.
             - name: Attach signatures to GitHub release
               uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
               with:
@@ -219,21 +228,30 @@ jobs:
                       artifacts/**/*.pem
                       artifacts/**/*.bundle
 
+            # Runs at tag time, before anyone has looked at the draft above:
+            # pushing a v* tag deploys the server. Only the GitHub release
+            # waits for a person.
             - name: Deploy to production
               run: |
                   curl --fail --show-error -X POST "$PRODUCTION_DEPLOY_WEBHOOK"
               env:
                   PRODUCTION_DEPLOY_WEBHOOK: ${{ secrets.PRODUCTION_DEPLOY_WEBHOOK }}
 
+            # The message used to say the release "is live". The deploy was
+            # requested above, but the GitHub release is a draft until a
+            # person publishes it, so the message says both. The tag name is
+            # passed through the environment, not interpolated into the
+            # script: whoever pushes a tag chooses its name.
             - name: Notify Matrix room of new release
               run: |
-                  MESSAGE="🚀 Blackout release ${{ github.ref_name }} is live."
+                  MESSAGE="🚀 Blackout $TAG: production deploy requested; the GitHub release is a draft until a person publishes it."
                   curl --fail --show-error -X POST \
                     -H "Authorization: Bearer $MATRIX_ACCESS_TOKEN" \
                     -H "Content-Type: application/json" \
                     "$MATRIX_HOMESERVER/_matrix/client/v3/rooms/$MATRIX_ROOM_ID/send/m.room.message/$(date +%s)" \
                     -d "{\"msgtype\":\"m.text\",\"body\":\"${MESSAGE}\"}"
               env:
+                  TAG: ${{ github.ref_name }}
                   MATRIX_HOMESERVER: ${{ secrets.MATRIX_HOMESERVER }}
                   MATRIX_ACCESS_TOKEN: ${{ secrets.MATRIX_ACCESS_TOKEN }}
                   MATRIX_ROOM_ID: ${{ secrets.MATRIX_ROOM_ID }}
