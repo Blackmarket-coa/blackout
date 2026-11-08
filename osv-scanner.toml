@@ -17,11 +17,13 @@
 # AbortSignal advisory (GHSA-3g3m-2fjr-6pw4) was resolved on 2026-10-31 by
 # the pnpm.overrides pin "glob@>=9 <14.0.3": "^14.0.3", which also took
 # minimatch 10.2.5 out of the tree. With "filelist@1>minimatch": "^11.0.3",
-# one minimatch version is left in that advisory's range
-# (GHSA-g3hv-75wg-m249), triaged in its entry below. The two image-size
-# infinite-loop advisories (GHSA-5p2g-fcmc-qvqq, GHSA-w3rx-r6r6-pgpr) were
-# resolved on 2026-11-02 by moving metro to 0.83.8, which measures images
-# with a parser of its own and no longer depends on image-size.
+# one minimatch version (3.1.5) was left in that advisory's range
+# (GHSA-g3hv-75wg-m249), triaged in its entry below, until GitHub moved the
+# range's start to 7.0.0 on 2026-11-04; since then the scanner reports that
+# entry as unused. The two image-size infinite-loop advisories
+# (GHSA-5p2g-fcmc-qvqq, GHSA-w3rx-r6r6-pgpr) were resolved on 2026-11-02 by
+# moving metro to 0.83.8, which measures images with a parser of its own and
+# no longer depends on image-size.
 
 # deepmerge prototype poisoning (GHSA-gcqx-w48m-w2h4 / CVE-2026-93753): when a
 # source object has an own `__proto__` key (as JSON.parse produces) and the
