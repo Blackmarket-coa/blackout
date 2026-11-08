@@ -78,18 +78,53 @@ For the source-of-truth triage with tier/owner detail see
         but has not been exercised in a running desktop build.
 -   **Desktop shell build:** until 2026-10-06 `blackout-desktop` did not
     compile on `develop` (an autostart argument type and the global-shortcut
-    plugin's changed `register` API), unnoticed because
-    `.github/workflows/blackout-desktop-tauri.yml` runs only for pull requests
-    and pushes to `main`. Both are fixed; the desktop workflow still does not
-    run on `develop` pull requests. Since 2026-11-02 a build-only check,
-    `.github/workflows/blackout-desktop-build-check.yml`, is set up to build
-    unsigned bundles on Linux, macOS and Windows for `develop` pull requests
-    that change the desktop app, the lockfile, the root manifests, the
+    plugin's changed `register` API), unnoticed because the desktop release
+    workflow, `.github/workflows/blackout-desktop-tauri.yml`, built the app
+    only on pushes to `main`, on tags and on dispatch (on pull requests, to
+    `main` only, it ran just a notification harness). Both are fixed. Since
+    2026-11-02 that workflow's release jobs run only on pushed tags, and
+    since 2026-11-08 only on `release-*` tags (not `v*`: `release.yml`'s
+    release holds hundreds of files, and
+    `tauri-action` reads one page of a release's assets, so a draft shared
+    with it could lose `latest.json`), upload into a draft release and leave
+    publishing to a person (each build leg stops unless the release is still
+    a draft just before it builds, but a draft published while a leg builds
+    still gets that leg's files). That holds for a tag on a commit that has
+    this version of the workflow: GitHub runs the file as it is at the tagged
+    commit, so a tag on an older commit, or a dispatch of an older branch,
+    runs a version set to publish a non-draft release on its own, which today
+    stops only by accident: at the placeholder updater public key on every
+    such commit, and earlier, at the invalid bundle category, on those that
+    still have it
+    (`docs/operations/wrapper-build-and-release.md`, step 2). Its
+    notification harness still runs on pull requests to `main`, a branch that
+    does not exist. It has never run, and
+    it does not run on `develop` pull requests. Also since
+    2026-11-02 a build-only check,
+    `.github/workflows/blackout-desktop-build-check.yml`, builds unsigned
+    bundles on Linux, macOS and Windows for `develop` pull requests that
+    change the desktop app, the lockfile, the workspace manifests, the
     client's build configuration or its desktop bridge
-    (`apps/blackout-client/src/platform`). First run: pending. A pull request
-    that changes the client anywhere else is built only on Linux (by
-    `ci.yml`), so a break that shows only in the desktop shell can still land
-    unseen until a release.
+    (`apps/blackout-client/src/platform`). Its first run, 41461043012,
+    found that the client did not build on the macOS and Windows runners,
+    because two files in one directory had names that, without the
+    extension, differed only by case (`toolbag.ts` beside `ToolBag.tsx`;
+    fixed in `9eab8c9`). So it would not have built on a developer machine
+    with a case-insensitive filesystem either (Windows, and macOS by
+    default), though none was tried. The next run, 41461856327, passed on
+    all three. The bundles were built, not started, and the macOS leg
+    builds aarch64 only, as does the release's (on 2026-11-02 the operator
+    chose not to add an x86_64 leg yet). `ci.yml`'s deployment-readiness
+    job now also fails on any pull request whose tree has two such names
+    (`tools/ci/check-duplicate-paths.mjs` compares names without the last
+    extension, ignoring case, a name against a sibling's name without its
+    last extension, as `foo.css` beside `Foo.css.ts`, and two directories
+    whose paths differ only by case, which such a filesystem merges). A
+    pull request
+    that changes the client
+    anywhere else is still built only on Linux (by `ci.yml`), so any other
+    break that shows only in the desktop shell or on a case-insensitive
+    filesystem can still land unseen until a release.
 -   **Placeholder integrations:** Blamazon, MayhemMarketplaze, AntinAmazon
     (`packages/api/src/integrations/marketplace/{blamazon,mayhemMarketplaze,antinAmazon}.ts`).
     -   These are wired as registered providers but return empty catalogs,

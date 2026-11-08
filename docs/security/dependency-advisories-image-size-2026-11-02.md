@@ -320,21 +320,20 @@ pnpm 9.15.4.
     of the 2026-10-30 record, where this change adds its cross-reference.
     Whichever of the two merges second resolves the conflict by removal:
     the image-size entries and the comments about them go.
--   **#999** (-v61, open since 2026-11-08T03:41Z) removes the dead
-    minimatch GHSA-g3hv-75wg-m249 entry and its `pnpm.auditConfig` mirror,
-    drops the brace-expansion GHSA-mh99-v99m-4gvg mirror from
-    `ignoreGhsas`, and rewrites the headers of `osv-scanner.toml` and
-    `.trivyignore`. `git merge-tree` of the two branches conflicts in two
-    files. In `osv-scanner.toml`, this change appends its image-size
-    sentence to the header sentence #999 rewrites, and deletes the
-    image-size block #999 keeps. In `package.json`, this change keeps
-    GHSA-mh99 and GHSA-g3hv in `ignoreGhsas` and #999 keeps GHSA-5p2g and
-    GHSA-w3rx. `.trivyignore` merges cleanly. Whichever merges second takes
-    both removals: `ignoreGhsas` ends empty, the image-size block and the
-    minimatch entry leave `osv-scanner.toml`, and its header keeps #999's
-    sentences and this change's image-size sentence, without this change's
-    minimatch clause, which #999's text replaces. A lockfile conflict is
-    resolved by re-running `pnpm install`, never by hand.
+-   **#999** (-v61) merged on 2026-11-08 at 05:51Z, with #1000 (the
+    desktop release workflow) after it. It removed the dead minimatch
+    GHSA-g3hv-75wg-m249 entry and its `pnpm.auditConfig` mirror, dropped
+    the brace-expansion GHSA-mh99-v99m-4gvg mirror from `ignoreGhsas`, and
+    rewrote the headers of `osv-scanner.toml` and `.trivyignore`. develop
+    at `0f9df74349` was then merged into this branch, with two conflicts,
+    resolved by removal as this section had planned. In `osv-scanner.toml`
+    the header keeps #999's sentences and adds this change's image-size
+    sentence, without this change's earlier minimatch clause, and the
+    image-size block is gone. In `package.json`, `ignoreGhsas` is empty:
+    #999 removed GHSA-mh99 and GHSA-g3hv, and this change GHSA-5p2g and
+    GHSA-w3rx. `.trivyignore` merged cleanly; its header gains a line for
+    the image-size entries and this record. The lock did not conflict:
+    neither #999 nor #1000 changed it.
 -   **-v54** (eslint 8 → 10 and minimatch, local and not pushed) moves
     `packages/ui` to react-native `^0.87.1`, which brings metro 0.87.2 and
     no image-size, and planned on 2026-11-02 to delete the same image-size
