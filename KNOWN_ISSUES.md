@@ -37,8 +37,10 @@ rather than newly discovered defects.
    in Blackout yet. Another Matrix app with the account's recovery key may
    restore backed-up keys there. For an account with no backup and no
    cross-signing, the key-backup nudge's "Set up backup" starts one, which other
-   Matrix apps can restore from; Blackout can't yet. **Not yet fixed**; see the
-   note below.
+   Matrix apps can restore from; Blackout can't yet. It holds the keys of the
+   device that set it up (and of other sessions that trust it); a Blackout
+   session signed in later doesn't add to it. **Not yet fixed**; see the note
+   below.
 2.
 3.
 4.
@@ -62,9 +64,11 @@ the account's secret storage and cross-signing and deleted that backup
 ([`docs/security/key-backup-nudge-2026-11-02.md`](docs/security/key-backup-nudge-2026-11-02.md)).
 The nudge and the undecryptable-message chip now ask the homeserver what the
 account has, again at every click, and offer the from-scratch setup only when
-it answered that there is neither a backup nor cross-signing; the setup form
-checks once more before its first write. Otherwise they say what is true and
-offer nothing. The restore path itself is still missing.
+it answered that there is neither a backup nor cross-signing, and the warned
+reset only when this device already trusts the account's cross-signing and no
+backup exists; the chip explains first, and the setup form checks once more
+before its first write. Otherwise they say what is true and offer nothing. The
+restore path itself is still missing.
 
 What BO-1 gates is anything that routes trust through Blackout
 (`TRANSMUTATION_NOTES.md` §5). It does not gate coalition external sync:
