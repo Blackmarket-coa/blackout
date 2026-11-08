@@ -37,7 +37,8 @@ rather than newly discovered defects.
    in Blackout yet. Another Matrix app with the account's recovery key may
    restore backed-up keys there. For an account with no backup and no
    cross-signing, the key-backup nudge's "Set up backup" starts one, which other
-   Matrix apps can restore from; Blackout can't yet. It holds the keys of the
+   Matrix apps can restore from; Blackout can't restore from it after you sign
+   in on a new device. It holds the keys of the
    device that set it up (and of other sessions that trust it); a Blackout
    session signed in later doesn't add to it. **Not yet fixed**; see the note
    below.
@@ -104,6 +105,24 @@ field. Triage rule of thumb: `backup=no` → setup never completed;
 failing; `trusted=no` or `cross_signing=no` → cross-signing state. The rate
 question still needs live-fleet reports; this only makes each report answer
 the "which cause" question by itself.
+
+2026-11-08 (finding S9): the main cause is no longer undiagnosed. A new
+Blackout device has no way to get the keys of messages sent before it signed
+in: no mounted screen restores from a backup, verifies the device or receives
+keys from another session, and the SDK's room-key requests are off
+(matrix-js-sdk 40.2.0, `lib/rust-crypto/index.js`,
+`roomKeyRequestsEnabled = false`). On such a device "restore failing" is not a
+restore that fails: there is no restore. A new device of an account that has a
+backup reports `active=no` for that reason alone, so the rule's
+`backup=yes` with `active=no` names a path that does not exist there.
+`failures` counts the SDK's `KeyBackupFailed` events, which it emits when this
+device's upload to its active backup is refused because that version was
+replaced or deleted on the server (`lib/rust-crypto/backup.js`, the upload
+loop): a backup this device was writing to, not a restore. What live numbers
+can still tell is narrower: how often a device fails on messages sent after it
+signed in, whose keys should reach it from the sender. See
+[`docs/security/key-backup-nudge-2026-11-02.md`](docs/security/key-backup-nudge-2026-11-02.md)
+("What remains") and `TRANSMUTATION_NOTES.md` §5.
 
 ## How this list is maintained
 
