@@ -10,7 +10,11 @@ review"); fixed on the same branch, new commits only. A third review the same
 day found that a check's late answer could replace a later one, that the chip's
 "Why?" opened the setup without explaining, and that several sentences said
 more or less than a backup does (S9-3, below, and "Third review"); fixed on the
-same branch, new commits only.
+same branch, new commits only. A fourth review the same day found five
+sentences that said more or less than the code does, among them one on the
+trust page, and could not run its checks for lack of disk space ("Fourth
+review"); the sentences are fixed on the same branch, new commits only, and the
+gates ran on the merged head.
 
 | ID   | Finding                                                                                                                                                                                                                                                                                                                               | Where                                                                                                                                                                                                                            | Status                                   |
 | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------- |
@@ -96,11 +100,23 @@ revision 2.
 The first fix asked the homeserver in `refresh`, at mount and on
 `CryptoEvent.KeyBackupStatus`, stored the verdict, and the "Set up backup" and
 "Enable" buttons opened `DeviceVerificationSetup` from that stored value. Nothing
-refreshes it when another device of the account sets things up: the SDK re-checks
-its own backup only at init (`rust-crypto.js:124`), on the user's own identity
-update (`rust-crypto.js:1872`) and after an upload failure of an active backup
-(`backup.js:439`), and it emits `KeyBackupStatus` only when THIS device enables or
-disables backup (`backup.js:322,345`). A verdict could therefore be hours old.
+refreshed it when another device of the account set things up. The SDK emits
+`KeyBackupStatus` only when THIS device enables or disables backup
+(`backup.js:322,345`). Its own re-checks of the backup are forced at start-up
+(`rust-crypto.js:124`), on the user's own identity update (`:1872`), after an
+upload failure of an active backup (`backup.js:439`), after this device's own
+`resetKeyBackup` (`rust-crypto.js:1244`) and when the app calls
+`checkKeyBackupAndEnable` (`:1215`, which Blackout never does); until a check
+first succeeds, an unforced call re-checks too (`getServerBackupInfo`,
+`backup.js:88-95`, which the SDK's `PerSessionKeyBackupDownloader` calls when an
+event can't be decrypted; `checkedForBackup` is set only on success,
+`backup.js:123,266`). On a new device, which trusts neither the account's
+identity nor a backup signed by it, a re-check that finds another device's new
+backup enables nothing (`backup.js:282-292`), so it emits nothing either. A
+verdict could therefore be hours old. (Rounds 2 and 3 said here, and in
+`KeyBackupSetupGuard.tsx`'s header, that the SDK re-checks "only" at the first
+three of these; the fourth review found the list incomplete. Both now list them
+all; the conclusion does not change.)
 Sequence: a new Blackout device of an account with nothing shows the nudge on a den
 screen; the person sets up cross-signing and a backup in another Matrix app while
 the tab stays open; back in Blackout, "Set up backup" → "Setup Device
@@ -206,6 +222,17 @@ and the nudge never hid after a real-crypto setup), and
       changed in round 3: both cases passed (the defect); against the fixed tree
       both failed (`scratchpad/v60/r4/repro-develop.txt`,
       `scratchpad/v60/r4/repro-head.txt`).
+    - Re-run on 2026-11-08 (fourth review), on `000667426d`'s tree, develop's
+      five files taken from `origin/develop` (`0f9df74349`, which changes none
+      of them) and restored with `git checkout HEAD --`: both cases passed, 4.2 s
+      for the nudge, with the same writes as round 1 (five account-data `PUT`s,
+      two `POST /keys/device_signing/upload` for the nudge and one for the chip,
+      `DELETE /room_keys/version/3`, `POST /room_keys/version`; backup `3` → `4`,
+      master key `nqOvzeuGWT/…` → a new one). Against the fixed tree both
+      failed: the nudge never rendered "Set up backup" (4 s wait) and the chip
+      had no "Set up backup" button (`scratchpad/v60/r5/repro-develop.txt`,
+      `scratchpad/v60/r5/repro-head.txt`). The file was copied into
+      `tests/unit/components/` for the runs and removed afterwards.
 
 2. **Committed, on the fixed tree, still real crypto**:
    `tests/unit/components/DeviceVerificationSetup.deletesBackup.test.tsx` makes
@@ -429,12 +456,33 @@ that verifies this device" and "… restores keys from it" would be false on the
 Devices page, which renders "Verify Manually" and the backup restore tile; its
 texts say only what the check found.
 
+Fourth review: `CHIP_NOT_VERIFIED` (the account has cross-signing and no
+backup, and this device doesn't trust the account's cross-signing) said "…so it
+can't get this message's key", which is absolute: a key the sender's device
+sends later is used at once (`rust-crypto.js:1790-1822`, `onRoomKeysUpdated` →
+`onRoomKeyUpdated` retries every event waiting for that session). It now reads
+"…so it can't get this message's key from a backup or from your other sessions.
+If the sender's device sends the key later, the message becomes readable here.
+Another of your sessions that has the key can still read it." What it names as
+closed is closed: the account has no backup in this row, Blackout has no screen
+that restores from one, and the SDK's room-key requests are off
+(`lib/rust-crypto/index.js:87`). A test pins it. `DeviceVerificationReset`'s
+JSX comment said the guarded reset loses no backup; it now says a backup that
+exists when the form is submitted is not deleted, and names the
+password-prompt window ("What remains"). The screen's own sentence ("If your
+account already has a key backup, or Blackout can't check, Blackout stops
+before changing anything") describes that check and is unchanged.
+
 `TRUST.md` ("Open, not hidden"): the BO-1 sentence no longer says the problem
 happens "without key backup set up"; it says Blackout has no restore screen, so
 it happens even when a backup exists, and that a backup still lets another
 Matrix app restore (third review: "restore the messages whose keys are in it; a
-Blackout session that didn't set the backup up doesn't add its keys to it"). The
-trust page is rebuilt from it. `KNOWN_ISSUES.md` BO-1: the
+Blackout session that didn't set the backup up doesn't add its keys to it";
+fourth review: "…; a Blackout session you sign in to later, which Blackout
+can't verify, doesn't add its keys to it", the qualifier the nudge's row 1 and
+KNOWN_ISSUES already used, because the third-review sentence was false of a
+Blackout session that holds the account's cross-signing identity: see "What
+remains"). The trust page is rebuilt from it. `KNOWN_ISSUES.md` BO-1: the
 cause and workaround are corrected (the old workaround pointed to a "Settings →
 Encryption" that never existed and to the "Set up backup" action above), and a
 note dated 2026-11-08, naming the finding's date, points here (the first version
@@ -469,15 +517,15 @@ their own timeout and a test timeout above it.
 | ---------------------------------------------------------------------------- | ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `tests/unit/client/keyBackupCheck.test.ts` (new)                             | 26    | every answer of both endpoints, incl. 404 `M_UNRECOGNIZED`, 500 JSON, 502 HTML, a rejected fetch, no answer in 10 s (fake timers), 200 without `version`; no cache; every row of the precedence; `setupRefusal` for every state in both modes, and its texts                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | `tests/unit/features/settings/KeyBackupNudge.test.tsx` (new)                 | 28    | the setup's three calls when the one safe row is submitted; S9's exact scenario offers nothing and reaches none of them; failed check (rejected, 500, 404 other) offers nothing; each row's text; nothing renders before the answer; nothing once this device's backup is active; the negative wording pin; five stale-click cases (the click re-asks; the overlay and the banner follow the fresh answer; a fresh `'none'` opens the setup with one more `GET`); a rejecting device check at mount (hidden, one warning, nothing escapes) and at the click (the unknown text); the recovery key stays on screen when the banner hides; (third review) three ordering cases (a late click answer, a refresh that answers after a click, a refresh that waits for a click), four snooze cases ("Not now" stores a week and a remount on the same store stays hidden, the week's end shows it again, the ✕, the unknown banner, snoozing with the setup open), and a brand-new account with real crypto through the nudge (backup 1 and a master key, no `DELETE`, the banner hides) |
-| `tests/unit/components/FallbackContent.chip.test.tsx` (new)                  | 16    | label and text; checking; each verdict's panel; no destructive call in the three refusing rows; Close; a rejecting device check (the check-failed text, nothing escapes); the chip text; (third review) rows 1 and 2 explain first and "Set up backup" re-checks before the flow; a backup created after the explanation; the offer texts; four ordering cases (a late answer after a re-click, after a close, after the offer's button and a close; the legitimate path still reaches the setup calls)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `tests/unit/components/FallbackContent.chip.test.tsx` (new)                  | 17    | label and text; checking; each verdict's panel; no destructive call in the three refusing rows; Close; a rejecting device check (the check-failed text, nothing escapes); the chip text; (third review) rows 1 and 2 explain first and "Set up backup" re-checks before the flow; a backup created after the explanation; the offer texts; four ordering cases (a late answer after a re-click, after a close, after the offer's button and a close; the legitimate path still reaches the setup calls); (fourth review) the not-verified text names what is closed and what can still happen                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | `tests/unit/features/settings/devices/EnableVerification.test.tsx` (new)     | 11    | Enable only on `'none'`; nothing on backup, failed check or a server master key; nothing asked when not visible; the stale click (the backup text, the button goes); a fresh `'none'` re-checks; a rejecting device check; (third review) a late click answer; its own texts say nothing about screens; the not-verified text                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | `tests/unit/components/DeviceVerificationSetup.guard.test.tsx` (new)         | 10    | the form's own check: each refusal with its text and no write (backup, master key, failed backup check, failed cross-signing check), the goes-on case, the check at the submit rather than at the open (a backup created in between is refused); the warned reset goes on past cross-signing, refuses a backup and a failed check; (third review) the reset's warning says a backup stops it and no longer that a backup will be lost                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | `tests/unit/components/DeviceVerificationSetup.deletesBackup.test.tsx` (new) | 2     | the fact (above) through the three SDK calls, real crypto; the component refuses before its first write against the same account, real crypto                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | `src/app/features/settings/security/encryptionPosture.test.ts` (updated)     | 19    | the two existing cases pass `accountState` and keep every assertion; the three refusing rows; whole-text pins; the negative wording pin; the unknown text names both checks; row 2 names no next screen; the overlay text map; (third review) rows 1 and 2 say whose keys a backup holds, row 1 that a later Blackout session doesn't add to it, row 2's "can't restore" is qualified; the nudge's overlay texts have no `offer`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | `tests/unit/features/settings/security/keyBackupNudge.test.ts` (updated)     | 6     | the three existing cases pass `accountState` and keep every assertion; the three refusing rows                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 
-118 tests in 8 files pass on the fixed tree, 0 unhandled errors (round 2: 100;
-round 1: 68 in 7).
+119 tests in 8 files pass on the fixed tree, 0 unhandled errors (round 3: 118;
+round 2: 100; round 1: 68 in 7).
 
 ### Fail without the fix
 
@@ -496,7 +544,15 @@ test only the new module), and so did the two "goes on" cases of the guard file
 and the SDK-fact case of `deletesBackup`
 (`scratchpad/v60/r3/fail-all-on-develop.txt`). Many of the component failures
 there are `TypeError`s on text constants develop does not have, so the per-entry
-swaps and the mutations below are the behavioural evidence.
+swaps and the mutations below are the behavioural evidence. Fourth review, the
+same swap from `origin/develop` on `000667426d`'s tree: **74 of 119 failed**
+(the nudge 28/28, the chip 17/17, `EnableVerification` 10/11, the guard file
+8/10, `encryptionPosture.test.ts` 7/19, the selector file 3/6,
+`deletesBackup` 1/2: its SDK-fact case passes, as it must), and
+`keyBackupCheck.test.ts`'s 26 passed (`scratchpad/v60/r5/fail-all-on-develop.txt`).
+The new not-verified wording case fails against round 3's text (1 failed, 16
+passed in the chip file) and passes with the fix
+(`scratchpad/v60/r5/fail-without-chip-text.txt`).
 
 Round 2, each source file swapped for its round-1 version (`0dc627f87b`; for
 `DeviceVerificationSetup.tsx` the style commit `e884c29a7e`, the same code
@@ -672,6 +728,27 @@ completes in one pass and with the password step
 (`scratchpad/v60/r4/probe-uia-shim.txt`). P3's five unknown answers held in the
 nudge, the chip, the form and `EnableVerification`.
 
+## Fourth review, 2026-11-08
+
+Six findings; each is fixed above or explained here. Severity as the
+reviewers gave it.
+
+| Finding                                                                                                                                                                                                             | Severity | What changed                                                                                                                                                                                                                                                                         |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| The reachability checks (every path to the setup's three writes, a fresh device of an account with a backup and cross-signing, a failing or slow backup endpoint, the fix reverted) were not run: about 337 MB free | high     | Nothing to change in the code for it. Free space was 7.2 GB at the start of this round; the reproduction, the fail-without runs and the gates below ran on this round's tree and on the merged head                                                                                  |
+| TRUST.md, the trust page and "What remains" said a Blackout session that didn't set the backup up doesn't add its keys to it, false of a Blackout session that holds the account's cross-signing identity           | low      | "a Blackout session you sign in to later, which Blackout can't verify, doesn't add its keys to it"; the trust page rebuilt; "What remains" names the exception with the SDK lines                                                                                                    |
+| `CHIP_NOT_VERIFIED`'s "so it can't get this message's key" was absolute                                                                                                                                             | low      | Names what is closed (a backup, the other sessions) and what can still happen (a key the sender's device sends later); a test pins it and fails on the round-3 text ("Wording")                                                                                                      |
+| `DeviceVerificationReset`'s JSX comment said "so no backup is lost", against "What remains"' password-prompt window                                                                                                 | low      | The comment says a backup that exists when the form is submitted is not deleted, and names the window                                                                                                                                                                                |
+| S9-2 and `KeyBackupSetupGuard.tsx`'s header said the SDK re-checks its backup "only" at three points; there are five forced checks and an unforced one                                                              | low      | Both list them all, and say why none refreshes the screen on a new device (a re-check that finds an untrusted backup enables nothing and emits nothing); `KeyBackupNudge.tsx`'s "nothing tells this device" reads "nothing refreshes it", since the SDK does learn of a new identity |
+| Typecheck, eslint, the unit suite as CI, the build and a develop baseline were not run for `68fa9fe692`: about 337 MB free                                                                                          | high     | Run this round on the merged head ("Gates", round 4), with develop's counts beside them                                                                                                                                                                                              |
+
+The orchestrator's note for this round also named a commit `ce5fc7f661` and
+uncommitted edits to `KNOWN_ISSUES.md`, `docs/features/data-export.md` and this
+record, left by a builder cut off by a usage limit. `ce5fc7f661` is round 2's
+commit, already an ancestor of `68fa9fe692` and described under "Second review";
+the working tree was clean at the start of this round (`git status`, no stash),
+so there was nothing left to finish.
+
 ## What remains
 
 -   **The restore path (BO-1).** Blackout still has no screen that restores keys
@@ -682,15 +759,31 @@ nudge, the chip, the form and `EnableVerification`.
     up, the SDK fetches a missing key from it by itself once another session has
     uploaded that key (`rust-crypto.js:2118-2121`). Every line here says so.
     Design revision 3's D13 (b) is the next PR.
--   **A backup stops growing once only Blackout sessions are left** (third
-    review). A Blackout session that did not set the backup up neither trusts it
-    nor holds its key, so the SDK never enables it there (`backup.js:282-292`)
-    and never uploads to it (`maybeUploadKey`, `backup.js:333-337`, needs an
-    active version). Someone who set a backup up in another app, signed that
-    session out and now uses only Blackout has a backup that no longer gains
-    keys: messages from then on cannot be restored from it anywhere. TRUST.md,
-    KNOWN_ISSUES BO-1 and the nudge's rows now say whose keys a backup holds;
-    the restore and verification path is what changes this.
+-   **A backup stops growing once only Blackout sessions signed in after it
+    are left** (third review, narrowed by the fourth). A Blackout session
+    signed in after the backup was set up, which Blackout can't verify, neither
+    trusts it nor holds its key, so the SDK never enables it there
+    (`backup.js:282-292`) and never uploads to it (`maybeUploadKey`,
+    `backup.js:333-337`, needs an active version). Someone who set a backup up
+    in another app, signed that session out and now uses only such Blackout
+    sessions has a backup that no longer gains keys: messages from then on
+    cannot be restored from it anywhere. The exception, found by the fourth
+    review: a Blackout session that holds the account's cross-signing identity,
+    because it ran the from-scratch setup or the warned reset, trusts a backup
+    that another app later creates in place of its own. That app signs the
+    backup with its device key and, when it has it, the account's master key
+    (`rust-crypto.js:1276-1291`, `signObject` → `olmMachine.sign`; the
+    crypto-wasm 17.1.0 typings: "Sign the given message using our device key
+    and if available cross-signing master key"), and a valid signature from
+    "our own user identity, provided the identity is trusted" or from a trusted
+    own device makes the backup trusted (`matrix_sdk_crypto_wasm.d.ts:3770-3780`).
+    That session switches to it at its next check and uploads every key it has
+    (`backup.js:282-306`); an upload to the deleted version forces the check
+    (`backup.js:428-439`). The third review's "a Blackout session that did not
+    set the backup up neither trusts it nor holds its key" was false of that
+    session, and TRUST.md said the same; both now say "signed in later". TRUST.md,
+    KNOWN_ISSUES BO-1 and the nudge's rows say whose keys a backup holds; the
+    restore and verification path is what changes this.
 -   **Sign out and the session list** (task #43): not built here; they wait for
     the operator's decisions. This record covers only the guard, which the
     design ships "in every option".
