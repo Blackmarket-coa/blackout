@@ -158,3 +158,43 @@ export const accountKeyVerdict = (
     if (state.crossSigning === 'no') return 'none';
     return 'unknown';
 };
+
+/** Which flow is about to write: the from-scratch setup, or the warned reset. */
+export type SetupMode = 'setup' | 'reset';
+
+/**
+ * Why the setup form itself refused, shown in its error slot. Each line says
+ * what the check found and what Blackout did: stopped before any write.
+ */
+export const SETUP_REFUSED_TEXT = {
+    backup: 'Your account already has a key backup on your homeserver. Setting up a new one here would delete it, so Blackout stopped before changing anything. Another Matrix app that you sign in to with your recovery key or passphrase may be able to restore from it.',
+    crossSigning:
+        'Your account already has cross-signing set up. Setting up here would replace it, and every device and contact that verified you would see a new identity, so Blackout stopped before changing anything.',
+    unknown:
+        'Blackout couldn’t finish checking whether your account already has a key backup or cross-signing, so it stopped before changing anything. Try again later.',
+} as const;
+
+/**
+ * The last check before the setup writes anything. Every entry re-checks at
+ * its click (`KeyBackupSetupGuard`); this closes the window between that click
+ * and the submit, in which another device of the account can create
+ * cross-signing and a backup.
+ *
+ * - `'setup'` (the from-scratch `DeviceVerificationSetup`) goes on only when
+ *   the homeserver answered that the account has neither a backup nor
+ *   cross-signing.
+ * - `'reset'` (the warned `DeviceVerificationReset`) exists to replace
+ *   cross-signing, so it goes on whatever the cross-signing check says, but
+ *   only when the backup check answered "none": it never deletes a backup and
+ *   never goes on after a failed backup check.
+ *
+ * Returns the message to show, or null to go on.
+ */
+export const setupRefusal = (state: AccountKeyState, mode: SetupMode): string | null => {
+    if (state.backup === 'backup') return SETUP_REFUSED_TEXT.backup;
+    if (state.backup === 'unknown') return SETUP_REFUSED_TEXT.unknown;
+    if (mode === 'reset') return null;
+    if (state.crossSigning === 'yes') return SETUP_REFUSED_TEXT.crossSigning;
+    if (state.crossSigning === 'unknown') return SETUP_REFUSED_TEXT.unknown;
+    return null;
+};

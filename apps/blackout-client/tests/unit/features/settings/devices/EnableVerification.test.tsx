@@ -18,18 +18,22 @@ vi.mock('focus-trap-react', () => ({
     default: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 import { EnableVerification } from '../../../../../src/app/features/settings/devices/Verification';
+import { KEY_BACKUP_NUDGE_TEXT } from '../../../../../src/app/features/settings/security/encryptionPosture';
 import {
     createFakeKeyClient,
     createFakeKeyHomeserver,
     type FakeKeyHomeserverOptions,
 } from '../../../helpers/fakeKeyHomeserver';
 import {
+    backupVersionGets,
     bodyText,
     buttonsNamed,
     click,
+    destructiveCryptoCalls,
     renderWithClient,
     settle,
     stubCrypto,
+    unhandledRejectionsDuring,
     waitFor,
 } from '../../../helpers/keyBackupRender';
 import type { MountedDialog } from '../../../helpers/modalReliability';
@@ -88,5 +92,59 @@ describe('EnableVerification', () => {
         const hs = await renderEnable({ backupVersion: null, masterKey: false }, false);
         expect(buttonsNamed('Enable')).toHaveLength(0);
         expect(hs.calls).toEqual([]);
+    });
+});
+
+describe('EnableVerification: the click re-asks the homeserver, because the answer can be stale', () => {
+    it('cross-signing and a backup created on another device after the check: the backup text, not the setup, and the button goes', async () => {
+        const hs = await renderEnable({ backupVersion: null, masterKey: false });
+        expect(buttonsNamed('Enable')).toHaveLength(1);
+        const before = backupVersionGets(hs.calls);
+        hs.setBackupVersion('3');
+        hs.setMasterKey(true);
+        await settle(50);
+
+        await click(buttonsNamed('Enable')[0]);
+        await waitFor(() => buttonsNamed('Close').length === 1, { what: 'the explanation' });
+        expect(backupVersionGets(hs.calls)).toBeGreaterThan(before);
+        expect(bodyText()).toContain(KEY_BACKUP_NUDGE_TEXT.backup.detail);
+        expect(bodyText()).not.toContain('Setup Device Verification');
+        expect(hs.destructiveCalls()).toEqual([]);
+        expect(buttonsNamed('Enable')).toHaveLength(0);
+
+        await click(buttonsNamed('Close')[0]);
+        await waitFor(() => buttonsNamed('Close').length === 0, {
+            what: 'the explanation to close',
+        });
+        expect(buttonsNamed('Enable')).toHaveLength(0);
+    });
+
+    it('nothing on the server at the click either: the fresh answer opens the setup', async () => {
+        const hs = await renderEnable({ backupVersion: null, masterKey: false });
+        const before = backupVersionGets(hs.calls);
+        await click(buttonsNamed('Enable')[0]);
+        await waitFor(() => bodyText().includes('Setup Device Verification'), {
+            what: 'the setup dialog',
+        });
+        expect(backupVersionGets(hs.calls)).toBe(before + 1);
+    });
+
+    it('a device check that rejects: no Enable, no setup, no rejection escapes', async () => {
+        const hs = createFakeKeyHomeserver({ backupVersion: null, masterKey: false });
+        const mx = createFakeKeyClient(hs);
+        const crypto = stubCrypto(mx, { crossSigningReady: false });
+        crypto.isCrossSigningReady.mockRejectedValue(new Error('crypto not ready'));
+
+        const unhandled = await unhandledRejectionsDuring(async () => {
+            mounted = await renderWithClient(mx, <EnableVerification visible />);
+            await waitFor(() => hs.calls.some((c) => c.path.endsWith('/keys/query')), {
+                what: 'the account check',
+            });
+            await settle(100);
+        });
+
+        expect(unhandled).toEqual([]);
+        expect(buttonsNamed('Enable')).toHaveLength(0);
+        expect(destructiveCryptoCalls(crypto)).toBe(0);
     });
 });

@@ -21,6 +21,7 @@ import { ContainerColor } from '../styles/ContainerColor.css';
 import { copyToClipboard } from '../utils/dom';
 import { AsyncStatus, useAsyncCallback } from '../hooks/useAsyncCallback';
 import { clearSecretStorageKeys } from '../../client/secretStorageKeys';
+import { checkAccountKeyState, setupRefusal, type SetupMode } from '../../client/keyBackupCheck';
 import { ActionUIA, ActionUIAFlowsLoader } from './ActionUIA';
 import { useMatrixClient } from '../hooks/useMatrixClient';
 import { useAlive } from '../hooks/useAlive';
@@ -69,8 +70,15 @@ function makeUIAAction<T>(
 
 type SetupVerificationProps = {
     onComplete: (recoveryKey: string) => void;
+    /**
+     * `'setup'` (default): the from-scratch flow, which goes on only when the
+     * homeserver answers that the account has neither a backup nor
+     * cross-signing. `'reset'`: the warned flow, which replaces cross-signing
+     * on purpose but still never deletes a backup (see `setupRefusal`).
+     */
+    mode?: SetupMode;
 };
-export function SetupVerification({ onComplete }: SetupVerificationProps) {
+export function SetupVerification({ onComplete, mode = 'setup' }: SetupVerificationProps) {
     const mx = useMatrixClient();
     const alive = useAlive();
 
@@ -143,6 +151,17 @@ export function SetupVerification({ onComplete }: SetupVerificationProps) {
                 const crypto = mx.getCrypto();
                 if (!crypto) throw new Error('Unexpected Error! Crypto module not found!');
 
+                // The last check before anything is written (S9,
+                // docs/security/key-backup-nudge-2026-11-02.md). Every entry
+                // re-checked at its click; this closes the window between that
+                // click and this submit, in which another device of the
+                // account may have created cross-signing and a backup. What
+                // follows replaces the account's secret storage and
+                // cross-signing and deletes every backup version it has, so
+                // only the homeserver's fresh answer lets it go on.
+                const refusal = setupRefusal(await checkAccountKeyState(mx), mode);
+                if (refusal) throw new Error(refusal);
+
                 const recoveryKeyData = await crypto.createRecoveryKeyFromPassphrase(passphrase);
                 if (!recoveryKeyData.encodedPrivateKey) {
                     throw new Error('Unexpected Error! Failed to create recovery key.');
@@ -163,7 +182,7 @@ export function SetupVerification({ onComplete }: SetupVerificationProps) {
 
                 onComplete(recoveryKeyData.encodedPrivateKey);
             },
-            [mx, onComplete, authUploadDeviceSigningKeys]
+            [mx, mode, onComplete, authUploadDeviceSigningKeys]
         )
     );
 
@@ -180,7 +199,10 @@ export function SetupVerification({ onComplete }: SetupVerificationProps) {
             passphrase = passphraseInput.value;
         }
 
-        setup(passphrase);
+        // useAsyncCallback records a failure in `setupState`, which the form
+        // shows below, and then rethrows it; a refusal from the account check
+        // is an expected outcome, not an escape, so the rejection ends here.
+        void setup(passphrase).catch(() => undefined);
     };
 
     return (
@@ -351,7 +373,7 @@ export const DeviceVerificationReset = forwardRef<HTMLDivElement, DeviceVerifica
                                 recoveryKey ? (
                                     <RecoveryKeyDisplay recoveryKey={recoveryKey} />
                                 ) : (
-                                    <SetupVerification onComplete={setRecoveryKey} />
+                                    <SetupVerification onComplete={setRecoveryKey} mode="reset" />
                                 )
                             }
                         </UseStateProvider>

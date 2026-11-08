@@ -120,7 +120,7 @@ export const KEY_BACKUP_NUDGE_TEXT = {
     },
     crossSigningReady: {
         headline: 'Turn on encrypted message backup',
-        detail: 'Your account has no message key backup. Turning one on here resets device verification and gives you a new recovery key; the next screen explains what that changes. Another Matrix app with the new key can then restore older messages from the backup. Blackout can’t restore from a backup yet.',
+        detail: 'Your account has no message key backup. Turning one on here resets device verification and gives you a new recovery key. Another Matrix app with the new key can then restore older messages from the backup. Blackout can’t restore from a backup yet.',
     },
     crossSigningNotReady: {
         headline: 'This device isn’t verified',
@@ -132,11 +132,29 @@ export const KEY_BACKUP_NUDGE_TEXT = {
     },
     unknown: {
         headline: 'Key backup',
-        detail: 'Blackout couldn’t check whether your account already has a key backup, so it doesn’t offer to set one up right now.',
+        detail: 'Blackout couldn’t finish checking whether your account already has a key backup or cross-signing, so it doesn’t offer to set one up right now.',
     },
 } as const;
 
 export const KEY_BACKUP_NUDGE_ACTION_LABEL = 'Set up backup';
+
+/** Shown in the overlay while a click re-asks the homeserver. */
+export const KEY_BACKUP_NUDGE_CHECKING =
+    'Checking what your account already has on your homeserver…';
+
+/**
+ * The nudge's texts for `KeyBackupSetupGuard`'s overlay: the wait, and the
+ * three rows that offer nothing, each the same sentence the banner shows for
+ * that row. The verdict the banner shows can be stale (another device can set
+ * things up while it sits open), so a click re-asks the homeserver and shows
+ * the fresh row's text when the answer removed the action.
+ */
+export const KEY_BACKUP_NUDGE_GUARD_TEXTS = {
+    checking: KEY_BACKUP_NUDGE_CHECKING,
+    backup: KEY_BACKUP_NUDGE_TEXT.backup.detail,
+    not_verified: KEY_BACKUP_NUDGE_TEXT.crossSigningNotReady.detail,
+    check_failed: KEY_BACKUP_NUDGE_TEXT.unknown.detail,
+} as const;
 
 /**
  * Focused selector for the key-backup nudge.
@@ -162,7 +180,13 @@ export const KEY_BACKUP_NUDGE_ACTION_LABEL = 'Set up backup';
  * Row 2 deletes no backup (the check answered "none") and the reset flow
  * carries its own warning and confirm step. A `'backup'` or `'unknown'`
  * answer offers nothing: a setup would delete the existing backup, and
- * "couldn't check" must never be read as "nothing to lose".
+ * "couldn't check" must never be read as "nothing to lose". `'unknown'` also
+ * covers a backup check that answered "none" while the cross-signing check
+ * failed, so its text names both checks.
+ *
+ * The row decides only what the banner shows. The click re-asks the
+ * homeserver (`KeyBackupSetupGuard`) and the setup form checks once more
+ * before its first write, so a stale row never opens the setup by itself.
  *
  * Returns null once this device's backup is active (nothing to nudge about).
  */

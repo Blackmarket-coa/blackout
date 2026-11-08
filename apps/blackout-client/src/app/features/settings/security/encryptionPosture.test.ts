@@ -4,6 +4,8 @@ import {
     onboardingBlocked,
     selectKeyBackupNudge,
     KEY_BACKUP_NUDGE_ACTION_LABEL,
+    KEY_BACKUP_NUDGE_CHECKING,
+    KEY_BACKUP_NUDGE_GUARD_TEXTS,
     KEY_BACKUP_NUDGE_TEXT,
     summarizePosture,
     type AccountPosture,
@@ -112,6 +114,10 @@ describe('selectKeyBackupNudge', () => {
         expect(v?.detail).toMatch(/resets device verification/i);
         expect(v?.headline).toBe(KEY_BACKUP_NUDGE_TEXT.crossSigningReady.headline);
         expect(v?.detail).toBe(KEY_BACKUP_NUDGE_TEXT.crossSigningReady.detail);
+        // The reset screen it opens says a backup "will be lost"; this row is
+        // reached only when the check answered that none exists, so the
+        // detail does not send the person to that screen for an explanation.
+        expect(v?.detail).not.toMatch(/next screen/i);
     });
 
     it('nudges when encryption is not set up at all', () => {
@@ -186,8 +192,23 @@ describe('selectKeyBackupNudge', () => {
             expect(v?.actions).toEqual([]);
             expect(v?.headline).toBe(KEY_BACKUP_NUDGE_TEXT.unknown.headline);
             expect(v?.detail).toBe(KEY_BACKUP_NUDGE_TEXT.unknown.detail);
-            expect(v?.detail).toMatch(/couldn.t check/i);
+            expect(v?.detail).toMatch(/couldn.t finish checking/i);
+            // 'unknown' also covers a backup check that answered "none" while
+            // the cross-signing check failed, so the text names both checks.
+            expect(v?.detail).toMatch(/key backup or cross-signing/);
         }
+    });
+
+    it('the click-time overlay texts are the rows’ own sentences, plus the wait', () => {
+        expect(KEY_BACKUP_NUDGE_GUARD_TEXTS.checking).toBe(KEY_BACKUP_NUDGE_CHECKING);
+        expect(KEY_BACKUP_NUDGE_GUARD_TEXTS.backup).toBe(KEY_BACKUP_NUDGE_TEXT.backup.detail);
+        expect(KEY_BACKUP_NUDGE_GUARD_TEXTS.not_verified).toBe(
+            KEY_BACKUP_NUDGE_TEXT.crossSigningNotReady.detail
+        );
+        expect(KEY_BACKUP_NUDGE_GUARD_TEXTS.check_failed).toBe(
+            KEY_BACKUP_NUDGE_TEXT.unknown.detail
+        );
+        expect(KEY_BACKUP_NUDGE_CHECKING).toMatch(/^Checking /);
     });
 
     it('no verdict promises a recovery Blackout cannot do', () => {

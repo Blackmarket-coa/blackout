@@ -103,3 +103,36 @@ export const destructiveCryptoCalls = (stub: CryptoStub): number =>
     stub.bootstrapSecretStorage.mock.calls.length +
     stub.bootstrapCrossSigning.mock.calls.length +
     stub.resetKeyBackup.mock.calls.length;
+
+/**
+ * Runs `run`, then lets the event loop turn, and returns every Node-level
+ * unhandled rejection raised meanwhile. A rejecting device check must not
+ * escape a `void`-fired effect or click handler: Vitest reports such an
+ * escape as a suite-level error, and a test here pins that there is none.
+ */
+export async function unhandledRejectionsDuring(run: () => Promise<void>): Promise<unknown[]> {
+    const seen: unknown[] = [];
+    const onUnhandled = (reason: unknown) => {
+        seen.push(reason);
+    };
+    // Typed locally: the client's tsconfig has no Node types, and jsdom runs on Node.
+    type RejectionListener = (reason: unknown) => void;
+    type NodeProcessLike = {
+        on(event: 'unhandledRejection', listener: RejectionListener): unknown;
+        off(event: 'unhandledRejection', listener: RejectionListener): unknown;
+    };
+    const nodeProcess = (globalThis as { process?: NodeProcessLike }).process;
+    if (!nodeProcess) throw new Error('unhandledRejectionsDuring needs Node’s process');
+    nodeProcess.on('unhandledRejection', onUnhandled);
+    try {
+        await run();
+        await settle(50);
+    } finally {
+        nodeProcess.off('unhandledRejection', onUnhandled);
+    }
+    return seen;
+}
+
+/** How many times the guard asked `GET /room_keys/version` so far. */
+export const backupVersionGets = (calls: { method: string; path: string }[]): number =>
+    calls.filter((c) => c.method === 'GET' && c.path.endsWith('/room_keys/version')).length;

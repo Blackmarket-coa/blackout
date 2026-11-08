@@ -27,20 +27,19 @@ import { SecretStorageKeyContent } from '../../../../types/matrix/accountData';
 import { AsyncState, AsyncStatus, useAsync } from '../../../hooks/useAsyncCallback';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
 import { DeviceVerification } from '../../../components/DeviceVerification';
+import { DeviceVerificationReset } from '../../../components/DeviceVerificationSetup';
 import {
-    DeviceVerificationReset,
-    DeviceVerificationSetup,
-} from '../../../components/DeviceVerificationSetup';
+    KeyBackupGuardOverlay,
+    checkForSetup,
+    useKeyBackupSetupGuard,
+} from '../../../components/KeyBackupSetupGuard';
 import { stopPropagation } from '../../../utils/keyboard';
 import { useAuthMetadata } from '../../../hooks/useAuthMetadata';
 import { withSearchParam } from '../../../pages/pathUtils';
 import { useAccountManagementActions } from '../../../hooks/useAccountManagement';
 import { useAlive } from '../../../hooks/useAlive';
-import {
-    accountKeyVerdict,
-    checkAccountKeyState,
-    type AccountKeyVerdict,
-} from '../../../../client/keyBackupCheck';
+import type { AccountKeyVerdict } from '../../../../client/keyBackupCheck';
+import { KEY_BACKUP_NUDGE_GUARD_TEXTS } from '../security/encryptionPosture';
 
 type VerificationStatusBadgeProps = {
     verificationStatus: VerificationStatus;
@@ -233,26 +232,26 @@ type EnableVerificationProps = {
  * version it has. `visible` comes from account data (`useCrossSigningActive`),
  * which never says whether a backup exists, so the button renders only once
  * the homeserver itself answered that the account has neither a backup nor
- * cross-signing (S9, `docs/security/key-backup-nudge-2026-11-02.md`). This
- * page is not mounted in the shipped app today; the guard is here for when it
- * is.
+ * cross-signing (S9, `docs/security/key-backup-nudge-2026-11-02.md`). That
+ * answer can be stale (another device can set things up while the page sits
+ * open), so the click asks again (`useKeyBackupSetupGuard`) and opens the
+ * setup only on a fresh "neither"; otherwise the overlay shows the nudge's text
+ * for the fresh row, and the button follows that row. This page is not mounted
+ * in the shipped app today; the guard is here for when it is.
  */
 export function EnableVerification({ visible }: EnableVerificationProps) {
     const mx = useMatrixClient();
     const alive = useAlive();
-    const [open, setOpen] = useState(false);
     const [accountState, setAccountState] = useState<AccountKeyVerdict | null>(null);
+    const { panel, open: openGuard, close: closeGuard } = useKeyBackupSetupGuard(mx);
 
     useEffect(() => {
         if (!visible) return undefined;
         let current = true;
         const check = async () => {
-            const crypto = mx.getCrypto();
-            const [state, crossSigningReady] = await Promise.all([
-                checkAccountKeyState(mx),
-                crypto ? crypto.isCrossSigningReady() : Promise.resolve(false),
-            ]);
-            if (current && alive()) setAccountState(accountKeyVerdict(state, crossSigningReady));
+            // Never throws: a rejected device check reads as 'unknown'.
+            const result = await checkForSetup(mx);
+            if (current && alive()) setAccountState(result.verdict);
         };
         void check();
         return () => {
@@ -260,34 +259,27 @@ export function EnableVerification({ visible }: EnableVerificationProps) {
         };
     }, [mx, visible, alive]);
 
-    const handleCancel = useCallback(() => setOpen(false), []);
+    const handleEnable = useCallback(async () => {
+        const result = await openGuard();
+        if (result) setAccountState(result.verdict);
+    }, [openGuard]);
 
     const offered = visible && accountState === 'none';
 
     return (
         <>
             {offered && (
-                <Button size="300" radii="300" onClick={() => setOpen(true)}>
+                <Button size="300" radii="300" onClick={() => void handleEnable()}>
                     <Text as="span" size="B300">
                         Enable
                     </Text>
                 </Button>
             )}
-            {offered && open && (
-                <Overlay open backdrop={<OverlayBackdrop />}>
-                    <OverlayCenter>
-                        <FocusTrap
-                            focusTrapOptions={{
-                                initialFocus: false,
-                                clickOutsideDeactivates: false,
-                                escapeDeactivates: false,
-                            }}
-                        >
-                            <DeviceVerificationSetup onCancel={handleCancel} />
-                        </FocusTrap>
-                    </OverlayCenter>
-                </Overlay>
-            )}
+            <KeyBackupGuardOverlay
+                panel={panel}
+                texts={KEY_BACKUP_NUDGE_GUARD_TEXTS}
+                onClose={closeGuard}
+            />
         </>
     );
 }

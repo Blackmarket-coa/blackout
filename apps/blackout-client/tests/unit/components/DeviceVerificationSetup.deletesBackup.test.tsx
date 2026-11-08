@@ -1,19 +1,22 @@
 // @vitest-environment jsdom
 //
-// What the from-scratch setup does to an account that already has a key
-// backup, shown at the HTTP level: `DeviceVerificationSetup` is rendered with
-// a real `MatrixClient` and real Rust crypto (in memory) against
-// `createFakeKeyHomeserver`, and the form is submitted. This is the component's
-// own code path, not a re-typed sequence. It is the fact that makes the guard
-// necessary (S9, `docs/security/key-backup-nudge-2026-11-02.md`): the SDK's
-// `resetKeyBackup` deletes every backup version the account has before it
-// creates a new one (`rust-crypto/backup.js`, `setupKeyBackup` →
-// `deleteAllKeyBackupVersions`).
+// What the from-scratch setup's three SDK calls do to an account that already
+// has a key backup, shown at the HTTP level with a real `MatrixClient` and
+// real Rust crypto (in memory) against `createFakeKeyHomeserver`; and that
+// the component that makes those calls (`DeviceVerificationSetup`) now
+// refuses before the first of them against the same account. The first is
+// the fact that makes the guard necessary (S9,
+// `docs/security/key-backup-nudge-2026-11-02.md`): the SDK's `resetKeyBackup`
+// deletes every backup version the account has before it creates a new one
+// (`rust-crypto/backup.js`, `setupKeyBackup` → `deleteAllKeyBackupVersions`).
+// The second is the setup form's own last check (round 2).
 //
 // The account here has a backup and no cross-signing: the chip's develop path
-// (account data said no cross-signing → the setup flow), and the only shape
-// the fake homeserver answers without user-interactive auth, as Synapse does
-// for a first master key.
+// (account data said no cross-signing → the setup flow). The fake asks for
+// user-interactive auth only when a master key already exists (the fork's
+// Synapse under MSC3967; with its default config Synapse asks every time
+// unless `ui_auth.session_timeout` is set), so this account's writes go
+// through in one pass.
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -26,8 +29,11 @@ vi.mock('focus-trap-react', () => ({
 }));
 import type { MatrixClient } from 'matrix-js-sdk';
 import { DeviceVerificationSetup } from '../../../src/app/components/DeviceVerificationSetup';
+import { SETUP_REFUSED_TEXT } from '../../../src/client/keyBackupCheck';
+import { clearSecretStorageKeys } from '../../../src/client/secretStorageKeys';
 import { createFakeKeyClient, createFakeKeyHomeserver } from '../helpers/fakeKeyHomeserver';
 import {
+    backupVersionGets,
     bodyText,
     renderWithClient,
     settle,
@@ -50,8 +56,8 @@ afterEach(() => {
     mx = undefined;
 });
 
-describe('DeviceVerificationSetup against an account that has a backup', () => {
-    it('submitting the form deletes the existing server backup version and replaces it', async () => {
+describe('the from-scratch setup against an account that has a backup', () => {
+    it('the three SDK calls the setup makes delete the existing server backup version and replace it', async () => {
         const hs = createFakeKeyHomeserver({ backupVersion: '3', masterKey: false });
         mx = createFakeKeyClient(hs);
         await mx.initRustCrypto({ useIndexedDB: false });
@@ -61,16 +67,20 @@ describe('DeviceVerificationSetup against an account that has a backup', () => {
         expect(await crypto!.isCrossSigningReady()).toBe(false);
         expect(await crypto!.getActiveSessionBackupVersion()).toBeNull();
 
-        mounted = await renderWithClient(
-            mx,
-            <DeviceVerificationSetup onCancel={() => undefined} />
-        );
-        await waitFor(() => bodyText().includes('Setup Device Verification'), {
-            what: 'the setup dialog',
+        // The same calls, in the same order, as `SetupVerification.setup`.
+        const recoveryKeyData = await crypto!.createRecoveryKeyFromPassphrase(undefined);
+        clearSecretStorageKeys();
+        await crypto!.bootstrapSecretStorage({
+            createSecretStorageKey: async () => recoveryKeyData,
+            setupNewSecretStorage: true,
         });
-        const form = document.body.querySelector('form');
-        expect(form).not.toBeNull();
-        await submitForm(form as HTMLFormElement);
+        await crypto!.bootstrapCrossSigning({
+            setupNewCrossSigning: true,
+            authUploadDeviceSigningKeys: async (makeRequest) => {
+                await makeRequest(null);
+            },
+        });
+        await crypto!.resetKeyBackup();
 
         await waitFor(
             () =>
@@ -94,17 +104,46 @@ describe('DeviceVerificationSetup against an account that has a backup', () => {
         expect(writes).toContain('DELETE /_matrix/client/v3/room_keys/version/3');
         expect(writes).toContain('POST /_matrix/client/v3/room_keys/version');
         expect(writes).toContain('POST /_matrix/client/v3/keys/device_signing/upload');
-        // The screen never warned: it shows the new recovery key next.
-        await waitFor(() => bodyText().includes('Recovery Key'), {
-            what: 'the recovery key screen',
-        });
 
         // resetKeyBackup starts the SDK's own backup check without awaiting
-        // it. With `force`, this returns the in-flight check's promise, so the
-        // check finishes before afterEach stops the client and closes its Rust
+        // it. The public `CryptoApi.checkKeyBackupAndEnable()` takes no
+        // argument and always forces that check (`rust-crypto.js`,
+        // `checkKeyBackupAndEnable` → `backupManager.checkKeyBackupAndEnable(true)`),
+        // so awaiting it returns the in-flight check's promise, and the check
+        // finishes before afterEach stops the client and closes its Rust
         // machine; the upload loop it then starts sleeps first and exits on
         // `stopped` without touching the machine.
-        await crypto!.checkKeyBackupAndEnable(true);
+        await crypto!.checkKeyBackupAndEnable();
+        await settle(20);
+    }, 60_000);
+
+    it('the component refuses before its first write: the backup stays, nothing is replaced, no recovery key is shown', async () => {
+        const hs = createFakeKeyHomeserver({ backupVersion: '3', masterKey: false });
+        mx = createFakeKeyClient(hs);
+        await mx.initRustCrypto({ useIndexedDB: false });
+
+        mounted = await renderWithClient(
+            mx,
+            <DeviceVerificationSetup onCancel={() => undefined} />
+        );
+        await waitFor(() => bodyText().includes('Setup Device Verification'), {
+            what: 'the setup dialog',
+        });
+        const before = backupVersionGets(hs.calls);
+        const form = document.body.querySelector('form');
+        expect(form).not.toBeNull();
+        await submitForm(form as HTMLFormElement);
+
+        await waitFor(() => bodyText().includes(SETUP_REFUSED_TEXT.backup), {
+            what: 'the refusal',
+            timeoutMs: 30_000,
+        });
+        expect(backupVersionGets(hs.calls)).toBe(before + 1);
+        expect(hs.destructiveCalls()).toEqual([]);
+        expect(hs.backupVersion()).toBe('3');
+        expect(hs.masterKey()).toBeNull();
+        expect(hs.accountData.has('m.secret_storage.default_key')).toBe(false);
+        expect(bodyText()).not.toContain('Store the Recovery Key');
         await settle(20);
     }, 60_000);
 });

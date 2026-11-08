@@ -16,8 +16,16 @@
  *   each queried user who has a master key (`synapse/handlers/e2e_keys.py`,
  *   `get_cross_signing_keys_from_cache`).
  * - `POST /keys/device_signing/upload`: user-interactive auth (the password)
- *   when the account already has a master key (`synapse/rest/client/keys.py`,
- *   `SigningKeyUploadServlet.on_POST`).
+ *   only when the account already has a master key. That is the fork's
+ *   Synapse under MSC3967 (`synapse/rest/client/keys.py`,
+ *   `SigningKeyUploadServlet.on_POST`, the `msc3967_enabled` branch), which
+ *   is off by default (`synapse/config/experimental.py`); with the default
+ *   config Synapse asks every time, first-time setup included, unless
+ *   `ui_auth.session_timeout` is set (`synapse/handlers/auth.py`,
+ *   `validate_user_via_ui_auth` with `can_skip_ui_auth`). The guard never
+ *   reaches this endpoint unless the verdict is 'none', so the difference
+ *   does not touch it; the fake takes the MSC3967 shape so a first-time
+ *   setup's writes can be shown in one submit.
  * - Account data is stored; a PUT is echoed as the sync would, after the
  *   answer, because secret storage waits for that echo before it goes on.
  */

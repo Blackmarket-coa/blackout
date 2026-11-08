@@ -37,6 +37,7 @@ import {
     destructiveCryptoCalls,
     renderWithClient,
     stubCrypto,
+    unhandledRejectionsDuring,
     waitFor,
     type CryptoStubOptions,
 } from '../helpers/keyBackupRender';
@@ -159,5 +160,28 @@ describe('MessageBadEncryptedContent chip', () => {
         await clickWhy();
         await waitFor(() => bodyText().includes(RESET_HEADING), { what: 'the reset dialog' });
         expect(bodyText()).toContain('Resetting device verification is permanent.');
+    });
+
+    it('a device check that rejects: the check-failed text, no setup, no rejection escapes', async () => {
+        const { crypto } = await renderChip(
+            { backupVersion: null, masterKey: false },
+            { crossSigningReady: false }
+        );
+        crypto.isCrossSigningReady.mockRejectedValue(new Error('crypto not ready'));
+        const unhandled = await unhandledRejectionsDuring(async () => {
+            await clickWhy();
+            await waitFor(() => bodyText().includes(CHIP_CHECK_FAILED), {
+                what: 'the failed text',
+            });
+        });
+        expect(unhandled).toEqual([]);
+        expect(bodyText()).not.toContain(SETUP_HEADING);
+        expect(destructiveCryptoCalls(crypto)).toBe(0);
+    });
+
+    it('the chip text is true of every undecryptable message, whatever the cause', () => {
+        expect(CHIP_TEXT).toBe('Can’t decrypt this message on this device.');
+        expect(CHIP_TEXT).not.toMatch(/doesn.t have its key/);
+        expect(CHIP_CHECK_FAILED).toMatch(/key backup or cross-signing/);
     });
 });

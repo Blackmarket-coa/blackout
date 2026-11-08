@@ -10,10 +10,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
     ACCOUNT_KEY_CHECK_TIMEOUT_MS,
+    SETUP_REFUSED_TEXT,
     accountKeyVerdict,
     checkAccountKeyState,
     checkBackupState,
     checkCrossSigningState,
+    setupRefusal,
+    type AccountKeyState,
 } from '../../../src/client/keyBackupCheck';
 import {
     ME,
@@ -207,5 +210,62 @@ describe('accountKeyVerdict precedence', () => {
         expect(accountKeyVerdict({ backup: 'none', crossSigning: 'unknown' }, false)).toBe(
             'unknown'
         );
+    });
+});
+
+describe('setupRefusal: the check the setup form runs before its first write', () => {
+    // Round 2 of S9: every entry re-checks at its click; this closes the
+    // window between that click and the submit. Only 'none' from both checks
+    // lets the from-scratch setup go on; the warned reset replaces
+    // cross-signing on purpose but still never deletes a backup.
+    const none: AccountKeyState = { backup: 'none', crossSigning: 'no' };
+
+    it('from-scratch setup goes on only when the homeserver answered neither', () => {
+        expect(setupRefusal(none, 'setup')).toBeNull();
+    });
+
+    it('a backup refuses both flows, with the backup text', () => {
+        const state: AccountKeyState = { backup: 'backup', crossSigning: 'no' };
+        expect(setupRefusal(state, 'setup')).toBe(SETUP_REFUSED_TEXT.backup);
+        expect(setupRefusal(state, 'reset')).toBe(SETUP_REFUSED_TEXT.backup);
+    });
+
+    it('a failed backup check refuses both flows, with the unknown text', () => {
+        const state: AccountKeyState = {
+            backup: 'unknown',
+            crossSigning: 'no',
+            detail: 'no answer',
+        };
+        expect(setupRefusal(state, 'setup')).toBe(SETUP_REFUSED_TEXT.unknown);
+        expect(setupRefusal(state, 'reset')).toBe(SETUP_REFUSED_TEXT.unknown);
+    });
+
+    it('cross-signing on the server refuses the from-scratch setup and lets the reset go on', () => {
+        const state: AccountKeyState = { backup: 'none', crossSigning: 'yes' };
+        expect(setupRefusal(state, 'setup')).toBe(SETUP_REFUSED_TEXT.crossSigning);
+        expect(setupRefusal(state, 'reset')).toBeNull();
+    });
+
+    it('a failed cross-signing check refuses the from-scratch setup and lets the reset go on', () => {
+        const state: AccountKeyState = { backup: 'none', crossSigning: 'unknown' };
+        expect(setupRefusal(state, 'setup')).toBe(SETUP_REFUSED_TEXT.unknown);
+        expect(setupRefusal(state, 'reset')).toBeNull();
+    });
+
+    it('a backup wins over everything: refused even when cross-signing is unknown', () => {
+        const state: AccountKeyState = { backup: 'backup', crossSigning: 'unknown' };
+        expect(setupRefusal(state, 'setup')).toBe(SETUP_REFUSED_TEXT.backup);
+        expect(setupRefusal(state, 'reset')).toBe(SETUP_REFUSED_TEXT.backup);
+    });
+
+    it('every refusal says Blackout stopped before changing anything, and promises no recovery Blackout cannot do', () => {
+        for (const text of Object.values(SETUP_REFUSED_TEXT)) {
+            expect(text).toMatch(/stopped before changing anything/);
+            expect(text).not.toMatch(/recover(ed|able)? when you sign in|don.t lose access/i);
+        }
+    });
+
+    it('the unknown text names both checks, because either can be the one that failed', () => {
+        expect(SETUP_REFUSED_TEXT.unknown).toMatch(/key backup or cross-signing/);
     });
 });
