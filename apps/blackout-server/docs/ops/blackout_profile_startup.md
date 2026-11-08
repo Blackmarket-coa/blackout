@@ -1,5 +1,12 @@
 # BLACKOUT_PROFILE startup behavior
 
+> **2026-11-02.** The entrypoint whose behaviour and log line this page
+> describes, `services/blackout-server/entrypoint.sh`, was removed with the
+> Railway template in `42f68f2`; the operator chose removal over fixing the
+> template. No image in the tree selects a profile at startup now. The
+> `synapse.util.blackout_profiles` helpers and their tests remain. The page is
+> kept as the description of what that entrypoint did.
+
 `BLACKOUT_PROFILE` controls deterministic startup configuration selection for `blackout-server`.
 
 ## Decision table

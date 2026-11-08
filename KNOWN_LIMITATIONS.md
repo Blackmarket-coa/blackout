@@ -81,8 +81,15 @@ For the source-of-truth triage with tier/owner detail see
     plugin's changed `register` API), unnoticed because
     `.github/workflows/blackout-desktop-tauri.yml` runs only for pull requests
     and pushes to `main`. Both are fixed; the desktop workflow still does not
-    run on `develop` pull requests, so a desktop break can again land unseen
-    until a release.
+    run on `develop` pull requests. Since 2026-11-02 a build-only check,
+    `.github/workflows/blackout-desktop-build-check.yml`, is set up to build
+    unsigned bundles on Linux, macOS and Windows for `develop` pull requests
+    that change the desktop app, the lockfile, the root manifests, the
+    client's build configuration or its desktop bridge
+    (`apps/blackout-client/src/platform`). First run: pending. A pull request
+    that changes the client anywhere else is built only on Linux (by
+    `ci.yml`), so a break that shows only in the desktop shell can still land
+    unseen until a release.
 -   **Placeholder integrations:** Blamazon, MayhemMarketplaze, AntinAmazon
     (`packages/api/src/integrations/marketplace/{blamazon,mayhemMarketplaze,antinAmazon}.ts`).
     -   These are wired as registered providers but return empty catalogs,

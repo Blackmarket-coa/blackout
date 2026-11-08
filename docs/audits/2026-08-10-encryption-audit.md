@@ -227,6 +227,15 @@ disclose them; apply to newly created rooms only, no backfill.
 | 2.4 | Client defaults              | Modal defaults on; `createDenInCanopy`, `useDiscussionDen`, `applyKit` encrypt; QuickSwitcher reuses `ensureDmRoom` | `a63fbf5` |
 | 2.6 | Registry grade               | `e2ee_defaults` → `implemented` / `unit+integration` / `code`                                                       | `3ea57fa` |
 
+2026-11-02, on row 2.1: the third of those templates, the Railway service's
+(`apps/blackout-server/services/blackout-server/homeserver.yaml.template`), was
+removed in `42f68f2`; the operator chose removal over fixing that service,
+whose image could not start
+([record](../security/dependency-advisories-server-desktop-2026-10-30.md#2026-11-02-the-railway-template-is-removed)).
+Two deployable templates carry the setting now:
+`infra/single-server-baseline/synapse/homeserver.yaml.template` and
+`deploy/docker/blackout-backend/synapse/homeserver.yaml.template`.
+
 ### 3.1 Why `encrypted` is required rather than defaulted
 
 A default of `true` would have fixed today's call sites and left the same trap

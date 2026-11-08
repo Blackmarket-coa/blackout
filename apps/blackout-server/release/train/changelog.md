@@ -15,6 +15,8 @@ Release date: `2026-03-19`
 - Adds managed-hosting readiness checks and smoke helpers so operators can validate minimum external dependency posture (database/redis and runtime compatibility) before promotion.
 - Adds image lifecycle automation for fork images with `blackout-server:<version>`, `:canary`, and `:stable` tagging conventions.
 
+> **2026-11-02.** The profile-aware entrypoint and the image lifecycle workflow these bullets name, `services/blackout-server/entrypoint.sh` and `.github/workflows/blackout-image-lifecycle.yml`, were removed with the Railway template in commit 42f68f2, with the image's Dockerfile; the operator chose removal over fixing the template. The workflow never ran in this repository. The managed-hosting readiness helpers and smoke scripts remain. This changelog is kept as the RC1 record.
+
 ## Security Backports
 
 - No additional upstream security patch backports are bundled in RC1 beyond the selected `1.98.0` upstream baseline.
