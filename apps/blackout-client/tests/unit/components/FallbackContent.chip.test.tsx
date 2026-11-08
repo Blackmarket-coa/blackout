@@ -8,6 +8,7 @@
 // `docs/security/key-backup-nudge-2026-11-02.md`).
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { MatrixClient } from 'matrix-js-sdk';
 
 // Folds overlays wrap their content in focus-trap-react, which in jsdom finds
 // no tabbable node (no layout) and throws. The existing overlay tests render it
@@ -53,8 +54,11 @@ import type { MountedDialog } from '../helpers/modalReliability';
 const SETUP_HEADING = 'Setup Device Verification';
 const RESET_HEADING = 'Reset Device Verification';
 const SET_UP_BACKUP = 'Set up backup';
+const RECOVERY_KEY_SCREEN = 'Store the Recovery Key in a safe place';
 
 let mounted: MountedDialog | undefined;
+/** A client with real crypto started, stopped after the case. */
+let realCryptoClient: MatrixClient | undefined;
 
 const renderChip = async (server: FakeKeyHomeserverOptions, device: CryptoStubOptions) => {
     const hs = createFakeKeyHomeserver(server);
@@ -77,6 +81,8 @@ beforeEach(() => {
 afterEach(() => {
     mounted?.unmount();
     mounted = undefined;
+    realCryptoClient?.stopClient();
+    realCryptoClient = undefined;
     vi.restoreAllMocks();
 });
 
@@ -337,4 +343,45 @@ describe('MessageBadEncryptedContent chip: a late answer never replaces a later 
         });
         expect(backupVersionGets(hs.calls)).toBe(before + 1);
     });
+});
+
+describe('MessageBadEncryptedContent chip: a brand-new account, real crypto', () => {
+    // Fifth review. On develop the chip chose its flow from account data at
+    // every render, so once the setup wrote `m.cross_signing.master` the
+    // overlay switched to "Reset Device Verification" and the new recovery
+    // key was never shown (the S9 record, "Reproduced how"). The guard's
+    // overlay follows its own panel, so the recovery key stays on screen.
+    it('the setup goes through, nothing is deleted, and its recovery key stays on screen after account data gains cross-signing', async () => {
+        const hs = createFakeKeyHomeserver({ backupVersion: null, masterKey: false });
+        realCryptoClient = createFakeKeyClient(hs);
+        await realCryptoClient.initRustCrypto({ useIndexedDB: false });
+        mounted = await renderWithClient(realCryptoClient, <MessageBadEncryptedContent />);
+        await clickWhy();
+        await waitFor(() => bodyText().includes(CHIP_OFFER_SETUP), {
+            what: 'the explanation',
+            timeoutMs: 15_000,
+        });
+        await click(buttonsNamed(SET_UP_BACKUP)[0]);
+        await waitFor(() => bodyText().includes(SETUP_HEADING), {
+            what: 'the setup dialog',
+            timeoutMs: 15_000,
+        });
+        await submitForm(document.body.querySelector('form') as HTMLFormElement);
+        await waitFor(() => bodyText().includes(RECOVERY_KEY_SCREEN), {
+            what: 'the recovery key screen',
+            timeoutMs: 20_000,
+        });
+        // The setup's last write, then time for the account-data echoes.
+        await waitFor(() => hs.accountData.has('m.megolm_backup.v1'), {
+            what: 'the backup key in secret storage',
+            timeoutMs: 15_000,
+        });
+        await settle(200);
+        expect(hs.accountData.has('m.cross_signing.master')).toBe(true);
+        expect(bodyText()).toContain(RECOVERY_KEY_SCREEN);
+        expect(bodyText()).not.toContain(RESET_HEADING);
+        expect(hs.backupVersion()).toBe('1');
+        expect(hs.masterKey()).not.toBeNull();
+        expect(hs.calls.filter((c) => c.method === 'DELETE')).toEqual([]);
+    }, 60_000);
 });
