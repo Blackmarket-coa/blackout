@@ -8,8 +8,8 @@ failed, what changed, and what the change does not cover. One job is added
 and the `gitleaks` job now waits for it; the scan steps, the gitleaks version
 (8.21.2) and the other jobs are unchanged. The first version
 of this change restored the cache inside the scan job, which a review showed
-to be unsafe; see **Corrected after review** and **Changed after the first
-review** at the end.
+to be unsafe; see **Corrected after review**, **Changed after the first
+review** and **After the second review** at the end.
 
 ## What failed
 
@@ -117,7 +117,8 @@ ubuntu-24.04 runners ship curl 8.5.0; the simulations below ran curl 8.5.0.
 restoring one writes outside the cache path. `actions/cache` at the pinned
 commit extracts the entry with `tar -xf <archive> -P -C $GITHUB_WORKSPACE`
 (`dist/restore-only/index.js`); `-P` keeps absolute and `../` member names,
-and members are not filtered. Whoever saved an entry under the key therefore
+and members are not filtered. Whoever saved the entry the restore finds
+(under the key or, as below, under a longer key that begins with it) therefore
 decides what lands anywhere the runner user can write. In the scan job, where
 the first version restored it, two routes turn that into a disabled scan:
 `~/.local/bin`, which the ubuntu image puts on `PATH` ahead of
@@ -148,15 +149,28 @@ https://github.com/actions/cache`); its `action.yml` at that commit runs on
     `actions/setup-node` and `actions/upload-artifact`: the full commit SHA,
     with the major version as a comment.
 -   Path `${{ runner.temp }}/gitleaks`, holding only the archive. Key
-    `gitleaks-<version>-linux_x64-<sha256>`, exact match only (no
-    `restore-keys`), so a version or pin change starts a new entry. The step
-    has `continue-on-error: true` and `timeout-minutes: 3`: an unreachable,
-    failed or slow cache is a miss.
--   On a hit, the archive is checked against the pin with `/usr/bin/sha256sum`
-    (by absolute path, since the restore may have put files on `PATH`). A
-    mismatch fails this job, with an error annotation naming the
-    `gh cache delete` command, and nothing is handed over. The check does not
-    make the job trustworthy; the `gitleaks` job checks again.
+    `gitleaks-<version>-linux_x64-<sha256>`, with no `restore-keys`, so a
+    version or pin change starts a new entry. That does not make the restore
+    an exact match only. GitHub's dependency-caching reference (Cache key
+    matching) says the cache action searches for the key, then for
+    prefix-matches for the key, then for `restore-keys`, first in the run's
+    own branch and then in the default branch. `actions/cache` at the pinned
+    commit extracts whatever entry comes back and sets `cache-hit` to `true`
+    only when its key equals the key (`isExactKeyMatch`, which ignores case).
+    So when there is no exact entry, an entry whose key begins with this key
+    is extracted on this job's runner with `cache-hit` false: nothing is
+    checked or handed over, and the `gitleaks` job downloads. The step has
+    `continue-on-error: true` and `timeout-minutes: 3`: an unreachable, failed
+    or slow cache is a miss.
+-   On a hit, the archive is checked against the pin with `/usr/bin/sha256sum`.
+    A mismatch fails this job, with an error annotation naming the
+    `gh cache delete` command, and nothing is handed over. `sha256sum` is
+    called by absolute path, but the runner looks up the step's own `bash` on
+    `PATH` (`WhichUtil.Which("bash", ...)` in `actions/runner`'s
+    `src/Runner.Worker/Handlers/ScriptHandler.cs`; the failed jobs ran
+    `/usr/bin/bash -e {0}`), so an entry that planted a `bash` in
+    `~/.local/bin` gets round the check. The check is a diagnostic that names
+    a bad entry, not a defence; the `gitleaks` job checks again.
 -   The archive is uploaded as the artifact `gitleaks-archive` with
     `actions/upload-artifact` at the SHA the repository already pins
     (`b7c566a772e6b6bfb58ed0dc250532a479d7789f`, v6), retention 1 day,
@@ -166,24 +180,33 @@ https://github.com/actions/cache`); its `action.yml` at that commit runs on
 **`gitleaks` job.**
 
 -   `needs: gitleaks_archive` with `if: ${{ !cancelled() }}`: it waits for the
-    archive job and runs whatever that job's result, except when the run is
-    cancelled. Without the condition a failed archive job would skip the scan,
-    and GitHub reports "A job that is skipped will report its status as
-    "Success". It will not prevent a pull request from merging, even if it is
-    a required check." It reads no output of the archive job.
+    archive job and runs whether that job succeeds or fails, except when the
+    run is cancelled (for the archive job reaching its own timeout, see **Not
+    yet run: the archive job reaching its own timeout**). Without the
+    condition a failed archive job would skip the scan, and GitHub reports "A
+    job that is skipped will report its status as "Success". It will not
+    prevent a pull request from merging, even if it is a required check." It
+    reads no output of the archive job.
 -   `actions/download-artifact` at `9000827ccba6bdab643e8b6fd33ac0654aef8333`
     (`v8` and `v8.0.2`, 2026-10-07), into `${{ runner.temp }}/gitleaks-artifact`,
     outside the checkout and off `PATH`, with `continue-on-error: true` and
-    `timeout-minutes: 3`. The repository used `download-artifact` only as
-    `@v4` by tag (`release.yml`), so there was no SHA to reuse. v8 rather than
-    the v6 that matches the upload: the zip extraction in v8 (and v7) uses
-    unzip-stream's sanitiser from 0.3.2 on, which turns every `..` segment of
-    an entry name into `.`; v6.0.0, v4.3.0 and v4.1.3 bundle 0.3.1's, which
-    strips only leading `../`. A zip with an entry `a/../../escaped-mid.txt`,
-    extracted with unzip-stream 0.3.1 from npm, wrote the file one level
-    above the target; with 0.3.4 it landed inside, as `a/escaped-mid.txt`.
-    download-artifact's own test workflow at v8.0.2 uploads with
-    `upload-artifact@v4` and downloads with v8.
+    `timeout-minutes: 3`. It selects the artifact with
+    `pattern: gitleaks-archive` and `merge-multiple: true`, not
+    `name: gitleaks-archive`. At the pinned commit `name:` with no such
+    artifact throws, and `core.setFailed` marks the step failed with an error
+    annotation (`continue-on-error` keeps the job going), which every run
+    after a cache miss would show; a pattern that matches nothing logs
+    `Total of 0 artifact(s) downloaded` and passes, and a single match is
+    extracted into `path` itself, as with `name:`. The repository used
+    `download-artifact` only as `@v4` by tag (`release.yml`), so there was no
+    SHA to reuse. v8 rather than the v6 that matches the upload: the zip
+    extraction in v8 (and v7) uses unzip-stream's sanitiser from 0.3.2 on,
+    which turns every `..` segment of an entry name into `.`; v6.0.0, v4.3.0
+    and v4.1.3 bundle 0.3.1's, which strips only leading `../`. A zip with an
+    entry `a/../../escaped-mid.txt`, extracted with unzip-stream 0.3.1 from
+    npm, wrote the file one level above the target; with 0.3.4 it landed
+    inside, as `a/escaped-mid.txt`. download-artifact's own test workflow at
+    v8.0.2 uploads with `upload-artifact@v4` and downloads with v8.
 -   The install step uses the artifact's archive only if it is a regular file
     that passes the check. Otherwise it writes a warning (when something was
     there), downloads the archive into `${{ runner.temp }}/gitleaks`, a
@@ -226,27 +249,59 @@ runs and pushes to `master` or `main` save into their own refs.
     access, but the limit is shared with the other jobs' caches (pnpm stores,
     Playwright browsers). The repository's cache usage was not checked: the
     cache API is not reachable from this session.
--   **Anyone who can save under the key can run code in `gitleaks_archive`.**
-    The key is public (it is in this file). Whenever no entry exists under it
-    (before the first save, after a version bump, after eviction, which whoever
-    can save entries can force by filling the cache), one can be saved by any
-    job, in any workflow of the repository, of a run on `develop` started by
-    one of the triggers above (for example a dependency's install script during
-    a `pnpm install`), and by a pull request run into that pull request's own
-    merge ref. Such an entry has to be assumed to run code in
-    `gitleaks_archive`, which has no checkout and no token permissions. From
-    there it can fail or stall that job (the scan then starts up to 10 minutes
-    later), save caches in the run's own scope, and upload artifacts to the
-    run. The `gitleaks` job downloads only the `gitleaks-archive` artifact,
-    uses its archive only after the pin check, and otherwise downloads; this
-    rests on `download-artifact` v8 keeping the extracted files inside its
-    target directory, as above.
--   **A bad entry persists while it is read.** A hit skips the save and a key
-    cannot be overwritten, so an entry that fails the check fails
-    `gitleaks_archive` and costs a download in the scan on every run, until it
-    is deleted (`gh cache delete <key>`) or stops being read for 7 days. An
-    entry that carries the genuine archive and extra files passes the check
-    and raises nothing; its extra files stay on the archive job's runner.
+-   **Anyone who can save under the key, or under any longer key that begins
+    with it, can run code in `gitleaks_archive`.** The key is public (it is in
+    this file). An entry under the key itself can be saved whenever none
+    exists (before the first save, after a version bump, after eviction, which
+    whoever can save entries can force by filling the cache). An entry under a
+    longer key can be saved at any time, even while the genuine entry exists,
+    and is extracted whenever the exact key misses (see **Cache**). Because a
+    run's own branch is searched before the default branch, that includes a
+    pull request run whose own scope holds such an entry while `develop` holds
+    the genuine one. Either kind can be saved by any job, in any workflow of
+    the repository, of a run on `develop` started by one of the triggers above
+    (for example a dependency's install script during a `pnpm install`), and
+    by a pull request run into that pull request's own merge ref. Such an
+    entry has to be assumed to run code in `gitleaks_archive`, which has no
+    checkout and no token permissions. From there it can fail or stall that
+    job, save caches in the run's own scope, and upload artifacts to the run.
+    A stall delays the scan by up to the job's 10-minute timeout, provided
+    GitHub does not count a job cancelled by its timeout as cancelled for
+    `!cancelled()`; that is untested (see **Not yet run: the archive job
+    reaching its own timeout**).
+    The `gitleaks` job uses the archive in the `gitleaks-archive` artifact
+    only after the pin check, and otherwise downloads; this rests on
+    `download-artifact` v8 keeping the extracted files inside its target
+    directory, as above.
+-   **Any job of the same run can hand the scan job an artifact.** The
+    `gitleaks` job takes the run's `gitleaks-archive` artifact whoever
+    uploaded it. Code in any job of the run that can reach the runner's
+    artifact token can upload one under that name when there is none, or
+    replace one (`upload-artifact`'s `overwrite` deletes and re-uploads),
+    before the `gitleaks` job fetches it. In this workflow that includes the
+    jobs that run beside `gitleaks_archive`: `dependency_audit` runs
+    `pnpm/action-setup@v5` and `google/osv-scanner-action@v2.3.3`, both pinned
+    by tag, and `pnpm install --frozen-lockfile` with pnpm 9.15.4, which runs
+    dependencies' install scripts (there is no `onlyBuiltDependencies` or
+    `ignore-scripts` setting in `package.json` or `pnpm-workspace.yaml`, and no
+    `.npmrc`); `semgrep` and `trivy` run `semgrep/semgrep-action@v1` and
+    `aquasecurity/trivy-action@v0.35.0`, also by tag. Before this change the
+    scan job took nothing from other jobs. Against such an artifact it relies
+    on the same two things as above: the pin check, and `download-artifact` v8
+    keeping the files it writes inside its target directory. In the local runs
+    of the install step, a tampered artifact led to a download, or, with the
+    release host also unreachable, to a failed step with nothing extracted.
+-   **A bad entry persists while it is read.** When an entry under the key
+    fails the check, the `gitleaks` job downloads and its save step runs, but
+    a key cannot be overwritten, so the save into the entry's own scope is
+    refused (`saveImpl` logs the error and the step passes). The entry keeps
+    failing `gitleaks_archive` and costing a download in the scan on every run
+    that restores it, until it is deleted (`gh cache delete <key>`) or stops
+    being read for 7 days. Whether a pull request run's save of the same key
+    into its own merge ref succeeds while `develop` holds the bad entry was
+    not checked. An entry that carries the genuine archive and extra files
+    passes the check and raises nothing; its extra files stay on the archive
+    job's runner.
 -   **The scan waits for `gitleaks_archive`.** Every run now schedules one more
     short job before the scan; the delay was not measured.
 -   **GitHub's `cache-mode` job key is not used.** It would let
@@ -273,7 +328,18 @@ runs and pushes to `master` or `main` save into their own refs.
     downloads the archive, as it does on a miss. This branch's own pull
     request run is the first real run: it will miss, download and save into
     the pull request's merge ref, and a re-run of it should restore, hand over
-    and use the artifact.
+    and use the artifact. The download step's behaviour with and without an
+    artifact was run only against a local stand-in for the artifact service
+    (see Verification).
+-   **Not yet run: the archive job reaching its own timeout.** GitHub cancels a
+    job that reaches its `timeout-minutes`, and its expressions reference says
+    only that `cancelled()` "Returns true if the workflow was canceled". It
+    does not say whether a `gitleaks_archive` cancelled by its own 10-minute
+    timeout makes `!cancelled()` false for the `gitleaks` job. If it does,
+    whoever can stall `gitleaks_archive` past 10 minutes (see above) skips the
+    scan, and a skipped job reports as a success. Settling it takes a
+    throwaway workflow: a needed job that sleeps past `timeout-minutes: 1`,
+    and a dependent job with `if: ${{ !cancelled() }}`.
 -   **Seen while doing this, not changed here.** `release.yml` uses
     `actions/download-artifact@v4`, which today resolves to v4.3.0 and its
     unzip-stream 0.3.1 sanitiser. It downloads artifacts uploaded by earlier
@@ -286,7 +352,9 @@ Both scripts were extracted from the workflow with PyYAML and run under
 described above: the `gitleaks` job has no cache restore, `gitleaks_archive`
 has no checkout and `permissions: {}`, the `gitleaks` job has
 `needs: gitleaks_archive` and `if: ${{ !cancelled() }}`, the two jobs' `env`
-are equal, and `gitleaks version` is the install step's last line.
+are equal, `gitleaks version` is the install step's last line, and the
+download step selects `pattern: gitleaks-archive` with `merge-multiple: true`
+(no `name:`) into the directory the install step reads.
 
 **Install step (`gitleaks` job)**, against a local Python HTTP server. The test
 harness made three substitutions only: the
@@ -320,6 +388,19 @@ not copied there, so the save step would save only the verified download.
 **Check step (`gitleaks_archive`)**: with the genuine archive in the cache path
 it exits 0; with the tampered one it exits 1 and prints the error annotation
 with the `gh cache delete` command.
+
+**Download step (`gitleaks` job).** `download-artifact`'s bundled
+`dist/index.js` at the pinned commit, run with the inputs the runner passes
+(the `action.yml` defaults included) against a local Python stand-in for the
+artifact service's `ListArtifacts` and `GetSignedArtifactURL` calls and the
+blob download. The action declares `node24`; it ran under Node 22.
+
+| Inputs                                              | Run's artifacts    | Exit | Annotation                                                                  | Written to `path`             |
+| --------------------------------------------------- | ------------------ | ---- | --------------------------------------------------------------------------- | ----------------------------- |
+| `name: gitleaks-archive`                            | none               | 1    | `::error::Unable to download artifact(s): Artifact not found for name: ...` | nothing                       |
+| `pattern: gitleaks-archive`, `merge-multiple: true` | none               | 0    | none (`Total of 0 artifact(s) downloaded`)                                  | nothing                       |
+| `pattern: gitleaks-archive`, `merge-multiple: true` | `gitleaks-archive` | 0    | none                                                                        | the archive, sha256 = the pin |
+| `name: gitleaks-archive`                            | `gitleaks-archive` | 0    | none                                                                        | the archive, at the same path |
 
 **Zip extraction.** A zip holding `ok.txt`, `a/../../escaped-mid.txt`,
 `../escaped-lead.txt` and `/abs-escape.txt`, extracted with unzip-stream's
@@ -373,3 +454,42 @@ repeats the substance of the first:
 4. **Timeouts and `continue-on-error`** on the cache and artifact steps, so that
    a slow or failing cache or artifact service delays the scan by at most a
    few minutes and never fails it.
+
+## After the second review
+
+These sentences in the version before this one (`5a29ee3703`) were untrue or
+gave a wrong reason:
+
+1. "exact match only (no `restore-keys`)": when there is no exact entry,
+   GitHub also restores one whose key begins with the key; see **Cache**. The
+   "Anyone who can save under the key" item said an entry could be saved only
+   while none existed under the key; one under a longer key can be saved at
+   any time.
+2. "The check calls sha256sum by absolute path because the restore may have
+   put files on PATH" (workflow comment, and the same reason in this record):
+   the step's own `bash` is still looked up on `PATH`, so the absolute path
+   protects nothing against a planted entry.
+3. "No artifact is not an error" was true of the job's result, but with
+   `name:` the download step was marked failed, with an error annotation, on
+   every run without the artifact. Neither the comment nor this record said
+   so.
+4. "A hit skips the save": the `gitleaks` job's save runs after its own
+   download and is refused because the key exists.
+5. "runs whatever that job's result" and "the scan then starts up to 10
+   minutes later": the archive job reaching its own timeout is untested.
+
+Changed:
+
+1. **The download step selects the artifact by pattern**
+   (`pattern: gitleaks-archive`, `merge-multiple: true`) instead of `name:`,
+   so a run without the artifact passes the step with no error annotation.
+   The install step's path is unchanged.
+2. **Not covered** now names the artifact as a channel from every job of the
+   run, the longer-key case, and the untested timeout case; the workflow
+   comments and the sentences above are corrected.
+
+Re-run on this version: the extractor's structure checks, the install-step
+cases for 504 on the first 3 requests, a tampered archive, 504 on every
+request, a good and a tampered artifact, and a tampered artifact with nothing
+listening, and the check step with a good and a tampered archive; each gave
+the result recorded above.

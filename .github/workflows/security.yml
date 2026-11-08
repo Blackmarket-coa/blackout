@@ -122,14 +122,17 @@ jobs:
     # to the gitleaks job as an artifact of this run. The restore runs here, in
     # a job of its own, because a cache entry is not signed and its restore
     # writes outside the cache path: actions/cache extracts the entry with
-    # `tar -P` relative to the workspace, so whoever saved an entry under the
-    # key decides what lands where the runner user can write, for example
+    # `tar -P` relative to the workspace, so whoever saved the entry it finds
+    # decides what lands where the runner user can write, for example
     # ~/.local/bin (on PATH ahead of /usr/local/bin) or a .gitleaks.toml in a
-    # checkout that allowlists everything. Each job runs on its own runner, and
-    # this one has no checkout and no token permissions. The gitleaks job does
-    # not trust what it is handed: it checks the archive against its own
-    # GITLEAKS_SHA256 and downloads the archive itself when there is no
-    # artifact or the check fails. docs/security/gitleaks-install-2026-11-08.md
+    # checkout that allowlists everything. The entry it finds need not be
+    # under the exact key: when that misses, GitHub also restores an entry
+    # whose key begins with it (cache-hit is then false, so the steps below
+    # are skipped). Each job runs on its own runner, and this one has no
+    # checkout and no token permissions. The gitleaks job does not trust what
+    # it is handed: it checks the archive against its own GITLEAKS_SHA256 and
+    # downloads the archive itself when there is no artifact or the check
+    # fails. docs/security/gitleaks-install-2026-11-08.md
     gitleaks_archive:
         name: Gitleaks archive from the cache
         runs-on: ubuntu-24.04
@@ -155,10 +158,11 @@ jobs:
 
             # An entry under the key that is not the pinned archive is corrupt
             # or was planted. This job then fails, so that it shows, and hands
-            # nothing over; the gitleaks job runs anyway and downloads. The
-            # check calls sha256sum by absolute path because the restore may
-            # have put files on PATH. It does not make this job trustworthy:
-            # the gitleaks job checks again.
+            # nothing over; the gitleaks job runs anyway and downloads.
+            # sha256sum is called by absolute path, but the runner looks up
+            # this step's own bash on PATH, so an entry that planted one can
+            # get round the check. It is a diagnostic that names a bad entry,
+            # not a defence: the gitleaks job checks again.
             - name: Check the restored archive
               if: steps.cache.outputs.cache-hit == 'true'
               run: |
@@ -186,9 +190,12 @@ jobs:
     gitleaks:
         name: Gitleaks secret scan
         runs-on: ubuntu-24.04
-        # Waits for gitleaks_archive and runs whatever its result, so that a
-        # failed archive job cannot skip the scan: GitHub reports a skipped job
-        # as a success, even for a required check. Not when the run is cancelled.
+        # Waits for gitleaks_archive and runs whether that job succeeds or
+        # fails, so that a failed archive job cannot skip the scan: GitHub
+        # reports a skipped job as a success, even for a required check. Not
+        # when the run is cancelled. Untested: whether gitleaks_archive hitting
+        # its own timeout-minutes, which GitHub handles by cancelling that job,
+        # counts as cancelled here and skips the scan.
         needs: gitleaks_archive
         if: ${{ !cancelled() }}
         # The archive's sha256 moves with the version: it is the linux_x64
@@ -206,19 +213,28 @@ jobs:
                   fetch-depth: 0
                   persist-credentials: false
 
-            # This job restores no cache. It takes the archive gitleaks_archive
-            # restored, if there is one, as an artifact, into a directory outside
-            # the checkout and off PATH. v8 because its zip extraction turns
-            # every ".." segment of an entry name into "."; v6 and v4.3.0 bundle
+            # This job restores no cache. It takes this run's gitleaks-archive
+            # artifact, if there is one, into a directory outside the checkout
+            # and off PATH. gitleaks_archive uploads it after a verified hit,
+            # but any job of the run could upload one, so the install step
+            # trusts only the pin. v8 because its zip extraction turns every
+            # ".." segment of an entry name into "."; v6 and v4.3.0 bundle
             # unzip-stream 0.3.1, which strips only leading "../", and an entry
-            # named a/../../x lands outside the target. No artifact is not an
-            # error: the install step then downloads the archive.
+            # named a/../../x lands outside the target. `pattern`, not `name`:
+            # with `name`, a run that has no such artifact (any run after a
+            # cache miss, for one) marks this step failed with an error
+            # annotation; a pattern that matches nothing downloads nothing and
+            # passes.
+            # merge-multiple puts a match straight into `path`, where the
+            # install step looks. No artifact is not an error: the install
+            # step then downloads the archive.
             - name: Fetch the archive gitleaks_archive restored
               continue-on-error: true
               timeout-minutes: 3
               uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
               with:
-                  name: gitleaks-archive
+                  pattern: gitleaks-archive
+                  merge-multiple: true
                   path: ${{ runner.temp }}/gitleaks-artifact
 
             # Use the gitleaks CLI directly instead of `gitleaks/gitleaks-action@v2`
