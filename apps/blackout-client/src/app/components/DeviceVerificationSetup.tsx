@@ -21,7 +21,12 @@ import { ContainerColor } from '../styles/ContainerColor.css';
 import { copyToClipboard } from '../utils/dom';
 import { AsyncStatus, useAsyncCallback } from '../hooks/useAsyncCallback';
 import { clearSecretStorageKeys } from '../../client/secretStorageKeys';
-import { checkAccountKeyState, setupRefusal, type SetupMode } from '../../client/keyBackupCheck';
+import {
+    SETUP_STOPPED_PARTWAY_TEXT,
+    checkAccountKeyState,
+    setupRefusal,
+    type SetupMode,
+} from '../../client/keyBackupCheck';
 import { ActionUIA, ActionUIAFlowsLoader } from './ActionUIA';
 import { useMatrixClient } from '../hooks/useMatrixClient';
 import { useAlive } from '../hooks/useAlive';
@@ -68,6 +73,16 @@ function makeUIAAction<T>(
     return action;
 }
 
+/**
+ * The cross-signing an earlier attempt of this form uploaded: its master
+ * public key, and whether that attempt's cross-signing step finished (the
+ * keys and this device's signature uploaded).
+ */
+type OwnCrossSigning = { masterKey: string; complete: boolean };
+
+/** A step failed after this form's cross-signing was on the homeserver. */
+class SetupStoppedPartway extends Error {}
+
 type SetupVerificationProps = {
     onComplete: (recoveryKey: string) => void;
     /**
@@ -84,6 +99,7 @@ export function SetupVerification({ onComplete, mode = 'setup' }: SetupVerificat
 
     const [uiaAction, setUIAAction] = useState<UIAAction<void>>();
     const [nextAuthData, setNextAuthData] = useState<IAuthData | null>(); // null means no next action.
+    const [ownCrossSigning, setOwnCrossSigning] = useState<OwnCrossSigning | null>(null);
 
     const handleAction = useCallback(
         async (authDict: AuthDict) => {
@@ -159,8 +175,22 @@ export function SetupVerification({ onComplete, mode = 'setup' }: SetupVerificat
                 // follows replaces the account's secret storage and
                 // cross-signing and deletes every backup version it has, so
                 // only the homeserver's fresh answer lets it go on.
-                const refusal = setupRefusal(await checkAccountKeyState(mx), mode);
+                //
+                // An earlier attempt of this same form may have uploaded
+                // cross-signing and then failed at a later step (the backup's
+                // creation, say). The account then has a master key, which is
+                // this form's own: the check lets the form go on when the
+                // homeserver's master key is that one and there is no backup,
+                // and the form keeps that identity rather than make another,
+                // provided the earlier attempt's cross-signing step finished.
+                const state = await checkAccountKeyState(mx);
+                const refusal = setupRefusal(state, mode, ownCrossSigning?.masterKey);
                 if (refusal) throw new Error(refusal);
+                const keepOwnCrossSigning =
+                    ownCrossSigning !== null &&
+                    ownCrossSigning.complete &&
+                    state.crossSigning === 'yes' &&
+                    state.masterKey === ownCrossSigning.masterKey;
 
                 const recoveryKeyData = await crypto.createRecoveryKeyFromPassphrase(passphrase);
                 if (!recoveryKeyData.encodedPrivateKey) {
@@ -168,21 +198,47 @@ export function SetupVerification({ onComplete, mode = 'setup' }: SetupVerificat
                 }
                 clearSecretStorageKeys();
 
-                await crypto.bootstrapSecretStorage({
-                    createSecretStorageKey: async () => recoveryKeyData,
-                    setupNewSecretStorage: true,
-                });
+                let crossSigningOn = keepOwnCrossSigning;
+                try {
+                    // With the form's own cross-signing kept, this also
+                    // stores those keys under the new recovery key: this
+                    // device holds them, and the storage is new.
+                    await crypto.bootstrapSecretStorage({
+                        createSecretStorageKey: async () => recoveryKeyData,
+                        setupNewSecretStorage: true,
+                    });
 
-                await crypto.bootstrapCrossSigning({
-                    authUploadDeviceSigningKeys,
-                    setupNewCrossSigning: true,
-                });
+                    if (!keepOwnCrossSigning) {
+                        let complete = false;
+                        try {
+                            await crypto.bootstrapCrossSigning({
+                                authUploadDeviceSigningKeys,
+                                setupNewCrossSigning: true,
+                            });
+                            complete = true;
+                        } finally {
+                            // The master key this attempt made, whether or not
+                            // its upload got through: the next attempt goes on
+                            // past the check only if the homeserver holds it.
+                            const masterKey = await crypto.getCrossSigningKeyId().catch(() => null);
+                            if (alive()) {
+                                setOwnCrossSigning(masterKey ? { masterKey, complete } : null);
+                            }
+                        }
+                        crossSigningOn = true;
+                    }
 
-                await crypto.resetKeyBackup();
+                    await crypto.resetKeyBackup();
+                } catch (error) {
+                    if (!crossSigningOn) throw error;
+                    throw new SetupStoppedPartway(
+                        error instanceof Error ? error.message : String(error)
+                    );
+                }
 
                 onComplete(recoveryKeyData.encodedPrivateKey);
             },
-            [mx, mode, onComplete, authUploadDeviceSigningKeys]
+            [mx, mode, onComplete, authUploadDeviceSigningKeys, ownCrossSigning, alive]
         )
     );
 
@@ -227,6 +283,10 @@ export function SetupVerification({ onComplete, mode = 'setup' }: SetupVerificat
                     <b>{setupState.error ? setupState.error.message : 'Unexpected Error!'}</b>
                 </Text>
             )}
+            {setupState.status === AsyncStatus.Error &&
+                setupState.error instanceof SetupStoppedPartway && (
+                    <Text size="T200">{SETUP_STOPPED_PARTWAY_TEXT}</Text>
+                )}
             {nextAuthData !== null && uiaAction && (
                 <ActionUIAFlowsLoader
                     authData={nextAuthData ?? uiaAction.authData}

@@ -20,6 +20,7 @@ import {
 } from '../../../src/client/keyBackupCheck';
 import {
     ME,
+    OLD_MASTER_KEY,
     createFakeKeyClient,
     createFakeKeyHomeserver,
     type FakeAnswer,
@@ -125,9 +126,12 @@ describe('checkBackupState: GET /room_keys/version', () => {
 });
 
 describe('checkCrossSigningState: POST /keys/query', () => {
-    it('a master key for the account is "yes"', async () => {
+    it('a master key for the account is "yes", with its public key', async () => {
         const { server, mx } = clientFor({ masterKey: true });
-        expect(await checkCrossSigningState(mx)).toEqual({ crossSigning: 'yes' });
+        expect(await checkCrossSigningState(mx)).toEqual({
+            crossSigning: 'yes',
+            masterKey: OLD_MASTER_KEY,
+        });
         const query = server.calls.find((c) => c.path.endsWith('/keys/query'));
         expect(query?.body).toEqual({ device_keys: { [ME]: [] } });
     });
@@ -135,6 +139,17 @@ describe('checkCrossSigningState: POST /keys/query', () => {
     it('a 200 without one is "no"', async () => {
         const { mx } = clientFor({ masterKey: false });
         expect(await checkCrossSigningState(mx)).toEqual({ crossSigning: 'no' });
+    });
+
+    it('a master key without a readable public key is still "yes", with no key to compare', async () => {
+        const { mx } = clientFor({
+            keysQueryAnswer: {
+                kind: 'json',
+                status: 200,
+                body: { master_keys: { [ME]: { user_id: ME, usage: ['master'], keys: {} } } },
+            },
+        });
+        expect(await checkCrossSigningState(mx)).toEqual({ crossSigning: 'yes' });
     });
 
     it('a failure is unknown', async () => {
@@ -159,7 +174,11 @@ describe('checkCrossSigningState: POST /keys/query', () => {
 describe('checkAccountKeyState', () => {
     it('combines both checks and never throws', async () => {
         const { mx } = clientFor({ backupVersion: '3', masterKey: true });
-        expect(await checkAccountKeyState(mx)).toEqual({ backup: 'backup', crossSigning: 'yes' });
+        expect(await checkAccountKeyState(mx)).toEqual({
+            backup: 'backup',
+            crossSigning: 'yes',
+            masterKey: OLD_MASTER_KEY,
+        });
 
         const { mx: mx2 } = clientFor({
             backupAnswer: { kind: 'reject' },
@@ -267,5 +286,46 @@ describe('setupRefusal: the check the setup form runs before its first write', (
 
     it('the unknown text names both checks, because either can be the one that failed', () => {
         expect(SETUP_REFUSED_TEXT.unknown).toMatch(/key backup or cross-signing/);
+    });
+});
+
+describe('setupRefusal: the form finishing its own earlier attempt (fifth review)', () => {
+    // An earlier submit of the same form uploaded cross-signing and failed at
+    // a later step. The account now has a master key, the form's own; only
+    // that key, with no backup, lets the from-scratch setup go on.
+    const OWN = 'ownMasterKeyFromTheFormsEarlierAttempt000000';
+    const ownOnServer: AccountKeyState = { backup: 'none', crossSigning: 'yes', masterKey: OWN };
+
+    it('the homeserver holds the form’s own master key and no backup: goes on', () => {
+        expect(setupRefusal(ownOnServer, 'setup', OWN)).toBeNull();
+    });
+
+    it('another master key: refused with the cross-signing text', () => {
+        expect(setupRefusal({ ...ownOnServer, masterKey: OLD_MASTER_KEY }, 'setup', OWN)).toBe(
+            SETUP_REFUSED_TEXT.crossSigning
+        );
+    });
+
+    it('no key in the answer, or none of its own: refused with the cross-signing text', () => {
+        const noKey: AccountKeyState = { backup: 'none', crossSigning: 'yes' };
+        expect(setupRefusal(noKey, 'setup', OWN)).toBe(SETUP_REFUSED_TEXT.crossSigning);
+        expect(setupRefusal(ownOnServer, 'setup', null)).toBe(SETUP_REFUSED_TEXT.crossSigning);
+        expect(setupRefusal(ownOnServer, 'setup', undefined)).toBe(SETUP_REFUSED_TEXT.crossSigning);
+        expect(setupRefusal(ownOnServer, 'setup', '')).toBe(SETUP_REFUSED_TEXT.crossSigning);
+    });
+
+    it('its own key never lets it past a backup or a failed backup check', () => {
+        expect(setupRefusal({ ...ownOnServer, backup: 'backup' }, 'setup', OWN)).toBe(
+            SETUP_REFUSED_TEXT.backup
+        );
+        expect(setupRefusal({ ...ownOnServer, backup: 'unknown' }, 'setup', OWN)).toBe(
+            SETUP_REFUSED_TEXT.unknown
+        );
+    });
+
+    it('a failed cross-signing check is still refused, whatever the form uploaded', () => {
+        expect(
+            setupRefusal({ backup: 'none', crossSigning: 'unknown', masterKey: OWN }, 'setup', OWN)
+        ).toBe(SETUP_REFUSED_TEXT.unknown);
     });
 });

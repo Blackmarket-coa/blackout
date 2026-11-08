@@ -150,6 +150,12 @@ export interface FakeKeyHomeserver {
      * check has answered.
      */
     delayNextBackupAnswer: () => () => void;
+    /**
+     * The next request with this method whose path ends with `pathSuffix` is
+     * answered with `answer` instead, once, and changes nothing on the
+     * account (a 500 from `POST /room_keys/version`, say: no backup is made).
+     */
+    failNext: (method: string, pathSuffix: string, answer: FakeAnswer) => void;
     /** Calls that change what the account has on the server (writes to keys, backup or secret storage). */
     destructiveCalls: () => FakeCall[];
 }
@@ -164,6 +170,7 @@ export function createFakeKeyHomeserver(options: FakeKeyHomeserverOptions = {}):
     const accountData = new Map<string, unknown>(Object.entries(options.accountData ?? {}));
     let client: MatrixClient | null = null;
     const delayedBackupAnswers: Promise<void>[] = [];
+    const oneShotAnswers: { method: string; pathSuffix: string; answer: FakeAnswer }[] = [];
     const FOREIGN_BACKUP = {
         algorithm: 'm.megolm_backup.v1.curve25519-aes-sha2',
         auth_data: { public_key: BACKUP_PUBLIC_KEY, signatures: {} } as unknown,
@@ -194,6 +201,14 @@ export function createFakeKeyHomeserver(options: FakeKeyHomeserverOptions = {}):
         const path = url.pathname;
         const body = parseBody(init);
         calls.push({ method, path, body });
+
+        const oneShot = oneShotAnswers.findIndex(
+            (o) => o.method === method && path.endsWith(o.pathSuffix)
+        );
+        if (oneShot >= 0) {
+            const [{ answer }] = oneShotAnswers.splice(oneShot, 1);
+            return answerWith(answer, init);
+        }
 
         if (path === `${V3}/room_keys/version` && method === 'GET') {
             const answer = answerBackupVersion(init);
@@ -309,6 +324,9 @@ export function createFakeKeyHomeserver(options: FakeKeyHomeserverOptions = {}):
                 })
             );
             return () => release();
+        },
+        failNext: (method, pathSuffix, answer) => {
+            oneShotAnswers.push({ method: method.toUpperCase(), pathSuffix, answer });
         },
         destructiveCalls: () =>
             calls.filter(

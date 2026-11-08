@@ -34,6 +34,12 @@ export type CrossSigningState = 'yes' | 'no' | 'unknown';
 export interface AccountKeyState {
     backup: BackupState;
     crossSigning: CrossSigningState;
+    /**
+     * The account's master cross-signing public key as the homeserver gave
+     * it, when `crossSigning` is `'yes'` and the answer carried one. The setup
+     * form compares it with the key its own earlier attempt uploaded.
+     */
+    masterKey?: string;
     /** Why a check came back `'unknown'`, for diagnostics. Never shown as-is. */
     detail?: string;
 }
@@ -67,6 +73,15 @@ type KeysQueryAnswer =
       }
     | null
     | undefined;
+
+/** The bare public key in a `/keys/query` master key's `keys` (`{ "ed25519:<key>": "<key>" }`). */
+const masterPublicKey = (master: object): string | undefined => {
+    const { keys } = master as { keys?: unknown };
+    if (!keys || typeof keys !== 'object') return undefined;
+    return Object.values(keys).find(
+        (key): key is string => typeof key === 'string' && key.length > 0
+    );
+};
 
 const requestOpts = {
     prefix: ClientPrefix.V3,
@@ -103,7 +118,7 @@ export const checkBackupState = async (
 
 export const checkCrossSigningState = async (
     mx: MatrixClient
-): Promise<{ crossSigning: CrossSigningState; detail?: string }> => {
+): Promise<{ crossSigning: CrossSigningState; masterKey?: string; detail?: string }> => {
     const userId = mx.getUserId();
     if (!userId) return { crossSigning: 'unknown', detail: 'no user id' };
     let answer: KeysQueryAnswer;
@@ -122,7 +137,9 @@ export const checkCrossSigningState = async (
         return { crossSigning: 'unknown', detail: 'it answered 200 without a body' };
     }
     const master = answer.master_keys?.[userId];
-    return { crossSigning: master && typeof master === 'object' ? 'yes' : 'no' };
+    if (!master || typeof master !== 'object') return { crossSigning: 'no' };
+    const masterKey = masterPublicKey(master);
+    return { crossSigning: 'yes', ...(masterKey ? { masterKey } : {}) };
 };
 
 /** Asks the homeserver, every time, what the account has. Never throws. */
@@ -140,6 +157,7 @@ export const checkAccountKeyState = async (mx: MatrixClient): Promise<AccountKey
     return {
         backup: backup.backup,
         crossSigning: crossSigning.crossSigning,
+        ...(crossSigning.masterKey ? { masterKey: crossSigning.masterKey } : {}),
         ...(detail ? { detail } : {}),
     };
 };
@@ -178,6 +196,15 @@ export const SETUP_REFUSED_TEXT = {
 } as const;
 
 /**
+ * Shown under the error when a step failed after this form's own
+ * cross-signing reached the homeserver (the backup's creation, say). The
+ * next Continue in the same form keeps that cross-signing (`setupRefusal`'s
+ * `ownMasterKey`, and `SetupVerification` skips the cross-signing step).
+ */
+export const SETUP_STOPPED_PARTWAY_TEXT =
+    'Cross-signing is now on for your account, but the rest of the setup didn’t finish. Press Continue to try the rest again: this window keeps that cross-signing rather than replacing it.';
+
+/**
  * The last check before the setup writes anything. Every entry re-checks at
  * its click (`KeyBackupSetupGuard`); this closes the window between that click
  * and the submit, in which another device of the account can create
@@ -185,7 +212,10 @@ export const SETUP_REFUSED_TEXT = {
  *
  * - `'setup'` (the from-scratch `DeviceVerificationSetup`) goes on only when
  *   the homeserver answered that the account has neither a backup nor
- *   cross-signing.
+ *   cross-signing, or has no backup and, as its master key, `ownMasterKey`:
+ *   the key this same form uploaded in an earlier attempt that failed at a
+ *   later step. That identity is the form's own, and the form keeps it
+ *   rather than make another.
  * - `'reset'` (the warned `DeviceVerificationReset`) exists to replace
  *   cross-signing, so it goes on whatever the cross-signing check says, but
  *   only when the backup check answered "none": it never deletes a backup and
@@ -193,11 +223,19 @@ export const SETUP_REFUSED_TEXT = {
  *
  * Returns the message to show, or null to go on.
  */
-export const setupRefusal = (state: AccountKeyState, mode: SetupMode): string | null => {
+export const setupRefusal = (
+    state: AccountKeyState,
+    mode: SetupMode,
+    ownMasterKey?: string | null
+): string | null => {
     if (state.backup === 'backup') return SETUP_REFUSED_TEXT.backup;
     if (state.backup === 'unknown') return SETUP_REFUSED_TEXT.unknown;
     if (mode === 'reset') return null;
-    if (state.crossSigning === 'yes') return SETUP_REFUSED_TEXT.crossSigning;
+    if (state.crossSigning === 'yes') {
+        return ownMasterKey && state.masterKey === ownMasterKey
+            ? null
+            : SETUP_REFUSED_TEXT.crossSigning;
+    }
     if (state.crossSigning === 'unknown') return SETUP_REFUSED_TEXT.unknown;
     return null;
 };

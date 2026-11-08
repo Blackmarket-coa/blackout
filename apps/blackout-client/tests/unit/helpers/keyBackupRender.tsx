@@ -110,6 +110,8 @@ export function stubCrypto(mx: MatrixClient, options: CryptoStubOptions) {
         bootstrapSecretStorage: vi.fn(async () => undefined),
         bootstrapCrossSigning: vi.fn(async () => undefined),
         resetKeyBackup: vi.fn(async () => undefined),
+        /** Read by the setup form after its cross-signing step: no key held here. */
+        getCrossSigningKeyId: vi.fn(async (): Promise<string | null> => null),
     };
     vi.spyOn(mx, 'getCrypto').mockReturnValue(stub as unknown as CryptoApi);
     return stub;
