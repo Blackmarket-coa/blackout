@@ -1309,10 +1309,10 @@ helpers are removed".
   and so is the job's `services` block (`postgres:16`, `redis:7`), which
   only the second step used. GitHub registers workflows only from the
   repository root's `.github/workflows/`, and the repository's list (34
-  workflows, read on 2026-11-02) has none under `apps/`, so this job has
-  never run in this repository: the edit keeps the file from naming removed
-  scripts and changes no CI run. That none of its steps runs in CI is older
-  than this change.
+  workflows, read on 2026-11-02 and again on 2026-11-08) has none under
+  `apps/`, so this job has never run in this repository: the edit keeps
+  the file from naming removed scripts and changes no CI run. That none of
+  its steps runs in CI is older than this change.
 - Of the four steps left after `pip install .`, two check something: the
   release-train gate (`scripts-dev/check_release_train_gate.py`, which
   reads `release/train/`) and the tracker evidence validator
@@ -1330,15 +1330,21 @@ helpers are removed".
     `validate_risky_changes_have_markers` returns no error for
     `apps/blackout-server/synapse/federation/federation_server.py` and an
     empty checklist, and the missing-heading error for the same path
-    without `apps/blackout-server/`.
+    without `apps/blackout-server/`. On a checkout of depth 1,
+    `actions/checkout@v4`'s default, the script's two diffs both fail and
+    it checks an empty list: in a `git clone --depth 1` of this branch,
+    `git diff --name-only origin/develop...HEAD` and `HEAD~1..HEAD` each
+    exit 128, and the gate prints its pass (checked on 2026-11-08). So the
+    job as written would pass even if the paths matched.
   - The protocol smoke (`test_versions_smoke_compatibility`) runs
     `python -m pytest` after only `pip install .`, and pytest is in neither
     `pyproject.toml` nor `poetry.lock`, so the job never installs the
     pytest the step needs.
 
   Fixing either changes files outside `blackout_runtime/` (the divergence
-  gate's script, for example with `git diff --relative`; the workflow, to
-  install pytest) and needs its own entry. Both are left for the operator.
+  gate's script, for example with `git diff --relative`, and the job's
+  checkout depth; the workflow, to install pytest) and needs its own
+  entry. Both are left for the operator.
 
 - Not changed, because none of them reads a removed file:
   `scripts-dev/check_release_train_gate.py` and
