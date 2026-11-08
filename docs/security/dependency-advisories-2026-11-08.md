@@ -346,21 +346,30 @@ from #998):
    present (Twisted ×4 in `poetry.lock`, image-size ×2 in `pnpm-lock.yaml`),
    none of them brace-expansion. They stay for their own change, as that
    file's header has planned since 2026-10-30.
-4. **The lodash override has no record.** Every root commit of this history
-   (the oldest is `eb71cc56c3`, 2026-08-10) has the key in `package.json` as
-   an exact pin, `"lodash@4.17.23": "4.18.0"`, and `pnpm-lock.yaml` already
-   has lodash 4.18.0 in the root that carries a lockfile (`ea3d85d2c7`). The
-   caret came on 2026-09-04: `50335a9b06` (merged in #890) turned "the
-   remaining 27 exact-version pins" into carets so that a later patch
-   release could pass, and `"4.18.0"` became `"^4.18.0"`; no `docs/security`
-   record came with it. This change makes it `"^4.18.1"`. Before this record,
+4. **The lodash override has no record.** It was added on 2026-04-22 by
+   `2eaa6dbdfa` ("gitcheck fixes"), which put eight overrides into
+   `package.json` at once, among them the exact pin
+   `"lodash@4.17.23": "4.18.0"`, and moved `pnpm-lock.yaml` from lodash
+   4.17.23 to 4.18.0. An earlier commit, `3ddaa49c2f` (2026-04-18), has
+   lodash 4.17.23 and no lodash override. Both were read from GitHub (the API
+   and a blobless fetch of each commit): this checkout is a shallow clone
+   whose history stops at three boundary commits from 2026-08-10 to
+   2026-08-30 (`eb71cc56c3`, `8669c26480`, `ea3d85d2c7`), which already have
+   the pin. The caret came on 2026-09-04: `50335a9b06` (merged in #890)
+   turned "the remaining 27 exact-version pins" into carets so that a later
+   patch release could pass, and `"4.18.0"` became `"^4.18.0"`; no
+   `docs/security` record came with it. This change makes it `"^4.18.1"`.
+   Neither `2eaa6dbdfa` nor `50335a9b06` names a lodash advisory, and before
+   this record
    `git grep -i lodash docs/security` found nothing. 4.18.0 is the `fixed`
    version of this advisory's lodash.unset and lodash.omit ranges, and the
    advisory's text names 4.18.0 and 4.18.1 as its patch releases, but which
-   advisory first motivated the 4.18.0 pin, and when, is not written
-   anywhere in this tree. This record is the first. (This record's first
-   commit, `7638734b9e`, said the caret value was in the oldest root commit;
-   that was wrong, and is corrected here.)
+   advisory first motivated the 4.18.0 pin is not written anywhere in this
+   tree. This record is the first. (This record's first two commits dated
+   the override from the shallow clone's boundary commits as if they were
+   the start of the history: `7638734b9e` said the caret value was in the
+   oldest of them, `4b398890e7` that the pin began there. Both are corrected
+   here.)
 5. **`pnpm install` warns about unmet peers** that predate this change and are
    not touched by it, among them: vite-plugin-static-copy 4.1.1 wants vite
    `^7.3.7` (found 8.1.6; that is the peer range the lockfile recorded for
