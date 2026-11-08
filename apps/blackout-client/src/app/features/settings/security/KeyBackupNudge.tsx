@@ -157,10 +157,13 @@ export function KeyBackupNudge() {
 
     // The click asks the homeserver again and opens the overlay on the fresh
     // answer; the banner follows that answer too, so a button the answer
-    // removed is gone. `openGuard` resolves null for an answer it dropped (a
-    // later click or a close came first); the banner drops it as well.
+    // removed is gone. The click takes an account turn, so a refresh that
+    // started before it and answers after it is dropped. `openGuard`
+    // resolves null for an answer it dropped (a later click or a close came
+    // first), and no refresh starts while the click's check is in flight, so
+    // an answer it does return is the newest one asked for.
     const handleAction = useCallback(async () => {
-        const turn = accountTurns.next();
+        accountTurns.next();
         clicksInFlight.current += 1;
         let result: KeyBackupGuardResult | null;
         try {
@@ -168,7 +171,7 @@ export function KeyBackupNudge() {
         } finally {
             clicksInFlight.current -= 1;
         }
-        if (result && alive() && accountTurns.isLatest(turn)) {
+        if (result && alive()) {
             setCrossSigningReady(result.crossSigningReady);
             setAccountState(result.verdict);
         }
