@@ -706,16 +706,24 @@ For the source-of-truth triage with tier/owner detail see
     have been recorded, and doing it again is safe. While such a write stands
     unconfirmed, every further check-in and cancel on that process is
     answered 503 at once, without being sent, so those were certainly not
-    recorded, until it settles, which is when its row is in that server's
-    memory. Nothing bounds how long that takes: the server's database pool
-    sets no connection or statement timeout, so a write sent on a connection
-    the database never answers (one a failover or a network fault left
-    dangling) settles only when the operating system gives up on that
-    connection, which can be minutes after the database answers again; each
-    check-in refused meanwhile is still written onto the switch, as below. A
-    cancel the database confirms late takes
-    effect then (the switch shows cancelled and its copies are removed), and
-    a check-in confirmed late counts. The server's own move of a switch
+    recorded, until that write is answered (its row is then in that
+    server's memory) or fails. Nothing bounds how long that takes. The
+    server's database pool sets no connection or statement timeout and no
+    TCP keepalive, so a write the database's host had received and
+    acknowledged before it went silent (a failover that fenced or powered off
+    that host mid-write, or a network fault that drops its traffic) is never
+    given up on: it stands until that server process is restarted. A write sent after the database went silent fails once the
+    operating system gives up retransmitting it (about 15 minutes at Linux's
+    defaults); what the server process does with that connection's error
+    then is a matter of the database pool's handling of connection errors,
+    which a separate change addresses. Each check-in refused meanwhile is still
+    written onto the switch, as below, but that holds a switch that falls
+    due back for one backlog window only (72 hours by default, once per
+    missed check-in): when the window ends the switch fires while that
+    process still refuses every check-in and cancel, unless it has been
+    restarted by then. A cancel the database confirms late takes effect then
+    (the switch shows cancelled and its copies are removed), and a check-in
+    confirmed late counts. The server's own move of a switch
     (into grace, or firing it) is checked the same way and reaches the
     process's memory only once the database has it, so nothing is served or
     sent for a firing the database refused; one the database does not
@@ -733,16 +741,19 @@ For the source-of-truth triage with tier/owner detail see
     failure logged. Each try
     takes a database connection of its own and gives up after 5 seconds,
     dropping that connection, so neither a write of that process's that
-    stands unconfirmed nor a try the database never answers holds the next
-    one back. The sweep reads the mark in whichever process runs it, and
+    stands unconfirmed nor a try the database never answers stops the next
+    one being made (while every connection of that process's pool is held by
+    such writes, though, no try can be written: below). The sweep reads the
+    mark in whichever process runs it, and
     the database itself refuses to fire a switch so marked that has not yet
     had its backlog window, even for a process that has not heard of the
     mark, which then reads it; so where the API and the sweep are separate
     processes (`deploy/docker/production`), a check-in refused on the API
-    process during a database outage holds the switch back on the worker
-    too once the mark is written, as long as you have not checked in since
-    (the 503 says the check-in may not have been recorded; checking in again
-    is the sure way once one is answered as done, and while a write of that
+    process during a database outage gives the switch its backlog window on
+    the worker too once the mark is written, as long as you have not checked
+    in since, and as above that window is one per missed check-in (the 503
+    says the check-in may not have been recorded; checking in again is the
+    sure way once one is answered as done, and while a write of that
     process's stands unconfirmed every check-in there is refused at once,
     each written onto the switch the same way). What is left: the process
     that refused your check-in loses its note if it stops before the mark is
@@ -755,8 +766,8 @@ For the source-of-truth triage with tier/owner detail see
     pool hands it that the database no longer answers costs one more try),
     and for as long as the database answers the worker but not that process
     (a network fault between them, or every connection of that process's
-    pool held by a statement the database never answered, which the
-    operating system gives up on only after minutes); and a stall itself is known only
+    pool held by a statement the database never answered, which, as above,
+    can last until that process is restarted); and a stall itself is known only
     to the process whose statements stood, so a switch due during an outage
     that only the API process's statements met is not held back for that
     alone.

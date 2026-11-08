@@ -289,18 +289,26 @@ const ownedSwitch = (id: string, subject: string): DeadmanSwitchRecord | undefin
  * attempt into the database (`ownerAttemptRefusedAt`, decision 31, the
  * operator's choice of 2026-11-02), trying at once and again on its own 10
  * seconds after each try that failed or passed its 5-second bound, each on a
- * connection of its own, whatever its other statements are doing (rounds 15
- * and 16 of part 2's review), and this sweep reads it as it reads its own
- * note; where this mirror has not yet heard of a carry that landed, the
- * trigger is refused in the database itself and the row taken, so the next
- * pass gives the window (round 15). So in the deployed layout a check-in the
- * API process refused holds the switch back on the worker too, once the
- * carry has landed. What stays one process's own is its stalls themselves,
- * and a note whose process stopped before its carry landed; and a deadline
- * that falls before the carry lands finds the note uncarried: one in the
- * time before the refusing process's next try once the database answers
- * its new connections again (that try starts within 15 seconds), or while
- * the database answers this process but not that one.
+ * connection of its own, whatever its other statements are doing as long as
+ * its pool hands over a connection (rounds 15 and 16 of part 2's review),
+ * and this sweep reads it as it reads its own note; where this mirror has
+ * not yet heard of a carry that landed, the trigger is refused in the
+ * database itself and the row taken, so the next pass gives the window
+ * (round 15). So in the deployed layout a check-in the API process refused
+ * gives the switch the backlog window on the worker too, once the carry has
+ * landed: one window per missed check-in, so where that process's own
+ * statement stands unanswered for longer (nothing bounds it: a statement
+ * the database's host acknowledged before it went silent stands until that
+ * process restarts) the switch fires when the window ends with the owner
+ * still refused there (round 17). What stays one process's own is its
+ * stalls themselves, and a note whose process stopped before its carry
+ * landed; and a deadline that falls before the carry lands finds the note
+ * uncarried: one in the time before the refusing process's next try once
+ * the database answers its new connections again (that try starts within
+ * 15 seconds, and one more try later for each connection its pool hands
+ * over that the database no longer answers), or while the database answers
+ * this process but not that one (a network fault, or that process's pool
+ * held whole by statements the database never answered).
  */
 export async function sweepOverdueDeadmanSwitches(
     now: Date = new Date(),

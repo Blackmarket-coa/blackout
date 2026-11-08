@@ -144,17 +144,24 @@ each correction.
     refused it, which tries at once and again on its own 10 seconds after
     each try that failed until it is written (each failure logged), each try
     on a database connection of its own and given up after 5 seconds, so a
-    write of that process's that the database never answers does not hold
-    it back; the database then refuses to fire the switch before it has had
-    its grace window, so it gets the window at its deadline in whichever
-    process runs the sweep, unless you check in again first. That note is
-    lost if the process stops before it is written; the sweep can fire a
-    switch already due before it is written, in the time before the next
-    try once the database answers that process again (within 15 seconds)
-    and for as long as the database answers the sweep's process but not
-    that one; and while a write of that process's stands unanswered, which
-    the server's database pool, setting no timeout, can leave for minutes,
-    check-ins there are refused at once
+    write of that process's that the database never answers does not stop
+    the next try being made, though while every database connection of that
+    process is held by such writes no try can be written; the database then
+    refuses to fire the switch before it has had its grace window, so it
+    gets the window at its deadline in whichever process runs the sweep,
+    unless you check in again first, one window per missed check-in. That
+    note is lost if the process stops before it is written; the sweep can
+    fire a switch already due before it is written, in the time before the
+    next try once the database answers that process again (within 15
+    seconds, and one more try for each connection that process is handed
+    that the database no longer answers) and for as long as the database
+    answers the sweep's process but not that one. While a write of that
+    process's stands unanswered, check-ins and cancels there are refused at
+    once, and nothing bounds how long: the server's database pool sets no
+    statement timeout or keepalive, so a write the database had received
+    before it went silent stands until that server process is restarted;
+    a switch that falls due meanwhile gets its 72-hour grace window and
+    then fires while they are still refused
     ([`KNOWN_LIMITATIONS.md`](../../KNOWN_LIMITATIONS.md)).
 -   **Deleting an account** removes the sealed copies of its unfired release
     switches with their content (whether a switch has fired is decided on
