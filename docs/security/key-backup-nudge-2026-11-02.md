@@ -460,9 +460,28 @@ temporary tsconfig (`scratchpad/v60/r3/tsconfig.tests.json`: extends the
 client's, includes the 7 guard test files, the 2 helpers and `src/**/*.d.ts`),
 exit 0. The first builder of the round had found two errors in that run, the
 TS2554 above and a `process` reference in the new helper (no Node types in the
-client's tsconfig; typed locally), and fixed both. The full gates run on the
-head after develop is merged into the branch; their results are added here in
-the commit that follows the merge.
+client's tsconfig; typed locally), and fixed both. Develop
+(`27d8c17051`, #998: lodash 4.18.1, the fork's hosting helpers removed; no file in
+common with this branch) was then merged (`b917bc89ba`), the lockfile installed
+with `pnpm install --frozen-lockfile --offline` (lodash 4.18.1 added from the
+store), and the gates ran on that merged head, Node 22, the `pnpm` commands from the
+repository root and the `npx` ones from `apps/blackout-client` (logs in
+`scratchpad/v60/r3/gates/`):
+
+| Gate                            | Command                                                                                                                                | Result                                                                                                                                                                              |
+| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| core and design builds          | `pnpm --filter @blackout/core run build`, `pnpm --filter @blackout/design run build`, as CI does before the client's jobs              | exit 0, both                                                                                                                                                                        |
+| client typecheck                | `pnpm --filter @blackout/client run typecheck` (`tsc --noEmit`, covers `src`)                                                          | exit 0                                                                                                                                                                              |
+| test files typecheck            | `npx tsc -p scratchpad/v60/r3/tsconfig.tests.json` (the temporary tsconfig above)                                                      | exit 0                                                                                                                                                                              |
+| eslint, changed `src` files     | `npx eslint --max-warnings=0` on the eight changed or new files under `apps/blackout-client/src`                                       | exit 0                                                                                                                                                                              |
+| guard tests                     | `npx vitest run` on the eight files of the Tests table                                                                                 | 100 passed, 6.2 s                                                                                                                                                                   |
+| client unit suite, as CI        | `pnpm --filter @blackout/client run test:coverage`                                                                                     | 525 files, 3726 passed, 3 skipped (pre-existing; none in this change's files), 0 unhandled errors; coverage 45.59 % statements, 36.66 branches, 36.46 functions, 46.65 lines; 214 s |
+| client integration suite, as CI | `pnpm --filter @blackout/client run test:integration`                                                                                  | 3 files, 13 passed                                                                                                                                                                  |
+| client build                    | `pnpm --filter @blackout/client run build`                                                                                             | both Vite bundles built (8.8 s and 0.08 s), exit 0                                                                                                                                  |
+| prettier                        | root `npx prettier --check` on the 22 files the branch changes against develop                                                         | clean                                                                                                                                                                               |
+| trust page                      | `node tools/ci/build-trust-page.mjs --check` (`TRUST.md` unchanged this round)                                                         | OK, `public/trust.html` matches                                                                                                                                                     |
+| gitleaks 8.21.2                 | `gitleaks git --log-opts="origin/develop..HEAD"`, run before this record's last commit and again after it                              | no leaks (7 commits before; the two merge commits carry develop's own content)                                                                                                      |
+| load rule                       | each heavy step waited for a 1-minute load under 3.5 (`scratchpad/v60/r3/gates/load.txt`): typecheck at 3.42, unit at 3.10, build 3.04 | kept                                                                                                                                                                                |
 
 ## Second review, 2026-11-08
 
@@ -522,7 +541,9 @@ Fourteen findings; each is fixed above or explained here.
     `bootstrapCrossSigning`, which with the fork's default Synapse config stops
     at the password prompt (above) for as long as the person takes, then
     `resetKeyBackup`. A backup that another Matrix app creates while the
-    password prompt is open would still be deleted by `resetKeyBackup`. Closing
+    password prompt is open would still be deleted by `resetKeyBackup`, and
+    cross-signing set up there in that window would be replaced by the upload
+    the password unlocks. Closing
     it means re-checking before `resetKeyBackup` and, if a backup appeared,
     skipping it while still showing the new recovery key (secret storage and
     cross-signing are already replaced by then, so failing there would lose the
