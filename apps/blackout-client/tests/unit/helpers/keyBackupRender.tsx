@@ -13,11 +13,21 @@ import type { MatrixClient } from 'matrix-js-sdk';
 import type { CryptoApi } from 'matrix-js-sdk/lib/crypto-api';
 import { vi } from 'vitest';
 import { MatrixClientProvider } from '../../../src/app/hooks/useMatrixClient';
-import { renderDialog, type MountedDialog } from './modalReliability';
+import { renderDialog, type JotaiStore, type MountedDialog } from './modalReliability';
 
-export async function renderWithClient(mx: MatrixClient, node: ReactNode): Promise<MountedDialog> {
+/**
+ * `store`: pass the same jotai store to a second render to keep atom state
+ * across a remount, as the app's one store does (each render otherwise gets
+ * a fresh store).
+ */
+export async function renderWithClient(
+    mx: MatrixClient,
+    node: ReactNode,
+    store?: JotaiStore
+): Promise<MountedDialog> {
     return renderDialog(node, {
         wrap: (inner) => <MatrixClientProvider value={mx}>{inner}</MatrixClientProvider>,
+        ...(store ? { store } : {}),
     });
 }
 

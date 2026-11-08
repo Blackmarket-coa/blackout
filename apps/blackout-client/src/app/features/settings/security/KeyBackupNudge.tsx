@@ -6,7 +6,9 @@ import { useAlive } from '../../../hooks/useAlive';
 import { useKeyBackupStatusChange } from '../../../hooks/useKeyBackup';
 import {
     KeyBackupGuardOverlay,
+    useAnswerTurns,
     useKeyBackupSetupGuard,
+    type KeyBackupGuardResult,
 } from '../../../components/KeyBackupSetupGuard';
 import {
     atomWithLocalStorage,
@@ -24,10 +26,12 @@ import { KEY_BACKUP_NUDGE_GUARD_TEXTS, selectKeyBackupNudge } from './encryption
  * Nudge shown while this device has no active key backup.
  *
  * A backup keeps copies of message keys on the homeserver, locked with a
- * recovery key. Another Matrix app signed in with that key can restore older
- * messages from it. Blackout has no screen that restores from a backup yet,
- * so here a backup does not bring older messages back after a new sign-in,
- * and the text says so.
+ * recovery key: the keys of the device that set it up, and of any other
+ * session that trusts it. Another Matrix app signed in with that key can
+ * restore the messages those keys open. Blackout has no screen that restores
+ * from a backup or verifies a device yet, so a Blackout session signed in
+ * later neither restores from the backup nor adds to it, and a backup does
+ * not bring older messages back after a new sign-in here. The text says so.
  *
  * What it offers depends on what the ACCOUNT has on the homeserver, not on
  * this device: `isCrossSigningReady()` and `getActiveSessionBackupVersion()`
@@ -47,8 +51,12 @@ import { KEY_BACKUP_NUDGE_GUARD_TEXTS, selectKeyBackupNudge } from './encryption
  * `KeyBackupStatus` only for this device's own backup). So the button never
  * opens a flow from the stored row. It re-asks the homeserver at the click
  * (`useKeyBackupSetupGuard`) and opens the setup or the reset only on the
- * fresh answer; otherwise the overlay shows the fresh row's text, and the
- * banner follows it. The setup form checks once more before its first write.
+ * answer to the latest click; otherwise the overlay shows that answer's row
+ * text. The banner shows the newest answer, from a click or a refresh: an
+ * answer that arrives after a later one was asked for is dropped
+ * (`useAnswerTurns`), and a refresh asked for while a click's check is in
+ * flight waits for it, so the overlay never shows an answer older than the
+ * banner's. The setup form checks once more before its first write.
  *
  * If a device check rejects (the crypto layer is closing, say), the nudge
  * renders nothing: this device's state is unknown, so nothing is offered and
@@ -79,10 +87,27 @@ export function KeyBackupNudge() {
     const [accountState, setAccountState] = useState<AccountKeyVerdict>('unknown');
     const [snoozeUntil, setSnoozeUntil] = useAtom(keyBackupNudgeSnoozeAtom);
     const warned = useRef(false);
-    const { panel, open: openGuard, close: closeGuard } = useKeyBackupSetupGuard(mx);
+    const guard = useKeyBackupSetupGuard(mx, KEY_BACKUP_NUDGE_GUARD_TEXTS);
+    const { open: openGuard } = guard;
+    // The account's answer comes from refreshes and from clicks; this
+    // device's backup state from refreshes only. Each keeps its own turns.
+    const accountTurns = useAnswerTurns();
+    const deviceTurns = useAnswerTurns();
+    const clicksInFlight = useRef(0);
+    const refreshWaiting = useRef(false);
 
     const refresh = useCallback(async () => {
         if (!crypto) return;
+        // A click's check is in flight and its answer goes to the overlay. A
+        // refresh started now could answer first and be newer, and the
+        // overlay would then show an older answer than the banner. It runs
+        // once the click's answer is in.
+        if (clicksInFlight.current > 0) {
+            refreshWaiting.current = true;
+            return;
+        }
+        const accountTurn = accountTurns.next();
+        const deviceTurn = deviceTurns.next();
         try {
             const [cs, backupVersion, account] = await Promise.all([
                 crypto.isCrossSigningReady(),
@@ -90,15 +115,19 @@ export function KeyBackupNudge() {
                 checkAccountKeyState(mx),
             ]);
             if (!alive()) return;
-            setCrossSigningReady(cs);
-            setKeyBackupReady(typeof backupVersion === 'string');
-            setAccountState(accountKeyVerdict(account, cs));
-            setLoaded(true);
+            if (deviceTurns.isLatest(deviceTurn)) {
+                setKeyBackupReady(typeof backupVersion === 'string');
+                setLoaded(true);
+            }
+            if (accountTurns.isLatest(accountTurn)) {
+                setCrossSigningReady(cs);
+                setAccountState(accountKeyVerdict(account, cs));
+            }
         } catch (error) {
             // Only the two device checks can reject (`checkAccountKeyState`
             // never throws). This device's state is then unknown, so the
             // nudge stays hidden rather than offer or claim anything.
-            if (!alive()) return;
+            if (!alive() || !deviceTurns.isLatest(deviceTurn)) return;
             setLoaded(false);
             if (!warned.current) {
                 warned.current = true;
@@ -108,7 +137,7 @@ export function KeyBackupNudge() {
                 );
             }
         }
-    }, [mx, crypto, alive]);
+    }, [mx, crypto, alive, accountTurns, deviceTurns]);
 
     useEffect(() => {
         void refresh();
@@ -128,13 +157,26 @@ export function KeyBackupNudge() {
 
     // The click asks the homeserver again and opens the overlay on the fresh
     // answer; the banner follows that answer too, so a button the answer
-    // removed is gone.
+    // removed is gone. `openGuard` resolves null for an answer it dropped (a
+    // later click or a close came first); the banner drops it as well.
     const handleAction = useCallback(async () => {
-        const result = await openGuard();
-        if (!result) return;
-        setCrossSigningReady(result.crossSigningReady);
-        setAccountState(result.verdict);
-    }, [openGuard]);
+        const turn = accountTurns.next();
+        clicksInFlight.current += 1;
+        let result: KeyBackupGuardResult | null;
+        try {
+            result = await openGuard();
+        } finally {
+            clicksInFlight.current -= 1;
+        }
+        if (result && alive() && accountTurns.isLatest(turn)) {
+            setCrossSigningReady(result.crossSigningReady);
+            setAccountState(result.verdict);
+        }
+        if (clicksInFlight.current === 0 && refreshWaiting.current) {
+            refreshWaiting.current = false;
+            void refresh();
+        }
+    }, [openGuard, alive, accountTurns, refresh]);
 
     // Nothing renders until this device's state and the homeserver's answer
     // are both in, so no action can flash that the answer would remove.
@@ -221,11 +263,7 @@ export function KeyBackupNudge() {
                 </div>
             )}
 
-            <KeyBackupGuardOverlay
-                panel={panel}
-                texts={KEY_BACKUP_NUDGE_GUARD_TEXTS}
-                onClose={closeGuard}
-            />
+            <KeyBackupGuardOverlay guard={guard} />
         </>
     );
 }

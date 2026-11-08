@@ -383,10 +383,19 @@ export const DeviceVerificationReset = forwardRef<HTMLDivElement, DeviceVerifica
                         <Box direction="Column" gap="200">
                             <Text size="H1">✋🧑‍🚒🤚</Text>
                             <Text size="T300">Resetting device verification is permanent.</Text>
+                            {/* What the guarded flow does (S9,
+                                docs/security/key-backup-nudge-2026-11-02.md):
+                                `SetupVerification` in mode "reset" refuses
+                                before its first write while the account has
+                                a backup or the backup check fails, so no
+                                backup is lost; it replaces cross-signing and
+                                secret storage and creates a new backup. */}
                             <Text size="T300">
-                                Anyone you have verified with will see security alerts and your
-                                encryption backup will be lost. You almost certainly do not want to
-                                do this, unless you have lost <b>Recovery Key</b> or{' '}
+                                Anyone you have verified with will see security alerts, and you will
+                                get a new recovery key and a new key backup. If your account already
+                                has a key backup, or Blackout can’t check, Blackout stops before
+                                changing anything. You almost certainly do not want to do this,
+                                unless you have lost <b>Recovery Key</b> or{' '}
                                 <b>Recovery Passphrase</b> and every device you can verify from.
                             </Text>
                         </Box>

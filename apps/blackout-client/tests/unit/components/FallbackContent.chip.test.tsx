@@ -22,21 +22,28 @@ import {
     CHIP_CHECK_FAILED,
     CHIP_LABEL,
     CHIP_NOT_VERIFIED,
+    CHIP_OFFER_RESET,
+    CHIP_OFFER_SETUP,
+    CHIP_SETUP_WONT_FIX,
     CHIP_TEXT,
     MessageBadEncryptedContent,
 } from '../../../src/app/components/message/content/FallbackContent';
+import { KEY_BACKUP_NUDGE_TEXT } from '../../../src/app/features/settings/security/encryptionPosture';
 import {
     createFakeKeyClient,
     createFakeKeyHomeserver,
     type FakeKeyHomeserverOptions,
 } from '../helpers/fakeKeyHomeserver';
 import {
+    backupVersionGets,
     bodyText,
     buttonsNamed,
     click,
     destructiveCryptoCalls,
     renderWithClient,
+    settle,
     stubCrypto,
+    submitForm,
     unhandledRejectionsDuring,
     waitFor,
     type CryptoStubOptions,
@@ -45,6 +52,7 @@ import type { MountedDialog } from '../helpers/modalReliability';
 
 const SETUP_HEADING = 'Setup Device Verification';
 const RESET_HEADING = 'Reset Device Verification';
+const SET_UP_BACKUP = 'Set up backup';
 
 let mounted: MountedDialog | undefined;
 
@@ -149,17 +157,50 @@ describe('MessageBadEncryptedContent chip', () => {
         expect(destructiveCryptoCalls(crypto)).toBe(0);
     });
 
-    it('nothing on the server: opens the from-scratch setup', async () => {
-        await renderChip({ backupVersion: null, masterKey: false }, { crossSigningReady: false });
+    it('nothing on the server: explains first, then "Set up backup" checks again and opens the from-scratch setup', async () => {
+        const { hs, crypto } = await renderChip(
+            { backupVersion: null, masterKey: false },
+            { crossSigningReady: false }
+        );
         await clickWhy();
+        await waitFor(() => bodyText().includes(CHIP_OFFER_SETUP), { what: 'the explanation' });
+        // "Why?" explains: no flow yet, and the text says the setup won't
+        // make this message readable.
+        expect(bodyText()).toContain(CHIP_SETUP_WONT_FIX);
+        expect(bodyText()).not.toContain(SETUP_HEADING);
+        expect(buttonsNamed('Close')).toHaveLength(1);
+        const before = backupVersionGets(hs.calls);
+        await click(buttonsNamed(SET_UP_BACKUP)[0]);
         await waitFor(() => bodyText().includes(SETUP_HEADING), { what: 'the setup dialog' });
+        expect(backupVersionGets(hs.calls)).toBe(before + 1);
+        expect(destructiveCryptoCalls(crypto)).toBe(0);
     });
 
-    it('cross-signing this device trusts, no backup: opens the warned reset', async () => {
+    it('cross-signing this device trusts, no backup: explains first, then "Set up backup" opens the warned reset', async () => {
         await renderChip({ backupVersion: null, masterKey: true }, { crossSigningReady: true });
         await clickWhy();
+        await waitFor(() => bodyText().includes(CHIP_OFFER_RESET), { what: 'the explanation' });
+        expect(bodyText()).not.toContain(RESET_HEADING);
+        await click(buttonsNamed(SET_UP_BACKUP)[0]);
         await waitFor(() => bodyText().includes(RESET_HEADING), { what: 'the reset dialog' });
         expect(bodyText()).toContain('Resetting device verification is permanent.');
+    });
+
+    it('a backup created after the explanation: "Set up backup" shows the backup text, not the setup', async () => {
+        const { hs, crypto } = await renderChip(
+            { backupVersion: null, masterKey: false },
+            { crossSigningReady: false }
+        );
+        await clickWhy();
+        await waitFor(() => bodyText().includes(CHIP_OFFER_SETUP), { what: 'the explanation' });
+        hs.setBackupVersion('3');
+        hs.setMasterKey(true);
+        await click(buttonsNamed(SET_UP_BACKUP)[0]);
+        await waitFor(() => bodyText().includes(CHIP_BACKUP_EXISTS), { what: 'the backup text' });
+        expect(bodyText()).not.toContain(SETUP_HEADING);
+        expect(buttonsNamed(SET_UP_BACKUP)).toHaveLength(0);
+        expect(destructiveCryptoCalls(crypto)).toBe(0);
+        expect(hs.destructiveCalls()).toEqual([]);
     });
 
     it('a device check that rejects: the check-failed text, no setup, no rejection escapes', async () => {
@@ -183,5 +224,101 @@ describe('MessageBadEncryptedContent chip', () => {
         expect(CHIP_TEXT).toBe('Can’t decrypt this message on this device.');
         expect(CHIP_TEXT).not.toMatch(/doesn.t have its key/);
         expect(CHIP_CHECK_FAILED).toMatch(/key backup or cross-signing/);
+    });
+
+    it('the offer texts say the setup won’t make this message readable, then the nudge’s text for the row', () => {
+        expect(CHIP_SETUP_WONT_FIX).toBe(
+            'Setting up a backup won’t, by itself, make this message readable: a new backup starts with only the keys this device already has.'
+        );
+        expect(CHIP_OFFER_SETUP).toBe(
+            `${CHIP_SETUP_WONT_FIX} ${KEY_BACKUP_NUDGE_TEXT.none.detail}`
+        );
+        expect(CHIP_OFFER_RESET).toBe(
+            `${CHIP_SETUP_WONT_FIX} ${KEY_BACKUP_NUDGE_TEXT.crossSigningReady.detail}`
+        );
+    });
+});
+
+describe('MessageBadEncryptedContent chip: a late answer never replaces a later one', () => {
+    // Round 3 of S9. A check that was superseded by a later click, or whose
+    // overlay was closed, must not set the overlay when its answer arrives.
+
+    it('close during the check, a backup appears, click again: the late "none" does not replace the backup text', async () => {
+        const { hs, crypto } = await renderChip(
+            { backupVersion: null, masterKey: false },
+            { crossSigningReady: false }
+        );
+        const release = hs.delayNextBackupAnswer();
+        await clickWhy();
+        await waitFor(() => bodyText().includes(CHIP_CHECKING), { what: 'the checking text' });
+        await click(buttonsNamed('Close')[0]);
+        // Another device of the account sets up cross-signing and a backup.
+        hs.setBackupVersion('3');
+        hs.setMasterKey(true);
+        await clickWhy();
+        await waitFor(() => bodyText().includes(CHIP_BACKUP_EXISTS), { what: 'the backup text' });
+
+        release(); // the first click's answer, "none", arrives now
+        await settle(50);
+        expect(bodyText()).toContain(CHIP_BACKUP_EXISTS);
+        expect(bodyText()).not.toContain(CHIP_OFFER_SETUP);
+        expect(bodyText()).not.toContain(SETUP_HEADING);
+        expect(buttonsNamed(SET_UP_BACKUP)).toHaveLength(0);
+        expect(destructiveCryptoCalls(crypto)).toBe(0);
+        expect(hs.destructiveCalls()).toEqual([]);
+    });
+
+    it('close during the check: the late answer does not reopen the overlay', async () => {
+        const { hs } = await renderChip(
+            { backupVersion: null, masterKey: false },
+            { crossSigningReady: false }
+        );
+        const release = hs.delayNextBackupAnswer();
+        await clickWhy();
+        await waitFor(() => bodyText().includes(CHIP_CHECKING), { what: 'the checking text' });
+        await click(buttonsNamed('Close')[0]);
+        await waitFor(() => !bodyText().includes(CHIP_CHECKING), { what: 'the overlay to close' });
+
+        release();
+        await settle(50);
+        expect(bodyText()).not.toContain(CHIP_OFFER_SETUP);
+        expect(bodyText()).not.toContain(SETUP_HEADING);
+        expect(buttonsNamed('Close')).toHaveLength(0);
+    });
+
+    it('the explanation’s "Set up backup" is dropped too when the overlay was closed before its answer', async () => {
+        const { hs, crypto } = await renderChip(
+            { backupVersion: null, masterKey: false },
+            { crossSigningReady: false }
+        );
+        await clickWhy();
+        await waitFor(() => bodyText().includes(CHIP_OFFER_SETUP), { what: 'the explanation' });
+        const release = hs.delayNextBackupAnswer();
+        await click(buttonsNamed(SET_UP_BACKUP)[0]);
+        await waitFor(() => bodyText().includes(CHIP_CHECKING), { what: 'the checking text' });
+        await click(buttonsNamed('Close')[0]);
+        release();
+        await settle(50);
+        expect(bodyText()).not.toContain(SETUP_HEADING);
+        expect(document.body.querySelector('form')).toBeNull();
+        expect(destructiveCryptoCalls(crypto)).toBe(0);
+    });
+
+    it('submitting a setup opened by a fresh answer still goes through the form’s own check', async () => {
+        // The ordering fix must not stop the legitimate path.
+        const { hs, crypto } = await renderChip(
+            { backupVersion: null, masterKey: false },
+            { crossSigningReady: false }
+        );
+        await clickWhy();
+        await waitFor(() => bodyText().includes(CHIP_OFFER_SETUP), { what: 'the explanation' });
+        await click(buttonsNamed(SET_UP_BACKUP)[0]);
+        await waitFor(() => bodyText().includes(SETUP_HEADING), { what: 'the setup dialog' });
+        const before = backupVersionGets(hs.calls);
+        await submitForm(document.body.querySelector('form') as HTMLFormElement);
+        await waitFor(() => crypto.resetKeyBackup.mock.calls.length === 1, {
+            what: 'the setup calls',
+        });
+        expect(backupVersionGets(hs.calls)).toBe(before + 1);
     });
 });

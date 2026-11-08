@@ -17,7 +17,10 @@ vi.mock('focus-trap-react', () => ({
     __esModule: true,
     default: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
-import { EnableVerification } from '../../../../../src/app/features/settings/devices/Verification';
+import {
+    ENABLE_VERIFICATION_GUARD_TEXTS,
+    EnableVerification,
+} from '../../../../../src/app/features/settings/devices/Verification';
 import { KEY_BACKUP_NUDGE_TEXT } from '../../../../../src/app/features/settings/security/encryptionPosture';
 import {
     createFakeKeyClient,
@@ -107,7 +110,7 @@ describe('EnableVerification: the click re-asks the homeserver, because the answ
         await click(buttonsNamed('Enable')[0]);
         await waitFor(() => buttonsNamed('Close').length === 1, { what: 'the explanation' });
         expect(backupVersionGets(hs.calls)).toBeGreaterThan(before);
-        expect(bodyText()).toContain(KEY_BACKUP_NUDGE_TEXT.backup.detail);
+        expect(bodyText()).toContain(ENABLE_VERIFICATION_GUARD_TEXTS.backup);
         expect(bodyText()).not.toContain('Setup Device Verification');
         expect(hs.destructiveCalls()).toEqual([]);
         expect(buttonsNamed('Enable')).toHaveLength(0);
@@ -129,6 +132,30 @@ describe('EnableVerification: the click re-asks the homeserver, because the answ
         expect(backupVersionGets(hs.calls)).toBe(before + 1);
     });
 
+    it('close during the check, a backup appears, click again: the late "none" brings back neither the setup nor Enable', async () => {
+        // Round 3 of S9: an answer to an earlier click is dropped.
+        const hs = await renderEnable({ backupVersion: null, masterKey: false });
+        const release = hs.delayNextBackupAnswer();
+        await click(buttonsNamed('Enable')[0]);
+        await settle(20);
+        await click(buttonsNamed('Close')[0]);
+        hs.setBackupVersion('3');
+        hs.setMasterKey(true);
+        await click(buttonsNamed('Enable')[0]);
+        await waitFor(() => bodyText().includes(ENABLE_VERIFICATION_GUARD_TEXTS.backup), {
+            what: 'the backup text',
+        });
+        await click(buttonsNamed('Close')[0]);
+        await settle(20);
+        expect(buttonsNamed('Enable')).toHaveLength(0);
+
+        release();
+        await settle(50);
+        expect(buttonsNamed('Enable')).toHaveLength(0);
+        expect(bodyText()).not.toContain('Setup Device Verification');
+        expect(hs.destructiveCalls()).toEqual([]);
+    });
+
     it('a device check that rejects: no Enable, no setup, no rejection escapes', async () => {
         const hs = createFakeKeyHomeserver({ backupVersion: null, masterKey: false });
         const mx = createFakeKeyClient(hs);
@@ -146,5 +173,34 @@ describe('EnableVerification: the click re-asks the homeserver, because the answ
         expect(unhandled).toEqual([]);
         expect(buttonsNamed('Enable')).toHaveLength(0);
         expect(destructiveCryptoCalls(crypto)).toBe(0);
+    });
+});
+
+describe('EnableVerification: its own texts', () => {
+    it('say only what the check found, nothing about which screens Blackout has', () => {
+        // The page it sits on renders "Verify Manually" and the backup
+        // restore tile, so the nudge's "Blackout has no screen that …" would
+        // be false here.
+        for (const text of Object.values(ENABLE_VERIFICATION_GUARD_TEXTS)) {
+            if (typeof text === 'string') expect(text).not.toMatch(/no screen/i);
+        }
+        expect(ENABLE_VERIFICATION_GUARD_TEXTS.offer).toBeUndefined();
+        expect(ENABLE_VERIFICATION_GUARD_TEXTS.check_failed).toBe(
+            KEY_BACKUP_NUDGE_TEXT.unknown.detail
+        );
+        expect(ENABLE_VERIFICATION_GUARD_TEXTS.backup).toMatch(/would delete it/);
+        expect(ENABLE_VERIFICATION_GUARD_TEXTS.not_verified).toMatch(
+            /would replace your cross-signing/
+        );
+    });
+
+    it('a master key on the server at the click: the not-verified text', async () => {
+        const hs = await renderEnable({ backupVersion: null, masterKey: false });
+        hs.setMasterKey(true);
+        await click(buttonsNamed('Enable')[0]);
+        await waitFor(() => bodyText().includes(ENABLE_VERIFICATION_GUARD_TEXTS.not_verified), {
+            what: 'the not-verified text',
+        });
+        expect(bodyText()).not.toContain('Setup Device Verification');
     });
 });

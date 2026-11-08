@@ -6,6 +6,7 @@ import {
     useKeyBackupSetupGuard,
     type KeyBackupGuardTexts,
 } from '../../KeyBackupSetupGuard';
+import { KEY_BACKUP_NUDGE_TEXT } from '../../../features/settings/security/encryptionPosture';
 
 const warningStyle = { color: color.Warning.Main, opacity: config.opacity.P300 };
 const criticalStyle = { color: color.Critical.Main, opacity: config.opacity.P300 };
@@ -46,6 +47,12 @@ export const MessageFailedContent = as<'div', { children?: never }>(({ ...props 
  * `onMegolmDecryptionError`). None of the lines promises a recovery Blackout
  * cannot do: it has no screen that restores keys from a backup or receives
  * them from another session.
+ *
+ * `Why?` explains in every row. Where the account check allows the setup
+ * (row 1) or the warned reset (row 2), the overlay first says that setting up
+ * a backup won't make this message readable, then what the backup does (the
+ * nudge's text for the row), with a "Set up backup" button that asks the
+ * homeserver again before it opens the flow (`texts.offer`).
  */
 export const CHIP_TEXT = 'Can’t decrypt this message on this device.';
 export const CHIP_LABEL = 'Why?';
@@ -56,21 +63,36 @@ export const CHIP_NOT_VERIFIED =
     'This device isn’t verified, and Blackout has no screen that verifies it or restores keys, so it can’t get this message’s key. Another of your sessions that has the key can still read it.';
 export const CHIP_CHECK_FAILED =
     'Blackout couldn’t finish checking whether your account already has a key backup or cross-signing, so it doesn’t offer to set one up right now.';
+/**
+ * True whether this device lacks the message's key or has it and refuses it:
+ * a backup set up now starts with the keys this device already has, and the
+ * device still can't decrypt the message. "By itself": once this device has
+ * the backup, the SDK asks it for a missing key at each failed attempt to
+ * decrypt (`rust-crypto.js` `onMegolmDecryptionError` →
+ * `PerSessionKeyBackupDownloader`), so the message can become readable later
+ * if another session uploads its key to that backup.
+ */
+export const CHIP_SETUP_WONT_FIX =
+    'Setting up a backup won’t, by itself, make this message readable: a new backup starts with only the keys this device already has.';
+export const CHIP_OFFER_SETUP = `${CHIP_SETUP_WONT_FIX} ${KEY_BACKUP_NUDGE_TEXT.none.detail}`;
+export const CHIP_OFFER_RESET = `${CHIP_SETUP_WONT_FIX} ${KEY_BACKUP_NUDGE_TEXT.crossSigningReady.detail}`;
 
-const CHIP_GUARD_TEXTS: KeyBackupGuardTexts = {
+export const CHIP_GUARD_TEXTS: KeyBackupGuardTexts = {
     checking: CHIP_CHECKING,
     backup: CHIP_BACKUP_EXISTS,
     not_verified: CHIP_NOT_VERIFIED,
     check_failed: CHIP_CHECK_FAILED,
+    offer: { setup: CHIP_OFFER_SETUP, reset: CHIP_OFFER_RESET },
 };
 
 export const MessageBadEncryptedContent = as<'div', { children?: never }>(({ ...props }, ref) => {
     // The chip explains; it does not always offer setup. A click asks the
     // homeserver what the ACCOUNT has and this device whether it trusts the
-    // account's cross-signing, right then (`useKeyBackupSetupGuard`), and
-    // opens the from-scratch setup only when the account has neither a backup
-    // nor cross-signing, the warned reset only when this device trusts the
-    // account's cross-signing and no backup exists, and otherwise a short
+    // account's cross-signing, right then (`useKeyBackupSetupGuard`). It
+    // offers the from-scratch setup only when the account has neither a
+    // backup nor cross-signing, the warned reset only when this device trusts
+    // the account's cross-signing and no backup exists, each behind its
+    // explanation and a button that checks again; otherwise it shows a short
     // explanation. Account data alone (`useCrossSigningActive`) is not used to
     // choose: it says cross-signing exists but not whether this device is
     // verified, and never says whether a backup exists. The from-scratch setup
@@ -79,7 +101,8 @@ export const MessageBadEncryptedContent = as<'div', { children?: never }>(({ ...
     // `docs/security/key-backup-nudge-2026-11-02.md`), so "couldn't check"
     // never opens it.
     const mx = useMatrixClientOrNull();
-    const { panel, open, close } = useKeyBackupSetupGuard(mx);
+    const guard = useKeyBackupSetupGuard(mx, CHIP_GUARD_TEXTS);
+    const { open } = guard;
 
     return (
         <Box as="span" alignItems="Center" gap="100" style={warningStyle} {...props} ref={ref}>
@@ -99,7 +122,7 @@ export const MessageBadEncryptedContent = as<'div', { children?: never }>(({ ...
                     </Text>
                 </Chip>
             )}
-            <KeyBackupGuardOverlay panel={panel} texts={CHIP_GUARD_TEXTS} onClose={close} />
+            <KeyBackupGuardOverlay guard={guard} />
         </Box>
     );
 });

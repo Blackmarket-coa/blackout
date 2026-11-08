@@ -107,20 +107,26 @@ export type KeyBackupAccountState = 'none' | 'backup' | 'cross_signing' | 'unkno
 /**
  * The key-backup nudge's text. What every line may say about a backup, and
  * why: a backup keeps copies of message keys on the homeserver, encrypted so
- * that only the recovery key (or its passphrase) opens them. Another Matrix
- * app signed in with that key can restore older messages from it. Blackout
- * has no screen that restores from a backup, so in Blackout a backup does not
- * bring older messages back after a new sign-in. None of these lines says or
- * implies that it does.
+ * that only the recovery key (or its passphrase) opens them. The keys in it
+ * are those of the device that set it up (every key it has when the backup is
+ * turned on, and those it gets later) and of any other session that trusts
+ * the backup. Another Matrix app signed in with that key can restore the
+ * messages those keys open. Blackout has no screen that restores from a
+ * backup or verifies a device, so a Blackout session signed in later neither
+ * restores from the backup nor adds its keys to it (matrix-js-sdk 40.2.0,
+ * `rust-crypto/backup.js` `doCheckKeyBackup`: an untrusted backup with no
+ * matching key is not enabled, and `maybeUploadKey` uploads only to an
+ * enabled one), and in Blackout a backup does not bring older messages back
+ * after a new sign-in. None of these lines says or implies that it does.
  */
 export const KEY_BACKUP_NUDGE_TEXT = {
     none: {
         headline: 'Turn on encrypted message backup',
-        detail: 'A backup keeps copies of your message keys on your homeserver, locked with a recovery key that you keep. Another Matrix app that you sign in to with that key can then restore your older encrypted messages. Blackout can’t restore from a backup yet, so here it won’t bring older messages back after you sign in on a new device. Setting it up also turns on cross-signing for your account.',
+        detail: 'A backup keeps copies of this device’s message keys, and those it gets later, on your homeserver, locked with a recovery key that you keep. Another Matrix app that you sign in to with that key can then restore those messages. Blackout can’t restore from a backup yet, and a Blackout session you sign in to later doesn’t add to it, so here it won’t bring older messages back after you sign in on a new device. Setting it up also turns on cross-signing for your account.',
     },
     crossSigningReady: {
         headline: 'Turn on encrypted message backup',
-        detail: 'Your account has no message key backup. Turning one on here resets device verification and gives you a new recovery key. Another Matrix app with the new key can then restore older messages from the backup. Blackout can’t restore from a backup yet.',
+        detail: 'Your account has no message key backup. Turning one on here resets device verification and gives you a new recovery key. The backup keeps copies of this device’s message keys, and those it gets later; another Matrix app with the new key can then restore those messages. Blackout can’t restore from a backup yet, so here it won’t bring older messages back after you sign in on a new device.',
     },
     crossSigningNotReady: {
         headline: 'This device isn’t verified',

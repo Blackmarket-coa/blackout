@@ -11,7 +11,12 @@
  *
  * - `GET /room_keys/version`: the current version, or 404 `M_NOT_FOUND`
  *   when the account has none (`synapse/rest/client/room_keys.py`,
- *   `RoomKeysNewVersionServlet.on_GET`).
+ *   `RoomKeysNewVersionServlet.on_GET`), with the `algorithm` and
+ *   `auth_data` the version was created with: a version this client created
+ *   (`POST`) is answered with its own signed public key, so real crypto
+ *   trusts and enables it, as it would against Synapse; a version that
+ *   exists from the start or that a test sets (another device's) carries a
+ *   fixed key with no signatures. `PUT /room_keys/keys` is accepted.
  * - `POST /keys/query`: `master_keys` is always an object, with an entry for
  *   each queried user who has a master key (`synapse/handlers/e2e_keys.py`,
  *   `get_cross_signing_keys_from_cache`).
@@ -22,10 +27,13 @@
  *   is off by default (`synapse/config/experimental.py`); with the default
  *   config Synapse asks every time, first-time setup included, unless
  *   `ui_auth.session_timeout` is set (`synapse/handlers/auth.py`,
- *   `validate_user_via_ui_auth` with `can_skip_ui_auth`). The guard never
- *   reaches this endpoint unless the verdict is 'none', so the difference
- *   does not touch it; the fake takes the MSC3967 shape so a first-time
- *   setup's writes can be shown in one submit.
+ *   `validate_user_via_ui_auth` with `can_skip_ui_auth`). The guard reaches
+ *   this endpoint only from the verdict 'none' (the from-scratch setup) and
+ *   from the trusted 'cross_signing' row (the warned reset). In the second a
+ *   master key exists, so Synapse asks for the password under either
+ *   configuration, and the difference touches only the first: the fake takes
+ *   the MSC3967 shape so a first-time setup's writes can be shown in one
+ *   submit.
  * - Account data is stored; a PUT is echoed as the sync would, after the
  *   answer, because secret storage waits for that echo before it goes on.
  */
@@ -135,6 +143,13 @@ export interface FakeKeyHomeserver {
     setBackupAnswer: (answer: FakeAnswer | undefined) => void;
     setBackupVersion: (version: string | null) => void;
     setMasterKey: (present: boolean) => void;
+    /**
+     * The next `GET /room_keys/version` is answered from the account as it is
+     * when the request arrives, but the answer is delivered only when the
+     * returned function is called: a check that answers late, after a later
+     * check has answered.
+     */
+    delayNextBackupAnswer: () => () => void;
     /** Calls that change what the account has on the server (writes to keys, backup or secret storage). */
     destructiveCalls: () => FakeCall[];
 }
@@ -148,6 +163,30 @@ export function createFakeKeyHomeserver(options: FakeKeyHomeserverOptions = {}):
     let master: string | null = options.masterKey ? OLD_MASTER_KEY : null;
     const accountData = new Map<string, unknown>(Object.entries(options.accountData ?? {}));
     let client: MatrixClient | null = null;
+    const delayedBackupAnswers: Promise<void>[] = [];
+    const FOREIGN_BACKUP = {
+        algorithm: 'm.megolm_backup.v1.curve25519-aes-sha2',
+        auth_data: { public_key: BACKUP_PUBLIC_KEY, signatures: {} } as unknown,
+    };
+    let backupInfo = { ...FOREIGN_BACKUP };
+
+    const answerBackupVersion = (init?: RequestInit): Promise<Response> => {
+        if (backupAnswer) return answerWith(backupAnswer, init);
+        if (!backupVersion) {
+            return Promise.resolve(
+                jsonResponse(404, { errcode: 'M_NOT_FOUND', error: 'No backup found' })
+            );
+        }
+        return Promise.resolve(
+            jsonResponse(200, {
+                algorithm: backupInfo.algorithm,
+                auth_data: backupInfo.auth_data,
+                version: backupVersion,
+                count: 12,
+                etag: '7',
+            })
+        );
+    };
 
     const fetchFn = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
         const url = new URL(typeof input === 'string' || input instanceof URL ? input : input.url);
@@ -157,22 +196,23 @@ export function createFakeKeyHomeserver(options: FakeKeyHomeserverOptions = {}):
         calls.push({ method, path, body });
 
         if (path === `${V3}/room_keys/version` && method === 'GET') {
-            if (backupAnswer) return answerWith(backupAnswer, init);
-            if (!backupVersion) {
-                return jsonResponse(404, { errcode: 'M_NOT_FOUND', error: 'No backup found' });
-            }
-            return jsonResponse(200, {
-                algorithm: 'm.megolm_backup.v1.curve25519-aes-sha2',
-                auth_data: { public_key: BACKUP_PUBLIC_KEY, signatures: {} },
-                version: backupVersion,
-                count: 12,
-                etag: '7',
-            });
+            const answer = answerBackupVersion(init);
+            const delay = delayedBackupAnswers.shift();
+            if (delay) await delay;
+            return answer;
         }
         if (path === `${V3}/room_keys/version` && method === 'POST') {
             backupVersion = String(nextBackupVersion);
             nextBackupVersion += 1;
+            const created = body as { algorithm?: string; auth_data?: unknown } | undefined;
+            backupInfo = {
+                algorithm: created?.algorithm ?? FOREIGN_BACKUP.algorithm,
+                auth_data: created?.auth_data ?? FOREIGN_BACKUP.auth_data,
+            };
             return jsonResponse(200, { version: backupVersion });
+        }
+        if (path === `${V3}/room_keys/keys` && method === 'PUT') {
+            return jsonResponse(200, { etag: '1', count: 0 });
         }
         const versionPath = path.match(/^\/_matrix\/client\/v3\/room_keys\/version\/([^/]+)$/);
         if (versionPath && method === 'DELETE') {
@@ -256,9 +296,19 @@ export function createFakeKeyHomeserver(options: FakeKeyHomeserverOptions = {}):
         },
         setBackupVersion: (version) => {
             backupVersion = version;
+            backupInfo = { ...FOREIGN_BACKUP };
         },
         setMasterKey: (present) => {
             master = present ? OLD_MASTER_KEY : null;
+        },
+        delayNextBackupAnswer: () => {
+            let release: () => void = () => undefined;
+            delayedBackupAnswers.push(
+                new Promise<void>((resolve) => {
+                    release = resolve;
+                })
+            );
+            return () => release();
         },
         destructiveCalls: () =>
             calls.filter(

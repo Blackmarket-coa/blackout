@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
     Box,
     Button,
@@ -37,29 +37,45 @@ import { DeviceVerificationReset, DeviceVerificationSetup } from './DeviceVerifi
  * Another device of the account can create cross-signing and a backup while
  * the screen sits open, and nothing tells this one. So no entry opens the
  * from-scratch setup from a stored verdict: `open()` asks the homeserver again
- * at the click, with the overlay already up in a checking state, and only a
- * fresh `'none'` opens `DeviceVerificationSetup`; a fresh `'cross_signing'`
- * that this device trusts opens the warned `DeviceVerificationReset`; every
- * other answer shows the caller's text for that row, with Close. The setup
- * form then checks once more right before its first write
- * (`SetupVerification`), which closes the window between this check and the
- * submit.
+ * at the click, with the overlay already up in a checking state, and only the
+ * answer to the latest click opens a flow: a `'none'` opens
+ * `DeviceVerificationSetup`; a `'cross_signing'` that this device trusts opens
+ * the warned `DeviceVerificationReset`; every other answer shows the caller's
+ * text for that row, with Close. An answer to an earlier click, or to a click
+ * whose overlay was closed, is dropped when it arrives (`useAnswerTurns`), so
+ * a late "none" never replaces a later answer or reopens a closed overlay. A
+ * caller whose own surface does not explain rows 1 and 2 (the chip) passes
+ * `texts.offer`: those rows then show that text first, with a "Set up backup"
+ * button that asks the homeserver once more before it opens the flow. The
+ * setup form then checks once more right before its first write
+ * (`SetupVerification`), which closes the window between the last of these
+ * checks and the submit.
  */
 
 export type KeyBackupGuardPanel =
     | 'checking'
     | 'setup'
     | 'reset'
+    | 'offer_setup'
+    | 'offer_reset'
     | 'backup'
     | 'not_verified'
     | 'check_failed';
 
-/** The caller's text for the wait and for the three rows that offer nothing. */
+/** The caller's text for the wait and for the rows that open no flow. */
 export interface KeyBackupGuardTexts {
     checking: string;
     backup: string;
     not_verified: string;
     check_failed: string;
+    /**
+     * Set by a caller whose own surface does not say what the setup (row 1)
+     * or the reset (row 2) does (the chip): the overlay shows this text first,
+     * with a "Set up backup" button that re-asks the homeserver before it
+     * opens the flow. Left out by a caller that already shows the row's text
+     * (the nudge's banner), so the fresh answer opens the flow at once.
+     */
+    offer?: { setup: string; reset: string };
 }
 
 export interface KeyBackupGuardResult {
@@ -84,6 +100,13 @@ export const panelForVerdict = (
         default:
             return 'check_failed';
     }
+};
+
+/** Rows 1 and 2 shown as an explanation with a button, for `texts.offer`. */
+const offerFirst = (panel: KeyBackupGuardPanel): KeyBackupGuardPanel => {
+    if (panel === 'setup') return 'offer_setup';
+    if (panel === 'reset') return 'offer_reset';
+    return panel;
 };
 
 const CHECK_FAILED: KeyBackupGuardResult = {
@@ -113,30 +136,93 @@ export const checkForSetup = async (mx: MatrixClient): Promise<KeyBackupGuardRes
     }
 };
 
-/**
- * `open()` runs the check and drives `panel`; it resolves with the fresh
- * answer so the caller can update what it shows too (a button the answer
- * removed should be gone). Resolves null when the component unmounted first.
- */
-export function useKeyBackupSetupGuard(mx: MatrixClient | null) {
-    const alive = useAlive();
-    const [panel, setPanel] = useState<KeyBackupGuardPanel | null>(null);
-
-    const open = useCallback(async (): Promise<KeyBackupGuardResult | null> => {
-        if (!mx) return null;
-        setPanel('checking');
-        const result = await checkForSetup(mx);
-        if (!alive()) return null;
-        setPanel(result.panel);
-        return result;
-    }, [mx, alive]);
-
-    const close = useCallback(() => setPanel(null), []);
-
-    return { panel, open, close };
+export interface AnswerTurns {
+    /** Takes a turn when a check starts. */
+    next: () => number;
+    /** True until a later turn is taken. */
+    isLatest: (turn: number) => boolean;
 }
 
-export function KeyBackupExplanation({ text, onClose }: { text: string; onClose: () => void }) {
+/**
+ * Orders answers that can arrive out of order. Each check takes a turn when
+ * it starts; an answer whose turn is no longer the latest was asked for
+ * before another one, so the caller drops it rather than let it overwrite
+ * a fresher answer. Closing an overlay takes a turn too, so an answer that
+ * arrives after the close is dropped.
+ */
+export function useAnswerTurns(): AnswerTurns {
+    const latest = useRef(0);
+    return useMemo(
+        () => ({
+            next: () => {
+                latest.current += 1;
+                return latest.current;
+            },
+            isLatest: (turn: number) => turn === latest.current,
+        }),
+        []
+    );
+}
+
+export interface KeyBackupSetupGuard {
+    panel: KeyBackupGuardPanel | null;
+    texts: KeyBackupGuardTexts;
+    /**
+     * Runs the check and drives `panel`. Resolves with the fresh answer, so
+     * the caller can update what it shows too (a button the answer removed
+     * should be gone), or null when the answer was dropped: the component
+     * unmounted, or a later click or a close came first.
+     */
+    open: () => Promise<KeyBackupGuardResult | null>;
+    /** The offer panel's "Set up backup": checks again, then opens the flow. */
+    proceed: () => Promise<KeyBackupGuardResult | null>;
+    close: () => void;
+}
+
+export function useKeyBackupSetupGuard(
+    mx: MatrixClient | null,
+    texts: KeyBackupGuardTexts
+): KeyBackupSetupGuard {
+    const alive = useAlive();
+    const turns = useAnswerTurns();
+    const [panel, setPanel] = useState<KeyBackupGuardPanel | null>(null);
+    const explainFirst = texts.offer !== undefined;
+
+    const check = useCallback(
+        async (explain: boolean): Promise<KeyBackupGuardResult | null> => {
+            if (!mx) return null;
+            const turn = turns.next();
+            setPanel('checking');
+            const result = await checkForSetup(mx);
+            if (!alive() || !turns.isLatest(turn)) return null;
+            const shown = explain ? offerFirst(result.panel) : result.panel;
+            setPanel(shown);
+            return { ...result, panel: shown };
+        },
+        [mx, alive, turns]
+    );
+
+    const open = useCallback(() => check(explainFirst), [check, explainFirst]);
+    const proceed = useCallback(() => check(false), [check]);
+    const close = useCallback(() => {
+        turns.next();
+        setPanel(null);
+    }, [turns]);
+
+    return { panel, texts, open, proceed, close };
+}
+
+/** The guard's button label in the offer panels, the same as the nudge's. */
+export const KEY_BACKUP_GUARD_PROCEED_LABEL = 'Set up backup';
+
+type KeyBackupExplanationProps = {
+    text: string;
+    onClose: () => void;
+    /** A button beside Close (the offer panels' "Set up backup"). */
+    action?: { label: string; onClick: () => void };
+};
+
+export function KeyBackupExplanation({ text, onClose, action }: KeyBackupExplanationProps) {
     return (
         <Dialog>
             <Header
@@ -156,6 +242,11 @@ export function KeyBackupExplanation({ text, onClose }: { text: string; onClose:
             </Header>
             <Box style={{ padding: config.space.S400 }} direction="Column" gap="400">
                 <Text size="T300">{text}</Text>
+                {action && (
+                    <Button variant="Primary" onClick={action.onClick}>
+                        <Text size="B400">{action.label}</Text>
+                    </Button>
+                )}
                 <Button variant="Secondary" fill="Soft" onClick={onClose}>
                     <Text size="B400">Close</Text>
                 </Button>
@@ -164,20 +255,42 @@ export function KeyBackupExplanation({ text, onClose }: { text: string; onClose:
     );
 }
 
-type KeyBackupGuardOverlayProps = {
-    panel: KeyBackupGuardPanel | null;
-    texts: KeyBackupGuardTexts;
-    onClose: () => void;
-};
-
 /**
- * The overlay for `useKeyBackupSetupGuard`: the setup, the reset, or the
- * caller's text for the row. Rendered whenever `panel` is set, independent of
- * whatever else the caller shows, so a setup that is under way (the recovery
- * key on screen) stays up when the caller's own banner goes away.
+ * The overlay for `useKeyBackupSetupGuard`: the setup, the reset, an offer
+ * (the row's text and "Set up backup"), or the caller's text for the row.
+ * Rendered whenever `panel` is set, independent of whatever else the caller
+ * shows, so a setup that is under way (the recovery key on screen) stays up
+ * when the caller's own banner goes away.
  */
-export function KeyBackupGuardOverlay({ panel, texts, onClose }: KeyBackupGuardOverlayProps) {
+export function KeyBackupGuardOverlay({ guard }: { guard: KeyBackupSetupGuard }) {
+    const { panel, texts, close, proceed } = guard;
     if (!panel) return null;
+
+    let body: React.ReactNode;
+    if (panel === 'setup') {
+        body = <DeviceVerificationSetup onCancel={close} />;
+    } else if (panel === 'reset') {
+        body = <DeviceVerificationReset onCancel={close} />;
+    } else if (panel === 'offer_setup' || panel === 'offer_reset') {
+        const text = panel === 'offer_setup' ? texts.offer?.setup : texts.offer?.reset;
+        // An offer panel comes only from `texts.offer`; without it, say
+        // nothing was checked rather than offer a flow with no explanation.
+        body = text ? (
+            <KeyBackupExplanation
+                text={text}
+                onClose={close}
+                action={{
+                    label: KEY_BACKUP_GUARD_PROCEED_LABEL,
+                    onClick: () => void proceed(),
+                }}
+            />
+        ) : (
+            <KeyBackupExplanation text={texts.check_failed} onClose={close} />
+        );
+    } else {
+        body = <KeyBackupExplanation text={texts[panel]} onClose={close} />;
+    }
+
     return (
         <Overlay open backdrop={<OverlayBackdrop />}>
             <OverlayCenter>
@@ -188,13 +301,7 @@ export function KeyBackupGuardOverlay({ panel, texts, onClose }: KeyBackupGuardO
                         escapeDeactivates: false,
                     }}
                 >
-                    {panel === 'setup' ? (
-                        <DeviceVerificationSetup onCancel={onClose} />
-                    ) : panel === 'reset' ? (
-                        <DeviceVerificationReset onCancel={onClose} />
-                    ) : (
-                        <KeyBackupExplanation text={texts[panel]} onClose={onClose} />
-                    )}
+                    {body}
                 </FocusTrap>
             </OverlayCenter>
         </Overlay>

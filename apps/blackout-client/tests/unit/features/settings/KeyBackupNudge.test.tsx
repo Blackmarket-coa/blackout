@@ -15,6 +15,8 @@
 // there is nothing to replace.
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createStore } from 'jotai';
+import type { MatrixClient } from 'matrix-js-sdk';
 import { CryptoEvent } from 'matrix-js-sdk/lib/crypto-api';
 
 // Folds overlays wrap their content in focus-trap-react, which in jsdom finds
@@ -54,8 +56,12 @@ import type { MountedDialog } from '../../helpers/modalReliability';
 const SETUP_HEADING = 'Setup Device Verification';
 const RESET_HEADING = 'Reset Device Verification';
 const RECOVERY_KEY_SCREEN = 'Store the Recovery Key in a safe place';
+const SNOOZE_KEY = 'blackout.keyBackupNudge.snoozeUntil';
+const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
 let mounted: MountedDialog | undefined;
+/** A client with real crypto started, stopped after the case. */
+let realCryptoClient: MatrixClient | undefined;
 
 const renderNudge = async (
     server: FakeKeyHomeserverOptions,
@@ -78,6 +84,9 @@ beforeEach(() => {
 afterEach(() => {
     mounted?.unmount();
     mounted = undefined;
+    realCryptoClient?.stopClient();
+    realCryptoClient = undefined;
+    vi.useRealTimers();
     vi.restoreAllMocks();
 });
 
@@ -438,4 +447,200 @@ describe('KeyBackupNudge: the overlay outlives the banner', () => {
         await settle(50);
         expect(bodyText()).toContain(RECOVERY_KEY_SCREEN);
     });
+});
+
+describe('KeyBackupNudge: a late answer never replaces a later one', () => {
+    // Round 3 of S9. The overlay follows only the answer to the latest
+    // click, and the banner only the newest answer, from a click or a refresh.
+
+    it('close during the check, a backup appears, click again: the late "none" brings back neither the setup nor the button', async () => {
+        // The verifier's sequence. Before the fix the late answer reopened
+        // "Setup Device Verification" and the banner's "Set up backup".
+        const { hs, crypto } = await renderNudge(
+            { backupVersion: null, masterKey: false },
+            { crossSigningReady: false },
+            KEY_BACKUP_NUDGE_TEXT.none.headline
+        );
+        const release = hs.delayNextBackupAnswer();
+        await click(buttonsNamed(KEY_BACKUP_NUDGE_ACTION_LABEL)[0]);
+        await settle(20);
+        await click(buttonsNamed('Close')[0]);
+        hs.setBackupVersion('3');
+        hs.setMasterKey(true);
+        await click(buttonsNamed(KEY_BACKUP_NUDGE_ACTION_LABEL)[0]);
+        await waitFor(() => bodyText().includes(KEY_BACKUP_NUDGE_TEXT.backup.detail), {
+            what: 'the fresh backup row',
+        });
+        await click(buttonsNamed('Close')[0]);
+        await settle(20);
+        expect(buttonsNamed(KEY_BACKUP_NUDGE_ACTION_LABEL)).toHaveLength(0);
+
+        release();
+        await settle(50);
+        expect(buttonsNamed(KEY_BACKUP_NUDGE_ACTION_LABEL)).toHaveLength(0);
+        expect(bodyText()).not.toContain(SETUP_HEADING);
+        expect(bodyText()).toContain(KEY_BACKUP_NUDGE_TEXT.backup.headline);
+        expect(destructiveCryptoCalls(crypto)).toBe(0);
+        expect(hs.destructiveCalls()).toEqual([]);
+    });
+
+    it('a refresh that started before a click and answers after it does not overwrite the banner', async () => {
+        const { hs, mx } = await renderNudge(
+            { backupVersion: null, masterKey: false },
+            { crossSigningReady: false },
+            KEY_BACKUP_NUDGE_TEXT.none.headline
+        );
+        // A refresh (KeyBackupStatus) whose backup answer, "none", is late.
+        const release = hs.delayNextBackupAnswer();
+        mx.emit(CryptoEvent.KeyBackupStatus, false);
+        await settle(20);
+        hs.setBackupVersion('3');
+        hs.setMasterKey(true);
+        await click(buttonsNamed(KEY_BACKUP_NUDGE_ACTION_LABEL)[0]);
+        await waitFor(() => bodyText().includes(KEY_BACKUP_NUDGE_TEXT.backup.detail), {
+            what: 'the click’s backup row',
+        });
+        await click(buttonsNamed('Close')[0]);
+        expect(buttonsNamed(KEY_BACKUP_NUDGE_ACTION_LABEL)).toHaveLength(0);
+
+        release();
+        await settle(50);
+        expect(bodyText()).toContain(KEY_BACKUP_NUDGE_TEXT.backup.headline);
+        expect(buttonsNamed(KEY_BACKUP_NUDGE_ACTION_LABEL)).toHaveLength(0);
+    });
+
+    it('a refresh asked for while a click’s check is in flight waits for that answer, then runs', async () => {
+        const { hs, mx } = await renderNudge(
+            { backupVersion: null, masterKey: false },
+            { crossSigningReady: false },
+            KEY_BACKUP_NUDGE_TEXT.none.headline
+        );
+        const before = backupVersionGets(hs.calls);
+        const release = hs.delayNextBackupAnswer();
+        await click(buttonsNamed(KEY_BACKUP_NUDGE_ACTION_LABEL)[0]);
+        await settle(20);
+        expect(backupVersionGets(hs.calls)).toBe(before + 1);
+        mx.emit(CryptoEvent.KeyBackupStatus, false);
+        await settle(50);
+        // Not yet: it would answer before the click and be newer than what
+        // the overlay is about to show.
+        expect(backupVersionGets(hs.calls)).toBe(before + 1);
+
+        release();
+        await waitFor(() => bodyText().includes(SETUP_HEADING), { what: 'the setup dialog' });
+        await waitFor(() => backupVersionGets(hs.calls) === before + 2, {
+            what: 'the waiting refresh',
+        });
+    });
+});
+
+describe('KeyBackupNudge: snooze', () => {
+    // The banner's gate was rewritten in round 2 (`showBanner`, with the
+    // overlay rendered apart from the banner); these pin that the snooze
+    // still works.
+
+    it('"Not now" hides the banner for a week, a remount stays hidden, and it shows again once the week is over', async () => {
+        // One jotai store across the remounts, as the app keeps one for the
+        // session (the snooze atom reads localStorage once, at start-up).
+        const store = createStore();
+        const hs = createFakeKeyHomeserver({ backupVersion: null, masterKey: false });
+        const mx = createFakeKeyClient(hs);
+        stubCrypto(mx, { crossSigningReady: false });
+        mounted = await renderWithClient(mx, <KeyBackupNudge />, store);
+        await waitFor(() => bodyText().includes(KEY_BACKUP_NUDGE_TEXT.none.headline), {
+            what: 'the banner',
+        });
+        const before = Date.now();
+        await click(buttonsNamed('Not now')[0]);
+        await settle(10);
+        expect(bodyText()).not.toContain(KEY_BACKUP_NUDGE_TEXT.none.headline);
+        const stored = JSON.parse(localStorage.getItem(SNOOZE_KEY) ?? '0') as number;
+        expect(stored).toBeGreaterThanOrEqual(before + WEEK_MS);
+        expect(stored).toBeLessThanOrEqual(Date.now() + WEEK_MS);
+
+        mounted.unmount();
+        document.body.innerHTML = '';
+        mounted = await renderWithClient(mx, <KeyBackupNudge />, store);
+        await settle(100);
+        expect(bodyText()).not.toContain(KEY_BACKUP_NUDGE_TEXT.none.headline);
+        expect(buttonsNamed('Not now')).toHaveLength(0);
+
+        // A minute after the week is over (only the clock is faked).
+        mounted.unmount();
+        document.body.innerHTML = '';
+        vi.useFakeTimers({ toFake: ['Date'] });
+        vi.setSystemTime(stored + 60_000);
+        mounted = await renderWithClient(mx, <KeyBackupNudge />, store);
+        await waitFor(() => bodyText().includes(KEY_BACKUP_NUDGE_TEXT.none.headline), {
+            what: 'the banner after the snooze',
+        });
+    });
+
+    it('the ✕ (Dismiss for now) snoozes too', async () => {
+        await renderNudge(
+            { backupVersion: null, masterKey: false },
+            { crossSigningReady: false },
+            KEY_BACKUP_NUDGE_TEXT.none.headline
+        );
+        await click(buttonsLabelled('Dismiss for now')[0]);
+        await settle(10);
+        expect(bodyText()).not.toContain(KEY_BACKUP_NUDGE_TEXT.none.headline);
+        expect(localStorage.getItem(SNOOZE_KEY)).not.toBeNull();
+    });
+
+    it('the unknown banner can be snoozed', async () => {
+        await renderNudge(
+            { backupAnswer: { kind: 'reject' }, masterKey: false },
+            { crossSigningReady: false },
+            KEY_BACKUP_NUDGE_TEXT.unknown.headline
+        );
+        await click(buttonsNamed('Not now')[0]);
+        await settle(10);
+        expect(bodyText()).not.toContain(KEY_BACKUP_NUDGE_TEXT.unknown.detail);
+    });
+
+    it('snoozing while the setup is open hides the banner and keeps the setup', async () => {
+        await renderNudge(
+            { backupVersion: null, masterKey: false },
+            { crossSigningReady: false },
+            KEY_BACKUP_NUDGE_TEXT.none.headline
+        );
+        await click(buttonsNamed(KEY_BACKUP_NUDGE_ACTION_LABEL)[0]);
+        await waitFor(() => bodyText().includes(SETUP_HEADING), { what: 'the setup dialog' });
+        await click(buttonsNamed('Not now')[0]);
+        await settle(10);
+        expect(bodyText()).not.toContain(KEY_BACKUP_NUDGE_TEXT.none.headline);
+        expect(bodyText()).toContain(SETUP_HEADING);
+    });
+});
+
+describe('KeyBackupNudge: a brand-new account, real crypto', () => {
+    it('the guard still lets the setup through: backup 1 and a master key are created, nothing is deleted, and the banner hides', async () => {
+        const hs = createFakeKeyHomeserver({ backupVersion: null, masterKey: false });
+        realCryptoClient = createFakeKeyClient(hs);
+        await realCryptoClient.initRustCrypto({ useIndexedDB: false });
+        mounted = await renderWithClient(realCryptoClient, <KeyBackupNudge />);
+        await waitFor(() => bodyText().includes(KEY_BACKUP_NUDGE_TEXT.none.headline), {
+            what: 'the none row',
+            timeoutMs: 15_000,
+        });
+        await click(buttonsNamed(KEY_BACKUP_NUDGE_ACTION_LABEL)[0]);
+        await waitFor(() => bodyText().includes(SETUP_HEADING), {
+            what: 'the setup dialog',
+            timeoutMs: 15_000,
+        });
+        await submitForm(document.body.querySelector('form') as HTMLFormElement);
+        await waitFor(() => bodyText().includes(RECOVERY_KEY_SCREEN), {
+            what: 'the recovery key screen',
+            timeoutMs: 20_000,
+        });
+        expect(hs.backupVersion()).toBe('1');
+        expect(hs.masterKey()).not.toBeNull();
+        expect(hs.calls.filter((c) => c.method === 'DELETE')).toEqual([]);
+        await waitFor(() => !bodyText().includes(KEY_BACKUP_NUDGE_TEXT.none.headline), {
+            what: 'the banner to hide',
+            timeoutMs: 15_000,
+        });
+        expect(bodyText()).toContain(RECOVERY_KEY_SCREEN);
+    }, 60_000);
 });

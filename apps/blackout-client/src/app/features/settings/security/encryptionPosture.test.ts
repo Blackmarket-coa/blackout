@@ -114,10 +114,17 @@ describe('selectKeyBackupNudge', () => {
         expect(v?.detail).toMatch(/resets device verification/i);
         expect(v?.headline).toBe(KEY_BACKUP_NUDGE_TEXT.crossSigningReady.headline);
         expect(v?.detail).toBe(KEY_BACKUP_NUDGE_TEXT.crossSigningReady.detail);
-        // The reset screen it opens says a backup "will be lost"; this row is
-        // reached only when the check answered that none exists, so the
-        // detail does not send the person to that screen for an explanation.
+        // Round 2: the detail does not send the person to the reset screen
+        // for an explanation (that screen then said a backup "will be lost").
         expect(v?.detail).not.toMatch(/next screen/i);
+        // Round 3: "can't restore" is qualified the way row 1's is. On the
+        // device that runs the reset the SDK does fetch a missing key from
+        // the new backup by itself, so an unqualified "Blackout can't restore
+        // from a backup" understated what it does.
+        expect(v?.detail).toMatch(
+            /Blackout can.t restore from a backup yet, so here it won.t bring older messages back after you sign in on a new device\.$/
+        );
+        expect(v?.detail).toMatch(/this device.s message keys, and those it gets later/);
     });
 
     it('nudges when encryption is not set up at all', () => {
@@ -133,6 +140,13 @@ describe('selectKeyBackupNudge', () => {
         expect(v?.actions[0].label).toBe(KEY_BACKUP_NUDGE_ACTION_LABEL);
         expect(v?.headline).toBe(KEY_BACKUP_NUDGE_TEXT.none.headline);
         expect(v?.detail).toBe(KEY_BACKUP_NUDGE_TEXT.none.detail);
+        // Round 3: a backup holds the keys of the device that set it up (and
+        // those it gets later), and a Blackout session signed in later never
+        // adds to it, so the row no longer says it restores "your older
+        // encrypted messages".
+        expect(v?.detail).not.toMatch(/restore your older encrypted messages/);
+        expect(v?.detail).toMatch(/this device.s message keys, and those it gets later/);
+        expect(v?.detail).toMatch(/a Blackout session you sign in to later doesn.t add to it/);
     });
 
     it('stays silent once a key backup exists', () => {
@@ -209,6 +223,9 @@ describe('selectKeyBackupNudge', () => {
             KEY_BACKUP_NUDGE_TEXT.unknown.detail
         );
         expect(KEY_BACKUP_NUDGE_CHECKING).toMatch(/^Checking /);
+        // The banner already says what rows 1 and 2 do, so the click opens
+        // their flows without a second explanation (the chip has one).
+        expect('offer' in KEY_BACKUP_NUDGE_GUARD_TEXTS).toBe(false);
     });
 
     it('no verdict promises a recovery Blackout cannot do', () => {

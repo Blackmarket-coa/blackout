@@ -178,6 +178,26 @@ describe('SetupVerification: the check before the first write, from-scratch setu
     });
 });
 
+describe('DeviceVerificationReset: the warning says what the guarded flow does', () => {
+    it('no longer says the backup will be lost; says a backup stops it', async () => {
+        // Round 3 of S9: the form refuses while a backup exists or the check
+        // fails, so in every run that reaches the writes there is no backup
+        // to lose, and the reset creates a new one.
+        const hs = createFakeKeyHomeserver({ backupVersion: null, masterKey: true });
+        const mx = createFakeKeyClient(hs);
+        stubCrypto(mx, { crossSigningReady: true });
+        mounted = await renderWithClient(
+            mx,
+            <DeviceVerificationReset onCancel={() => undefined} />
+        );
+        await waitFor(() => bodyText().includes(RESET_HEADING), { what: 'the reset dialog' });
+        expect(bodyText()).not.toMatch(/backup will be lost/);
+        expect(bodyText()).toContain(
+            'Anyone you have verified with will see security alerts, and you will get a new recovery key and a new key backup. If your account already has a key backup, or Blackout can’t check, Blackout stops before changing anything.'
+        );
+    });
+});
+
 describe('SetupVerification in the warned reset', () => {
     it('cross-signing on the server, no backup: goes on (the reset replaces cross-signing on purpose)', async () => {
         const { crypto } = await renderReset({ backupVersion: null, masterKey: true });

@@ -31,7 +31,9 @@ import { DeviceVerificationReset } from '../../../components/DeviceVerificationS
 import {
     KeyBackupGuardOverlay,
     checkForSetup,
+    useAnswerTurns,
     useKeyBackupSetupGuard,
+    type KeyBackupGuardTexts,
 } from '../../../components/KeyBackupSetupGuard';
 import { stopPropagation } from '../../../utils/keyboard';
 import { useAuthMetadata } from '../../../hooks/useAuthMetadata';
@@ -39,7 +41,7 @@ import { withSearchParam } from '../../../pages/pathUtils';
 import { useAccountManagementActions } from '../../../hooks/useAccountManagement';
 import { useAlive } from '../../../hooks/useAlive';
 import type { AccountKeyVerdict } from '../../../../client/keyBackupCheck';
-import { KEY_BACKUP_NUDGE_GUARD_TEXTS } from '../security/encryptionPosture';
+import { KEY_BACKUP_NUDGE_CHECKING, KEY_BACKUP_NUDGE_TEXT } from '../security/encryptionPosture';
 
 type VerificationStatusBadgeProps = {
     verificationStatus: VerificationStatus;
@@ -223,6 +225,20 @@ export function VerifyOtherDeviceTile({ crypto, deviceId }: VerifyOtherDeviceTil
     );
 }
 
+/**
+ * `EnableVerification`'s overlay texts. Not the nudge's: those say Blackout
+ * has no screen that verifies this device or restores keys, which would be
+ * false here, on the page that renders "Verify Manually" and the backup
+ * restore tile. These say only what the check found.
+ */
+export const ENABLE_VERIFICATION_GUARD_TEXTS: KeyBackupGuardTexts = {
+    checking: KEY_BACKUP_NUDGE_CHECKING,
+    backup: 'Your account already has a key backup on your homeserver. Enabling verification here would delete it, so Blackout doesn’t offer that here.',
+    not_verified:
+        'Your account already has cross-signing set up, and this device isn’t verified with it. Enabling verification here would replace your cross-signing and secret storage, so Blackout doesn’t offer that here.',
+    check_failed: KEY_BACKUP_NUDGE_TEXT.unknown.detail,
+};
+
 type EnableVerificationProps = {
     visible: boolean;
 };
@@ -235,34 +251,40 @@ type EnableVerificationProps = {
  * cross-signing (S9, `docs/security/key-backup-nudge-2026-11-02.md`). That
  * answer can be stale (another device can set things up while the page sits
  * open), so the click asks again (`useKeyBackupSetupGuard`) and opens the
- * setup only on a fresh "neither"; otherwise the overlay shows the nudge's text
- * for the fresh row, and the button follows that row. This page is not mounted
- * in the shipped app today; the guard is here for when it is.
+ * setup only when the answer to the latest click is "neither"; otherwise the
+ * overlay says what that answer found (`ENABLE_VERIFICATION_GUARD_TEXTS`). The
+ * button follows the newest answer, from the mount-time check or a click; an
+ * answer that arrives after a later one was asked for is dropped. This page is
+ * not mounted in the shipped app today; the guard is here for when it is.
  */
 export function EnableVerification({ visible }: EnableVerificationProps) {
     const mx = useMatrixClient();
     const alive = useAlive();
     const [accountState, setAccountState] = useState<AccountKeyVerdict | null>(null);
-    const { panel, open: openGuard, close: closeGuard } = useKeyBackupSetupGuard(mx);
+    const guard = useKeyBackupSetupGuard(mx, ENABLE_VERIFICATION_GUARD_TEXTS);
+    const { open: openGuard } = guard;
+    const turns = useAnswerTurns();
 
     useEffect(() => {
         if (!visible) return undefined;
         let current = true;
+        const turn = turns.next();
         const check = async () => {
             // Never throws: a rejected device check reads as 'unknown'.
             const result = await checkForSetup(mx);
-            if (current && alive()) setAccountState(result.verdict);
+            if (current && alive() && turns.isLatest(turn)) setAccountState(result.verdict);
         };
         void check();
         return () => {
             current = false;
         };
-    }, [mx, visible, alive]);
+    }, [mx, visible, alive, turns]);
 
     const handleEnable = useCallback(async () => {
+        const turn = turns.next();
         const result = await openGuard();
-        if (result) setAccountState(result.verdict);
-    }, [openGuard]);
+        if (result && turns.isLatest(turn)) setAccountState(result.verdict);
+    }, [openGuard, turns]);
 
     const offered = visible && accountState === 'none';
 
@@ -275,11 +297,7 @@ export function EnableVerification({ visible }: EnableVerificationProps) {
                     </Text>
                 </Button>
             )}
-            <KeyBackupGuardOverlay
-                panel={panel}
-                texts={KEY_BACKUP_NUDGE_GUARD_TEXTS}
-                onClose={closeGuard}
-            />
+            <KeyBackupGuardOverlay guard={guard} />
         </>
     );
 }
