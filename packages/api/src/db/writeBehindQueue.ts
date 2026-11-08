@@ -4,8 +4,10 @@
 // the in-memory mirror), so Postgres writes are applied asynchronously here.
 // A single FIFO promise chain preserves enqueue order — critical so that an
 // upsert followed by a delete of the same key never reorders. Failures are
-// logged (and retried once) but never thrown into the event loop; durability is
-// therefore eventual, bounded by drain() on graceful shutdown.
+// logged (and retried once) but never thrown into the event loop; a write that
+// fails twice is dropped and counted (db_write_behind_failures_total), and a
+// crash loses what is still queued. Graceful shutdown awaits drain(), which
+// waits for every queued write, until the shutdown's forced exit.
 //
 // The queue also keeps a per-key fence: for each (map, key), how many queued
 // ops write it. The fence is raised when an op is enqueued, right after the
