@@ -2667,9 +2667,11 @@ Nixpacks path and the hosting helpers are removed" lists every path. Under
         matched. `git diff --relative` in the script, and a deeper checkout
         in the job, are one way to fix it.
     -   The protocol smoke (`test_versions_smoke_compatibility`) runs
-        `python -m pytest` after only `pip install .`, and pytest is in
-        neither `pyproject.toml` nor `poetry.lock`, so the job never installs
-        the pytest the step needs.
+        `python -m pytest` after only `pip install .`. pytest is not a
+        dependency in `pyproject.toml` and has no package entry in
+        `poetry.lock` (the name appears there only inside other packages'
+        optional extras, which `pip install .` does not install), so the job
+        never installs the pytest the step needs.
 
     No other gate runs a removed file: the release-train
     gate reads only `release/train/`, the divergence-marker gate names none of

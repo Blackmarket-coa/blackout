@@ -1337,9 +1337,11 @@ helpers are removed".
     exit 128, and the gate prints its pass (checked on 2026-11-08). So the
     job as written would pass even if the paths matched.
   - The protocol smoke (`test_versions_smoke_compatibility`) runs
-    `python -m pytest` after only `pip install .`, and pytest is in neither
-    `pyproject.toml` nor `poetry.lock`, so the job never installs the
-    pytest the step needs.
+    `python -m pytest` after only `pip install .`. pytest is not a
+    dependency in `pyproject.toml` and has no package entry in
+    `poetry.lock` (the name appears there only inside other packages'
+    optional extras, which `pip install .` does not install), so the job
+    never installs the pytest the step needs.
 
   Fixing either changes files outside `blackout_runtime/` (the divergence
   gate's script, for example with `git diff --relative`, and the job's
