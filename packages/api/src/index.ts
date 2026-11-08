@@ -100,7 +100,11 @@ import {
 } from './telemetry/api-alias-usage';
 import { log } from './telemetry/logger';
 import { startBackgroundLoops } from './backgroundLoops';
-import { tryBecomeBackgroundLeader, releaseBackgroundLeader } from './services/backgroundLeader';
+import {
+    tryBecomeBackgroundLeader,
+    releaseBackgroundLeader,
+    watchBackgroundLeadership,
+} from './services/backgroundLeader';
 import { httpMetricsMiddleware } from './telemetry/http-metrics';
 import { registry as metricsRegistry } from './telemetry/metrics';
 import { initErrorReporter, errorReporter } from './telemetry/errors';
@@ -498,7 +502,16 @@ if (shouldListen) {
         void (async () => {
             const isLeader = await tryBecomeBackgroundLeader();
             if (isLeader) {
-                startBackgroundLoops();
+                const loops = startBackgroundLoops();
+                // In postgres mode the lock lives on a held pool connection. If
+                // that connection fails or the lock is gone, stop the loops and
+                // exit 1 through the drain below, as the background worker
+                // does: running on without the lock could double-process every
+                // job, and the restart takes the lock again.
+                watchBackgroundLeadership((reason) => {
+                    loops.stop();
+                    shutdown(`background_leader_lost:${reason}`, 1);
+                });
                 log.info('background_loops_started', {});
             } else {
                 log.info('background_loops_skipped_not_leader', {});
@@ -548,13 +561,13 @@ if (shouldListen) {
     // runtime store (a no-op unless BLACKOUT_DB_MODE=postgres), then exit. A
     // hard timeout guarantees the process still exits if a connection hangs.
     let shuttingDown = false;
-    const shutdown = (signal: string) => {
+    const shutdown = (signal: string, exitCode = 0) => {
         if (shuttingDown) return;
         shuttingDown = true;
         log.info('shutdown_signal_received', { signal });
         const forceTimer = setTimeout(() => {
             log.warn('shutdown_forced_after_timeout', { signal, timeoutMs: SHUTDOWN_TIMEOUT_MS });
-            process.exit(0);
+            process.exit(exitCode);
         }, SHUTDOWN_TIMEOUT_MS);
         if (typeof forceTimer.unref === 'function') forceTimer.unref();
 
@@ -568,7 +581,7 @@ if (shouldListen) {
                     log.warn('runtime_store_drain_failed', { error: String(err) });
                 } finally {
                     clearTimeout(forceTimer);
-                    process.exit(0);
+                    process.exit(exitCode);
                 }
             })();
         });

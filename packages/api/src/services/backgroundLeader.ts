@@ -106,10 +106,10 @@ const ignoreError = (): void => undefined;
  * leader; the background worker stops its loops. No-op where no lock is held
  * (file/memory mode). Returns a function that stops watching.
  *
- * Unwatched, an error on the held connection is an unhandled `error` event
- * (the pool takes its own listener off a client while it is checked out), so
- * the process crashes rather than run on without the lock. That is still the
- * API's behaviour: it runs no watch.
+ * Unwatched, an error on the held connection is only logged by the shared
+ * pool's listener (config/postgres.ts) and the process runs on without the
+ * lock, so every holder watches: the worker exits 1, and so does an API that
+ * runs the loops in-process (src/index.ts).
  */
 export const watchBackgroundLeadership = (
     onLost: (reason: string) => void,

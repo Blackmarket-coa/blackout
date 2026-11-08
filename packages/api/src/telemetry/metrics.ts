@@ -300,6 +300,12 @@ export const dbWriteBehindFailuresTotal = new Counter(
     ['map', 'kind']
 );
 
+export const dbPoolClientErrorsTotal = new Counter(
+    'db_pool_client_errors_total',
+    'Pooled Postgres connections that failed (backend terminated, network reset), by whether the client was idle in the pool or checked out; the pool opens a new one on the next checkout.',
+    ['state']
+);
+
 export const dbWriteBehindDepth = new Gauge(
     'db_write_behind_depth',
     'Approximate number of write-behind ops not yet flushed to Postgres (durability lag / backpressure).'

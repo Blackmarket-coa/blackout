@@ -39,7 +39,8 @@ const CHANNEL = 'blackout_store_change';
 interface NotifyClient {
     query(sql: string, params?: unknown[]): Promise<unknown>;
     on(event: string, cb: (arg: unknown) => void): void;
-    release?(): void;
+    /** With an error, the pool destroys the connection instead of reusing it. */
+    release?(err?: Error): void;
 }
 interface NotifyPool {
     connect(): Promise<NotifyClient>;
@@ -51,6 +52,7 @@ export class PgNotifyTransport implements StoreChangeTransport {
     private reconnectHandler: (() => void) | null = null;
     private changeHandler: ((payload: StoreChangePayload) => void) | null = null;
     private closed = false;
+    private reconnectPending = false;
 
     constructor(private readonly pool: NotifyPool) {}
 
@@ -100,19 +102,31 @@ export class PgNotifyTransport implements StoreChangeTransport {
                 });
             }
         });
+        // pg reports one dropped connection twice (the server's message, then the
+        // socket closing). Reconnect once, and give the dead client back to the
+        // pool to be destroyed: each extra reconnect left one more LISTEN session,
+        // and a dead client never released kept its pool slot for good.
+        let failed = false;
         client.on('error', (err: unknown) => {
+            if (failed || this.listenClient !== client) return;
+            failed = true;
             log.warn('pg_notify_listen_error', {
                 error: err instanceof Error ? err.message : String(err),
             });
+            client.release?.(err instanceof Error ? err : new Error(String(err)));
             this.scheduleReconnect();
         });
         await client.query(`LISTEN ${CHANNEL}`);
     }
 
     private scheduleReconnect(): void {
-        if (this.closed) return;
+        // One reconnect at a time: a reconnect whose LISTEN fails on a dropped
+        // connection is reported by both its error event and its catch below.
+        if (this.closed || this.reconnectPending) return;
+        this.reconnectPending = true;
         this.listenClient = null;
         setTimeout(() => {
+            this.reconnectPending = false;
             void (async () => {
                 try {
                     await this.openListenConnection();

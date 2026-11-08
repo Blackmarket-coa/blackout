@@ -735,6 +735,31 @@ or off, an invitation the server no longer accepts (not recognized, used up,
 expired or revoked) stops the anonymous sign-up in the tab that holds it, and
 the form says why.
 
+### Dropped Postgres connections (2026-11-08)
+
+In postgres mode the API and the background worker share one connection pool
+(`packages/api/src/config/postgres.ts`). Before 2026-11-08 a pooled connection
+that the server dropped (a Postgres restart, a failover, an idle-session
+timeout, a network reset) ended the process with nothing drained. Since then
+the drop is logged (`pg_pool_client_error`), counted
+(`db_pool_client_errors_total`) and the next checkout opens a new connection.
+What remains:
+
+-   An API that runs the background loops itself (started without
+    `BLACKOUT_BACKGROUND_WORKERS_DISABLED=1`; the production compose files set
+    it on the app replicas) holds the background-leader lock on a pooled
+    connection, and every Postgres restart drops it. That API stops its loops,
+    drains the store and exits 1, as the worker does, and comes back through
+    its restart policy rather than run on without the lock.
+-   A write the write-behind queue attempts while Postgres cannot be reached
+    still fails after one retry and is not written later
+    (`db_write_behind_failed`, `db_write_behind_failures_total`). Staying up
+    keeps it in that process's memory, not in Postgres.
+-   The one-shot command-line tools (`migrate`, `db:import-json`,
+    `db:verify-import`, `db:clean-demo-seed`) make their own pools without
+    these listeners, so a dropped connection still ends them. They hold no
+    write-behind queue.
+
 ### Release signoff
 
 The CI release gate
