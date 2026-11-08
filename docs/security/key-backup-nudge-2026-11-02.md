@@ -1356,6 +1356,45 @@ the mutation runs and the swap started between 2.5 and 3.3. None of those is
 a full suite, and every test file they touched passed again inside the gates
 above.
 
+Round 8 (eighth review). Develop had not moved past `97756ff4ec`, so nothing
+was merged, and round 4's develop baseline on that commit stands as the
+comparison. Free space on `/` was 4.5 GB at the start of the round and 4.3 GB
+after the gates. The gates ran on `9615d670d1` (the fixes and this record
+before this paragraph), Node 22, `pnpm` from the repository root, `npx` from
+`apps/blackout-client`; logs in `scratchpad/v60/r9/gates/`. The test files'
+temporary tsconfig now names the client's `node_modules/@types` as its
+`typeRoots`: from the scratchpad, TypeScript found no `@types/node`, whose
+global `URLSearchParams` the client's `sanitizeUrl.ts` relies on, and the new
+file pulls that module in through `Reply`; the client's own tsconfig finds it
+from its directory.
+
+| Gate                            | Command                                                                                                    | `9615d670d1`                                                                                      |
+| ------------------------------- | ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| core and design builds          | `pnpm --filter @blackout/core run build`, `pnpm --filter @blackout/design run build`                       | exit 0, both                                                                                      |
+| client typecheck                | `pnpm --filter @blackout/client run typecheck` (`tsc --noEmit`, covers `src`)                              | exit 0                                                                                            |
+| test files typecheck            | `npx tsc -p scratchpad/v60/r9/tsconfig.tests.json` (the 11 guard test files under `tests/`, the 2 helpers) | exit 0                                                                                            |
+| eslint, as CI                   | `pnpm --filter @blackout/client exec eslint "src/**/*.{ts,tsx}" --max-warnings=0`                          | exit 0                                                                                            |
+| guard tests                     | `npx vitest run` on the twelve files of the Tests table                                                    | 12 files, 180 passed                                                                              |
+| client unit suite, as CI        | `pnpm --filter @blackout/client run test:coverage`                                                         | 529 files, 3806 passed, 3 skipped, 0 unhandled errors; coverage 46.11 / 37.12 / 37.07 / 47.16     |
+| client integration suite, as CI | `pnpm --filter @blackout/client run test:integration`                                                      | 3 files, 13 passed                                                                                |
+| client build                    | `pnpm --filter @blackout/client run build`                                                                 | both Vite bundles built, exit 0                                                                   |
+| bundle size, as CI              | `du -sk --exclude='*.map' apps/blackout-client/dist`, threshold `MAX_BUNDLE_KB` 29696                      | 25328 KB                                                                                          |
+| prettier                        | root `npx prettier --check` on the 33 files the branch changes against develop                             | clean                                                                                             |
+| trust page                      | `node tools/ci/build-trust-page.mjs --check` (`TRUST.md` not changed this round)                           | OK, `public/trust.html` matches                                                                   |
+| gitleaks 8.21.2                 | `gitleaks git --log-opts="origin/develop..HEAD"`, before this paragraph's commit                           | 35 commits scanned (the range's 39 less its 4 merges), no leaks                                   |
+| load rule                       | each step waited for a 1-minute load under 3.5, polling every 30 s (`scratchpad/v60/r9/gates/load.txt`)    | kept; the highest start was 3.35 (the build); the integration suite waited 30 s (4.64, then 2.88) |
+
+The unit suite's difference from develop is this branch's tests and nothing
+else: round 7's 154 and this round's 9 (the new window-gone file), in 1 new
+file; the same 3 skipped. The load rule held for the gates above. It did not
+hold for every single-file run this round: the first `src` type-check after the
+code change (1-minute load 4.0), the first run of three guard files (6.7) and
+the new file's first run (6.1) started above 3.5 while other sessions' suites
+ran. The two mutation batches started at 3.2 and 1.5; the load at the start of
+each single mutation inside a batch, of the swap and of the two single
+re-runs was not logged. None of those is a full suite, and the type-check and
+every test file they touched passed again inside the gates above.
+
 ## Second review, 2026-11-08
 
 Fourteen findings; each is fixed above or explained here.
