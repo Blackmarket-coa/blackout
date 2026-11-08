@@ -1,22 +1,22 @@
 import React, { MouseEventHandler, useCallback, useState } from 'react';
 import {
-  Badge,
-  Box,
-  Button,
-  Chip,
-  config,
-  Icon,
-  Icons,
-  Spinner,
-  Text,
-  Overlay,
-  OverlayBackdrop,
-  OverlayCenter,
-  IconButton,
-  RectCords,
-  PopOut,
-  Menu,
-  MenuItem,
+    Badge,
+    Box,
+    Button,
+    Chip,
+    config,
+    Icon,
+    Icons,
+    Spinner,
+    Text,
+    Overlay,
+    OverlayBackdrop,
+    OverlayCenter,
+    IconButton,
+    RectCords,
+    PopOut,
+    Menu,
+    MenuItem,
 } from 'folds';
 import FocusTrap from 'focus-trap-react';
 import { CryptoApi, VerificationRequest } from 'matrix-js-sdk/lib/crypto-api';
@@ -28,8 +28,8 @@ import { AsyncState, AsyncStatus, useAsync } from '../../../hooks/useAsyncCallba
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
 import { DeviceVerification } from '../../../components/DeviceVerification';
 import {
-  DeviceVerificationReset,
-  DeviceVerificationSetup,
+    DeviceVerificationReset,
+    DeviceVerificationSetup,
 } from '../../../components/DeviceVerificationSetup';
 import { stopPropagation } from '../../../utils/keyboard';
 import { useAuthMetadata } from '../../../hooks/useAuthMetadata';
@@ -37,316 +37,321 @@ import { withSearchParam } from '../../../pages/pathUtils';
 import { useAccountManagementActions } from '../../../hooks/useAccountManagement';
 
 type VerificationStatusBadgeProps = {
-  verificationStatus: VerificationStatus;
-  otherUnverifiedCount?: number;
+    verificationStatus: VerificationStatus;
+    otherUnverifiedCount?: number;
 };
 export function VerificationStatusBadge({
-  verificationStatus,
-  otherUnverifiedCount,
+    verificationStatus,
+    otherUnverifiedCount,
 }: VerificationStatusBadgeProps) {
-  if (
-    verificationStatus === VerificationStatus.Unknown ||
-    typeof otherUnverifiedCount !== 'number'
-  ) {
-    return <Spinner size="400" variant="Secondary" />;
-  }
-  if (verificationStatus === VerificationStatus.Unverified) {
-    return (
-      <Badge variant="Critical" fill="Solid" size="500">
-        <Text size="L400">Unverified</Text>
-      </Badge>
-    );
-  }
+    if (
+        verificationStatus === VerificationStatus.Unknown ||
+        typeof otherUnverifiedCount !== 'number'
+    ) {
+        return <Spinner size="400" variant="Secondary" />;
+    }
+    if (verificationStatus === VerificationStatus.Unverified) {
+        return (
+            <Badge variant="Critical" fill="Solid" size="500">
+                <Text size="L400">Unverified</Text>
+            </Badge>
+        );
+    }
 
-  if (otherUnverifiedCount > 0) {
-    return (
-      <Badge variant="Warning" fill="Solid" size="500">
-        <Text size="L400">{otherUnverifiedCount} Unverified</Text>
-      </Badge>
-    );
-  }
+    if (otherUnverifiedCount > 0) {
+        return (
+            <Badge variant="Warning" fill="Solid" size="500">
+                <Text size="L400">{otherUnverifiedCount} Unverified</Text>
+            </Badge>
+        );
+    }
 
-  return (
-    <Badge variant="Success" fill="Solid" size="500">
-      <Text size="L400">Verified</Text>
-    </Badge>
-  );
+    return (
+        <Badge variant="Success" fill="Solid" size="500">
+            <Text size="L400">Verified</Text>
+        </Badge>
+    );
 }
 
 function LearnStartVerificationFromOtherDevice() {
-  return (
-    <Box direction="Column">
-      <Text size="T200">Steps to verify from other device.</Text>
-      <Text as="div" size="T200">
-        <ul style={{ margin: `${config.space.S100} 0` }}>
-          <li>Open your other verified device.</li>
-          <li>
-            Open <i>Settings</i>.
-          </li>
-          <li>
-            Find this device in <i>Devices/Sessions</i> section.
-          </li>
-          <li>Initiate verification.</li>
-        </ul>
-      </Text>
-      <Text size="T200">
-        If you do not have any verified device press the <i>&quot;Verify Manually&quot;</i> button.
-      </Text>
-    </Box>
-  );
+    return (
+        <Box direction="Column">
+            <Text size="T200">Steps to verify from other device.</Text>
+            <Text as="div" size="T200">
+                <ul style={{ margin: `${config.space.S100} 0` }}>
+                    <li>Open your other verified device.</li>
+                    <li>
+                        Open <i>Settings</i>.
+                    </li>
+                    <li>
+                        Find this device in <i>Devices/Sessions</i> section.
+                    </li>
+                    <li>Initiate verification.</li>
+                </ul>
+            </Text>
+            <Text size="T200">
+                If you do not have any verified device press the <i>&quot;Verify Manually&quot;</i>{' '}
+                button.
+            </Text>
+        </Box>
+    );
 }
 
 type VerifyCurrentDeviceTileProps = {
-  secretStorageKeyId: string;
-  secretStorageKeyContent: SecretStorageKeyContent;
+    secretStorageKeyId: string;
+    secretStorageKeyContent: SecretStorageKeyContent;
 };
 export function VerifyCurrentDeviceTile({
-  secretStorageKeyId,
-  secretStorageKeyContent,
+    secretStorageKeyId,
+    secretStorageKeyContent,
 }: VerifyCurrentDeviceTileProps) {
-  const [learnMore, setLearnMore] = useState(false);
+    const [learnMore, setLearnMore] = useState(false);
 
-  const [manualVerification, setManualVerification] = useState(false);
-  const handleCancelVerification = () => setManualVerification(false);
+    const [manualVerification, setManualVerification] = useState(false);
+    const handleCancelVerification = () => setManualVerification(false);
 
-  return (
-    <>
-      <InfoCard
-        variant="Critical"
-        title="Unverified"
-        description={
-          <>
-            Start verification from other device or verify manually.{' '}
-            <Text as="a" size="T200" onClick={() => setLearnMore(!learnMore)}>
-              <b>{learnMore ? 'View Less' : 'Learn More'}</b>
-            </Text>
-          </>
-        }
-        after={
-          !manualVerification && (
-            <Button
-              size="300"
-              variant="Critical"
-              fill="Soft"
-              radii="300"
-              outlined
-              onClick={() => setManualVerification(true)}
+    return (
+        <>
+            <InfoCard
+                variant="Critical"
+                title="Unverified"
+                description={
+                    <>
+                        Start verification from other device or verify manually.{' '}
+                        <Text as="a" size="T200" onClick={() => setLearnMore(!learnMore)}>
+                            <b>{learnMore ? 'View Less' : 'Learn More'}</b>
+                        </Text>
+                    </>
+                }
+                after={
+                    !manualVerification && (
+                        <Button
+                            size="300"
+                            variant="Critical"
+                            fill="Soft"
+                            radii="300"
+                            outlined
+                            onClick={() => setManualVerification(true)}
+                        >
+                            <Text as="span" size="B300">
+                                Verify Manually
+                            </Text>
+                        </Button>
+                    )
+                }
             >
-              <Text as="span" size="B300">
-                Verify Manually
-              </Text>
-            </Button>
-          )
-        }
-      >
-        {learnMore && <LearnStartVerificationFromOtherDevice />}
-      </InfoCard>
-      {manualVerification && (
-        <ManualVerificationTile
-          secretStorageKeyId={secretStorageKeyId}
-          secretStorageKeyContent={secretStorageKeyContent}
-          options={
-            <Chip
-              type="button"
-              variant="Secondary"
-              fill="Soft"
-              radii="Pill"
-              onClick={handleCancelVerification}
-            >
-              <Icon size="100" src={Icons.Cross} />
-            </Chip>
-          }
-        />
-      )}
-    </>
-  );
+                {learnMore && <LearnStartVerificationFromOtherDevice />}
+            </InfoCard>
+            {manualVerification && (
+                <ManualVerificationTile
+                    secretStorageKeyId={secretStorageKeyId}
+                    secretStorageKeyContent={secretStorageKeyContent}
+                    options={
+                        <Chip
+                            type="button"
+                            variant="Secondary"
+                            fill="Soft"
+                            radii="Pill"
+                            onClick={handleCancelVerification}
+                        >
+                            <Icon size="100" src={Icons.Cross} />
+                        </Chip>
+                    }
+                />
+            )}
+        </>
+    );
 }
 
 type VerifyOtherDeviceTileProps = {
-  crypto: CryptoApi;
-  deviceId: string;
+    crypto: CryptoApi;
+    deviceId: string;
 };
 export function VerifyOtherDeviceTile({ crypto, deviceId }: VerifyOtherDeviceTileProps) {
-  const mx = useMatrixClient();
-  const [requestState, setRequestState] = useState<AsyncState<VerificationRequest, Error>>({
-    status: AsyncStatus.Idle,
-  });
-
-  const requestVerification = useAsync<VerificationRequest, Error, []>(
-    useCallback(() => {
-      const requestPromise = crypto.requestDeviceVerification(mx.getSafeUserId(), deviceId);
-      return requestPromise;
-    }, [mx, crypto, deviceId]),
-    setRequestState
-  );
-
-  const handleExit = useCallback(() => {
-    setRequestState({
-      status: AsyncStatus.Idle,
+    const mx = useMatrixClient();
+    const [requestState, setRequestState] = useState<AsyncState<VerificationRequest, Error>>({
+        status: AsyncStatus.Idle,
     });
-  }, []);
 
-  const requesting = requestState.status === AsyncStatus.Loading;
-  return (
-    <InfoCard
-      variant="Warning"
-      title="Unverified"
-      description="Verify device identity and grant access to encrypted messages."
-      after={
-        <Button
-          size="300"
-          variant="Warning"
-          radii="300"
-          onClick={requestVerification}
-          before={requesting && <Spinner size="100" variant="Warning" fill="Solid" />}
-          disabled={requesting}
+    const requestVerification = useAsync<VerificationRequest, Error, []>(
+        useCallback(() => {
+            const requestPromise = crypto.requestDeviceVerification(mx.getSafeUserId(), deviceId);
+            return requestPromise;
+        }, [mx, crypto, deviceId]),
+        setRequestState
+    );
+
+    const handleExit = useCallback(() => {
+        setRequestState({
+            status: AsyncStatus.Idle,
+        });
+    }, []);
+
+    const requesting = requestState.status === AsyncStatus.Loading;
+    return (
+        <InfoCard
+            variant="Warning"
+            title="Unverified"
+            description="Verify device identity and grant access to encrypted messages."
+            after={
+                <Button
+                    size="300"
+                    variant="Warning"
+                    radii="300"
+                    onClick={requestVerification}
+                    before={requesting && <Spinner size="100" variant="Warning" fill="Solid" />}
+                    disabled={requesting}
+                >
+                    <Text as="span" size="B300">
+                        Verify
+                    </Text>
+                </Button>
+            }
         >
-          <Text as="span" size="B300">
-            Verify
-          </Text>
-        </Button>
-      }
-    >
-      {requestState.status === AsyncStatus.Error && (
-        <Text size="T200">{requestState.error.message}</Text>
-      )}
-      {requestState.status === AsyncStatus.Success && (
-        <DeviceVerification request={requestState.data} onExit={handleExit} />
-      )}
-    </InfoCard>
-  );
+            {requestState.status === AsyncStatus.Error && (
+                <Text size="T200">{requestState.error.message}</Text>
+            )}
+            {requestState.status === AsyncStatus.Success && (
+                <DeviceVerification request={requestState.data} onExit={handleExit} />
+            )}
+        </InfoCard>
+    );
 }
 
 type EnableVerificationProps = {
-  visible: boolean;
+    visible: boolean;
 };
 export function EnableVerification({ visible }: EnableVerificationProps) {
-  const [open, setOpen] = useState(false);
+    const [open, setOpen] = useState(false);
 
-  const handleCancel = useCallback(() => setOpen(false), []);
+    const handleCancel = useCallback(() => setOpen(false), []);
 
-  return (
-    <>
-      {visible && (
-        <Button size="300" radii="300" onClick={() => setOpen(true)}>
-          <Text as="span" size="B300">
-            Enable
-          </Text>
-        </Button>
-      )}
-      {open && (
-        <Overlay open backdrop={<OverlayBackdrop />}>
-          <OverlayCenter>
-            <FocusTrap
-              focusTrapOptions={{
-                initialFocus: false,
-                clickOutsideDeactivates: false,
-                escapeDeactivates: false,
-              }}
-            >
-              <DeviceVerificationSetup onCancel={handleCancel} />
-            </FocusTrap>
-          </OverlayCenter>
-        </Overlay>
-      )}
-    </>
-  );
+    return (
+        <>
+            {visible && (
+                <Button size="300" radii="300" onClick={() => setOpen(true)}>
+                    <Text as="span" size="B300">
+                        Enable
+                    </Text>
+                </Button>
+            )}
+            {open && (
+                <Overlay open backdrop={<OverlayBackdrop />}>
+                    <OverlayCenter>
+                        <FocusTrap
+                            focusTrapOptions={{
+                                initialFocus: false,
+                                clickOutsideDeactivates: false,
+                                escapeDeactivates: false,
+                            }}
+                        >
+                            <DeviceVerificationSetup onCancel={handleCancel} />
+                        </FocusTrap>
+                    </OverlayCenter>
+                </Overlay>
+            )}
+        </>
+    );
 }
 
 export function DeviceVerificationOptions() {
-  const [menuCords, setMenuCords] = useState<RectCords>();
-  const authMetadata = useAuthMetadata();
-  const accountManagementActions = useAccountManagementActions();
+    const [menuCords, setMenuCords] = useState<RectCords>();
+    const authMetadata = useAuthMetadata();
+    const accountManagementActions = useAccountManagementActions();
 
-  const [reset, setReset] = useState(false);
+    const [reset, setReset] = useState(false);
 
-  const handleCancelReset = useCallback(() => {
-    setReset(false);
-  }, []);
+    const handleCancelReset = useCallback(() => {
+        setReset(false);
+    }, []);
 
-  const handleMenu: MouseEventHandler<HTMLButtonElement> = (event) => {
-    setMenuCords(event.currentTarget.getBoundingClientRect());
-  };
+    const handleMenu: MouseEventHandler<HTMLButtonElement> = (event) => {
+        setMenuCords(event.currentTarget.getBoundingClientRect());
+    };
 
-  const handleReset = () => {
-    setMenuCords(undefined);
+    const handleReset = () => {
+        setMenuCords(undefined);
 
-    if (authMetadata) {
-      const authUrl = authMetadata.account_management_uri ?? authMetadata.issuer;
-      window.open(
-        withSearchParam(authUrl, {
-          action: accountManagementActions.crossSigningReset,
-        }),
-        '_blank'
-      );
-      return;
-    }
-
-    setReset(true);
-  };
-
-  return (
-    <>
-      <IconButton
-        aria-pressed={!!menuCords}
-        variant="SurfaceVariant"
-        size="300"
-        radii="300"
-        onClick={handleMenu}
-      >
-        <Icon size="100" src={Icons.VerticalDots} />
-      </IconButton>
-      <PopOut
-        anchor={menuCords}
-        offset={5}
-        position="Bottom"
-        align="Center"
-        content={
-          <FocusTrap
-            focusTrapOptions={{
-              initialFocus: false,
-              onDeactivate: () => setMenuCords(undefined),
-              clickOutsideDeactivates: true,
-              isKeyForward: (evt: KeyboardEvent) =>
-                evt.key === 'ArrowDown' || evt.key === 'ArrowRight',
-              isKeyBackward: (evt: KeyboardEvent) =>
-                evt.key === 'ArrowUp' || evt.key === 'ArrowLeft',
-              escapeDeactivates: stopPropagation,
-            }}
-          >
-            <Menu>
-              <Box direction="Column" gap="100" style={{ padding: config.space.S100 }}>
-                <MenuItem
-                  variant="Critical"
-                  onClick={handleReset}
-                  size="300"
-                  radii="300"
-                  fill="None"
-                >
-                  <Text as="span" size="T300" truncate>
-                    Reset
-                  </Text>
-                </MenuItem>
-              </Box>
-            </Menu>
-          </FocusTrap>
+        if (authMetadata) {
+            const authUrl = authMetadata.account_management_uri ?? authMetadata.issuer;
+            window.open(
+                withSearchParam(authUrl, {
+                    action: accountManagementActions.crossSigningReset,
+                }),
+                '_blank'
+            );
+            return;
         }
-      />
-      {reset && (
-        <Overlay open backdrop={<OverlayBackdrop />}>
-          <OverlayCenter>
-            <FocusTrap
-              focusTrapOptions={{
-                initialFocus: false,
-                clickOutsideDeactivates: false,
-                escapeDeactivates: false,
-              }}
+
+        setReset(true);
+    };
+
+    return (
+        <>
+            <IconButton
+                aria-pressed={!!menuCords}
+                variant="SurfaceVariant"
+                size="300"
+                radii="300"
+                onClick={handleMenu}
             >
-              <DeviceVerificationReset onCancel={handleCancelReset} />
-            </FocusTrap>
-          </OverlayCenter>
-        </Overlay>
-      )}
-    </>
-  );
+                <Icon size="100" src={Icons.VerticalDots} />
+            </IconButton>
+            <PopOut
+                anchor={menuCords}
+                offset={5}
+                position="Bottom"
+                align="Center"
+                content={
+                    <FocusTrap
+                        focusTrapOptions={{
+                            initialFocus: false,
+                            onDeactivate: () => setMenuCords(undefined),
+                            clickOutsideDeactivates: true,
+                            isKeyForward: (evt: KeyboardEvent) =>
+                                evt.key === 'ArrowDown' || evt.key === 'ArrowRight',
+                            isKeyBackward: (evt: KeyboardEvent) =>
+                                evt.key === 'ArrowUp' || evt.key === 'ArrowLeft',
+                            escapeDeactivates: stopPropagation,
+                        }}
+                    >
+                        <Menu>
+                            <Box
+                                direction="Column"
+                                gap="100"
+                                style={{ padding: config.space.S100 }}
+                            >
+                                <MenuItem
+                                    variant="Critical"
+                                    onClick={handleReset}
+                                    size="300"
+                                    radii="300"
+                                    fill="None"
+                                >
+                                    <Text as="span" size="T300" truncate>
+                                        Reset
+                                    </Text>
+                                </MenuItem>
+                            </Box>
+                        </Menu>
+                    </FocusTrap>
+                }
+            />
+            {reset && (
+                <Overlay open backdrop={<OverlayBackdrop />}>
+                    <OverlayCenter>
+                        <FocusTrap
+                            focusTrapOptions={{
+                                initialFocus: false,
+                                clickOutsideDeactivates: false,
+                                escapeDeactivates: false,
+                            }}
+                        >
+                            <DeviceVerificationReset onCancel={handleCancelReset} />
+                        </FocusTrap>
+                    </OverlayCenter>
+                </Overlay>
+            )}
+        </>
+    );
 }
