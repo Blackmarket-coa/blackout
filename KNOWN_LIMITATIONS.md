@@ -758,16 +758,22 @@ error and is not counted. What remains:
 -   A write-behind write gets one immediate retry, on another connection than
     the one it failed on (a new one only when none is idle). A write whose own
     connection was dropped under it lands on that retry; one attempted while
-    Postgres cannot be reached or is restarting fails twice and is not written
-    later (`db_write_behind_failed`, `db_write_behind_failures_total`), though
-    the request that made it was answered 2xx. The change is then lost. If the
-    outage also dropped this replica's LISTEN connection (a Postgres restart
-    always does), the re-hydrate that follows its reconnect reloads every table
-    of the mirror from Postgres and drops the change from this replica's memory
-    too: an account created during the outage can no longer sign in, even on
-    the replica that created it. Otherwise the change stays only in that
-    process's memory until something reloads that table from Postgres (a
-    re-hydrate, a peer's whole-table change) or the process restarts.
+    Postgres cannot be reached or is restarting fails twice
+    (`db_write_behind_failed`, `db_write_behind_failures_total`), though the
+    request that made it was answered 2xx, and the queue does not try it again.
+    The change is then only in that process's memory, and it is lost unless the
+    same process writes it to Postgres first: a later write of the same record
+    (a write sends the whole record, not only what changed), or a later write
+    that reconciles the whole table (most deletes, consumes and prunes are
+    written that way), which writes every record of that table the process
+    holds. It leaves memory unwritten when the process restarts, when a
+    re-hydrate or a peer's whole-table change reloads that table from Postgres,
+    or when a peer's change to the same record replaces it with the copy in
+    Postgres. A Postgres restart always drops the LISTEN connection, and the
+    re-hydrate after the reconnect reloads every table, so after a restart the
+    change is gone within seconds of Postgres coming back: an account created
+    during the outage can no longer sign in, even on the replica that created
+    it.
 -   A peer replica's change that this replica cannot read back at that moment
     (no connection to be had) is logged (`pg_store_peer_refresh_failed`) and
     leaves that row stale in this replica's mirror until it changes again or

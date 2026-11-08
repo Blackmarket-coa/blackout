@@ -67,7 +67,7 @@ class FakeConnection extends EventEmitter {
         setImmediate(() => callback());
     }
 
-    async query(sql = ''): Promise<{ rows: unknown[] }> {
+    async query(sql = '', params?: unknown[]): Promise<{ rows: unknown[] }> {
         if (!this._queryable) {
             throw new Error('Client has encountered a connection error and is not queryable');
         }
@@ -84,6 +84,15 @@ class FakeConnection extends EventEmitter {
         }
         FakeConnection.executed.push({ connection: FakeConnection.made.indexOf(this), sql });
         if (sql.includes('pg_try_advisory_lock')) return { rows: [{ locked: true }] };
+        // One store table, users, so PostgresBackedDb has a table to load and read back.
+        if (sql.includes('information_schema.columns') && params?.[0] === 'users') {
+            return {
+                rows: [
+                    { column_name: 'id', data_type: 'text', is_nullable: 'NO' },
+                    { column_name: 'username', data_type: 'text', is_nullable: 'NO' },
+                ],
+            };
+        }
         return { rows: [] };
     }
 
@@ -622,10 +631,12 @@ test('shutdown() stops a pending re-hydrate retry', async (t) => {
 
 /**
  * The other checkouts in the running app give their client back the same way as
- * the write-behind queue (db/pooledClient.ts). Each case starts with one healthy
- * connection idle in the pool, as after any earlier query, and the server ends
- * that backend under the case's first query; the socket has not closed yet when
- * the next checkout comes.
+ * the write-behind queue (db/pooledClient.ts): the store's load at boot, a change
+ * notification and migrate.ts's four functions here, and the store's two
+ * checkouts after boot in the block after this one. Each case starts with one
+ * healthy connection idle in the pool, as after any earlier query, and the
+ * server ends that backend under the case's first query; the socket has not
+ * closed yet when the next checkout comes.
  */
 const checkoutCases: Array<[string, (pool: SharedPool, lines: string[]) => Promise<void>]> = [
     [
@@ -701,6 +712,57 @@ for (const [name, run] of checkoutCases) {
         first.terminateUnderNextQuery(terminated(), 1_000);
 
         await run(pool, lines);
+
+        assert.equal(first.ended, true, 'the dead connection was destroyed, not pooled');
+        const next = await pool.connect();
+        assert.equal(FakeConnection.made.length, 2, 'the next checkout is not the dead connection');
+        await next.query('SELECT 1');
+        next.release();
+    });
+}
+
+/**
+ * The store's checkouts after boot, which run un-awaited: the re-hydrate after
+ * each LISTEN reconnect, and the read-back of each peer change. The store loads
+ * at boot on one healthy connection, which goes back to the pool idle, and the
+ * server ends that backend under the next query. The peer-change and re-hydrate
+ * tests above use a pool whose release() ignores its argument, so they cannot
+ * tell a client given back with its error from one pooled again.
+ */
+const afterBootCases: Array<
+    [string, (transport: ReturnType<typeof stubTransport>) => void, string]
+> = [
+    [
+        'the re-hydrate after a LISTEN reconnect (PostgresBackedDb.rehydrateAll)',
+        (transport) => transport.reconnect(),
+        'pg_store_rehydrate_failed',
+    ],
+    [
+        'a peer change read back from Postgres (PostgresBackedDb.applyPeerChange)',
+        (transport) => transport.peer({ src: 'peer-replica', m: 'users', op: 'u', kv: ['u1'] }),
+        'pg_store_peer_refresh_failed',
+    ],
+];
+
+for (const [name, deliver, failure] of afterBootCases) {
+    test(`${name}: a checkout whose backend the server ends under its query is destroyed, not handed out again`, async (t) => {
+        const lines = captureLogs(t);
+        const pool = (openPool = await sharedPoolOfFakes());
+        const transport = stubTransport();
+        const store = new PostgresBackedDb();
+        await store.init(pool as never, transport as never);
+        t.after(() => store.shutdown());
+        assert.equal(FakeConnection.made.length, 1, 'boot loaded on one connection');
+        assert.ok(
+            FakeConnection.executed.some((e) => e.sql.startsWith('SELECT * FROM users')),
+            'boot loaded the users table'
+        );
+        const first = FakeConnection.made[0];
+        first.terminateUnderNextQuery(terminated(), 1_000);
+
+        deliver(transport);
+        await waitFor(() => logged(lines, failure).length > 0, failure);
+        assert.match(String(logged(lines, failure)[0].error), /terminating/);
 
         assert.equal(first.ended, true, 'the dead connection was destroyed, not pooled');
         const next = await pool.connect();
