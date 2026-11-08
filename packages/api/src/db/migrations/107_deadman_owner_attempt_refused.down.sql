@@ -1,5 +1,14 @@
 -- Reverting forgets every refused attempt not yet acted on: a switch whose
 -- owner's check-in was refused during a database outage, and who has not
 -- checked in since, then fires at its deadline as it did before 107, rather
--- than getting the backlog window. Nothing else depends on the column.
+-- than getting the backlog window.
+--
+-- The API code that came with 107 needs the column: it names it in
+-- hand-written statements (the owner's deletion's erase of each switch and its
+-- last statement over the owner's switches, the carry of a refused attempt,
+-- and the trigger's condition). With the column dropped and that code still
+-- running, every deletion's erase of a switch fails, so the owner's unfired
+-- switches stay armed with their content and copies and fire at their
+-- deadlines for an account that is gone; every carry fails; and every trigger
+-- fails, so no switch fires. Revert that code first, then run this.
 ALTER TABLE deadman_switches DROP COLUMN IF EXISTS owner_attempt_refused_at;

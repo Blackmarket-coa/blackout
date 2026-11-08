@@ -442,7 +442,12 @@ export const ACCOUNT_DELETION_FINISH_TIMEOUT_MS = 10 * 1000;
  * process's mirror, so a release that fired elsewhere and which this mirror
  * never had is served here from now on (round 14: the fired row went in
  * without the recipients' copies, and the release was listed to nobody on
- * the deleting process until it restarted). Then every notice still
+ * the deleting process until it restarted), as is one it held armed behind
+ * a trigger it was not told of, or held marked after a dropped erase whose
+ * read back failed (round 15). Once that statement has answered, or failed,
+ * the owner's mark ends (`endOwnerDeletion`; `confirmAccountDeletion` set
+ * it), and this process's sweep moves the owner's switches again as the
+ * database has them. Then every notice still
  * pending to the account ends and every notice row of theirs forgets its
  * room, including a row another process wrote that this one had not heard of
  * (the worker's sweep, moments before; `endDeadmanReleaseNoticesOfDeletedAccount`).
@@ -483,6 +488,13 @@ export const finishAccountDeletion = async (
                 error: err instanceof Error ? err.message : String(err),
             });
             failed = true;
+        } finally {
+            // The owner's mark, set by `confirmAccountDeletion`, ends once
+            // the statement over the owner's switches has answered (round 15
+            // of part 2's review: it ended when the per-switch loop did, and
+            // a switch read back armed after a dropped erase could then be
+            // fired by this process's sweep before the last statement ran).
+            store.endOwnerDeletion(accountId);
         }
         try {
             await store.endDeadmanReleaseNoticesOfDeletedAccount(
@@ -533,13 +545,20 @@ export type ConfirmDeletionOutcome =
  * leave a switch that fired for the account after it was gone; and a notice
  * whose send answered in that window was recorded sent).
  *
- * Then the switches. From before the first `await` until every switch this
- * process lists has had its statement, the owner is marked on this process
- * (`beginOwnerDeletion`), and the sweep here moves none of the owner's
- * switches meanwhile (round 14 of part 2's review: a switch whose deadline
- * fell inside the deletion's awaits was fired by the deleting process's own
- * sweep, with the owner's row already gone from its mirror, then erased as
- * fired and served). First the arms of the owner's this process is still
+ * Then the switches. From before the first `await` until the last statement
+ * over the owner's switches has answered (`finishAccountDeletion`, which the
+ * route runs next and which ends the mark), the owner is marked on this
+ * process (`beginOwnerDeletion`), and the sweep here starts no move of the
+ * owner's switches meanwhile (round 14 of part 2's review: a switch whose
+ * deadline fell inside the deletion's awaits was fired by the deleting
+ * process's own sweep, with the owner's row already gone from its mirror,
+ * then erased as fired and served; round 15: the mark ended with the loop
+ * below, and a switch read back armed after its erase was dropped could be
+ * fired by that sweep before the last statement ran). A move that sweep had
+ * already sent when the deletion began is not held back: it can still land,
+ * and the switch then stays released. A caller that never runs
+ * `finishAccountDeletion` leaves the mark until the process restarts. First
+ * the arms of the owner's this process is still
  * writing, already past their checks, are waited for
  * (`armsInFlightSettledFor`; each one that lands for an account that is gone
  * erases its own switch and is refused), for at most `armsWaitMs`
@@ -548,8 +567,11 @@ export type ConfirmDeletionOutcome =
  * read-back waiting on a pool that does not answer) is left to erase its own
  * switch when it answers, or to the deletion's last statement, and the wait's
  * end is logged (`account_deletion_arms_wait_timeout`; round 14: the wait had
- * no bound, so such a pool held the deletion's answer for good, the account
- * already gone). Only then are the owner's switches listed (round 13: an arm
+ * no bound, so such a pool kept this call from returning for good, the
+ * account already gone). The bound shortens this call only: the route's
+ * answer waits for `finishAccountDeletion`, whose drain waits, with no bound
+ * (decision 27), for every call this process has queued, such an arm's
+ * read-back included (round 15). Only then are the owner's switches listed (round 13: an arm
  * whose insert was being written when the deletion listed them landed after
  * the list and stayed armed). Each switch
  * of the owner's is erased by one call decided in the database
@@ -628,30 +650,30 @@ export const confirmAccountDeletion = async (
     // Dead-man switches: cancel the ones that have not fired and remove what
     // the owner put in them, so none fires for an account that is gone. One
     // that has fired, in the database's judgement, stays readable to the
-    // people it named; its label goes. While the statements are on their way
-    // this process's sweep moves none of the owner's switches (the mark,
-    // round 14). The arms already past their checks first, for at most the
-    // bound, so that what they wrote is listed.
+    // people it named; its label goes. From here until the last statement
+    // over the owner's switches has answered (`finishAccountDeletion`), this
+    // process's sweep starts no move of the owner's switches (the mark, round
+    // 14; until round 15 it ended with the loop below). The arms already past
+    // their checks first, for at most the bound, so that what they wrote is
+    // listed.
     db.beginOwnerDeletion(record.userId);
-    try {
-        let timer: ReturnType<typeof setTimeout> | undefined;
-        const arms = await Promise.race([
-            armsInFlightSettledFor(record.userId).then(() => 'settled' as const),
-            new Promise<'timeout'>((resolve) => {
-                timer = setTimeout(() => resolve('timeout'), armsWaitMs);
-            }),
-        ]);
-        clearTimeout(timer);
-        if (arms === 'timeout') {
-            log.warn('account_deletion_arms_wait_timeout', { timeoutMs: armsWaitMs });
-        }
-        for (const sw of db.listDeadmanSwitchesForOwner(record.userId)) {
-            const outcome = await db.eraseDeadmanSwitchUnlessFired(sw.id);
-            if (outcome.kind === 'queued') log.warn('account_deletion_switch_erase_queued', {});
-        }
-    } finally {
-        db.endOwnerDeletion(record.userId);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const arms = await Promise.race([
+        armsInFlightSettledFor(record.userId).then(() => 'settled' as const),
+        new Promise<'timeout'>((resolve) => {
+            timer = setTimeout(() => resolve('timeout'), armsWaitMs);
+        }),
+    ]);
+    clearTimeout(timer);
+    if (arms === 'timeout') {
+        log.warn('account_deletion_arms_wait_timeout', { timeoutMs: armsWaitMs });
     }
+    for (const sw of db.listDeadmanSwitchesForOwner(record.userId)) {
+        const outcome = await db.eraseDeadmanSwitchUnlessFired(sw.id);
+        if (outcome.kind === 'queued') log.warn('account_deletion_switch_erase_queued', {});
+    }
+    // The mark stays: `finishAccountDeletion` ends it once its statement over
+    // the owner's switches has answered.
     return { kind: 'ok', userId: record.userId };
 };
 

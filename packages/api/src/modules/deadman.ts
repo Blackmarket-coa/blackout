@@ -286,12 +286,17 @@ const ownedSwitch = (id: string, subject: string): DeadmanSwitchRecord | undefin
  * deadline refused the owner's check-in, and the first pass after it fired
  * the switch). A check-in or cancel refused on another process reaches this
  * one through the switch's own record: the refusing process carries the
- * attempt into the database once its database answers again
- * (`ownerAttemptRefusedAt`, decision 31, the operator's choice of
- * 2026-11-02), and this sweep reads it as it reads its own note, so in the
- * deployed layout a check-in the API process refused holds the switch back
- * on the worker too. What stays one process's own is its stalls themselves,
- * and a note whose process stopped before its database answered.
+ * attempt into the database (`ownerAttemptRefusedAt`, decision 31, the
+ * operator's choice of 2026-11-02), trying again on its own every 10
+ * seconds until it lands (round 15 of part 2's review), and this sweep reads
+ * it as it reads its own note; where this mirror has not yet heard of a carry
+ * that landed, the trigger is refused in the database itself and the row
+ * taken, so the next pass gives the window (round 15). So in the deployed
+ * layout a check-in the API process refused holds the switch back on the
+ * worker too, once the carry has landed. What stays one process's own is its
+ * stalls themselves, and a note whose process stopped before its carry
+ * landed; and a deadline that falls after the database answers again but
+ * before the carry's next try finds the note uncarried.
  */
 export async function sweepOverdueDeadmanSwitches(
     now: Date = new Date(),
@@ -303,14 +308,16 @@ export async function sweepOverdueDeadmanSwitches(
         const record = db.getDeadmanSwitch(listed.id);
         if (!record) continue;
         // Its owner's deletion has queued an erase this process has not seen
-        // land, or has begun on this process and not yet reached the switch:
-        // not moved here meanwhile, so a switch whose erase is lost and whose
-        // row could not be read back is not fired for the deleted account by
-        // this process (round 13 of part 2's review), and nor is one whose
-        // deadline falls while the deletion awaits an earlier switch's
-        // statement or the owner's arms in flight, with the owner's row
-        // already gone from this mirror (round 14). The erase, in the
-        // switch's lane, decides on Postgres's row when it runs.
+        // land, or has begun on this process and its last statement over the
+        // owner's switches has not yet answered: not moved here meanwhile, so
+        // a switch whose erase is lost and whose row could not be read back is
+        // not fired for the deleted account by this process (round 13 of part
+        // 2's review), and nor is one whose deadline falls while the deletion
+        // awaits an earlier switch's statement, the owner's arms in flight or
+        // its last statement, with the owner's row already gone from this
+        // mirror (rounds 14 and 15). The erase, in the switch's lane, decides
+        // on Postgres's row when it runs. A move this pass had already sent
+        // when the deletion began is not held back by this check.
         if (db.deadmanSwitchErasePending(record.id)) continue;
         if (record.status === 'triggered' || record.status === 'cancelled') {
             db.clearOwnerWriteUnanswered(record.id);
@@ -323,9 +330,10 @@ export async function sweepOverdueDeadmanSwitches(
             refused = undefined;
         }
         // A refused attempt any process carried into the switch's own record
-        // once its database answered (decision 31): read as this process's
-        // note is, so the worker's sweep gives the window for a check-in the
-        // API process refused.
+        // (decision 31): read as this process's note is, so the worker's sweep
+        // gives the window for a check-in the API process refused. Where this
+        // mirror lacks a carry that landed, Postgres refuses the trigger and
+        // the next pass reads the column (round 15).
         const stalled =
             refused !== undefined ||
             ownerAttemptRefusedSinceCheckIn(record) ||

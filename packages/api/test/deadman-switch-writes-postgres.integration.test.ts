@@ -2835,6 +2835,148 @@ test('a queued erase whose connection the pool refuses is tried once more and la
     await here.drain();
     await worker.drain();
     await restarted.drain();
+
+    // Round 15 of part 2's review (the verifiers' `p2-d30-stale.mts` and
+    // `r14v-claims` probe B): a release with no label, fired on the other
+    // process and not told here, so this process still holds it armed; its
+    // erase, the queued retry and the read back all fail, and the deletion's
+    // last statement then runs. Its first `UPDATE` does not rewrite the row
+    // (fired, no label, no refused attempt: nothing left to erase), and it
+    // kept the stale armed view and the mark for good, so the release was
+    // served to nobody here until a restart. Now the last statement takes a
+    // row it did not rewrite where this mirror holds it marked or behind.
+    const unlabelledOf = async (owner: Awaited<ReturnType<typeof person>>) => {
+        const named = await person();
+        const envelope = await protocol.buildReleaseEnvelope({
+            ownerKeySet: owner.keySet,
+            recipients: [named.keySet.identity],
+            message: 'Synthetic test text.',
+        });
+        assert.equal(
+            (
+                await armReleaseSwitch({
+                    ownerId: owner.id,
+                    input: { checkInIntervalSeconds: 60, gracePeriodSeconds: 0, envelope },
+                })
+            ).kind,
+            'armed'
+        );
+        await here.drain();
+        return { named, id: envelope.releaseId };
+    };
+    const fourth = await person();
+    const { named: quietNamed, id: quietId } = await unlabelledOf(fourth);
+    // A second one of the same owner's, fired elsewhere and told here, so
+    // only the mark is left behind once its erase and read back fail.
+    const { id: toldId } = await unlabelledOf(fourth);
+    const elsewhere = await otherProcess();
+    const quietFiredAt = nextMoment();
+    for (const id of [quietId, toldId]) {
+        assert.ok(
+            await elsewhere.advanceDeadmanSwitch(id, elsewhere.getDeadmanSwitch(id)!, {
+                status: 'triggered',
+                releasedAt: quietFiredAt.toISOString(),
+            })
+        );
+    }
+    await elsewhere.drain();
+    deliver(here, { src: 'x', m: 'deadmanSwitches', op: 'u', kv: [toldId] });
+    await until(
+        () => here.getDeadmanSwitch(toldId)?.status === 'triggered',
+        5_000,
+        'the second told here'
+    );
+    assert.equal(here.getDeadmanSwitch(quietId)?.status, 'armed', 'not heard here');
+    const failing = new Set([quietId, toldId]);
+    let perSwitch = 0;
+    let readBacks = 0;
+    pool.connect = async () => {
+        const client = await realConnect();
+        return {
+            ...client,
+            async query<T = Record<string, unknown>>(sql: string, params?: unknown[]) {
+                // The erase of this one switch (`WHERE id = $1`) and its read
+                // back fail; the last statement (`WHERE owner_id = $1`) and
+                // its reads do not.
+                if (
+                    sql.startsWith('UPDATE deadman_switches SET headline = NULL') &&
+                    sql.includes('WHERE id = $1') &&
+                    failing.has(String(params?.[0]))
+                ) {
+                    perSwitch += 1;
+                    throw new Error('Connection terminated unexpectedly (test)');
+                }
+                if (
+                    sql.startsWith('SELECT * FROM deadman_switches WHERE id') &&
+                    failing.has(String(params?.[0]))
+                ) {
+                    readBacks += 1;
+                    throw new Error('Connection terminated unexpectedly (test)');
+                }
+                return client.query<T>(sql, params);
+            },
+        };
+    };
+    let quietMarked = false;
+    let toldMarked = false;
+    try {
+        const issued = requestAccountDeletion({ userId: fourth.id })!;
+        assert.equal((await confirmAccountDeletion(issued.token, fourth.id)).kind, 'ok');
+        await here.drain();
+        // The erase's own mark (the owner's mark, which also ends with the
+        // last statement, is not what is asked here).
+        const pending = (here as unknown as { erasesPending: Set<string> }).erasesPending;
+        quietMarked = pending.has(quietId);
+        toldMarked = pending.has(toldId);
+        await finishAccountDeletion(fourth.id, here);
+    } finally {
+        restore();
+    }
+    await settled();
+    assert.equal(perSwitch, 6, 'each erase, its queued attempt and the retry all failed');
+    assert.equal(readBacks, 2, 'and each read back');
+    assert.equal(quietMarked, true, 'marked before the last statement');
+    assert.equal(toldMarked, true);
+    assert.equal(
+        here.deadmanSwitchErasePending(toldId),
+        false,
+        'the last statement ends the mark of a switch this mirror already had as Postgres has it'
+    );
+    assert.equal(here.getDeadmanSwitch(toldId)?.status, 'triggered');
+    const quietRow = await stored(quietId);
+    assert.equal(quietRow?.status, 'triggered', 'fired in Postgres, and kept');
+    assert.equal(quietRow?.released_at?.toISOString(), quietFiredAt.toISOString());
+    assert.equal(
+        here.deadmanSwitchErasePending(quietId),
+        false,
+        'the last statement ends the mark'
+    );
+    assert.equal(here.getDeadmanSwitch(quietId)?.status, 'triggered', 'taken as Postgres has it');
+    assert.equal(here.getDeadmanSwitch(quietId)?.releasedAt, quietFiredAt.toISOString());
+    assert.ok(
+        releasedCopiesFor(quietNamed.id).some((r) => r.releaseId === quietId),
+        'served here to the person it named'
+    );
+    // And without any mark: a view behind a trigger elsewhere is taken by the
+    // last statement on its status alone (the store's method called directly,
+    // since every switch the deletion lists has had its own statement first).
+    const fifth = await person();
+    const { named: behindNamed, id: behindId } = await unlabelledOf(fifth);
+    const third2 = await otherProcess();
+    assert.ok(
+        await third2.advanceDeadmanSwitch(behindId, third2.getDeadmanSwitch(behindId)!, {
+            status: 'triggered',
+            releasedAt: quietFiredAt.toISOString(),
+        })
+    );
+    await third2.drain();
+    assert.equal(here.getDeadmanSwitch(behindId)?.status, 'armed', 'not heard here');
+    assert.equal(here.deadmanSwitchErasePending(behindId), false, 'and not marked');
+    await here.eraseDeadmanSwitchesOfDeletedOwner(fifth.id);
+    assert.equal(here.getDeadmanSwitch(behindId)?.status, 'triggered', 'taken on its status');
+    assert.ok(releasedCopiesFor(behindNamed.id).some((r) => r.releaseId === behindId));
+    await elsewhere.drain();
+    await third2.drain();
 });
 
 test('the removal pass blanks a cancelled release switch’s copies only where Postgres has it cancelled: a view of it as cancelled that is behind a trigger blanks nothing, and the view is refreshed', async () => {
@@ -3378,7 +3520,7 @@ test('the column never moves a switch that fired or was cancelled, and a check-i
     await worker.drain();
 });
 
-test('the deleting process’s own sweep moves none of the owner’s switches while the deletion is on its way: one due while an earlier switch’s erase statement is held is not fired here, and the deletion then cancels it', async () => {
+test('the deleting process’s own sweep starts no move of the owner’s switches until the deletion’s last statement over them has answered: one due while an earlier switch’s erase statement is held is not fired here, nor one read back armed after its erase was dropped, and the deletion then cancels each', async () => {
     // Round 14 of part 2's review: the sweep skipped only a switch whose erase
     // was queued; one listed but not yet reached, with the owner's row already
     // gone from this mirror, was fired at its deadline during the deletion's
@@ -3429,10 +3571,15 @@ test('the deleting process’s own sweep moves none of the owner’s switches wh
     assert.equal(seen.s2Mirror, 'armed');
     assert.equal(
         here.deadmanSwitchErasePending(s2.switchId),
-        false,
-        'the mark ends with the deletion'
+        true,
+        'the mark stays once every listed switch has had its statement (round 15)'
     );
     await finishAccountDeletion(owner.id, here);
+    assert.equal(
+        here.deadmanSwitchErasePending(s2.switchId),
+        false,
+        'and ends once the last statement over the owner’s switches has answered'
+    );
     await settled();
     const row = await stored(s2.switchId);
     assert.equal(row?.status, 'cancelled', 'the deletion then cancelled it');
@@ -3443,6 +3590,70 @@ test('the deleting process’s own sweep moves none of the owner’s switches wh
     );
     assert.equal(releasedCopiesFor(s2.recipient.id).length, 0, 'served to nobody');
     assert.deepEqual(await noticeRows(s2.switchId), []);
+
+    // Round 15 of part 2's review (the verifiers' `r14v-claims` probe C): the
+    // mark ended with the per-switch loop. A switch whose erase failed three
+    // times and was then read back armed (Postgres's row, which ends the
+    // queued erase's own mark) was fired by this process's sweep at its
+    // deadline before the deletion's last statement ran, for the account
+    // that was gone. Now the mark lasts until that statement has answered.
+    const second = await person();
+    const s3 = await armedFor(second, 60, 'label c');
+    let erases = 0;
+    const atLast: Record<string, unknown> = {};
+    let lastSeen = false;
+    pool.connect = async () => {
+        const client = await realConnect();
+        return {
+            ...client,
+            async query<T = Record<string, unknown>>(sql: string, params?: unknown[]) {
+                if (
+                    sql.startsWith('UPDATE deadman_switches SET headline = NULL') &&
+                    sql.includes('WHERE id = $1') &&
+                    params?.[0] === s3.switchId
+                ) {
+                    erases += 1;
+                    throw new Error('Connection terminated unexpectedly (test)');
+                }
+                if (
+                    !lastSeen &&
+                    sql.startsWith('UPDATE deadman_switches SET headline = NULL') &&
+                    sql.includes('WHERE owner_id = $1') &&
+                    params?.[0] === second.id
+                ) {
+                    // Just before the last statement: a pass at the deadline.
+                    lastSeen = true;
+                    atLast.mirror = here.getDeadmanSwitch(s3.switchId)?.status;
+                    atLast.marked = here.deadmanSwitchErasePending(s3.switchId);
+                    const due = new Date(
+                        Date.parse(here.getDeadmanSwitch(s3.switchId)!.triggerAt) + 1_000
+                    );
+                    atLast.swept = await sweepOverdueDeadmanSwitches(due, Number.MAX_SAFE_INTEGER);
+                    atLast.postgres = (await stored(s3.switchId))?.status;
+                }
+                return client.query<T>(sql, params);
+            },
+        };
+    };
+    try {
+        const issued2 = requestAccountDeletion({ userId: second.id })!;
+        assert.equal((await confirmAccountDeletion(issued2.token, second.id)).kind, 'ok');
+        await finishAccountDeletion(second.id, here);
+    } finally {
+        restore();
+    }
+    await settled();
+    assert.equal(erases, 3, 'the erase, its queued attempt and the retry all failed');
+    assert.equal(lastSeen, true);
+    assert.equal(atLast.mirror, 'armed', 'read back armed, as Postgres had it');
+    assert.equal(atLast.marked, true, 'still marked when the pass ran');
+    assert.equal(atLast.postgres, 'armed', 'not fired by this process’s sweep');
+    const s3Row = await stored(s3.switchId);
+    assert.equal(s3Row?.status, 'cancelled', 'the last statement then cancelled it');
+    assert.equal(s3Row?.released_at, null);
+    assert.equal(releasedCopiesFor(s3.recipient.id).length, 0);
+    assert.deepEqual(await noticeRows(s3.switchId), []);
+    assert.equal(here.deadmanSwitchErasePending(s3.switchId), false);
 });
 
 test('the deletion’s last statement takes every switch of the owner’s and every copy of theirs into this mirror: a release that fired on another process and that this process never had is served here from then on, and a switch with nothing left to erase is neither rewritten nor announced', async () => {
@@ -3521,7 +3732,24 @@ test('the deletion’s last statement takes every switch of the owner’s and ev
     const refusedArmed = await unlabelled(3600);
     const refusedSpent = await unlabelled(3600);
     assert.equal((await post(owner, `/switches/${refusedSpent}/cancel`)).status, 200);
+    // And two cancelled ones this process never had, each with one remnant
+    // only: content left behind, or a backlog window (round 15 of part 2's
+    // review: the clauses of the narrowed `WHERE` that reach each were
+    // untested alone).
+    const leftContent = await unlabelled(3600);
+    const leftWindow = await unlabelled(3600);
+    for (const id of [leftContent, leftWindow]) {
+        assert.equal((await post(owner, `/switches/${id}/cancel`)).status, 200);
+    }
     await here.drain();
+    forget(leftContent);
+    forget(leftWindow);
+    await pg.query("UPDATE deadman_switches SET encrypted_payload = 'left behind' WHERE id = $1", [
+        leftContent,
+    ]);
+    await pg.query('UPDATE deadman_switches SET backlog_grace_started_at = now() WHERE id = $1', [
+        leftWindow,
+    ]);
     const worker = await otherProcess();
     forget(gone.switchId);
     forget(quietEnvelope.releaseId);
@@ -3630,6 +3858,16 @@ test('the deletion’s last statement takes every switch of the owner’s and ev
         assert.equal(here.getDeadmanSwitch(id)?.ownerAttemptRefusedAt, undefined);
     }
     assert.equal((await stored(refusedArmed))?.encrypted_payload, '', 'emptied');
+    const content = await stored(leftContent);
+    assert.equal(content?.status, 'cancelled');
+    assert.equal(
+        content?.encrypted_payload,
+        '',
+        'the content left on a cancelled switch is erased'
+    );
+    const window = await stored(leftWindow);
+    assert.equal(window?.status, 'cancelled');
+    assert.equal(window?.backlog_grace_started_at, null, 'and so is a backlog window left on one');
     await worker.drain();
 });
 
@@ -3837,10 +4075,14 @@ test('an arm whose statement fails and whose look afterwards finds the same owne
     await elsewhere.drain();
 });
 
-test('the deletion’s wait for the owner’s arms in flight is bounded (decision 33): an arm whose failed statement’s read-back waits on a pool that does not answer no longer holds the deletion’s answer, the wait’s end is logged, and nothing is armed once the pool answers', async () => {
+test('the deletion’s wait for the owner’s arms in flight is bounded (decision 33): an arm whose failed statement’s read-back waits on a pool that does not answer no longer keeps the deletion from listing and erasing the owner’s switches, the wait’s end is logged; the route’s answer still waits for that read-back through the drain of the deletion’s writes (decision 27); nothing is armed once the pool answers', async () => {
     // Round 14 of part 2's review (the verifiers' `r13v-fq.mts` R4): the wait
-    // had no bound, so such a pool held the route's answer for good, the
-    // account already gone and the token revoked.
+    // had no bound, so such a pool kept `confirmAccountDeletion` from
+    // returning for good, the account already gone and the token revoked.
+    // Round 15: the bound shortens that step only. The route answers after
+    // `finishAccountDeletion`, whose drain waits, with no bound (decision
+    // 27), for every queued call of the process, the arm's read-back
+    // included (the verifiers' `r14v-claims` probe A2).
     const owner = await person();
     const named = await person();
     const envelope = await protocol.buildReleaseEnvelope({
@@ -3893,14 +4135,364 @@ test('the deletion’s wait for the owner’s arms in flight is bounded (decisio
     );
     assert.equal(here.getUserById(owner.id), undefined);
     assert.equal(armsInFlightCount(), 1, 'the arm is still in flight');
+    // What the route does next: `finishAccountDeletion`, whose drain waits
+    // for the read-back still queued.
+    let finished = false;
+    const finishing = finishAccountDeletion(owner.id, here).then(() => {
+        finished = true;
+    });
+    await new Promise((r) => setTimeout(r, 300));
+    assert.equal(finished, false, 'the route’s answer waits for the pool through the drain');
     releaseHang();
     const outcome = await arming;
+    await finishing;
     restore();
     assert.equal(outcome.kind, 'write_failed', 'the read-back found no row: nothing armed');
     assert.equal(armsInFlightCount(), 0);
-    await finishAccountDeletion(owner.id, here);
     await settled();
     assert.equal(await stored(envelope.releaseId), undefined, 'nothing in Postgres');
     assert.equal(here.getDeadmanSwitch(envelope.releaseId), undefined);
     assert.equal(ACCOUNT_DELETION_ARMS_WAIT_MS, 30_000);
+});
+
+// ---------------------------------------------------------------------------
+// Round 15 of part 2's review: what the verifiers found in round 14's fixes.
+
+test('a refused check-in is carried by the refusing process on its own: a statement that throws is carried at once, and a carry the database refuses at connect is tried again every carryRetryMs, so it lands once the database answers with no other request on the process (decision 31)', async () => {
+    // Round 15 of part 2's review (the verifiers' `d31-attacks.mts` S3): a
+    // carry that failed was tried again only when another switch statement
+    // of the process answered. In `deploy/docker/production` nothing else on
+    // the API process asks the database by itself, so after an outage that
+    // refused connections the worker fired the switch at its deadline.
+    const quick = await armed(3600);
+    const slow = await armed(3600);
+    const deadline = new Date(here.getDeadmanSwitch(slow.switchId)!.triggerAt);
+    // The statement throws once while the database is up: carried at once,
+    // with no timer able to do it (the retry is a minute away).
+    here.carryRetryMs = 60_000;
+    let thrown = 0;
+    pool.connect = async () => {
+        const client = await realConnect();
+        return {
+            ...client,
+            async query<T = Record<string, unknown>>(sql: string, params?: unknown[]) {
+                if (isSwitchUpdate(sql) && !isCarry(sql) && thrown === 0) {
+                    thrown += 1;
+                    throw new Error('Connection terminated unexpectedly (test)');
+                }
+                return client.query<T>(sql, params);
+            },
+        };
+    };
+    try {
+        assert.equal((await post(quick.owner, `/switches/${quick.switchId}/check-in`)).status, 503);
+        await until(
+            () => here.ownerWriteUnansweredAt(quick.switchId) === undefined,
+            3_000,
+            'the carry sent with the note'
+        );
+    } finally {
+        restore();
+    }
+    assert.equal(thrown, 1);
+    assert.ok((await columnOf(quick.switchId)) instanceof Date, 'carried at once');
+    // The database refuses connections (it is restarting): the check-in fails
+    // at once, so no stall opens, and the carry sent with the note fails too.
+    here.carryRetryMs = 150;
+    let refusing = true;
+    let refusedConnects = 0;
+    pool.connect = async () => {
+        if (refusing) {
+            refusedConnects += 1;
+            throw new Error('connect ECONNREFUSED 127.0.0.1:5432 (test)');
+        }
+        return realConnect();
+    };
+    let failedCarries = 0;
+    try {
+        failedCarries = await logged('deadman_owner_attempt_carry_failed', async () => {
+            assert.equal(
+                (await post(slow.owner, `/switches/${slow.switchId}/check-in`)).status,
+                503
+            );
+            assert.ok(here.ownerWriteUnansweredAt(slow.switchId), 'noted');
+            await until(() => refusedConnects >= 4, 3_000, 'the carry tried while refused');
+        });
+        assert.ok(failedCarries >= 2, `tried again on its own (${failedCarries})`);
+        assert.equal(await columnOf(slow.switchId), null);
+        assert.ok(here.ownerWriteUnansweredAt(slow.switchId), 'the note is kept');
+        // The database answers again. Nothing else is asked on this process.
+        refusing = false;
+        await until(
+            () => here.ownerWriteUnansweredAt(slow.switchId) === undefined,
+            3_000,
+            'the carry on its timer'
+        );
+    } finally {
+        restore();
+        here.carryRetryMs = 10_000;
+    }
+    const column = await columnOf(slow.switchId);
+    assert.ok(column instanceof Date, 'carried with no other request on the process');
+    assert.ok(column.getTime() < deadline.getTime(), 'before the deadline');
+    // And held at the deadline, from the column alone (this process's note
+    // is gone, and nothing stalled).
+    const late = new Date(deadline.getTime() + 5 * 60_000);
+    await sweepOverdueDeadmanSwitches(late, 15 * 60_000);
+    await here.drain();
+    const row = await stored(slow.switchId);
+    assert.equal(row?.status, 'grace', 'the backlog window, not the trigger');
+    assert.equal(row?.released_at, null);
+    for (const sw of [quick, slow]) {
+        here.updateDeadmanSwitch(sw.switchId, { status: 'cancelled', encryptedPayload: '' });
+    }
+    await here.drain();
+});
+
+test('the trigger is refused in Postgres over a refused attempt the sweeping process has not heard of: a carry that landed from another process while this one was not told holds the switch, this mirror takes the row, the next pass gives the window, and a switch that had its window fires when it ends (decision 31)', async () => {
+    // Round 15 of part 2's review (the verifiers' `d31-attacks.mts` S2 and
+    // `p1-d31-worker.mts` A and A2): the trigger's conditional write checked
+    // only the status and the last check-in, so a worker whose mirror had not
+    // received the carry's announcement (lost, or its refresh failed) fired
+    // the switch over a refusal Postgres held, and the trigger cleared the
+    // column. Here the API process (a second store, its pool refusing
+    // connections, told to nobody) refuses the check-in; the database
+    // answers; its carry lands on its own timer; this process plays the
+    // worker, whose mirror never hears of it.
+    const sw = await armed(3600);
+    const deadline = new Date(here.getDeadmanSwitch(sw.switchId)!.triggerAt);
+    const client = await realConnect();
+    let refusing = false;
+    const apiPool = {
+        connect: async () => {
+            if (refusing) throw new Error('connect ECONNREFUSED 127.0.0.1:5432 (test)');
+            return client;
+        },
+        end: async () => {},
+    };
+    const api = new store.PostgresBackedDb();
+    await api.init(apiPool as never);
+    api.carryRetryMs = 100;
+    const read = api.getDeadmanSwitch(sw.switchId)!;
+    const refreshed = applyCheckIn(read, new Date());
+    refusing = true;
+    const outcome = await api.updateDeadmanSwitchIf(sw.switchId, read, {
+        status: refreshed.status,
+        lastCheckInAt: refreshed.lastCheckInAt,
+        triggerAt: refreshed.triggerAt,
+        releaseAt: refreshed.releaseAt,
+        backlogGraceStartedAt: refreshed.backlogGraceStartedAt,
+        ownerAttemptRefusedAt: refreshed.ownerAttemptRefusedAt,
+    });
+    assert.equal(outcome.kind, 'unanswered');
+    refusing = false;
+    await until(
+        () => api.ownerWriteUnansweredAt(sw.switchId) === undefined,
+        3_000,
+        'the API process’s carry'
+    );
+    const column = await columnOf(sw.switchId);
+    assert.ok(column instanceof Date, 'carried into Postgres');
+    assert.equal(
+        here.getDeadmanSwitch(sw.switchId)?.ownerAttemptRefusedAt,
+        undefined,
+        'this process was not told'
+    );
+    // The worker's pass at the deadline, five minutes late within a 15-minute
+    // tolerance: its mirror holds nothing that would give the window.
+    const late = new Date(deadline.getTime() + 5 * 60_000);
+    const held = await logged('deadman_trigger_held_by_refused_attempt', async () => {
+        await sweepOverdueDeadmanSwitches(late, 15 * 60_000);
+        await here.drain();
+    });
+    assert.equal(held, 1, 'refused in Postgres, logged');
+    const after = await stored(sw.switchId);
+    assert.equal(after?.status, 'armed', 'not fired');
+    assert.equal(after?.released_at, null);
+    assert.equal(
+        (await columnOf(sw.switchId))?.toISOString(),
+        column.toISOString(),
+        'the column kept'
+    );
+    assert.equal(
+        here.getDeadmanSwitch(sw.switchId)?.ownerAttemptRefusedAt,
+        column.toISOString(),
+        'the refusal took Postgres’s row into this mirror'
+    );
+    assert.deepEqual(await noticeRows(sw.switchId), [], 'no notice');
+    assert.equal(releasedCopiesFor(sw.recipient.id).length, 0, 'served to nobody');
+    // The next pass: the backlog window.
+    const next = new Date(late.getTime() + 30_000);
+    await sweepOverdueDeadmanSwitches(next, 15 * 60_000);
+    await here.drain();
+    const windowed = await stored(sw.switchId);
+    assert.equal(windowed?.status, 'grace');
+    assert.equal(windowed?.backlog_grace_started_at?.toISOString(), next.toISOString());
+    assert.equal((await columnOf(sw.switchId))?.toISOString(), column.toISOString());
+    // The window ends with no check-in: the switch fires, the column
+    // notwithstanding (a switch that had its window is judged afresh).
+    const ends = new Date(Date.parse(here.getDeadmanSwitch(sw.switchId)!.releaseAt) + 1_000);
+    await sweepOverdueDeadmanSwitches(ends, 15 * 60_000);
+    await here.drain();
+    const fired = await stored(sw.switchId);
+    assert.equal(fired?.status, 'triggered', 'fired at the window’s end');
+    assert.ok(fired?.released_at);
+    assert.equal(await columnOf(sw.switchId), null, 'the trigger clears the column');
+    await api.drain();
+});
+
+test('a carry writes the attempt’s moment, keeps the newer of two refused attempts, keeps the column in this mirror when the switch was refreshed while it ran, and never writes over a newer attempt another process carried (decision 31)', async () => {
+    // Round 15 of part 2's review: four checks of round 14's carry that no
+    // test reached alone (the verifiers' Q05, Q03, Q04 and Q01).
+    here.switchStatementTimeoutMs = 1_000;
+    here.carryRetryMs = 100;
+    let refuseConnect = false;
+    let holdConnect: Promise<void> | null = null;
+    let holdCarry: Promise<void> | null = null;
+    let carriesHeld = 0;
+    pool.connect = async () => {
+        if (refuseConnect) throw new Error('connect ECONNREFUSED 127.0.0.1:5432 (test)');
+        if (holdConnect) {
+            const gate = holdConnect;
+            holdConnect = null;
+            await gate;
+        }
+        const client = await realConnect();
+        return {
+            ...client,
+            async query<T = Record<string, unknown>>(sql: string, params?: unknown[]) {
+                if (isCarry(sql) && holdCarry) {
+                    const gate = holdCarry;
+                    holdCarry = null;
+                    carriesHeld += 1;
+                    await gate;
+                }
+                return client.query<T>(sql, params);
+            },
+        };
+    };
+    const gate = () => {
+        let open!: () => void;
+        const promise = new Promise<void>((resolve) => {
+            open = resolve;
+        });
+        return { promise, open };
+    };
+    const s = await armed(3600);
+    const t = await armed(3600);
+    const u = await armed(3600);
+    try {
+        // Q05: a check-in refused after its bound, not during a standing
+        // stall, carries the moment it was made, not the refusal's.
+        const first = gate();
+        holdConnect = first.promise;
+        const before1 = Date.now();
+        assert.equal((await post(s.owner, `/switches/${s.switchId}/check-in`)).status, 503);
+        const after1 = Date.now();
+        assert.ok(after1 - before1 >= 1_000, 'refused after the bound');
+        const note1 = here.ownerWriteUnansweredAt(s.switchId)!;
+        assert.ok(
+            Date.parse(note1.at) >= before1 && Date.parse(note1.at) < before1 + 500,
+            'noted with the attempt’s moment'
+        );
+        // Q03: the first carry is held at the database while the owner tries
+        // again and is refused again; the second attempt's moment is what
+        // the switch ends with.
+        const carry1 = gate();
+        holdCarry = carry1.promise;
+        first.open(); // the statement's turn comes after the bound: not run
+        await until(() => carriesHeld === 1, 3_000, 'the first carry held');
+        const before2 = Date.now();
+        assert.equal((await post(s.owner, `/switches/${s.switchId}/check-in`)).status, 503);
+        const after2 = Date.now();
+        assert.ok(after2 - before2 >= 1_000, 'refused after the bound, behind the carry');
+        const note2 = here.ownerWriteUnansweredAt(s.switchId)!;
+        assert.ok(Date.parse(note2.at) >= before2 && Date.parse(note2.at) < before2 + 500);
+        carry1.open();
+        await until(
+            () => here.ownerWriteUnansweredAt(s.switchId) === undefined,
+            5_000,
+            'both carries'
+        );
+        await settled();
+        const column = await columnOf(s.switchId);
+        assert.ok(column instanceof Date);
+        assert.ok(
+            column.getTime() >= before2 && column.getTime() < before2 + 500,
+            'the second attempt’s moment'
+        );
+        assert.equal(
+            here.getDeadmanSwitch(s.switchId)?.ownerAttemptRefusedAt,
+            column.toISOString()
+        );
+
+        // Q04: the switch is refreshed in this mirror while the carry is held
+        // at the database; when it lands the mirror keeps the column.
+        refuseConnect = true;
+        assert.equal((await post(t.owner, `/switches/${t.switchId}/check-in`)).status, 503);
+        const carryT = gate();
+        holdCarry = carryT.promise;
+        refuseConnect = false;
+        await until(() => carriesHeld === 2, 3_000, 'the retried carry held');
+        const marker = new Date(Date.now() - 1_000).toISOString();
+        await pg.query('UPDATE deadman_switches SET updated_at = $2 WHERE id = $1', [
+            t.switchId,
+            marker,
+        ]);
+        deliver(here, { src: 'x', m: 'deadmanSwitches', op: 'u', kv: [t.switchId] });
+        await until(
+            () => here.getDeadmanSwitch(t.switchId)?.updatedAt === marker,
+            3_000,
+            'the refresh'
+        );
+        carryT.open();
+        await until(
+            () => here.ownerWriteUnansweredAt(t.switchId) === undefined,
+            3_000,
+            'the carry'
+        );
+        const columnT = await columnOf(t.switchId);
+        assert.ok(columnT instanceof Date, 'carried');
+        assert.equal(
+            here.getDeadmanSwitch(t.switchId)?.ownerAttemptRefusedAt,
+            columnT.toISOString(),
+            'kept in this mirror over the refresh'
+        );
+
+        // Q01: another process carried a newer attempt of the owner's before
+        // this one's carry landed: this one is refused, the newer kept.
+        refuseConnect = true;
+        assert.equal((await post(u.owner, `/switches/${u.switchId}/check-in`)).status, 503);
+        const noteU = here.ownerWriteUnansweredAt(u.switchId)!;
+        await new Promise((r) => setTimeout(r, 20));
+        const newer = new Date(Date.parse(noteU.at) + 10).toISOString();
+        await pg.query('UPDATE deadman_switches SET owner_attempt_refused_at = $2 WHERE id = $1', [
+            u.switchId,
+            newer,
+        ]);
+        let notCarried = 0;
+        notCarried = await logged('deadman_owner_attempt_not_carried', async () => {
+            refuseConnect = false;
+            await until(
+                () => here.ownerWriteUnansweredAt(u.switchId) === undefined,
+                3_000,
+                'the carry refused'
+            );
+        });
+        assert.equal(notCarried, 1, 'refused by Postgres');
+        assert.equal((await columnOf(u.switchId))?.toISOString(), newer, 'the newer attempt kept');
+    } finally {
+        restore();
+        here.switchStatementTimeoutMs = 30_000;
+        here.carryRetryMs = 10_000;
+    }
+    await settled();
+    for (const sw of [s, t, u]) {
+        deliver(here, { src: 'x', m: 'deadmanSwitches', op: 'u', kv: [sw.switchId] });
+    }
+    await new Promise((r) => setTimeout(r, 100));
+    for (const sw of [s, t, u]) {
+        here.updateDeadmanSwitch(sw.switchId, { status: 'cancelled', encryptedPayload: '' });
+    }
+    await here.drain();
 });

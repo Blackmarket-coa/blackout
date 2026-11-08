@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { hashPassword } from '../services/auth';
+import { ownerAttemptRefusedSinceCheckIn } from '../services/deadmanScheduler';
 import type {
     CanaryTokenRecord,
     CircleEdgeRecord,
@@ -2858,7 +2859,11 @@ class InMemoryDb {
      * file store, the mirror is the database and the sweep has just read it,
      * so it holds; the Postgres store carries the condition into the database
      * (round 9 of part 2's review: a standby whose mirror had not heard of a
-     * trigger fired the switch again, and Postgres took its `releasedAt`).
+     * trigger fired the switch again, and Postgres took its `releasedAt`),
+     * and there refuses a trigger over a refused attempt of the owner's
+     * after the last check-in while the switch has not had its backlog
+     * window (decision 31; round 15: a sweep whose mirror lacked a carry
+     * that had landed fired the switch and cleared the column).
      */
     async advanceDeadmanSwitch(
         id: string,
@@ -2950,12 +2955,14 @@ class InMemoryDb {
      * same process treats such a switch as it does one whose deadline fell in
      * an outage: the owner was alive and tried, so it gets the backlog window
      * rather than firing; a later write of the switch that applied, or a
-     * check-in that landed anywhere since, clears it. Once the database
-     * answers, the Postgres store carries the note into the switch's own row
-     * (`ownerAttemptRefusedAt`, decision 31), which the sweep in every
-     * process reads the same way (`ownerAttemptRefusedSinceCheckIn`), and
-     * the note ends; here, and in the file store, nothing is refused
-     * unanswered, and the field is read, cleared and kept like any other.
+     * check-in that landed anywhere since, clears it. The Postgres store
+     * carries the note into the switch's own row (`ownerAttemptRefusedAt`,
+     * decision 31), trying again on its own timer until it lands, which the
+     * sweep in every process reads the same way
+     * (`ownerAttemptRefusedSinceCheckIn`) and on which the database refuses
+     * the trigger, and the note ends; here, and in the file store, nothing
+     * is refused unanswered, and the field is read, cleared and kept like
+     * any other.
      */
     ownerWriteUnansweredAt(_switchId: string): { at: string; lastCheckInAt: string } | undefined {
         return undefined;
@@ -3015,29 +3022,34 @@ class InMemoryDb {
     }
 
     /**
-     * Owners whose account deletion has begun on this process and has not
-     * yet had its statement for every switch it lists (`beginOwnerDeletion`,
-     * `endOwnerDeletion`): in this process's memory only, a lookup on the
-     * path that fires a switch and no second table in the database, so
-     * decision 32's concern does not apply.
+     * Owners whose account deletion has begun on this process and whose last
+     * statement over their switches has not yet answered
+     * (`beginOwnerDeletion`, `endOwnerDeletion`): in this process's memory
+     * only, a lookup on the path that fires a switch and no second table in
+     * the database, so decision 32's concern does not apply.
      */
     private readonly ownerDeletionsInProgress = new Set<string>();
 
     /**
      * The owner's deletion has begun on this process: from before its first
-     * `await` until `endOwnerDeletion`, this process's sweep moves none of
+     * `await` until `endOwnerDeletion`, this process's sweep starts no move of
      * the owner's switches (`deadmanSwitchErasePending`), so one whose
      * deadline falls while the deletion awaits an earlier switch's statement,
-     * or the owner's arms in flight, is not fired here with the owner's row
-     * already gone from this mirror and then erased as fired (round 14 of
-     * part 2's review). Another process's sweep is not held by it: a switch
-     * it fires in that window is erased as fired, as decision 30 has it.
+     * the owner's arms in flight or its last statement is not fired here with
+     * the owner's row already gone from this mirror and then erased as fired
+     * (round 14 of part 2's review; round 15: the mark ended with the
+     * per-switch loop, and a switch read back armed after its erase was
+     * dropped was fired here before the last statement ran). A move this
+     * sweep had already sent when the deletion began is not held back: it can
+     * still land, and the switch is then erased as fired. Another process's
+     * sweep is not held by it either: a switch it fires in that window is
+     * erased as fired, as decision 30 has it.
      */
     beginOwnerDeletion(ownerId: string): void {
         this.ownerDeletionsInProgress.add(ownerId);
     }
 
-    /** The deletion has had its statement for every switch it listed (each applied, or queued and marked). */
+    /** The deletion's last statement over the owner's switches has answered (`finishAccountDeletion`), or failed. */
     endOwnerDeletion(ownerId: string): void {
         this.ownerDeletionsInProgress.delete(ownerId);
     }
@@ -3045,8 +3057,9 @@ class InMemoryDb {
     /**
      * Whether the owner's deletion has queued an erase of this switch that
      * has not yet landed (the Postgres store only: here the erase is made at
-     * once), or has begun on this process and not yet reached the switch
-     * (`beginOwnerDeletion`, in every store). While it is pending, this
+     * once), or has begun on this process and its last statement over the
+     * owner's switches has not yet answered (`beginOwnerDeletion`, in every
+     * store). While it is pending, this
      * process's mirror keeps the switch as it last had it, never a view of
      * its own of the erase (round 13 of part 2's review: it held its own
      * erase, cancelled and emptied, and the removal pass took that for a
@@ -9600,7 +9613,10 @@ export class PostgresBackedDb extends InMemoryDb {
      * it, a check-in or a cancel on the API process), one whose statement
      * failed or did not answer in time, and one this process's own write
      * moved elsewhere while it ran (the owner's deletion cancelling it) all
-     * return `undefined`.
+     * return `undefined`, and so does a trigger Postgres refuses because the
+     * owner made a refused attempt after the last check-in that this mirror
+     * had not heard of (decision 31, round 15): the row is then taken into
+     * the mirror, so the next pass gives the backlog window.
      */
     override async advanceDeadmanSwitch(
         id: string,
@@ -9706,6 +9722,21 @@ export class PostgresBackedDb extends InMemoryDb {
         { at: string; lastCheckInAt: string; carrying?: boolean }
     >();
 
+    /**
+     * How long after a carry that could not be sent, or that failed, it is
+     * tried again on its own (`scheduleCarryRetry`), whatever else the
+     * process asks the database meanwhile (round 15 of part 2's review: a
+     * failed carry was tried again only when another switch statement of the
+     * process answered, and in `deploy/docker/production` nothing else on the
+     * API process asks the database by itself, so after an outage that
+     * refused connections the worker fired the switch at its deadline). A
+     * field, so a test can shorten it.
+     */
+    carryRetryMs = 10_000;
+
+    /** The timer of the next carry retry, while a note is waiting for one. */
+    private carryRetryTimer: ReturnType<typeof setTimeout> | null = null;
+
     override switchStatementsStalledBetween(fromMs: number, toMs: number): boolean {
         return this.switchStalls.some(
             (stall) => stall.startedAt <= toMs && (stall.endedAt ?? Infinity) >= fromMs
@@ -9734,18 +9765,23 @@ export class PostgresBackedDb extends InMemoryDb {
      * backlog window as this process's own sweep does from the note
      * (`ownerAttemptRefusedSinceCheckIn`). Sent only while no switch
      * statement stands unanswered here: called when a note is made, when a
-     * stall settles and when a switch statement answers, so a note made
-     * during a stall is carried once the database answers again. A carry
-     * that lands ends the note (the row, with the column, is in the mirror
-     * and announced); one Postgres refuses ends it too (the switch moved on,
-     * or a check-in landed); one that fails keeps the note, and the next
-     * answer tries it again. Until it lands this process's sweep acts on the
-     * note as before; a note is lost with the process if it stops before the
-     * database answers.
+     * stall settles, when a switch statement answers, and on its own timer
+     * every `carryRetryMs` after a carry failed (round 15 of part 2's review:
+     * without the timer a carry that failed, or was made during a stall
+     * that settled with an error, waited for another switch statement of
+     * the process to answer, and in `deploy/docker/production` nothing else
+     * on the API process asks the database by itself). A carry that lands
+     * ends the note (the row, with the column, is in the mirror and
+     * announced); one Postgres refuses ends it too (the switch moved on, or
+     * a check-in landed); one that fails keeps the note for the next try.
+     * Until it lands this process's sweep acts on the note as before, and a
+     * sweep elsewhere does not see it; a note is lost with the process if it
+     * stops before the carry lands.
      */
     private carryRefusedOwnerWrites(): void {
         const plan = this.plans.get('deadmanSwitches');
         const queue = this.queue;
+        // While a stall stands nothing is sent: its settling calls this again.
         if (!plan || !queue || this.stalledSwitchStatement) return;
         const table = plan.descriptor.tableName;
         const map = this.mapByName('deadmanSwitches');
@@ -9775,6 +9811,7 @@ export class PostgresBackedDb extends InMemoryDb {
                         // nothing of this one is this mirror's to take.
                         if (this.unansweredOwnerWrites.get(id) !== note) return;
                         this.unansweredOwnerWrites.delete(id);
+                        this.endCarryRetryIfNoneWaits();
                         if (!row) {
                             log.info('deadman_owner_attempt_not_carried', {});
                             return;
@@ -9798,9 +9835,43 @@ export class PostgresBackedDb extends InMemoryDb {
                         log.warn('deadman_owner_attempt_carry_failed', {
                             error: err instanceof Error ? err.message : String(err),
                         });
+                        this.scheduleCarryRetry();
                     }
                 );
         }
+    }
+
+    /**
+     * Try the carry again in `carryRetryMs` while any note's carry has failed
+     * and not been tried since: on its own timer, so a note is carried once
+     * the database answers this process again even when nothing else on the
+     * process asks it anything (round 15 of part 2's review). A timer that
+     * finds a stall standing sends nothing; the stall's settling tries again.
+     * The timer does not keep the process alive, and none is set once every
+     * note has landed, been refused or ended otherwise.
+     */
+    private scheduleCarryRetry(): void {
+        if (this.carryRetryTimer) return;
+        let waiting = false;
+        for (const note of this.unansweredOwnerWrites.values()) {
+            if (!note.carrying) waiting = true;
+        }
+        if (!waiting) return;
+        this.carryRetryTimer = setTimeout(() => {
+            this.carryRetryTimer = null;
+            this.carryRefusedOwnerWrites();
+        }, this.carryRetryMs);
+        this.carryRetryTimer.unref?.();
+    }
+
+    /** No note waits for a retry any more: the timer, if one is set, goes. */
+    private endCarryRetryIfNoneWaits(): void {
+        if (!this.carryRetryTimer) return;
+        for (const note of this.unansweredOwnerWrites.values()) {
+            if (!note.carrying) return;
+        }
+        clearTimeout(this.carryRetryTimer);
+        this.carryRetryTimer = null;
     }
 
     private noteOwnSwitchWrite(
@@ -10267,6 +10338,20 @@ export class PostgresBackedDb extends InMemoryDb {
         const columns = Object.keys(written);
         const table = plan.descriptor.tableName;
         const n = columns.length;
+        // The trigger is refused where the owner made a refused attempt after
+        // the last landed check-in and the switch has not had its backlog
+        // window (decision 31): the column is the database's, so a sweep whose
+        // mirror has not yet heard of a carry that landed elsewhere (its
+        // announcement lost, or the refresh it asked for failed) does not fire
+        // the switch and wipe the column (round 15 of part 2's review). The
+        // refusal takes Postgres's row into the mirror, so the next pass gives
+        // the window; a switch that had its window fires when it ends.
+        const heldByRefusedAttempt =
+            patch.status === 'triggered'
+                ? 'AND (owner_attempt_refused_at IS NULL ' +
+                  'OR owner_attempt_refused_at <= last_check_in_at ' +
+                  'OR backlog_grace_started_at IS NOT NULL) '
+                : '';
         const note = new Map<string, unknown>();
         const notes = this.switchWritesInFlight.get(id) ?? new Set<Map<string, unknown>>();
         notes.add(note);
@@ -10283,6 +10368,7 @@ export class PostgresBackedDb extends InMemoryDb {
                             .join(', ')} ` +
                             `WHERE id = $${n + 1} AND status = $${n + 2} ` +
                             `AND last_check_in_at = $${n + 3}::timestamptz ` +
+                            heldByRefusedAttempt +
                             'RETURNING *',
                         [...columns.map((c) => written[c]), id, read.status, read.lastCheckInAt]
                     )
@@ -10353,6 +10439,16 @@ export class PostgresBackedDb extends InMemoryDb {
         if ('applied' in answer && current) {
             this.unansweredOwnerWrites.delete(id);
             return { kind: 'applied', record: current, statusMovedHere: note.has('status') };
+        }
+        if (
+            patch.status === 'triggered' &&
+            current &&
+            current.status !== 'triggered' &&
+            current.status !== 'cancelled' &&
+            !current.backlogGraceStartedAt &&
+            ownerAttemptRefusedSinceCheckIn(current)
+        ) {
+            log.info('deadman_trigger_held_by_refused_attempt', {});
         }
         if (current?.status === 'cancelled') this.blankHeldCopiesOf(id);
         return { kind: 'refused', current };
@@ -10621,11 +10717,17 @@ export class PostgresBackedDb extends InMemoryDb {
      * each was left armed with its content, and fired at its deadline for an
      * account that was gone). The rows erased go into the mirror with every
      * copy of theirs as Postgres has them and are announced, which ends a
-     * queued erase still marked; a row and copies nothing changed go in only
-     * where the mirror lacks them, announced to nobody (round 14: a fired
-     * switch this mirror never had went in with the owner's blanked copy
-     * alone, never the recipients' held ones, so the release was served to
-     * nobody on the deleting process until it restarted). An arm that
+     * queued erase still marked; a row nothing changed goes in where the
+     * mirror holds it marked (its queued erase dropped and read back without
+     * success) or with another status or `releasedAt` than Postgres, which
+     * ends the mark (round 15: a fired switch with no label, which the first
+     * statement does not rewrite, kept a stale armed view and its mark for
+     * good, and was served to nobody here), and otherwise only where the
+     * mirror lacks it, its copies where the mirror lacks them; neither is
+     * announced (round 14: a fired switch this mirror never had went in
+     * with the owner's blanked copy alone, never the recipients' held ones,
+     * so the release was served to nobody on the deleting process until it
+     * restarted). An arm that
      * commits after this (a statement the database was still running when
      * its client was lost) is not reached. The caller
      * (`finishAccountDeletion`) drains first too; this one stands on its own,
@@ -10710,10 +10812,29 @@ export class PostgresBackedDb extends InMemoryDb {
                 );
                 continue;
             }
-            // Nothing changed in Postgres: the row and its copies go in only
-            // where this mirror lacks them, and nothing is announced.
-            if (!map.has(id) && !this.switchWritesInFlight.has(id)) {
-                map.set(id, rowToRecord(plan, row));
+            // Nothing changed in Postgres. Where this mirror holds the switch
+            // marked (a queued erase dropped and its read back failed) or
+            // with another status or `releasedAt` than Postgres (a trigger
+            // committed elsewhere it was not told of), the row is taken,
+            // which ends the mark (round 15 of part 2's review: a fired switch
+            // with no label was not rewritten here, so the stale armed view
+            // and the mark stayed, and this process served the release to
+            // nobody until it restarted); otherwise the row goes in only
+            // where this mirror lacks it. Its copies go in where this mirror
+            // lacks them. Either way nothing is announced.
+            const fromPostgres = rowToRecord(plan, row);
+            const held = map.get(id);
+            const behind =
+                held !== undefined &&
+                (this.erasesPending.has(id) ||
+                    held.status !== fromPostgres.status ||
+                    held.releasedAt !== fromPostgres.releasedAt);
+            if (behind) {
+                this.erasesPending.delete(id);
+                this.unansweredOwnerWrites.delete(id);
+                if (!this.switchWritesInFlight.has(id)) map.set(id, fromPostgres);
+            } else if (!held && !this.switchWritesInFlight.has(id)) {
+                map.set(id, fromPostgres);
             }
             for (const copy of ofSwitch.get(id) ?? []) {
                 const record = rowToRecord(wrapPlan, copy);
@@ -10965,6 +11086,8 @@ export class PostgresBackedDb extends InMemoryDb {
 
     /** Flush queued writes and tear down the change subscription — graceful shutdown only. */
     async shutdown(): Promise<void> {
+        if (this.carryRetryTimer) clearTimeout(this.carryRetryTimer);
+        this.carryRetryTimer = null;
         await this.drain();
         await this.transport?.close();
     }

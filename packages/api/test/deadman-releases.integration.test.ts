@@ -2272,6 +2272,7 @@ test('the account deletion route revokes the session, then waits for the deletio
         drain: async () => {
             order.push('drain');
         },
+        endOwnerDeletion: () => {},
         endDeadmanReleaseNoticesOfDeletedAccount: () => {
             order.push('end');
             return new Promise<number>(() => {});
@@ -2297,6 +2298,7 @@ test('the account deletion route revokes the session, then waits for the deletio
             new Promise<void>((resolve) => {
                 drained = resolve;
             }),
+        endOwnerDeletion: () => {},
         endDeadmanReleaseNoticesOfDeletedAccount: async () => {
             order.push('end after the drain');
             return 0;
