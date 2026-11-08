@@ -496,7 +496,9 @@ fourth review on 2026-10-31). The detail is in
     joins the three above in `.trivyignore`, with an expiry of 2026-11-30.
     **Twisted 26.10.0 final was published on 2026-10-30.** It fixes all four.
     The plan is to lock it in its own change before 2026-11-30, then delete
-    the four entries.
+    the four entries. Done by the change that
+    `dependency-advisories-twisted-2026-11-02.md` records, which locks
+    26.10.0 (with zope-interface 8.7) and removes the four entries.
 -   **The three Twisted entries above now expire on 2026-11-30 too.** The
     [Twisted section](#twisted-three-highs-fixed-only-in-a-pre-release) gives
     them a review date of 2026-12-31, which was only prose: Trivy would have

@@ -59,8 +59,42 @@ The following config options are available:
 
 - `username` - The username for the manhole (defaults to `matrix`)
 - `password` - The password for the manhole (defaults to `rabbithole`)
-- `ssh_priv_key` - The path to a private SSH key
-- `ssh_pub_key` - The path to a public SSH key
+- `ssh_priv_key_path` - The path to a private SSH key, the manhole's host key:
+  an RSA, Ed25519 or ECDSA (P-256, P-384 or P-521) key, unencrypted, in the
+  format `ssh-keygen` writes. Synapse refuses to start if the file holds a
+  public key, an EC key on any other curve (one `openssl` wrote, say), which
+  the SSH server has no key type for, or a DSA (`ssh-dss`) key: every ssh-dss
+  signature uses SHA-1, and the SSH server cannot in practice sign with a DSA
+  key whose subgroup order is 224 or 256 bits, as every standard DSA key
+  larger than 1024 bits has.
+- `ssh_pub_key_path` - The path to the matching public SSH key. Optional: when
+  it is unset, the public half is derived from the private key. When it is set,
+  it must be the public half of the key at `ssh_priv_key_path`; a public key of
+  another type, or of another key, or a DSA key or an EC key on a curve other
+  than P-256, P-384 or P-521, stops startup with a configuration error.
+  Set on its own, without `ssh_priv_key_path`, it is ignored with a warning,
+  since a host key must be able to sign.
+
+Synapse checks these keys only when the configuration declares a manhole
+listener for the process it is loaded as: for the main process, a
+`type: manhole` entry in `listeners` or the `manhole` option; for a worker, a
+manhole entry in `worker_listeners` or the `worker_manhole` option. Without
+one, `manhole_settings` is not used, and a key there that would be refused
+does not stop the homeserver. The check follows the configuration, not what
+the process goes on to start: `synapse.app.admin_cmd` starts no listener, but
+given the homeserver's configuration it is checked as the main process, so it
+refuses the keys the homeserver would, and given a worker configuration it is
+checked as that worker. A key file that cannot be read stops startup either
+way.
+
+Until the change that locked Twisted 26.10.0 in this build, this page named
+these `ssh_priv_key` and `ssh_pub_key`. The configuration parser reads only the
+`_path` names and accepts unknown keys without complaint, so a config written
+from the old text runs on an ephemeral host key (and, before that change, did
+not start at all). Until the same change, only an RSA key pair worked: with an
+Ed25519 or ECDSA key pair (both paths set) the manhole started without a warning
+and every connection to it failed, with any key set alone the homeserver did not
+start, and a mismatched key pair was not refused.
 
 For example:
 
@@ -68,8 +102,8 @@ For example:
 manhole_settings:
   username: manhole
   password: mypassword
-  ssh_priv_key: '/home/synapse/manhole_keys/id_rsa'
-  ssh_pub_key: '/home/synapse/manhole_keys/id_rsa.pub'
+  ssh_priv_key_path: '/home/synapse/manhole_keys/id_ed25519'
+  ssh_pub_key_path: '/home/synapse/manhole_keys/id_ed25519.pub'
 ```
 
 ### Set a host key. This build will not use a shared one.
@@ -88,14 +122,22 @@ case; the Docker instructions above nonetheless have you bind `0.0.0.0` and
 rely on a `-p 127.0.0.1:9000:9000` publish rule, and publish rules get
 mistyped.
 
-The practical consequence: with no `ssh_priv_key`/`ssh_pub_key` configured, the
-manhole logs a warning at startup and its host key changes every restart, so
-your ssh client will report a changed host key each time. To get a stable one,
-generate a keypair and point the config at it:
+The practical consequence: with no `ssh_priv_key_path` configured, the manhole
+logs a warning at startup and its host key changes every restart, so your ssh
+client will report a changed host key each time. A client then has nothing
+stable to check the key against and cannot tell a restart from an impersonator,
+so a key that changes on every restart protects the password you type less
+than a pinned one. To get a stable one, generate a keypair and point
+`ssh_priv_key_path` at its private half (`ssh_pub_key_path` is optional):
 
 ```bash
-ssh-keygen -t rsa -b 4096 -f /home/synapse/manhole_keys/id_rsa -N ""
+ssh-keygen -t ed25519 -f /home/synapse/manhole_keys/id_ed25519 -N ""
 ```
+
+An RSA key (`ssh-keygen -t rsa -b 4096`) or an ECDSA key (`-t ecdsa`) works as
+well; a DSA key (`-t dsa`) is refused at startup. The key is a _host_ key: it lets your ssh client check that it is talking
+to your server. The keys that encrypt the session are agreed afresh by the SSH
+key exchange on each connection.
 
 That is the recommended setup for anything you use more than once, and it is
 now genuinely private rather than an override of a public default.
