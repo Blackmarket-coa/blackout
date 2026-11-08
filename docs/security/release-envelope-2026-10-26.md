@@ -7376,21 +7376,25 @@ here".
     stall settles and the carry lands, logged once, the column set to the
     attempt's moment, the note gone, announced, hydrated by a fresh store; a
     sweep at the deadline with the note gone and no stall in the window gives
-    the window from the column alone; the landed check-in clears column and
-    mirror, and the export), test 29 (a column older than the last check-in
+    the window from the column alone, run on this process's store, since the
+    sweep reads the process's one store (`db`), while a store opened afresh,
+    as the worker's is at its start, hydrates the same column; the landed
+    check-in clears column and mirror, and the export), test 29 (a column older than the last check-in
     holds nothing: the trigger fires and clears it), test 30 (the carry's
     statement thrown once: the note kept, the column null, logged; another
     owner's applied check-in is the next answer, and the carry lands), test
-    31 (the carry refused for a switch the worker fired meanwhile and one
-    whose owner checked in elsewhere meanwhile, both notes ended; a column
-    set on a fired switch moves nothing; the cancel clears a column set),
+    31 (the carry refused for a switch the worker fired meanwhile, one whose
+    owner checked in elsewhere meanwhile and, since the check below, one
+    cancelled elsewhere meanwhile, every note ended; a column set on a fired
+    switch moves nothing; the cancel clears a column set),
     scheduler tests 19 and 20 (the comparison at, before and after the
     check-in; `applyCheckIn` forgets it), the backlog-postgres file's test 2
     (the column written, and erased by the deletion for a fired and an
     unfired switch), the file store's test 3 (the field survives a restart;
     the conditional check-in clears it) and the memory-mode releases file's
     test 28 (the window from the field, the trigger, the check-in and the
-    cancel forgetting it, the export). R01–R08, R16–R18 below. §15,
+    cancel forgetting it, the export, and since the check below the owner's
+    deletion erasing it). R01–R08, R16–R18 and R19–R22 below. §15,
     decision 31, `KNOWN_LIMITATIONS.md` (the Durability item's
     deployed-layout sentences, and the backlog item), the threat model's row,
     the changelog and the sweep's and scheduler's docstrings say what the
@@ -7412,8 +7416,9 @@ here".
     process. Test 33 (a release fired on the worker that this process never
     had, and a fired switch with no label it never had either: both
     triggered in the mirror with the recipient's held copy, served here,
-    listed by the route; the second not announced, since nothing changed).
-    R10, R11b.
+    listed by the route; the second not announced, since nothing changed;
+    and, since the check below, two switches it never had carrying a refused
+    attempt, each losing it to the last statement). R10, R11b, R20, R21.
 -   **The deleting process's own sweep fired an unfired switch during the
     deletion (Low, attack replay; fixed in code).** The sweep skipped a
     switch whose erase was queued, not one listed and not yet reached; a
@@ -7605,8 +7610,78 @@ snapshot afterwards, one test command at a time; the switch-writes file has
 | R18: the export omits the refused attempt                                              | `deadman-releases.integration.test.ts`               | test 28: `undefined` in the owner's export                                     |
 
 Not counted as checks: the docstrings, the sweep scheduler's and the
-notifier's comments, and the memory store's `beginOwnerDeletion` and
-`endOwnerDeletion` bodies, which R09 and R09b cover through the mark.
+notifier's comments, the memory store's `beginOwnerDeletion` and
+`endOwnerDeletion` bodies, which R09 and R09b cover through the mark, and
+the 365-day removal's clearing of the refused attempt, which no test can
+reach: the removal reaches only a fired switch, the trigger clears the
+column and the carry refuses a fired switch, so the removal finds it clear
+(kept as belt-and-braces).
+
+#### Round 14, checked before the report
+
+The round's work (`58d64a0264`, `bcf8f32aa6`, `484c5253ee`) was read again
+against the brief and the round-13 verdicts before the report, since the
+agent that did it was cut off at its final report. Decision 31 is built in
+the memory, file and Postgres stores, the migration, the export and the
+erase as the entry above says, each round-13 verdict is fixed in code or
+made true, the twenty-two mutants above are in the run's own log, all
+`KILLED` (`fix/mut/run-round14.log`, `result-round14.json`), and the gates
+ran on `484c5253ee` (below). Four checks were not pinned on their own, two
+sentences still read as conditional, and the entry did not say on which
+store test 28's sweep runs; each is fixed here (`a53c2ecfb2` and the
+`docs(security)` commit after it).
+
+-   **The carry's cancelled condition was tested only together with the
+    fired one (Low; pinned).** R04 removed both; with the cancelled
+    condition removed alone, test 31 passed, since no carry met a cancelled
+    switch. Test 31 now has a third switch, cancelled on the worker while
+    the stall stands with its last check-in unchanged, so that condition
+    alone refuses its carry: refused, the note ended, the column null. R19.
+-   **The deletion's last statement's erasure of the refused attempt was
+    unreached (Low; pinned).** The last statement sets
+    `owner_attempt_refused_at = NULL`, and its narrowed `WHERE` reaches a
+    row whose only remnant is that column, but the per-switch erase clears
+    the column first on every switch the deleting process lists, so neither
+    was reached: with either removed, test 33 passed. Test 33 now adds two
+    switches this process never had, each carrying a refused attempt in
+    Postgres (one armed, one cancelled with nothing else left): the armed
+    one is cancelled and emptied, the spent one rewritten for the column
+    alone, and both lose it in Postgres and in the mirror. R20, R21.
+-   **The memory and file stores' erase of the field was unreached (Low;
+    pinned).** `erasedSwitchRecord` clears it, and with that removed the
+    memory-mode releases test 28 passed. It now deletes an owner of an
+    unfired and a fired legacy switch carrying it: both lose it. R22.
+-   **Test 28's sweep (Low, precision; the entry corrected).** The brief
+    asked for the worker store's sweep at the deadline. The sweep reads the
+    process's one store (`db`, a module constant), so test 28 runs it on
+    the API process's store with that process's note gone and its stall
+    long before the deadline, which leaves the column as the only thing
+    that can hold the switch, and checks that a store opened afresh, as the
+    worker's is at its start, hydrates the same column. The entry above now
+    says so.
+-   **"... before the deletion is answered, and a last statement then
+    erases" (Low, claims; done).** In the threat model's row and the
+    changelog the last step still followed the clause about a database that
+    does not answer in time, as the deletion screen's sentence did before
+    this round, so it read as conditional; it runs on every deletion. Both
+    now say every deletion's last statement (the changelog: last step).
+-   **Develop.** `58d64a0264` merged `origin/develop` at `7bda9eb72a`.
+    Develop has since moved to `27d8c17051` (#998: the Synapse fork's
+    Nixpacks removal and lodash 4.18.1, nothing under `packages/api`); it is
+    not merged this round, and waits for a later one.
+
+The four mutants (`fix/mut/spec-round14b.json`, run with the round-7 runner
+against this worktree, `store.ts` restored after each and compared with a
+snapshot afterwards; each run first against the tests as `484c5253ee` has
+them, where all four survived, `fix/mut/r14b-before/`, then against the
+tests above, where all four were caught, `fix/mut/r14b/`):
+
+| Check removed                                                                            | Test file                                            | What failed                                  |
+| ---------------------------------------------------------------------------------------- | ---------------------------------------------------- | -------------------------------------------- |
+| R19: the carry lands on a cancelled switch (the fired condition kept)                    | `deadman-switch-writes-postgres.integration.test.ts` | test 31: two carries refused where three     |
+| R20: the deletion's last statement does not erase the refused attempt                    | `deadman-switch-writes-postgres.integration.test.ts` | test 33: the column kept on the armed switch |
+| R21: the last statement's narrowed `WHERE` misses a row whose only remnant is the column | `deadman-switch-writes-postgres.integration.test.ts` | test 33: the column kept on the spent switch |
+| R22: the memory and file stores' erase keeps the refused attempt                         | `deadman-releases.integration.test.ts`               | test 28: the field kept after the deletion   |
 
 ### Still open
 

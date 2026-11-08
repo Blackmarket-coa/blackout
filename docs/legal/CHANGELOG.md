@@ -154,9 +154,9 @@ each correction.
     writing (one still unanswered after that is cancelled when its write
     answers, or by the last step) and fires none of the account's switches
     itself meanwhile; where the database does not answer that question in
-    time it is asked again, queued, before the deletion is answered, and a
-    last step then erases in the database every switch it holds for the
-    account, including one that process never had, and reads every switch
+    time it is asked again, queued, before the deletion is answered; every
+    deletion's last step then erases in the database every switch it holds
+    for the account, including one that process never had, and reads every switch
     and copy of the account's into the deleting process, so a release that
     fired elsewhere is shown to the people it named there too; a switch is
     left as the database had it, so one that had not fired could still
