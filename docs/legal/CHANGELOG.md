@@ -141,13 +141,20 @@ each correction.
     then gets the 72-hour grace window instead of firing; such a stall counts
     only in the server process whose statements stood. A check-in or cancel
     refused that way is written onto the switch by the server process that
-    refused it, which tries again on its own every 10 seconds until it is
-    written (each failure logged), and the database then refuses to fire the
-    switch before it has had its grace window, so it gets the window at its
-    deadline in whichever process runs the sweep, unless you check in again
-    first; that note is lost if the process stops before it is written, and
-    the sweep's first pass after the database answers again can come before
-    that next try and fire a switch already due
+    refused it, which tries at once and again on its own 10 seconds after
+    each try that failed until it is written (each failure logged), each try
+    on a database connection of its own and given up after 5 seconds, so a
+    write of that process's that the database never answers does not hold
+    it back; the database then refuses to fire the switch before it has had
+    its grace window, so it gets the window at its deadline in whichever
+    process runs the sweep, unless you check in again first. That note is
+    lost if the process stops before it is written; the sweep can fire a
+    switch already due before it is written, in the time before the next
+    try once the database answers that process again (within 15 seconds)
+    and for as long as the database answers the sweep's process but not
+    that one; and while a write of that process's stands unanswered, which
+    the server's database pool, setting no timeout, can leave for minutes,
+    check-ins there are refused at once
     ([`KNOWN_LIMITATIONS.md`](../../KNOWN_LIMITATIONS.md)).
 -   **Deleting an account** removes the sealed copies of its unfired release
     switches with their content (whether a switch has fired is decided on

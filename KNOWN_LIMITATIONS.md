@@ -707,7 +707,13 @@ For the source-of-truth triage with tier/owner detail see
     unconfirmed, every further check-in and cancel on that process is
     answered 503 at once, without being sent, so those were certainly not
     recorded, until it settles, which is when its row is in that server's
-    memory; a cancel the database confirms late takes
+    memory. Nothing bounds how long that takes: the server's database pool
+    sets no connection or statement timeout, so a write sent on a connection
+    the database never answers (one a failover or a network fault left
+    dangling) settles only when the operating system gives up on that
+    connection, which can be minutes after the database answers again; each
+    check-in refused meanwhile is still written onto the switch, as below. A
+    cancel the database confirms late takes
     effect then (the switch shows cancelled and its copies are removed), and
     a check-in confirmed late counts. The server's own move of a switch
     (into grace, or firing it) is checked the same way and reaches the
@@ -720,26 +726,40 @@ For the source-of-truth triage with tier/owner detail see
     that way, gets the backlog window (below) at the first pass after it
     rather than firing, within the 15 minutes or not. A check-in or cancel
     refused that way is noted by the server process that refused it and
-    written onto the switch itself (`owner_attempt_refused_at`, migration
-    107): at once where the database answers, and otherwise tried again by
-    that process on its own every 10 seconds (and whenever another switch
-    write of that process is answered) until it is written, each failure
-    logged. The sweep reads the mark in whichever process runs it, and the
-    database itself refuses to fire a switch so marked that has not yet had
-    its backlog window, even for a process that has not heard of the mark,
-    which then reads it; so where the API and the sweep are separate
+    written onto the switch itself by that process
+    (`owner_attempt_refused_at`, migration 107): tried at once, and again on
+    its own 10 seconds after each try that failed (and whenever another
+    switch write of that process is answered) until it is written, each
+    failure logged. Each try
+    takes a database connection of its own and gives up after 5 seconds,
+    dropping that connection, so neither a write of that process's that
+    stands unconfirmed nor a try the database never answers holds the next
+    one back. The sweep reads the mark in whichever process runs it, and
+    the database itself refuses to fire a switch so marked that has not yet
+    had its backlog window, even for a process that has not heard of the
+    mark, which then reads it; so where the API and the sweep are separate
     processes (`deploy/docker/production`), a check-in refused on the API
     process during a database outage holds the switch back on the worker
     too once the mark is written, as long as you have not checked in since
     (the 503 says the check-in may not have been recorded; checking in again
-    once the database answers is the sure way). What is left: the process
+    is the sure way once one is answered as done, and while a write of that
+    process's stands unconfirmed every check-in there is refused at once,
+    each written onto the switch the same way). What is left: the process
     that refused your check-in loses its note if it stops before the mark is
     written, and until then the switch is held back on that process alone;
-    the worker's first pass after the database answers again can come before
-    that process's next try (at most 10 seconds later) and fire a switch
-    already due; and a stall itself is known only to the process whose
-    statements stood, so a switch due during an outage that only the API
-    process's statements met is not held back for that alone.
+    the worker's pass can fire a switch already due before the mark is
+    written: in the time before that process's next try once the database
+    answers new connections from it again (that try starts within 15
+    seconds: one under way when it starts answering can wait out its 5
+    seconds first, and the next comes 10 seconds later; each connection the
+    pool hands it that the database no longer answers costs one more try),
+    and for as long as the database answers the worker but not that process
+    (a network fault between them, or every connection of that process's
+    pool held by a statement the database never answered, which the
+    operating system gives up on only after minutes); and a stall itself is known only
+    to the process whose statements stood, so a switch due during an outage
+    that only the API process's statements met is not held back for that
+    alone.
 -   The switches that exist were armed through the API before this. Their
     payload is whatever was sent: the server never decrypts it and cannot
     tell whether it is ciphertext. Recipients named by Blackout account id

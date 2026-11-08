@@ -52,8 +52,16 @@ recorded under the same heading, with decisions 32 and 33 new. Round 15, on
 2026-11-08, read round 14's fixes: its high finding (the trigger's
 conditional write in Postgres ignored a refused attempt carried there, so a
 sweep not yet told of the carry fired the switch and wiped it), three medium
-and ten low are each fixed or made true under the same heading, with
-decision 34 new.
+and nine low are each fixed or made true under the same heading, one low
+(the model names in the commit trailers) is recorded with no action, and
+decision 34 is new. Round 16, the same day, read round 15's fixes: its
+three medium findings, one finding seen by all three verifiers (a refused
+check-in's carry was held back by its process's own unanswered statement
+and by a carry that hung, which the database pool bounds by nothing short
+of the operating system's TCP timeouts, so the "at most 10 seconds" the
+documents gave was not so), are fixed in code with what is left stated;
+six low are fixed or made true and one (the model names) recorded with no
+action; decision 35 is new.
 
 **State read:** the PR 2 branch at `6ae33bc2e2` (#991), on `develop` at
 `8a20ad6a0b`; PR 2 then merged as `e1d4cec964`, which this branch merged. **Read** means a claim rests on the code or a standard; **Run**
@@ -1586,7 +1594,15 @@ message, and nothing here makes a release happen on time (§10, R12).
     not answer says the database is not answering, and since round 11 a
     statement waits only for this process's earlier writes of the same
     switch, so a backlog of its other writes no longer sets it), and a
-    stalled database ends a pass after about one bound. The store keeps when
+    stalled database ends a pass after about one bound. Nothing bounds how
+    long such a statement stands: the shared pool sets no connection,
+    statement or keepalive timeout, so one sent on a connection the database
+    never answers (a socket a failover or a network fault left black-holed)
+    settles only when the operating system gives up on it, minutes after the
+    database may have begun answering again, and every check-in and cancel
+    on that process is refused 503 at once meanwhile; the carry of each
+    such refusal is not held back by it (below; decision 35 puts the pool's
+    timeouts to the operator; round 16 of the review). The store keeps when
     its statements began to stand unanswered and when they settled, and
     notes a check-in or cancel refused unanswered with the switch's last
     check-in as it then stood; the sweep gives a switch due at any moment
@@ -1601,25 +1617,44 @@ message, and nothing here makes a release happen on time (§10, R12).
     that process has carried the attempt into the switch's row
     (`carryRefusedOwnerWrites`; decision 31, the operator's choice of
     2026-11-02, built in round 14): one conditional
-    statement in the switch's lane, `UPDATE deadman_switches SET
+    statement per note, `UPDATE deadman_switches SET
 owner_attempt_refused_at = <the attempt's moment> WHERE id = ... AND
 status <> 'triggered' AND status <> 'cancelled' AND last_check_in_at =
 <the one the attempt read> AND (owner_attempt_refused_at IS NULL OR
-older) RETURNING *` (migration 107), sent when the note is made unless a
-    stall stands, when a stall settles, when any switch statement of that
-    process answers, and, once one has failed, on that process's own timer
-    every 10 s (`carryRetryMs`) until it lands or Postgres refuses it,
-    whatever else the process asks (round 15: without the timer a failed
-    carry waited for another switch statement of the same process to
-    answer, and in `deploy/docker/production` nothing else on the API
-    process asks the database by itself, so after an outage that refused
-    connections, or a stall that settled with an error while the database
-    was still down, a quiet server's worker fired the switch at its
-    deadline; this said a note made during an outage "is carried once the
-    database answers again"). One that lands ends the note (the row, with
-    the column, is in the mirror and announced); one Postgres refuses ends
-    it too (the switch moved on, or a check-in landed since: the owner's
-    later word); one that fails keeps the note for the timer's next try.
+owner_attempt_refused_at <= <the attempt's moment>) RETURNING *`
+    (migration 107; the same moment is written again, so a try that landed
+    with its answer lost is taken by the next, round 16). Since round 16 each
+    try takes one connection of its own from the pool, outside the
+    write-behind queue, and sends every waiting note's statement on it in
+    turn, the connection and each statement within 5 s
+    (`carryTimeoutMs`); one that passes its bound or fails ends the try,
+    and its connection is given back with the error, so the pool drops it
+    (node-postgres destroys a connection whose statement is still out). A
+    try is made when a note is made, when any switch statement of that
+    process answers, when a stall settles, and on that process's own timer
+    10 s (`carryRetryMs`) after a try that failed or passed its bound,
+    until the note lands or Postgres refuses it, whatever else the process
+    asks and whether or not a switch statement of that process stands
+    unanswered (round 15: without the timer a failed carry waited for
+    another switch statement of the same process to answer, and in
+    `deploy/docker/production` nothing else on the API process asks the
+    database by itself; round 16: the carry was sent only while no switch
+    statement stood unanswered on that process, in the switch's lane
+    behind them, and only a failed carry armed the timer, so while that
+    process's own stalled statement waited, which the pool, with no
+    connection or statement timeout, leaves to the operating system's TCP
+    timeouts, or while a carry hung on a connection the database never
+    answered, nothing was carried with the database answering every other
+    connection, and the worker fired the switch at its deadline). Outside
+    the queue the carry is ordered after nothing the process queued; its
+    condition keeps it right in any order (a check-in or move that lands
+    after it clears or outranks the column, one that landed before refuses
+    it), and no plain write of a switch is left in Postgres mode to write
+    the column over. One that lands ends the note (the row, with the
+    column, is in the mirror and announced); one Postgres refuses ends it
+    too (the switch moved on, or a check-in landed since: the owner's later
+    word); one that fails or passes its bound keeps the note for the next
+    try.
     The sweep in every process reads the column as it reads its own note
     (`ownerAttemptRefusedSinceCheckIn`: a moment after the switch's last
     check-in holds, one at or before it holds nothing), and a landed
@@ -1644,9 +1679,18 @@ older) RETURNING *` (migration 107), sent when the note is made unless a
     landed, unless the owner checked in since. What stays one process's
     own: a stall itself (the worker's sweep gives the window for a stall of
     its own statements only), and a note whose process stops before its
-    carry lands; and the worker's first pass after the database answers
-    again can come before the refusing process's next try, at most 10 s
-    later, and fire a switch already due (round 15) (round 12 of the review: this said the gap needed an
+    carry lands. And the worker's pass can fire a switch already due
+    before the carry lands: in the time before the refusing process's next
+    try once the database answers that process's new connections again
+    (that try starts within 15 s: one under way can wait out its 5 s bound,
+    and the next comes 10 s after; each connection the pool hands it that
+    the database no longer answers costs one more), and for as long as the
+    database answers the worker but not that process (a network fault
+    between them, or every connection of its pool held by a statement the
+    database never answered, which the pool leaves to the operating
+    system's TCP timeouts, minutes) (round 16: this said "at most 10 s
+    later", which held only for a carry that failed, not for one that hung
+    or one a standing stall held back) (round 12 of the review: this said the gap needed an
     outage the worker's statements did not meet, which was not a condition
     the code had; until round 14 the note never left the refusing process,
     so a check-in refused on the API process during an outage that ended
@@ -2572,13 +2616,18 @@ records what the API sends.
     in round 11 this confined the gap to an outage the worker's statements
     did not meet, which was not a condition the code had.)_ Now the refusing
     process carries the attempt into the switch's own row
-    (`owner_attempt_refused_at`, migration 107: one conditional statement in
-    the switch's lane, onto a switch not fired or cancelled whose last
-    check-in is still the one the attempt read and whose column is null or
-    older), sent at once and, after a failure, tried again on that process's
-    own timer every 10 s until it lands (round 15: it was tried again only
-    when another switch statement of that process answered, which on a quiet
-    API process may be never), and the sweep in every process gives a
+    (`owner_attempt_refused_at`, migration 107: one conditional statement
+    onto a switch not fired or cancelled whose last check-in is still the
+    one the attempt read and whose column is null, older or the same
+    moment), sent at once and, after a try that failed or passed its 5 s
+    bound, tried again on that process's own timer 10 s later until it
+    lands, each try on a connection of its own outside the write-behind
+    queue, whether or not a switch statement of that process stands
+    unanswered (round 15: it was tried again only when another switch
+    statement of that process answered, which on a quiet API process may be
+    never; round 16: it was sent only while no switch statement of that
+    process stood unanswered, in the switch's lane behind them, and a carry
+    that hung was never tried again), and the sweep in every process gives a
     switch whose owner made a refused attempt after its last landed
     check-in the backlog window at its deadline, exactly as the refusing
     process's own note does; the trigger's conditional statement in Postgres
@@ -2592,13 +2641,22 @@ records what the API sends.
     owner's data, and the deletion erases it with the switch. What remains:
     a note is lost with its process if it stops before its carry lands (the
     503 says the check-in may not have been recorded, and checking in again
-    is the sure way), the worker's first pass after the database answers
-    again can come before the refusing process's next try (at most 10 s
-    later) and fire a switch already due, and a stall itself is still known
-    to the process whose statements stood (§15, `KNOWN_LIMITATIONS.md`, the
+    is the sure way once one is answered as done; while a statement of that
+    process stands unanswered every check-in there is refused at once,
+    each carried the same way, and nothing bounds that stall: the pool sets
+    no timeout); the worker's pass can fire a switch already due before
+    the carry lands, in the time before the refusing process's next try
+    once the database answers that process's new connections again (within
+    15 s) and for as long as the database answers the worker but not that
+    process (a network fault, or a pool every connection of which a
+    statement the database never answered holds, which the operating
+    system gives up on after minutes); and a stall itself is still known to
+    the process whose statements stood (§15, `KNOWN_LIMITATIONS.md`, the
     threat model's row and the changelog say so; round 15: the changelog had
-    lost its sentence on stalls in round 14 and has it again). The cost
-    chosen: one statement per refused attempt, one more per 10 s while it
+    lost its sentence on stalls in round 14 and has it again; round 16:
+    each said the next try came "at most 10 seconds later", which held only
+    for a carry that failed). The cost chosen: one statement per refused
+    attempt, one connection per try and one more try per 10 s while it
     fails, a migration, and one more condition on the trigger.
 32. (Part 2, after its review's round 13.) An account deletion can still
     leave an unfired switch armed in Postgres, which a process that reads it
@@ -2651,19 +2709,55 @@ records what the API sends.
     the wait unbounded as round 13 built it.
 34. (Part 2, after its review's round 15. Built as the default; confirm or
     veto.) A check-in or cancel refused `unanswered` whose carry into the
-    switch's row (decision 31) fails is tried again by the refusing process
-    on its own timer every 10 s (`carryRetryMs`) until it lands or Postgres
+    switch's row (decision 31) fails, or since round 16 passes its 5 s
+    bound (decision 35), is tried again by the refusing process on its own
+    timer 10 s later (`carryRetryMs`), and so on until it lands or Postgres
     refuses it. Round 14 tried it again only when another switch statement
     of that process answered, which on the API process of
     `deploy/docker/production`, where nothing asks the database by itself,
     may be never before the deadline. What remains is a switch already due
-    that the worker's first pass after the database answers again reaches
-    before that next try, at most 10 s later. A shorter interval narrows
-    that, at the cost of one more failing statement and one warning
-    (`deadman_owner_attempt_carry_failed`) per interval per waiting note
-    while the database refuses (a refused connection fails at once; a pool
-    that hangs holds the one carry in flight and sends no more). Confirm
-    10 s, or choose another interval.
+    that the worker's pass reaches before the carry lands: in the time
+    before that next try once the database answers the refusing process's
+    new connections again (within 15 s: a try under way can wait out its
+    5 s bound, and the next comes 10 s after), and for as long as the
+    database answers the worker but not that process (§15). A shorter
+    interval narrows the first, at the cost of one more failing try and
+    one warning (`deadman_owner_attempt_carry_failed`) per interval while
+    the database refuses (a refused connection fails at once; since round
+    16 a try that hangs is given up after its bound and its connection
+    dropped, so it no longer holds the carry: round 15 said "a pool that
+    hangs holds the one carry in flight and sends no more", which was so
+    then, and the "at most 10 s" above it held only for a carry that
+    failed). Confirm 10 s, or choose another interval.
+35. (Part 2, after its review's round 16. Built as the default; confirm or
+    veto.) Each try of the carry takes one connection of its own from the
+    shared pool, outside the write-behind queue, and gives up after 5 s
+    (`carryTimeoutMs`) on the connection and on each statement, giving the
+    connection back with the error so the pool drops it; the carry is not
+    held back by a switch statement of that process that stands
+    unanswered. The stall itself is left as it is: the shared pool
+    (`src/config/postgres.ts`, `new pg.Pool({ connectionString })`) sets no
+    `connectionTimeoutMillis`, `query_timeout`, `statement_timeout` or
+    `keepAlive`, so a statement sent on a connection the database never
+    answers stands until the operating system gives up on the socket
+    (minutes; about 15 for an established one at Linux's defaults), and for
+    that time every check-in and cancel on that process is refused 503 at
+    once (each carried, so the switch is held, but the owner is refused).
+    The options: (a) leave the pool as it is (built); (b) give the shared
+    pool a connection timeout and TCP keepalive, which bounds a connection
+    that is never made and finds a dead idle one, but not a statement
+    already sent on a black-holed socket, which TCP's retransmission
+    timeout governs and node-postgres offers no user timeout for; (c) a
+    client-side `query_timeout` on the shared pool, which bounds the stall
+    but fails every longer statement of the whole API, migrate-on-start
+    included, and leaves each such statement's outcome unknown (it may
+    still commit), which is what the stall waits to learn before more
+    switch statements are sent (round 12); or (d) end the stall from a
+    fresh connection that finds the row as Postgres holds it, after
+    terminating the stalled statement's backend (`pg_terminate_backend`
+    on its process id, which a failed-over primary no longer has), which
+    needs that id kept per statement and the role's right to signal it.
+    Confirm (a) and the 5 s bound, or choose.
 
 ## Not verified here
 
@@ -8112,6 +8206,246 @@ and notices Postgres files (2 and 16), the memory notices file (32), the
 scheduler (20), auth lifecycle (15), release identities (17) and the
 account-number invite claim (9).
 
+### Round 16: what the verifiers found in round 15's fixes
+
+A sixteenth pass read round 15's head (`e339411250`) with three verifiers.
+The attack replay found one Medium: the "at most 10 seconds" bound on the
+carry's next try fails when the refusing process's own stalled statement
+outlives the outage, since the carry was sent only while no switch
+statement of that process stood unanswered, and the shared pool, with no
+connection, statement or keepalive setting, leaves such a statement to the
+operating system's TCP timeouts; for that time the API process sent no
+carry and refused every check-in 503, while a worker that reconnected fired
+the switch at its deadline (`fix/r15v-attack-replay/snap-d31-r15-s12.mts`,
+run on a snapshot of `e339411250`). The fix quality verifier found one
+Medium (the same: a carry that hangs, or a stall that stands, is never
+tried again, so the worker fires the switch at its deadline with the
+database answering the refusing process; `p1-hung-carry.mts`,
+`p1b-standing-stall.mts`) and three Low (the legacy half of the trigger's
+new condition pinned by no test, with its mutant X02 passing every test,
+and the last statement's `releasedAt` clause, X03, surviving too; the last
+statement's behind take keeping the mirror's sealed copies of a switch
+Postgres had cancelled with them blank, `p2-behind-copies.mts`; no record
+that the gates ran at `e339411250`). The claims verifier found one Medium
+(the carry described as "every 10 seconds until it lands" with "at most 10
+seconds later" left, in `KNOWN_LIMITATIONS.md`, the threat model's row and
+header, the changelog, §15, decisions 31 and 34, Still open and
+`deadman.ts`, though nothing was retried while a stall stood or while the
+timer's own carry hung; `stall-carry.mts` C1 and C2) and four Low
+(migration 107's down comment saying the switches fire at their deadlines
+and that no switch fires; round 14's wording in `deadmanSweepScheduler.ts`
+and a scheduler test comment; "`grep` over the tree finds none" of model
+names; "the timer is cleared once no note waits"). Each is fixed in code or
+made true here, and the model-name item is recorded with no action on the
+trailers. `origin/develop` had moved to `97756ff4ec` (#1001: metro 0.83.8
+under react-native 0.82.1, which takes image-size out of the lock, with the
+image-size ignores dropped and the 2026-11-02 advisory record; ten
+commits) and was merged in first (`6582f9f9a1`, no conflict: none of its
+six files is one this branch touches, and nothing under `packages/api`;
+`pnpm install --frozen-lockfile --ignore-scripts --offline` from the
+store).
+
+-   **The carry was held back by a standing stall and by a carry that hung
+    (Medium, attack replay; Medium, fix quality; Medium, claims; fixed in
+    code, and the documents now say what is left).** `carryRefusedOwnerWrites`
+    returned at once while `stalledSwitchStatement` was set, sent each
+    carry through `enqueueCall` in the switch's lane (so behind that
+    switch's stalled statement, when the stall was the refused check-in's
+    own), and armed the retry timer only from a carry's rejection: a note
+    made during a stall was not tried until the stalled statement settled,
+    and a carry that hung kept its note `carrying` with nothing tried
+    again. The pool (`src/config/postgres.ts`) sets no timeout, so both can
+    last until the operating system gives up on the socket. Now each try
+    takes one connection of its own from the pool, outside the write-behind
+    queue, and sends every waiting note's statement on it in turn
+    (`runCarryPass`), the connection and each statement within
+    `carryTimeoutMs` (5 s, `withinCarryBound`); a try that fails or passes
+    its bound ends there, logged, gives its connection back with the error,
+    so the pool drops it (node-postgres's `Client.end` destroys a socket
+    whose statement is still out), gives a connection handed over after its
+    bound back at once, unused, and arms the timer, 10 s; a try is made when
+    a note is made, when a switch statement answers, when a stall settles
+    and on the timer, whatever stands unanswered; one try at a time, and a
+    note made during one is taken up when it ends well. Outside the lane
+    the carry is ordered after nothing the process queued, and its
+    condition is what keeps it right: a check-in or move that lands after
+    it clears or outranks the column (the stalled check-in itself, should
+    it land, clears it, as the owner's later word), one that landed before
+    it refuses it, and no plain write of a switch is left in Postgres mode
+    to write the column over. The condition now admits the same moment
+    (`<=`), so a try that landed with its answer lost is written again by
+    the next and taken by this mirror, which a strict `<` would have
+    refused. The stall itself is left unbounded, and decision 35 puts the
+    pool's timeouts to the operator. Tests 40 (the API process's check-in
+    statement never answers until the end: 503 after its bound, the carry
+    landing while the stall stands, a second check-in refused at once, and
+    the worker's passes at the deadline five minutes late giving the window,
+    served to nobody), 41 (connections refused, then a connection never
+    handed over, then a carry statement that hangs, then the carry landing
+    on a new connection with nothing else asked of the process, the hung
+    connection given back with the bound's error, the late one given back
+    without one and nothing sent on it, and the window at the deadline) and
+    44 (a lost answer written again, the column taken and announced by the
+    refusing process). Tests 2, 9, 10, 28, 30, 31 and 39 follow the carry
+    out of the stall: 9 and 28 now assert it lands while the stall stands;
+    2, 10 and 31, which are about what a held statement does when it
+    settles, hold the carries off until it does (a carry landing first
+    would have the trigger refused over it, which is decision 31 working);
+    30 fails a carry without a stall and has the next answered statement
+    try it again; 39's second refusal is answered at once during the stall
+    rather than behind a carry in the lane. R01 to R07, R13.
+-   **The legacy trigger's condition was unpinned (Low, fix quality;
+    pinned).** The condition keys on `patch.status === 'triggered'`, so it
+    covered the legacy trigger as round 15 said, but only release switches
+    reached it. Test 42 (a legacy switch written plainly; the API process,
+    a second store refusing connections, refuses its owner's check-in and
+    carries it once the database answers; this process, not told, has its
+    trigger at the deadline refused in Postgres and logged, the switch
+    armed with its payload and column; the next pass gives the window; it
+    fires at the window's end and the trigger clears the column). X02, the
+    verifiers' mutant, rerun. The `releasedAt` half of round 15's S07 (the
+    last statement's take of a row whose status matches the mirror's and
+    whose `releasedAt` differs) is not pinned: no writer of today leaves a
+    mirror holding a status Postgres also holds with another `releasedAt`
+    (`releasedAt` reaches a mirror only from Postgres since round 10, and
+    the trigger lands once since round 9), so the verifiers' X03 is
+    equivalent in every state the code reaches. The clause stays as a
+    guard; S07 is pinned for the status half alone, which round 15's table
+    did not say.
+-   **The last statement's behind take kept the mirror's copies (Low, fix
+    quality; fixed in code).** A row taken because the mirror held it
+    marked or behind went in, but its copies only where the mirror lacked
+    them, and the third statement's blanking of an unfired switch of the
+    owner's that the first did not rewrite was set nowhere, so a switch a
+    queued erase had cancelled stayed held in the deleting process with
+    the people's sealed copies, which nothing served (the switch is
+    cancelled) but which the API process of `deploy/docker/production`,
+    with no removal pass, kept until it restarted. Now the copies of a row
+    taken so are replaced with Postgres's, and every copy the blanking
+    changed on a switch the first statement did not rewrite is set in the
+    mirror and announced. Test 43 (both shapes: the queued erase's copies
+    statement lost before it ran, so the last statement blanks the copy,
+    which is announced; and lost after it committed, so Postgres already
+    had it blank and only the take sets it right). R08, R09.
+-   **No record of the gates at round 15's head (Low, fix quality).** Round
+    15's runner was still waiting for the load to fall when the round
+    ended, and its summary held only its header; nothing after the API
+    typecheck had an observed result on that code. This round's gates are
+    run on its final head and recorded below.
+-   **Migration 107's down comment (Low, claims; made true).** With the
+    column dropped and the code still running every trigger statement
+    names the column and fails, so the owner's unfired switches stay armed
+    and would fire at their deadlines only once the trigger runs again,
+    after the code is reverted; the comment said they fire at their
+    deadlines and, two clauses on, that no switch fires. It also names the
+    check-ins and cancels that fail until a process that read its table
+    plan before the drop restarts.
+-   **Round 14's wording in two comments (Low, claims; made true).**
+    `deadmanSweepScheduler.ts`'s header and the scheduler file's test 19
+    said the attempt reaches the sweep once the refusing process's database
+    answered; they now say once its carry has landed, or once Postgres
+    refuses the trigger over it and the row is taken.
+-   **The timer "is cleared once no note waits" (Low, claims; made true in
+    code).** Only a carry's own answer cleared it; a note ended by a write
+    that applied, the sweep, the deletion's take or the last statement left
+    a timer that fired once for nothing. Every note now ends through
+    `endOwnerWriteNote`, which clears the timer once no note waits; test 44
+    checks it after a check-in applies. R10. Shutdown also gives an
+    uncarried note one last try, waited for, and sets no timer after it
+    (test 44, R11, R12).
+-   **Model names (Low, claims).** No action on the trailers, as in rounds
+    5 to 15: they are the session's harness's and stay, and nothing is
+    rebased or amended. The rounds 14 and 15 entries' "`grep` over the tree
+    finds none" was not true: 18 tracked files under `docs/` carry a model
+    name, in a "Verified by" line or a JSON `name` field, every one present
+    at the merge base and inherited from `develop`; no file this branch
+    changes carries one, and the commit messages carry the harness's
+    trailers. Those entries stay as written, as the record of what was
+    said; this one says what is so. The opening of this record counted the
+    item among round 15's lows "fixed or made true", and now counts it as
+    recorded with no action.
+
+Claims that were not true, and what they say now (this round's):
+`KNOWN_LIMITATIONS.md`'s "tried again by that process on its own every 10
+seconds ... until it is written", "checking in again once the database
+answers is the sure way" and "that process's next try (at most 10 seconds
+later)"; the threat model's row's "tried again on its own every 10 s until
+it lands" and "the worker's first pass after the database answers again
+can come before that process's next try"; the changelog's "tries again on
+its own every 10 seconds until it is written" and "that next try"; §15's
+"sent when the note is made unless a stall stands ... in the switch's lane"
+and "at most 10 s later"; decision 31's "one conditional statement in the
+switch's lane", "every 10 s" and "(at most 10 s later)"; decision 34's
+"what remains ... at most 10 s later" and "a pool that hangs holds the one
+carry in flight and sends no more"; Still open's "every 10 s" and "(at most
+10 s later)"; `deadman.ts`'s "trying again on its own every 10 seconds until
+it lands" and "after the database answers again but before the carry's
+next try" (now: tried at once and 10 s after each try that failed or passed
+its 5 s bound, each on a connection of its own, whatever that process's
+other statements are doing; the next try starts within 15 s of the
+database answering that process's new connections; and what is left is
+named: the database answering the worker but not that process, a pool held
+whole by statements the database never answered, and every check-in on
+that process refused 503 while one of its statements stands, which nothing
+bounds); `KNOWN_LIMITATIONS.md`'s and the changelog's silence on how long
+that stall can last (now: until the operating system gives up on the
+connection, minutes); migration 107's down comment (above); the scheduler's
+header and test comment (above); the rounds 14 and 15 entries' "`grep` over
+the tree finds none" (above); round 15's "the timer ... is cleared once no
+note waits" (now so in code); and round 15's table, which said S07 covered
+"a status or `releasedAt` behind Postgres" (only the status half is
+pinned).
+
+Raised and refuted: nothing this round; every finding stood. Of the fixes
+the verifiers offered for the Medium, the carry's own bounded connection
+was built; the pool's own timeouts were not, since a `query_timeout` would
+fail every longer statement of the whole API, migrate-on-start included,
+and keepalive does not bound a statement already sent (decision 35).
+
+Decisions: decision 35 is new (the carry's 5 s bound and own connection,
+built as the default, and whether to bound the stall by the pool's
+timeouts); decision 34 now counts its 10 s from a try that failed or passed
+its bound. Not done this round, unchanged: the recipient-side refusal
+(decision 19), the legacy retention decision (20), the rows of cancelled
+switches (24) and the alias's key (25, 26) are the operator's, as written;
+decisions 32 and 33 stay open as written; the "aside found while probing
+round 6" stays as it is in Still open. PR 4 is not built here, and
+`BLACKOUT_DEADMAN_RELEASES` stays off everywhere.
+
+Round 16's mutants (`fix/mut/spec-round16.json` and `spec-round16-b.json`,
+run with the round-7 runner `mut/run.py` against this worktree at the
+round's code, each file restored after its run and compared with a
+snapshot, `fix/mut/r16snap/`, one test command at a time, each against the
+tests named through `--test-name-pattern`; `fix/mut/run-round16.log` and
+`run-round16-b.log`). Fourteen mutants, all caught; R08 survived its first
+run, against test 43 as first written (the last statement's blanking had
+already set the copy right, so the take's replacement was not needed
+there), and was caught once test 43 also covered a copy Postgres had
+blanked before the last statement.
+
+| Check removed                                                                  | Test | What failed                                            |
+| ------------------------------------------------------------------------------ | ---- | ------------------------------------------------------ |
+| R01: the carry is not sent while a switch statement stands (round 15)          | 28   | the carry while the stall stands never came            |
+| R02: the carry's statement has no bound                                        | 41   | the carry on a new connection never came               |
+| R03: taking the carry's connection has no bound                                | 41   | the try whose statement hangs never came               |
+| R04: a try that failed or passed its bound sets no retry timer                 | 37   | the carry never tried again while connections refused  |
+| R05: a failed or unanswered try's connection goes back to the pool for reuse   | 41   | no connection given back with the bound's error        |
+| R06: a connection handed over after the bound is never given back              | 41   | the late connection never given back                   |
+| R07: the carry is refused over the same moment (a landed try's answer lost)    | 44   | the column absent from the refusing process's mirror   |
+| R08: a row taken as behind keeps the mirror's copies (round 15)                | 43   | a sealed copy left in the mirror (blanked before)      |
+| R09: a copy the blanking changed on an own switch not rewritten is skipped     | 43   | the blanked copy not announced                         |
+| R10: the timer is not cleared when a note ends other than by its carry         | 44   | a timer left after the check-in applied                |
+| R11: shutdown gives an uncarried note no last try                              | 44   | no last try at shutdown                                |
+| R12: a retry timer is set after shutdown                                       | 44   | a timer set after the last try was refused             |
+| R13: drain does not wait for a try under way                                   | 44   | the note not carried when shutdown returned            |
+| X02: the trigger's condition covers release triggers only (the verifiers' X02) | 42   | the trigger not refused in Postgres (0 logged where 1) |
+
+All tests named here are in `deadman-switch-writes-postgres.integration.test.ts`,
+which now has 44 tests. Not counted as checks: the comments and the log
+lines. The branch's other changed test file this round, the scheduler's,
+changes a comment only and was run whole (20 of 20), with the backlog
+Postgres file (2 of 2).
+
 ### Still open
 
 -   **A recipient-side refusal of an owner** (decision 19), which the
@@ -8211,17 +8545,27 @@ account-number invite claim (9).
 -   **A refused check-in's note is its process's own until its carry
     lands** (decision 31, built in round 14): a check-in or cancel refused
     unanswered is noted in the refusing process and carried into the
-    switch's row, at once and, after a failure, on that process's own timer
-    every 10 s until it lands (round 15: a failed carry waited for another
-    switch statement of that process, which on a quiet API process may never
-    come), where the sweep in every process reads it, and the trigger's
-    statement in Postgres refuses a switch so marked that has not had its
-    window (round 15: a worker that had not heard of the carry fired the
-    switch over it); what remains is the note lost with a process that stops
-    before its carry lands, the worker's first pass after the database
-    answers again coming before the refusing process's next try (at most
-    10 s later) and firing a switch already due, and a stall itself known to
-    the process whose statements stood, so a switch due during an outage
+    switch's row, at once and, after a try that failed or passed its 5 s
+    bound, on that process's own timer 10 s later, until it lands, each try
+    on a connection of its own whatever that process's other statements are
+    doing (round 15: a failed carry waited for another switch statement of
+    that process, which on a quiet API process may never come; round 16: no
+    carry was sent while a switch statement of that process stood
+    unanswered, and one that hung was never tried again), where the sweep
+    in every process reads it, and the trigger's statement in Postgres
+    refuses a switch so marked that has not had its window (round 15: a
+    worker that had not heard of the carry fired the switch over it); what
+    remains is the note lost with a process that stops before its carry
+    lands; the worker's pass firing a switch already due before the carry
+    lands, in the time before the refusing process's next try once the
+    database answers its new connections again (within 15 s) and for as
+    long as the database answers the worker but not that process (a network
+    fault, or that process's pool held whole by statements the database
+    never answered, which the pool, setting no timeout, leaves to the
+    operating system: decision 35); every check-in on that process refused
+    503 at once while a statement of its own stands unanswered, which
+    nothing bounds either (each refusal carried); and a stall itself known
+    to the process whose statements stood, so a switch due during an outage
     that only the API process's statements met is not held back for that
     alone (until round 14 the note never left
     the refusing process, so in the deployed layout a check-in the API
