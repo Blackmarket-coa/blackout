@@ -22,8 +22,9 @@
 #     a regression below the override pins from Trivy (the OSV gates and pnpm
 #     audit would catch it), and the comment below names versions the lockfile
 #     no longer has.
-# Records: docs/security/dependency-advisories-2026-10-30.md and
-# docs/security/dependency-advisories-2026-10-31.md.
+# Records: docs/security/dependency-advisories-2026-10-30.md,
+# docs/security/dependency-advisories-2026-10-31.md and
+# docs/security/dependency-advisories-2026-11-08.md.
 
 # brace-expansion ReDoS. The tree resolves to 1.1.16/2.1.2/5.0.8, all at or
 # above the maintainer's per-line security patches (1.1.12/2.0.2/5.0.8); OSV's

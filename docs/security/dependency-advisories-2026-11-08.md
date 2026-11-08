@@ -3,8 +3,14 @@
 Two upstream edits to advisory ranges, not a release, changed what the OSV
 gates see since the 2026-10-31 record. Both gates, **Dependency audit (no
 un-triaged advisories, any severity)** in `ci.yml` and the OSV step of
-`security.yml`'s **Dependency vulnerability audit**, have been red on
-`develop` since 2026-11-03, and so on every PR.
+`security.yml`'s **Dependency vulnerability audit**, were red on `develop`
+from 2026-11-03, and so on every PR, until #998 merged at 03:36Z on
+2026-11-08. Its last commit, `77e6e68182`, is this record's lodash commit
+(`eacf8f8b08`), ported so that #998's own audits could pass. On that merge
+(`27d8c17051`) both gates passed: `ci.yml` run 42443420808's **Dependency
+audit (no un-triaged advisories, any severity)** and `security.yml` run 42443420809. This branch has since merged `develop`, so of the changes
+below it still makes the ignore deletions; the lodash change reached
+`develop` through #998 and is recorded here, as nothing else records it.
 
 1. **GHSA-f23m-r3pf-42rh (lodash) now ends at 4.18.1.** GitHub modified its
    file at 15:37:10Z on 2026-11-03 and OSV's record followed at 15:45:08Z.
@@ -16,8 +22,8 @@ un-triaged advisories, any severity)** in `ci.yml` and the OSV step of
     | ------------------- | ----------- | ------- | ------- | ------ |
     | GHSA-f23m-r3pf-42rh | 6.5         | lodash  | 4.18.0  | 4.18.1 |
 
-    `develop`'s latest runs, on `7bda9eb72a` at 00:31Z on 2026-11-04, fail
-    this way and no other: `ci.yml` run 41747526572 has one failed job,
+    `develop`'s last runs before #998, on `7bda9eb72a` at 00:31Z on
+    2026-11-04, fail this way and no other: `ci.yml` run 41747526572 has one failed job,
     **Dependency audit (no un-triaged advisories, any severity)**, and
     `security.yml` run 41747526887 has one, **Dependency vulnerability
     audit**. Each log prints that row and "Total 1 package affected by 1
@@ -34,9 +40,9 @@ un-triaged advisories, any severity)** in `ci.yml` and the OSV step of
    it as unused. A scan of `develop`'s lockfile and `osv-scanner.toml`
    (`7bda9eb72a`) at 02:24Z today exits 1, prints the lodash row above, "3
    vulnerabilities" filtered and "osv-scanner.toml has unused ignores:
-   GHSA-g3hv-75wg-m249". The runs of 11-04 00:37Z and 00:51Z still show the
-   entry in use (4 filtered), so the change reached CI between 17:01Z on
-   11-04 and the next run.
+   GHSA-g3hv-75wg-m249". The OSV steps of `develop`'s runs of 11-04 (item 1),
+   logged at 00:37Z and 00:51Z, still show the entry in use (4 filtered), so
+   the change reached CI between 17:01Z on 11-04 and the next run.
 
 **Result:**
 
@@ -203,9 +209,10 @@ named by it.
     -   **slate-react 0.112.1** (dependency): `dist/index.js` and
         `dist/index.es.js` import `lodash/throttle` and `lodash/debounce`,
         nothing else. These ship in the client bundle. `throttle.js`,
-        `debounce.js` and the eleven modules they load (`isObject`, `now`,
-        `toNumber`, `_root`, `_freeGlobal`, `isObjectLike`, `isSymbol`,
-        `_baseGetTag`, `_Symbol`, `_getRawTag`, `_objectToString`) are
+        `debounce.js` and the thirteen modules they load (`isObject`, `now`,
+        `toNumber`, `_baseTrim`, `_trimmedEndIndex`, `_root`, `_freeGlobal`,
+        `isObjectLike`, `isSymbol`, `_baseGetTag`, `_Symbol`, `_getRawTag`,
+        `_objectToString`) are
         byte-identical in 4.18.0 and 4.18.1, so the lodash code in the
         bundle does not change.
     -   **slate-dom 0.112.2** (dependency): declares lodash `^4.17.21` and
@@ -283,9 +290,10 @@ named by it.
     `pnpm audit --prod --audit-level moderate` (`guard:audit-clean`), on the
     final lockfile, with the mirror and then without it: all four runs exit
     0 with "3 vulnerabilities found" and "1 low \| 2 high (2 ignored)". The
-    whole-tree `pnpm audit --json` (devDependencies included) names
-    deepmerge 4.3.1 (low, 10 paths) and the two image-size advisories (high,
-    ignored), and no brace-expansion. So the mirror hides nothing today, and
+    whole-tree `pnpm audit --json` (devDependencies included) lists one
+    advisory, deepmerge 4.3.1 (low, 10 paths), and counts two high ones it
+    does not list (the ignored image-size pair, the `--prod` runs' "2 high
+    (2 ignored)"); it names no brace-expansion. So the mirror hides nothing today, and
     tomorrow it would hide a regression below the pins from `pnpm audit`.
     Removed, for the reason the toml gives: a regression should fail loudly.
 -   The two `.trivyignore` lines (`GHSA-mh99-v99m-4gvg`, `CVE-2026-14257`)
@@ -297,7 +305,9 @@ named by it.
 ## Lockfile
 
 Compared as parsed YAML, `7bda9eb72a`'s `pnpm-lock.yaml` against this
-change's:
+change's (since the merge with `develop`, this branch's `pnpm-lock.yaml` is
+byte-identical to `develop`'s at `27d8c17051`, which has the same change
+from #998):
 
 -   **Removed (1):** lodash 4.18.0 (with its `deprecated:` line).
 -   **Added (1):** lodash 4.18.1, integrity the registry's `sha512`.
@@ -336,17 +346,25 @@ change's:
    present (Twisted ×4 in `poetry.lock`, image-size ×2 in `pnpm-lock.yaml`),
    none of them brace-expansion. They stay for their own change, as that
    file's header has planned since 2026-10-30.
-4. **The lodash override has no record.** `"lodash@4.17.23": "^4.18.0"` is in
-   `package.json` in the oldest root commit of this history (`eb71cc56c3`,
-   2026-08-10), and `pnpm-lock.yaml` already has lodash 4.18.0 in the root
-   that carries it (`ea3d85d2c7`); `git grep -i lodash docs/security` finds
-   nothing. 4.18.0 is the `fixed` version of this advisory's lodash.unset
-   and lodash.omit ranges, and the advisory's text names 4.18.0 and 4.18.1 as
-   its patch releases, but which advisory the override was added for, and
-   when, is not written anywhere in this tree. This record is the first.
+4. **The lodash override has no record.** Every root commit of this history
+   (the oldest is `eb71cc56c3`, 2026-08-10) has the key in `package.json` as
+   an exact pin, `"lodash@4.17.23": "4.18.0"`, and `pnpm-lock.yaml` already
+   has lodash 4.18.0 in the root that carries a lockfile (`ea3d85d2c7`). The
+   caret came on 2026-09-04: `50335a9b06` (merged in #890) turned "the
+   remaining 27 exact-version pins" into carets so that a later patch
+   release could pass, and `"4.18.0"` became `"^4.18.0"`; no `docs/security`
+   record came with it. This change makes it `"^4.18.1"`. Before this record,
+   `git grep -i lodash docs/security` found nothing. 4.18.0 is the `fixed`
+   version of this advisory's lodash.unset and lodash.omit ranges, and the
+   advisory's text names 4.18.0 and 4.18.1 as its patch releases, but which
+   advisory first motivated the 4.18.0 pin, and when, is not written
+   anywhere in this tree. This record is the first. (This record's first
+   commit, `7638734b9e`, said the caret value was in the oldest root commit;
+   that was wrong, and is corrected here.)
 5. **`pnpm install` warns about unmet peers** that predate this change and are
-   not touched by it: vite-plugin-static-copy 4.1.1 wants vite `^7.3.7`
-   (found 8.1.6), vite-plugin-pwa 1.3.0 wants workbox-build and
+   not touched by it, among them: vite-plugin-static-copy 4.1.1 wants vite
+   `^7.3.7` (found 8.1.6; that is the peer range the lockfile recorded for
+   it, while the package's own manifest accepts vite 6, 7 and 8), vite-plugin-pwa 1.3.0 wants workbox-build and
    workbox-window `^7.4.1` (found 7.4.0; item 3 of the 2026-10-31 record),
    folds 2.6.1 wants react 17 and @vanilla-extract/css 1.9.2, and
    `packages/ui`'s react-dom 18.2.0 wants react `^18.2.0` (found 19.2.5).
@@ -382,7 +400,7 @@ shared with other runs).
 | frozen install, fresh copy | `git archive HEAD` of `258e8a0b4a` extracted to scratch, then `pnpm install --frozen-lockfile`                                                                                                                                                         | exit 0 in 8 s at 02:49Z: "Lockfile is up to date, resolution step is skipped", 1,389 packages added (1,383 reused from the store, 0 downloaded); `pnpm-lock.yaml` byte-identical to HEAD's afterwards; slate-dom, slate-react and workbox-build each link to `lodash@4.18.1`, the only lodash in `.pnpm`; husky's `prepare` prints ".git can't be found" in the archive and exits 0 |
 | pnpm audit, before         | `pnpm audit --prod --audit-level high` (`security.yml`) and `--audit-level moderate` (`guard:audit-clean`), in an extracted `git archive` of `7bda9eb72a`                                                                                              | exit 0 both: "3 vulnerabilities found", "1 low \| 2 high (2 ignored)"; no lodash row (npm's audit data does not list 4.18.0), no minimatch row                                                                                                                                                                                                                                      |
 | pnpm audit                 | the same on this change, with the GHSA-mh99 mirror present, then removed                                                                                                                                                                               | exit 0 in all four: "3 vulnerabilities found", "1 low \| 2 high (2 ignored)"                                                                                                                                                                                                                                                                                                        |
-| pnpm audit, whole tree     | `pnpm audit --json` (dev included), on this change                                                                                                                                                                                                     | deepmerge 4.3.1 (low, 10 paths), image-size ×2 (high, ignored); nothing else                                                                                                                                                                                                                                                                                                        |
+| pnpm audit, whole tree     | `pnpm audit --json` (dev included), on this change                                                                                                                                                                                                     | lists deepmerge 4.3.1 (low, 10 paths); counts 2 high it does not list (image-size ×2, ignored); nothing else                                                                                                                                                                                                                                                                        |
 | Trivy                      | 0.69.3, `fs` scan of the extracted `git archive HEAD` (`258e8a0b4a`) with `security.yml`'s flags (`--severity CRITICAL,HIGH --ignore-unfixed --scanners vuln --exit-code 1 --ignorefile .trivyignore`) and `--skip-db-update`, DB of 2026-11-08 00:37Z | exit 0 at 02:46Z: six targets (`pnpm-lock.yaml`, `apps/blackout-server/{Cargo.lock,poetry.lock}`, `apps/blackout-server/services/blackout-api/requirements.txt`, `blackout-desktop/src-tauri/Cargo.lock`, `services/perturbation/requirements.txt`), 0 findings each; the same on `7bda9eb72a`'s extract at 02:43Z                                                                  |
 | core, design builds        | `pnpm --filter @blackout/core run build`; `pnpm --filter @blackout/design run build` (the client's project references)                                                                                                                                 | exit 0 and exit 0 (2 s each)                                                                                                                                                                                                                                                                                                                                                        |
 | client types               | `pnpm --filter @blackout/client run typecheck`                                                                                                                                                                                                         | exit 0 (35 s)                                                                                                                                                                                                                                                                                                                                                                       |
@@ -395,6 +413,7 @@ shared with other runs).
 | auth-secrets guard         | `node tools/ci/check-auth-secrets.mjs`, before each commit                                                                                                                                                                                             | "Auth secret hardening check passed", exit 0, before each of the three commits (and again in the pre-commit hook)                                                                                                                                                                                                                                                                   |
 | gitleaks                   | 8.21.2: `gitleaks dir --no-banner --redact` on the changed files before each commit; `security.yml`'s `gitleaks detect --redact --no-banner --log-opts=…` over the branch's commits                                                                    | `dir`: "no leaks found" on each of the five changed files and the record; range scan over `7bda9eb72a..258e8a0b4a` at 02:45Z: 2 commits scanned, no leaks found (the record's own commit is scanned after it exists; see the PR)                                                                                                                                                    |
 | lint                       | none run: no lint toolchain depends on lodash (Lockfile)                                                                                                                                                                                               | —                                                                                                                                                                                                                                                                                                                                                                                   |
+| after merging `develop`    | the merge `1cf8730eaa`: osv-scanner as above in `TZ=UTC`, `Etc/GMT-3` and `Pacific/Kiritimati`; `pnpm install --frozen-lockfile`; both `pnpm audit --prod` levels; `pnpm audit --json`; 03:39Z                                                         | OSV exit 0 in all three: 3 filtered (deepmerge, image-size ×2), "No issues found", no unused-ignore line; install exit 0, "Lockfile is up to date"; both audits exit 0, "3 vulnerabilities found", "1 low \| 2 high (2 ignored)"; the JSON lists deepmerge only, `muted` empty; `pnpm-lock.yaml` byte-identical to `develop`'s                                                      |
 
 **Not verified:**
 
@@ -403,11 +422,13 @@ shared with other runs).
 -   The advisory files' edit history, and so what GitHub's lodash range said
     before 2026-11-03 (Method).
 -   The client's `dist` was not compared byte for byte with a build of
-    `7bda9eb72a`; the thirteen lodash modules the bundle contains were
+    `7bda9eb72a`; the fifteen lodash modules the bundle contains were
     compared instead, and are identical.
 -   `generateSW` was not run; the `ReferenceError` on 4.18.0 was observed in
     the harness, not in workbox-build.
 -   The client's e2e suites, the mobile and API suites and `cap sync` were
     not run: `apps/blackout-client` is the only importer that reaches
     lodash, and its typecheck, unit, smoke and build gates ran.
--   CI did not run on this change; nothing was pushed.
+-   CI had not run on this branch when this record was committed; the PR
+    runs it. `develop`'s own runs on `27d8c17051`, which carry the lodash
+    change, are in the opening section.
