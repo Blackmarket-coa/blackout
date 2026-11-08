@@ -11,13 +11,17 @@ run to show both, what it leaves open, and what the operator has to decide.
 
 **Rating:** High. Fixed by this change, the pull request from
 `claude/bmc-transmutation-strategy-6jenal-v49` to `develop`; every `develop`
-commit before that merge has the defect. The dates and the operator's interim
-measures are under "Disclosure"; what to do at deploy is under "After
-upgrading".
+commit from `eb71cc56c3` (the merge of #878, 2026-08-10, which added the
+store's Postgres writer with the resync) up to that merge has the defect. The
+dates and the operator's interim measures are under "Disclosure"; what to do
+at deploy is under "After upgrading".
 **State read:** `develop` at `ff7d08bfa0`. The fix is the commits after it on the
-branch (listed under "Commits"). The branch has since merged `develop` twice, at
-`f6da7b7d16` (`a0f6012736`) and at `7bda9eb72a` (`51a37fa8b9`); neither merge
-changed a file under `packages/api/src` or `packages/api/test`.
+branch (listed under "Commits"). The branch has since merged `develop` three
+times, at `f6da7b7d16` (`a0f6012736`), at `7bda9eb72a` (`51a37fa8b9`) and at
+`27d8c17051` (`f2054bd111`). None of the three changed a file under
+`packages/api/src` or `packages/api/test`: the first brought `develop`'s
+`@hono/node-server` 2.1.3 into `packages/api/package.json`, and the other two
+changed nothing under `packages/api`.
 **Read** means a claim rests on the code; **Run** that it was observed in Node
 22.22.0 in this worktree, on PGlite or on PostgreSQL 16.15 as stated; **Test**
 names the regression test that keeps it true. No production deployment was
@@ -25,7 +29,10 @@ examined. A review of the branch found one high, one medium and seventeen low fi
 what changed because of them is under "Changed after review round 1". A second
 review found two medium findings, both fixed (under "Changed after review round
 2"). A third found eight low findings, all fixed (under "Changed after review
-round 3"). The sections below describe the code after those changes.
+round 3"). The sections below describe the code after those changes. A
+review of the text for publication found four sentences in this record that
+were not exact; they are corrected (under "Changed in the publication
+review").
 
 | ID  | Finding                                                                                                                                                                         | Verified                     | Disposition                                                               |
 | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- | ------------------------------------------------------------------------- |
@@ -41,24 +48,43 @@ round 3"). The sections below describe the code after those changes.
 
 ## Disclosure
 
--   **2026-11-02.** The operator confirmed `BLACKOUT_AUTH_ROWS_PRUNE=0` set on
-    the production worker (decision 1 below). That stops the one trigger that
-    needs no request, the hourly revocation prune; the triggers a request
-    reaches (sign-up rollback, sign-out, token refresh, revoke-all, a password
-    change, account deletion, unlinking an account, the keyed deletes) stayed
-    live.
--   **2026-11-08.** The operator decided to run production as a single API
-    process until this fix is deployed, and to publish this change only after
-    that switch. The defect needs more than one process writing one database
-    (S1), so with one process no write of this kind can destroy another
-    process's row; the worker is a process too, so the switch removes the
-    precondition only while nothing else writes that database.
+-   **2026-11-02.** The operator confirmed `BLACKOUT_AUTH_ROWS_PRUNE=0` in
+    production (decision 1 below), set in the server's `.env.production`,
+    which the production compose file loads into both `app` and `worker`
+    (`x-common-env` in `deploy/docker/production/docker-compose.yml`). That
+    stops the one request-less trigger on the security tables, the hourly
+    prune of `revoked_sessions`, `pending_oauth_links` and
+    `pending_oidc_logins`. Two loops still resync a table with no request,
+    neither of them a security table: the daily retention sweep
+    (`coalition_external_activity`, when a quarantined reply is due) and, with
+    the FBM bridge on, the flash-mob pin sweeper (`coalition_spatial_items`)
+    (S1). The triggers a request reaches (sign-up rollback, the token
+    consumes, sign-out, token refresh, revoke-all, a password change, account
+    deletion, unlinking an account, the keyed deletes) stayed live in the
+    code. In the operator's deployment, the sign-up route whose rollback S1
+    lists (`POST /v1/auth/register`) has answered `503` at the reverse proxy
+    since the same day, a separate measure, recorded with the fix for that
+    route; the other routes S1 lists, the consumes that need no sign-in among
+    them, stayed reachable. Until 2026-11-08 production ran the API (`app`)
+    and the `worker` as two processes on one database, so the defect's
+    precondition (S1) held.
+-   **2026-11-08.** The operator confirmed that production runs as a single
+    process until this fix is deployed. A `docker-compose.override.yml` on the
+    server sets the app's `BLACKOUT_BACKGROUND_WORKERS_DISABLED` to `'0'`, so
+    the API process runs the background loops (`src/index.ts` starts them
+    unless the variable is `'1'`), and scales the `worker` service to 0
+    replicas. `BLACKOUT_AUTH_ROWS_PRUNE=0` still applies, now to the app. The
+    defect needs more than one process writing one database (S1), so with one
+    process no write of this kind can destroy another process's row; that
+    holds while no other process writes that database. The operator decided
+    the same day to publish this change only after that switch.
 -   **Publication.** The fix is published with its pull request to `develop`,
     with this record; the GitHub security advisory is published when the pull
     request is merged. The fix removes the whole-table resync (S1 to S6, and
     S9); it does not close the read-side gaps (O1 to O4), and nothing records
     whether any row was lost in production before it (S1, "Detection"). The
-    steps for the deploy are under "After upgrading".
+    steps for the deploy, which end with the interim measures removed, are
+    under "After upgrading".
 
 ---
 
@@ -87,18 +113,36 @@ So, for one resync of a table, by the process P that ran it:
 -   Anyone, unauthenticated: `/register` rolls back a failed sign-up with
     `deleteUser`, which resynced `users` (`routes/auth.ts`, four call sites). The
     auth rate limit is 10 requests a minute per address.
+-   Anyone holding a single-use token or a pending sign-in for an account of
+    their own, without being signed in: confirming a password reset or an email
+    verification (`routes/auth.ts`, `/password/reset/confirm` and
+    `/email/verify/confirm`) and completing an OIDC sign-in
+    (`routes/auth-oidc.ts`) each consume a row (#2, #3, #14), which resynced
+    `password_reset_tokens`, `email_verification_tokens` or
+    `pending_oidc_logins`.
 -   Any signed-in account: logout and refresh (`services/refreshToken.ts`),
     revoke-all and password change (`routes/auth.ts`), account deletion
     (`services/accountLifecycle.ts`), unlinking an account, and deleting a vault
     item, a webhook or a bridge.
--   The worker, with no request at all: the auth-rows prune
+-   The process that runs the background loops (the `worker` in the production
+    compose file), with no request at all. The auth-rows prune
     (`services/authRowsPruneScheduler.ts`) runs at boot and then hourly,
     resyncing `revoked_sessions`, `pending_oauth_links` and `pending_oidc_logins`.
     It is on unless `BLACKOUT_AUTH_ROWS_PRUNE=0` (`packages/api/src/backgroundLoops.ts`).
+    It is the one request-less trigger on the security tables. Two other loops
+    resync a table with no request: the retention sweep of quarantined external
+    replies (`services/coalitionExternalRetentionScheduler.ts`, at boot and then
+    daily, on unless `BLACKOUT_COALITION_EXTERNAL_RETENTION_SWEEP=0`) resynced
+    `coalition_external_activity` whenever a reply was due
+    (`deleteCoalitionExternalActivities`, #32); and, only with the FBM bridge on
+    (`FBM_MATRIX_BRIDGE_ENABLED`), the flash-mob pin sweeper
+    (`services/fbmMatrixBridge/flashMobDispatcher.ts`, every 5 minutes) resynced
+    `coalition_spatial_items` whenever an ephemeral pin was due
+    (`deleteCoalitionSpatialItem`, #30).
 
 It needs more than one process on one database. Postgres mode is the default
-whenever `DB_HOST` is set; production Docker runs `app` and `worker` on one
-database, and the Kubernetes manifest runs three API replicas.
+whenever `DB_HOST` is set; the shipped production compose file runs `app` and
+`worker` on one database, and the Kubernetes manifest runs three API replicas.
 
 **The window.** A change P would normally hear of was exposed for the
 notification lag: on loopback PostgreSQL 16 the design lens measured p99 16 ms
@@ -470,19 +514,21 @@ at `f6da7b7d16`; "R3" is `a8edded8ab`, after review round 3 (its tests and
 comments; this record's commit changes only the record); "R4" is
 `3f4a6752f2`, after review round 4 (its gates are in its commit message); "P"
 is `51a37fa8b9`, the merge of `develop` at `7bda9eb72a`, run before this
-record's publication commit, which changes only this record:
+record's publication commit (`e30c6d5c4f`), which changes only this record;
+"P2" is `f2054bd111`, the merge of `develop` at `27d8c17051`, run before the
+commit after it, which changes only this record:
 
-| Gate                                                                     | Result                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `pnpm lint`, `pnpm typecheck`                                            | clean (C6, C7, R1, R2, R3m, R3, P)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| `pnpm test:integration` (CI's PR gate)                                   | C6: 2014 of 2015, three runs; each time the one failure was a `streaming-module` test hit by the file store's temp-file race (O13). C7: 2015 of 2015. R1: 2022 of 2022 (5 min 20 s). R2: 2022 of 2022 (5 min 25 s); U4b among them. R3m: 2022 of 2022 (5 min 57 s). R3: 2022 of 2022 (5 min 29 s). The merge changes no API count: `develop`'s new tests are in the client (Vitest) and the Synapse fork (Python), which no API gate runs, and it changed only `packages/api/package.json` (`@hono/node-server` 2.1.3) in the API; round 3 adds assertions to X5, X11 and X13, not tests. P: 2022 of 2022 (5 min 39 s) |
-| `pnpm test` (post-merge, `--test-force-exit`)                            | TAP, C6 and C7 alike: tests 2135, pass 2135, fail 0, cancelled 0; all 23 tests that `cbce376602`, `111eabe39e` and `c30077a925` add appear in it (2112 before them). R1: tests 2142, pass 2142, fail 0, cancelled 0; the 7 tests round 1 adds appear in it and in `test:integration`. R2: tests 2142, pass 2142, fail 0, cancelled 0 (13 min); U4b among them. R3m: tests 2142, pass 2142, fail 0, cancelled 0 (12 min 13 s). R3: tests 2142, pass 2142, fail 0, cancelled 0 (12 min 27 s). P: tests 2142, pass 2142, fail 0, cancelled 0 (9 min 57 s)                                                                 |
-| `pnpm test:launch-smoke`                                                 | C6, C7, R1, R2, R3m, R3 and P: 14 of 14                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| `store-cross-process` on PostgreSQL 16.15 (loopback)                     | C6: 36 of 36, three runs; C7, with `store-spec-coverage`: 38 of 38 (the coverage file's U6 boots on PGlite either way). R1, the same two files: 43 of 43. Every per-test and template database dropped afterwards (0 left). R2, the same two files: 43 of 43, 0 databases left (U4b boots on PGlite in either mode). R3m and R3, the same two files: 43 of 43 each, 0 databases left. P, the same two files: 43 of 43 (1 min 10 s), 0 databases left (3 before, 3 after: `postgres` and the two templates); the throwaway cluster was removed afterwards                                                               |
-| the store's test files on PGlite (mutation baseline)                     | `store-cross-process`, `store-spec-coverage` and `pg-writer-targeted`: 44 of 44 (C7). R1, seven files run together: 59 of 59 (`store-cross-process` 41, `store-spec-coverage` 2, `pg-writer-targeted` 6, `postgres-store` 4, `pg-notify-replication` 3, `write-behind-durability` 2, `file-store-temp-snapshots` 1). R3, `store-cross-process`, `store-spec-coverage` and `pg-writer-targeted`: 49 of 49 (41, 2 and 6). P, the same three files: 49 of 49 (1 min 26 s)                                                                                                                                                 |
-| the reviewer's harnesses at R1 (`verify-concurrency-1`, not in the tree) | `attack.mts`: hub on PGlite 10 pass, 0 fail (A7 needs real Postgres); PostgreSQL 16.15 9 pass, 2 fail, A7 (O15) and A9 (the boot gap, O4). `natural.mts` N1: 0 of 1,000 logouts lost in four runs; N2: three runs, one listen error and one reconnect each, no LISTEN session left, 0 lost                                                                                                                                                                                                                                                                                                                             |
-| root `pnpm exec prettier --check` on the changed files                   | clean (P: the 24 files changed against `develop` at `7bda9eb72a`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| gitleaks 8.21.2 over `origin/develop..HEAD`                              | P: 26 commits scanned (merges skipped), no leaks                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| Gate                                                                     | Result                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm lint`, `pnpm typecheck`                                            | clean (C6, C7, R1, R2, R3m, R3, P, P2)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `pnpm test:integration` (CI's PR gate)                                   | C6: 2014 of 2015, three runs; each time the one failure was a `streaming-module` test hit by the file store's temp-file race (O13). C7: 2015 of 2015. R1: 2022 of 2022 (5 min 20 s). R2: 2022 of 2022 (5 min 25 s); U4b among them. R3m: 2022 of 2022 (5 min 57 s). R3: 2022 of 2022 (5 min 29 s). The merge changes no API count: `develop`'s new tests are in the client (Vitest) and the Synapse fork (Python), which no API gate runs, and it changed only `packages/api/package.json` (`@hono/node-server` 2.1.3) in the API; round 3 adds assertions to X5, X11 and X13, not tests. P: 2022 of 2022 (5 min 39 s). P2: 2022 of 2022 (4 min 43 s)                        |
+| `pnpm test` (post-merge, `--test-force-exit`)                            | TAP, C6 and C7 alike: tests 2135, pass 2135, fail 0, cancelled 0; all 23 tests that `cbce376602`, `111eabe39e` and `c30077a925` add appear in it (2112 before them). R1: tests 2142, pass 2142, fail 0, cancelled 0; the 7 tests round 1 adds appear in it and in `test:integration`. R2: tests 2142, pass 2142, fail 0, cancelled 0 (13 min); U4b among them. R3m: tests 2142, pass 2142, fail 0, cancelled 0 (12 min 13 s). R3: tests 2142, pass 2142, fail 0, cancelled 0 (12 min 27 s). P: tests 2142, pass 2142, fail 0, cancelled 0 (9 min 57 s). P2: tests 2142, pass 2142, fail 0, cancelled 0 (9 min 19 s)                                                          |
+| `pnpm test:launch-smoke`                                                 | C6, C7, R1, R2, R3m, R3, P and P2: 14 of 14                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `store-cross-process` on PostgreSQL 16.15 (loopback)                     | C6: 36 of 36, three runs; C7, with `store-spec-coverage`: 38 of 38 (the coverage file's U6 boots on PGlite either way). R1, the same two files: 43 of 43. Every per-test and template database dropped afterwards (0 left). R2, the same two files: 43 of 43, 0 databases left (U4b boots on PGlite in either mode). R3m and R3, the same two files: 43 of 43 each, 0 databases left. P, the same two files: 43 of 43 (1 min 10 s), 0 databases left (3 before, 3 after: `postgres` and the two templates); the throwaway cluster was removed afterwards. P2, the same two files: 43 of 43 (1 min 6 s), 0 databases left (3 before, 3 after), the cluster removed afterwards |
+| the store's test files on PGlite (mutation baseline)                     | `store-cross-process`, `store-spec-coverage` and `pg-writer-targeted`: 44 of 44 (C7). R1, seven files run together: 59 of 59 (`store-cross-process` 41, `store-spec-coverage` 2, `pg-writer-targeted` 6, `postgres-store` 4, `pg-notify-replication` 3, `write-behind-durability` 2, `file-store-temp-snapshots` 1). R3, `store-cross-process`, `store-spec-coverage` and `pg-writer-targeted`: 49 of 49 (41, 2 and 6). P, the same three files: 49 of 49 (1 min 26 s). P2, the same three files: 49 of 49 (1 min 23 s)                                                                                                                                                      |
+| the reviewer's harnesses at R1 (`verify-concurrency-1`, not in the tree) | `attack.mts`: hub on PGlite 10 pass, 0 fail (A7 needs real Postgres); PostgreSQL 16.15 9 pass, 2 fail, A7 (O15) and A9 (the boot gap, O4). `natural.mts` N1: 0 of 1,000 logouts lost in four runs; N2: three runs, one listen error and one reconnect each, no LISTEN session left, 0 lost                                                                                                                                                                                                                                                                                                                                                                                   |
+| root `pnpm exec prettier --check` on the changed files                   | clean (P: the 24 files changed against `develop` at `7bda9eb72a`; P2 and the commit after it: the same 24 files against `27d8c17051`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| gitleaks 8.21.2 over `origin/develop..HEAD`                              | P: 26 commits scanned (merges skipped), no leaks. P2: 27 commits, no leaks; the commit after it: 28, no leaks                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 
 The earlier commits' gates are in their messages: `test:integration` 2003 of
 2003 after the auth tables, and 2010 of 2010 after the bounty, sweeper, mesh
@@ -661,16 +707,19 @@ set in any committed file. The decisions the operator has since taken are dated
 under "Disclosure"; the deploy steps they lead to are under "After upgrading".
 
 1. **Interim mitigation, before this ships.** Setting `BLACKOUT_AUTH_ROWS_PRUNE=0`
-   on the worker removes the one trigger that needs no request: the hourly prune
-   that resyncs `revoked_sessions` (`packages/api/src/backgroundLoops.ts`; the
-   prune was added in `053778f728` on 2026-10-26). Expiry is checked on read, so
-   the only cost is that the three tables grow; the code says the prune
-   "discharges an obligation, not a feature".
-   This work set it nowhere. The operator set it on the production worker on
-   2026-11-02, and on 2026-11-08 decided to run production as a single API
-   process until the fix is deployed ("Disclosure"). Scaling the API to one
-   replica narrows the rest, but the worker is still a second process. Both
-   measures end with the deploy ("After upgrading").
+   on the process that runs the background loops removes the one request-less
+   trigger on the security tables: the hourly prune that resyncs
+   `revoked_sessions` (`packages/api/src/backgroundLoops.ts`; the prune was
+   added in `053778f728` on 2026-10-26). The retention sweep and, with the FBM
+   bridge on, the pin sweeper still resync their tables with no request (S1);
+   neither is a security table. Expiry is checked on read, so the only cost is
+   that the three tables grow; the code says the prune "discharges an
+   obligation, not a feature".
+   This work set it nowhere. The operator set it in production on 2026-11-02.
+   The worker was a separate process from the API on the same database until
+   2026-11-08; from then until the fix is deployed, production runs as one
+   process ("Disclosure"). Both measures end with the deploy ("After
+   upgrading").
 2. **Rollout.** A process on the old code ignores `'k'`. Either ship two
    releases (A: commits 1 to 3 of this branch's first half, the receivers, to
    every process; B: the rest), or ship one with a full stop: stop the worker,
@@ -706,9 +755,10 @@ under "Disclosure"; the deploy steps they lead to are under "After upgrading".
 3. **Past losses.** Nothing records which rows were lost. Either accept that a
    revoked access token a resync brought back expires on its own within 24
    hours of the fix shipping, or rotate the JWT signing key at deploy, which
-   ends every access token at once; the rotation's steps, and what else it
-   touches, are under "After upgrading". Separately: whether to tell users
-   beyond the advisory ("Disclosure").
+   ends every access token at once. "After upgrading" gives the rotation as
+   the recommended step, with what else it touches; no decision on this is
+   recorded under "Disclosure". Separately: whether to tell users beyond the
+   advisory ("Disclosure").
 4. **Order with v46.** The unmerged v46 branch (`215eff7c6d` or later; the
    branch moves, so re-run `git merge-tree` before merging) also
    changes `pgWriter.ts`, `writeBehindQueue.ts`, `pgDescriptors.ts` and
@@ -765,12 +815,15 @@ under "Disclosure"; the deploy steps they lead to are under "After upgrading".
 ## After upgrading
 
 For an operator deploying the release that carries this change. Each step says
-what it rests on; none of it is set by this change.
+what it rests on; none of it is set by this change. Steps 1 and 2 are the
+rotation that decision 3 recommends; steps 3 to 5 deploy and then end the
+interim measures dated under "Disclosure".
 
-1. **Set `BLACKOUT_ATTRIBUTION_SECRET` first, if it is unset.** The `ref` on a
-   shared campaign link is signed with `BLACKOUT_ATTRIBUTION_SECRET` or, when
-   that is unset, with `JWT_SECRET_PRIMARY`
-   (`services/coalitionAttribution.ts`, `signingKey`; `.env.example`). A
+1. **Set `BLACKOUT_ATTRIBUTION_SECRET` first, if it is unset** (needed only
+   with step 2). The `ref` on a shared campaign link is signed with
+   `BLACKOUT_ATTRIBUTION_SECRET` or, when that is unset, with
+   `JWT_SECRET_PRIMARY` (`services/coalitionAttribution.ts`, `signingKey`;
+   `.env.example`). A
    deployment without it would lose, at step 2, every `ref` minted before the
    rotation: each becomes a visit with no known source, and nothing else fails
    (`recordAttributedAction`). Set it to the current `JWT_SECRET_PRIMARY` to
@@ -778,8 +831,9 @@ what it rests on; none of it is set by this change.
    value to let them lapse; either way the attribution key no longer moves with
    the session key.
 2. **Rotate `JWT_SECRET_PRIMARY`, and do not put the old value in
-   `JWT_SECRET_ROLLOVER`.** An access token is verified against the primary
-   secret and the rollover list (`services/auth.ts`, `readAuthRuntimeConfig`
+   `JWT_SECRET_ROLLOVER`** (recommended; decision 3). An access token is
+   verified against the primary secret and the rollover list
+   (`services/auth.ts`, `readAuthRuntimeConfig`
    and `verifyJwt`), so with the old value in neither, every access token
    signed before the rotation is refused at once, including any revoked token a
    resync brought back (decision 3: whether there was one is unknown). Access
@@ -789,18 +843,41 @@ what it rests on; none of it is set by this change.
    signed-in client gets a new access token at its next refresh without signing
    in again; a client whose refresh token a resync deleted signs in again. The
    rotation does not touch the read-side gaps (O4): a process that misses a
-   later sign-out still accepts that token until it expires.
+   later sign-out still accepts that token until it expires. An operator who
+   instead accepts that a revived token expires on its own within 24 hours of
+   the deploy (decision 3) skips steps 1 and 2.
 3. **Deploy by hand, with a full stop.** Stop every process on the old code,
    the worker and every API replica, before starting any on the new code, so
    old and new store code never run side by side: an old process still resyncs
    whole tables and ignores `'k'` (O7, decision 2). No canary overlay and no
    rolling replacement. With production on one process ("Disclosure"), that is
-   one process stopped and one started. The change adds no migration.
-4. **Then remove `BLACKOUT_AUTH_ROWS_PRUNE=0` and restore the worker** (and
-   any replicas). With every process on the new code the prune is
+   one process stopped and one started, with the server's
+   `docker-compose.override.yml` and `BLACKOUT_AUTH_ROWS_PRUNE=0` still in
+   place. The `canary` job of `.github/workflows/deploy-compose-prod.yml`
+   starts `app_canary` beside `app`, so it does not fit. That job and
+   `full-rollout` also sync `deploy/docker/production/` to the server with
+   `rsync --delete`, which replaces the server's `Caddyfile` and removes every
+   file there that the repository does not have and the sync does not
+   exclude, the override among them; and both run
+   `docker compose -f docker-compose.yml`, which reads no override file. If
+   this deploys before the fix for `POST /v1/auth/register` ("Disclosure"),
+   such a sync lifts the proxy's `503` on that route once the proxy reloads or
+   its container is recreated; put it back. The change adds no migration.
+4. **Then end this change's interim measures.** Once the new process serves,
+   delete the line `BLACKOUT_AUTH_ROWS_PRUNE=0` from the server's
+   `.env.production`, delete the server's `docker-compose.override.yml`, and
+   run `docker compose up -d` in the stack directory: the app is recreated
+   with `BLACKOUT_BACKGROUND_WORKERS_DISABLED` `'1'` from the compose file
+   again, and the `worker` starts and runs the background loops, both on the
+   new code. Restore any other replicas. With
+   every process on the new code the prune is
    `DELETE FROM revoked_sessions WHERE expires_at <= $1` (#9), so the three
    tables it keeps stop growing; until then expiry is checked on read, and
    nothing is lost by the prune's absence.
+5. **The proxy's `503` on `POST /v1/auth/register` is not part of this
+   change.** It is the interim measure for a separate fix to that route, and
+   comes off when that fix is deployed, by that fix's own steps; leave it in
+   place until then.
 
 ## The other findings
 
@@ -917,41 +994,68 @@ commit's message.
 | 1   | #30 (`deleteCoalitionSpatialItem`) has the same `nullMatchesAny` as #32, and no test failed when it was removed; the #30 row and D5 did not say that a pin copy with no `updatedAt` is deleted whatever Postgres holds                                                        | X12 now removes `updatedAt` from a pin's mirror copy and requires the pin gone from Postgres and the mirror, as X11 does for a reply. Removed alone in a scratch worktree at `f023389188`'s code: baseline X12 passes; without `nullMatchesAny` X12 alone fails ("a pin whose copy has no updatedAt is deleted", 1 where 0 was expected). The #30 row and the X12 row say so; the round-3 mutation table has the row |
 | 2   | `deploy/helm/blackout/values.yaml:24` and `deploy/kubernetes/phase4/blackout-api.yaml:54` still opened with "Consistency is EVENTUAL", the wording round 3 removed from `store.ts`, `pgNotify.ts` and `index.ts` because a process that misses a notification never converges | Both now read "Reads are stale for a time"; the sentences after it, which already give the missed-notification case, are unchanged. Both files still parse to the same documents (`yaml.parseAllDocuments`, 0 errors)                                                                                                                                                                                                |
 
+## Changed in the publication review
+
+A review of the text for publication (2026-11-08) found nine sentences that
+were not exact. Four were in this record; the others were in the pull request
+text and the advisory text, which are not in the tree. Each was checked here
+first; all were real. Finding numbers are the review's.
+
+| #   | Finding                                                                                                                                                                                                                                                           | Now                                                                                                                                                                                                                                                                   |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 3   | "Disclosure", decision 1 and S1 called the hourly prune "the one trigger that needs no request". The retention sweep (at boot and daily, on by default) and, with the FBM bridge on, the flash-mob pin sweeper also resynced a table with no request (#32, #30)   | "The one request-less trigger on the security tables". S1 lists the two sweeps with their tables and switches; decision 1 says they still run                                                                                                                         |
+| 4   | "Disclosure" said the sign-up rollback trigger "stayed live" from 2026-11-02. In the operator's deployment the proxy has answered `503` to `POST /v1/auth/register` since that day, and a deploy that syncs the stack directory replaces the server's `Caddyfile` | "Disclosure" says the route has been blocked at the proxy since then, as a separate measure, and that the other routes S1 lists stayed reachable. "After upgrading" step 3 says such a sync lifts the block, and step 5 that it comes off with the fix for that route |
+| 5   | The header said every `develop` commit before the merge has the defect. The resync exists only from `eb71cc56c3` (the merge of #878, 2026-08-10), which added `pgWriter.ts` with `resyncMap`                                                                      | The header gives that range                                                                                                                                                                                                                                           |
+| 7   | Decision 3 offered the JWT rotation as one of two choices while "After upgrading" step 2 instructed it, and no decision on it was recorded                                                                                                                        | Step 2 is the recommended option and says what skipping it means; decision 3 says no decision is recorded                                                                                                                                                             |
+
+Two more changes came with them. The operator confirmed on 2026-11-08 how
+production runs as one process ("Disclosure"), so decision 1 no longer says
+the worker "is still a second process": it gives the dated facts, and "After
+upgrading" step 4 ends both measures. And while finding 4 was checked, S1's
+unauthenticated triggers were found short: they listed only `/register`, but
+confirming a password reset or an email verification, or completing an OIDC
+sign-in, needs no sign-in and consumed a row through a resync on `develop`
+(#2, #3, #14; `resync('passwordResetTokens')`, `resync('emailVerificationTokens')`
+and `resync('pendingOidcLogins')` in `pgDescriptors.ts` at `ff7d08bfa0`). S1
+now lists them.
+
 ## Commits
 
 On `claude/bmc-transmutation-strategy-6jenal-v49`, after `ff7d08bfa0`:
 
-| Commit       | What                                                                                                                              |
-| ------------ | --------------------------------------------------------------------------------------------------------------------------------- |
-| `75b6060037` | Targeted statement primitives in `pgWriter` (U2, U3)                                                                              |
-| `2f5b92a5a1` | Receivers re-read changed keys by key, behind a per-key fence (X14, X16, X16b)                                                    |
-| `0ca48db41b` | Computing an upsert's fence key never throws into the mutator                                                                     |
-| `60203eb3a4` | The targeted kind, one transaction per call, the keyed deletes (#11, #16–29, #31, #33, #36, #38)                                  |
-| `cbce376602` | The auth tables: #1–9, #12–15, #39–42 (X1–X5, X7, X13, X17, X19, U7)                                                              |
-| `111eabe39e` | Bounty, sweepers, mesh and coliseum: #10, #30, #32, #34, #35, #37 (X8, X8b, X9–X12, X11b)                                         |
-| `c30077a925` | Remove the resync; U1, U6, X1b, X7b, X8c; the prose, `KNOWN_LIMITATIONS.md`, the M11 note, this record                            |
-| `a1696d1609` | The file store's temp file is per process (O13); this record's gates                                                              |
-| `b0b5bfbd32` | Round 1: a refresh re-reads a key whose queued write landed while its `SELECT` was out (X16d)                                     |
-| `7b94aa8344` | Round 1: `flushRuntimeStoreWrites` waits for the write queue only (`drainWrites`)                                                 |
-| `2efb0ffeab` | Round 1: the store boots on a schema behind the code (U4b)                                                                        |
-| `0e712a9b7e` | Round 1: a gate miss after a lost `COMMIT` reply is not counted (X8d)                                                             |
-| `551a39043b` | Round 1: the mesh writer re-reads merged `seen_by`, kept in first-seen order (X9)                                                 |
-| `b28fc592ad` | Round 1: one dropped LISTEN connection is replaced once, and released (S9)                                                        |
-| `0cd7b9ab75` | Round 1: the capture and the reload keep a mirror map's own kind                                                                  |
-| `f80b923e4d` | Round 1: a file store's boot removes temp snapshots dead processes left (O16)                                                     |
-| `b828f7f244` | Round 1: Helm chart, headers, production error and alert text say write-behind                                                    |
-| `baa7a1d593` | Round 1: this record, `KNOWN_LIMITATIONS.md`                                                                                      |
-| `7bc2db101b` | Round 2: U4b finds the schema without `invitation_admissions` by its migration (overlap (e))                                      |
-| `beeaa6556c` | Round 2: a missed notification lasts until restart: `KNOWN_LIMITATIONS.md`, deploy comments, M11 note                             |
-| `265f430fdb` | Round 2: the single-server compose file says write-behind, and that a missed notification lasts                                   |
-| `232b8c6409` | Round 2: this record                                                                                                              |
-| `a0f6012736` | Merge `develop` at `f6da7b7d16` (#993, #994, #995); no file under `packages/api/src` or `test` changed there                      |
-| `b2ba8803c7` | Round 3: X5, X11 and X13 fail without #12, #14, #32, #40 and #41's predicates                                                     |
-| `a8edded8ab` | Round 3: the store's comments say a missed notification lasts, and that an upsert rewrites its row                                |
-| `f023389188` | Round 3: this record                                                                                                              |
-| `3f4a6752f2` | Round 4: X12's null-stamp case; the deploy comments no longer say "eventual"                                                      |
-| `51a37fa8b9` | Merge `develop` at `7bda9eb72a` (#996, #997 and the documentation commits after them); no file under `packages/api` changed there |
-| this commit  | For publication: "Disclosure", "After upgrading", the header, decisions 1, 3 and 4, O3, and the gates on the merged head          |
+| Commit       | What                                                                                                                                                                                                                                                   |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `75b6060037` | Targeted statement primitives in `pgWriter` (U2, U3)                                                                                                                                                                                                   |
+| `2f5b92a5a1` | Receivers re-read changed keys by key, behind a per-key fence (X14, X16, X16b)                                                                                                                                                                         |
+| `0ca48db41b` | Computing an upsert's fence key never throws into the mutator                                                                                                                                                                                          |
+| `60203eb3a4` | The targeted kind, one transaction per call, the keyed deletes (#11, #16–29, #31, #33, #36, #38)                                                                                                                                                       |
+| `cbce376602` | The auth tables: #1–9, #12–15, #39–42 (X1–X5, X7, X13, X17, X19, U7)                                                                                                                                                                                   |
+| `111eabe39e` | Bounty, sweepers, mesh and coliseum: #10, #30, #32, #34, #35, #37 (X8, X8b, X9–X12, X11b)                                                                                                                                                              |
+| `c30077a925` | Remove the resync; U1, U6, X1b, X7b, X8c; the prose, `KNOWN_LIMITATIONS.md`, the M11 note, this record                                                                                                                                                 |
+| `a1696d1609` | The file store's temp file is per process (O13); this record's gates                                                                                                                                                                                   |
+| `b0b5bfbd32` | Round 1: a refresh re-reads a key whose queued write landed while its `SELECT` was out (X16d)                                                                                                                                                          |
+| `7b94aa8344` | Round 1: `flushRuntimeStoreWrites` waits for the write queue only (`drainWrites`)                                                                                                                                                                      |
+| `2efb0ffeab` | Round 1: the store boots on a schema behind the code (U4b)                                                                                                                                                                                             |
+| `0e712a9b7e` | Round 1: a gate miss after a lost `COMMIT` reply is not counted (X8d)                                                                                                                                                                                  |
+| `551a39043b` | Round 1: the mesh writer re-reads merged `seen_by`, kept in first-seen order (X9)                                                                                                                                                                      |
+| `b28fc592ad` | Round 1: one dropped LISTEN connection is replaced once, and released (S9)                                                                                                                                                                             |
+| `0cd7b9ab75` | Round 1: the capture and the reload keep a mirror map's own kind                                                                                                                                                                                       |
+| `f80b923e4d` | Round 1: a file store's boot removes temp snapshots dead processes left (O16)                                                                                                                                                                          |
+| `b828f7f244` | Round 1: Helm chart, headers, production error and alert text say write-behind                                                                                                                                                                         |
+| `baa7a1d593` | Round 1: this record, `KNOWN_LIMITATIONS.md`                                                                                                                                                                                                           |
+| `7bc2db101b` | Round 2: U4b finds the schema without `invitation_admissions` by its migration (overlap (e))                                                                                                                                                           |
+| `beeaa6556c` | Round 2: a missed notification lasts until restart: `KNOWN_LIMITATIONS.md`, deploy comments, M11 note                                                                                                                                                  |
+| `265f430fdb` | Round 2: the single-server compose file says write-behind, and that a missed notification lasts                                                                                                                                                        |
+| `232b8c6409` | Round 2: this record                                                                                                                                                                                                                                   |
+| `a0f6012736` | Merge `develop` at `f6da7b7d16` (#993, #994, #995); no file under `packages/api/src` or `test` changed there                                                                                                                                           |
+| `b2ba8803c7` | Round 3: X5, X11 and X13 fail without #12, #14, #32, #40 and #41's predicates                                                                                                                                                                          |
+| `a8edded8ab` | Round 3: the store's comments say a missed notification lasts, and that an upsert rewrites its row                                                                                                                                                     |
+| `f023389188` | Round 3: this record                                                                                                                                                                                                                                   |
+| `3f4a6752f2` | Round 4: X12's null-stamp case; the deploy comments no longer say "eventual"                                                                                                                                                                           |
+| `51a37fa8b9` | Merge `develop` at `7bda9eb72a` (#996, #997 and the documentation commits after them); no file under `packages/api` changed there                                                                                                                      |
+| `e30c6d5c4f` | For publication: "Disclosure", "After upgrading", the header, decisions 1, 3 and 4, O3, and the gates on the merged head                                                                                                                               |
+| `f2054bd111` | Merge `develop` at `27d8c17051` (#998, with lodash 4.18.1); no file under `packages/api` changed there                                                                                                                                                 |
+| this commit  | The publication review: the header's range, the request-less and unauthenticated triggers, the sign-up block, the rotation as the recommended step, the single process's dated facts, "After upgrading" steps 3 to 5, and the gates on the merged head |
 
 Release A of the rollout (decision 2) is the receivers: the first three
 commits. Release B is the rest. Which round-1 receiver fixes can also go
