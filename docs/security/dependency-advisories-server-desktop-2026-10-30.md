@@ -39,8 +39,11 @@ Also on 2026-11-02 the operator decided that the desktop release runs only on
 yes), and asked for a CI guard against file names that differ only by case,
 which `7518112` adds ([Found outside scope](#found-outside-scope-not-fixed-here),
 item 6, and [Before merge or release](#before-merge-or-release), the
-third-fault bullet). No x86_64 macOS leg was added: the operator chose not
-to add one yet.
+third-fault bullet). On 2026-11-08 a second review of those commits led
+`b70100d` to drop `v*` from the desktop tags, so that desktop releases come
+only from `release-*` tags (item 6 says why; this too departs from the
+decision's words and needs the operator's yes), and `cbd023b` to widen the
+guard. No x86_64 macOS leg was added: the operator chose not to add one yet.
 
 | Package (lock)        | Advisory                              | Severity | Fixed in   | Outcome                                         |
 | --------------------- | ------------------------------------- | -------- | ---------- | ----------------------------------------------- |
@@ -223,8 +226,9 @@ to add one yet.
     removed in `42f68f2` instead of fixed). On 2026-11-02 it also has
     the desktop release workflow, which was configured to publish a public
     release named after whatever ref ran it once its build passed (item 6;
-    since `9ff8159` it runs only on `release-*` and `v*` tags and uploads
-    into a draft that a person publishes), and two inherited workflows that
+    since `9ff8159` it runs only on tags and uploads into a draft that a
+    person publishes, and since `b70100d` only on `release-*` tags), and two
+    inherited workflows that
     would act on such a draft or on its publication (items 7 and 8). See
     [Found outside scope](#found-outside-scope-not-fixed-here).
 
@@ -1458,8 +1462,9 @@ three runners, run 41461856327).
 `blackout-desktop-tauri.yml` runs on pull requests to `main` only, and only
 its toolchain-free notification harness; its `build` job had
 `if: github.event_name != 'pull_request'` and ran on pushes to `main`, on
-`release-*` and `v*` tags, and on `workflow_dispatch` (since `9ff8159`, on
-those tags only, after its `create-release` job). PRs here target
+`release-*` and `v*` tags, and on `workflow_dispatch` (since `9ff8159` on
+those tags only, after its `create-release` job, and since `b70100d` on
+`release-*` tags only). PRs here target
 `develop`. So tauri 2.10.3 → 2.12.5, wry 0.54 → 0.57, tao, tray-icon, muda and
 the 28 added package versions (15 of them crates new to the lock, dbus and
 libdbus-sys among them) were first linked in CI by the build check, not the
@@ -1498,8 +1503,8 @@ libayatana-appindicator3-dev librsvg2-dev`):
     it would have published a release named after the branch (item 6 of
     [Found outside scope](#found-outside-scope-not-fixed-here)). Since
     `9ff8159` that workflow has no `workflow_dispatch`. A pushed `release-*`
-    or `v*` tag still starts its signed build, into a draft; to test a
-    build, dispatch the build check instead.
+    tag still starts its signed build, into a draft (a `v*` tag did too
+    until `b70100d`); to test a build, dispatch the build check instead.
 -   **Done here, after the third review: the Linux half of the Rust build**
     (see [Verification](#verification)), on Ubuntu 24.04 rather than 22.04,
     with a placeholder frontend and without `tauri build`'s bundling. The
@@ -1848,15 +1853,51 @@ libayatana-appindicator3-dev librsvg2-dev`):
     `7518112` the script exits 0 (6,595 paths, all three checks green). On
     a scratch copy of the tree with `toolbag.ts` restored from `f0b6469`
     beside `ToolBag.tsx` it exits 1 and names exactly that pair; the script
-    before `7518112` exits 0 on the same copy. Not covered: a file against
-    a sibling directory (`Foo.ts` beside `foo/`, where `./foo` finds the
-    file on macOS and the directory's index on Linux; a prototype finds
-    none in this tree), Unicode case folding beyond `toLowerCase`, and the
-    NFC/NFD normalization that APFS ignores (no tracked path has a
-    non-ASCII character today). `develop` has no required checks, so a
-    failure is a red check, not a merge block. A pull request that changes
-    the client outside the build check's path filter is still built on
-    Linux only, so any other macOS- or Windows-only break can still land.
+    before `7518112` exits 0 on the same copy.
+
+    The second review (2026-11-08) found two gaps and a silent pass, and
+    `cbd023b` answers them. `foo.css` beside `Foo.css.ts` passed every
+    check (stems `foo` and `Foo.css`; whole names differ), yet it is the
+    tool-bag fault again: the client imports vanilla-extract styles as
+    `./PdfViewer.css` (206 client files import a `.css` specifier), which
+    resolves to `PdfViewer.css.ts`, plain `.css` files already sit beside
+    `.css.ts` files in two directories (`src/index.css` beside
+    `colors.css.ts` and `config.css.ts`; `features/profile/ProfileEffect.css`
+    beside `ProfileLayoutEditor.css.ts`), and Vite 8.1.6 stats the specifier
+    as written before it tries any extension (`dist/node/chunks/node.js`
+    32419-32422, `tryCleanFsResolve`), so `./Foo.css` would find
+    `Foo.css.ts` on Linux and `foo.css` on macOS or Windows. The script now
+    has a check for a tracked path that equals a sibling's path without its
+    last extension, ignoring case but not exactly (`Foo.css` beside
+    `Foo.css.ts` passes: the exact name wins everywhere; a file without an
+    extension is left to the whole-path check); no pair in this tree
+    matches, and on a scratch copy with `pdfviewer.css` added beside
+    `PdfViewer.css.ts` the script exits 1 and names the pair. `a.TS` beside
+    `a.tsx` also passes every check (stems exactly equal, whole names
+    differ) while `./a`, probed as `a.ts`, matches `a.TS` only where case
+    does not matter; the header's claim that exactly equal stems are safe
+    "because every filesystem resolves them alike" now holds only for
+    lower-case extensions, and the pair is listed as not covered (catching
+    it would take the resolver's probe order; the one upper-case extension
+    tracked today, `editable.Dockerfile`, has no sibling with its stem).
+    And the main guard compared `import.meta.url`, in which the ESM loader
+    has resolved symlinks, with `pathToFileURL(process.argv[1])`, which
+    keeps the path as given, so the script called through a symlinked path
+    ran nothing and exited 0, even on a tree with the tool-bag pair; it now
+    compares `realpathSync(process.argv[1])` with the module's real path
+    (CI and `pnpm guard:duplicate-paths` use a relative path and were not
+    affected). The test has 17 cases (four more unit groups and three more
+    runs of the script, one through a symlink), and four more mutations in
+    scratch copies each turned it red. Not covered: a file against a
+    sibling directory (`Foo.ts` beside `foo/`, where `./foo` finds the file
+    on macOS and the directory's index on Linux; a prototype finds none in
+    this tree), the `a.TS` case above, Unicode case folding beyond
+    `toLowerCase`, and the NFC/NFD normalization that APFS ignores (no
+    tracked path has a non-ASCII character today). `develop` has no
+    required checks, so a failure is a red check, not a merge block. A pull
+    request that changes the client outside the build check's path filter
+    is still built on Linux only, so any other macOS- or Windows-only break
+    can still land.
 
 -   **2026-11-02: what this branch's commit messages got wrong.** History
     is not rewritten here, so the corrections are recorded instead.
@@ -1905,7 +1946,8 @@ libayatana-appindicator3-dev librsvg2-dev`):
         dispatch and on pushes to `main` that touch the mobile directories,
         and the desktop release job's macos-latest and windows-latest legs
         build it on both (then on pushes to `main`, on tags and on
-        dispatch; since `9ff8159` on `release-*` and `v*` tags only). None
+        dispatch; since `9ff8159` on `release-*` and `v*` tags only, and
+        since `b70100d` on `release-*` tags only). None
         of those jobs has run. Until this version this entry, and the build
         check's path-filter comment until `9ff8159`, called it "the only CI
         build of it on Windows", which left out the release job's Windows
@@ -1972,7 +2014,23 @@ libayatana-appindicator3-dev librsvg2-dev`):
         `blackout-mobile/` or that workflow.
     -   `7518112` says each of the five mutations "turned the suite red and
         was reverted": they were made in scratch copies of the script and
-        its test, so nothing in the tree needed reverting.
+        its test, so nothing in the tree needed reverting. Its "Not
+        covered" list (a file against a sibling directory, Unicode folding,
+        NFC/NFD) read as complete; it left out `foo.css` beside
+        `Foo.css.ts`, which `cbd023b` now catches, and `a.TS` beside
+        `a.tsx`, which it does not.
+    -   `9ff8159` says `create-release` fails on a published release "so no
+        bundle is uploaded into a live one". That holds for a release
+        published before the run started; the check runs once, and a draft
+        published while the legs build gets their uploads (item 6 of
+        [Found outside scope](#found-outside-scope-not-fixed-here)).
+    -   `27be012` says a `v*` tag "ends with one draft holding the web,
+        mobile, SBOM, signature and desktop files". That sharing is what
+        `b70100d` undoes: a draft with release.yml's hundreds of files is
+        past tauri-action's one page of assets. Its "If the operator says
+        no, revert this commit and drop v\*" no longer describes the
+        choice: the desktop workflow drops that tag pattern either way, and
+        `27be012` stays for a different reason (item 6).
 
 ## The gate
 
@@ -2507,7 +2565,8 @@ The record's own commit changes no file Trivy reads.
 6.  **The desktop release workflow was configured to publish a public,
     non-draft release named after whatever ref ran it, once its build
     passed (2026-11-02).** (Changed on 2026-11-02 in `9ff8159`, with
-    `27be012` for `release.yml`; see the end of this item.) When this item
+    `27be012` for `release.yml`, and on 2026-11-08 in `b70100d` and
+    `826bc48`; see the end of this item.) When this item
     was written nothing had been run, dispatched or changed in that
     workflow. `blackout-desktop-tauri.yml`'s `build` job ran
     `tauri-apps/tauri-action@v0` with
@@ -2595,19 +2654,33 @@ The record's own commit changes no file Trivy reads.
     `v*` tags and creates its release as a draft, so that a person
     publishes each release and `latest.json` reaches installed desktops
     only then. The bullets above describe the workflow before that commit,
-    and it landed before any pubkey fix, as this item asked.
+    and it landed before any pubkey fix, as this item asked. On 2026-11-08
+    `b70100d` narrowed the tags to `release-*` (the `release.yml` bullet
+    below says why); that departs from the decision's words and needs the
+    operator's yes.
 
-    -   **What changed.** Under `push` only `tags` remain, so no branch
-        push starts the workflow, and `workflow_dispatch` is gone. The
-        workflow's permissions are `contents: read`; only its two release
-        jobs have `contents: write`. A new `create-release` job
+    -   **What changed.** Under `push` only `tags` remain (`release-*` and
+        `v*`; since `b70100d` `release-*` alone, and both release jobs also
+        check for that prefix in their `if`), so no branch push starts the
+        workflow, and `workflow_dispatch` is gone; the notification
+        harness's `pull_request` trigger, to `main`, which does not exist,
+        stays. The workflow's permissions are `contents: read`; only its two
+        release jobs have `contents: write`. A new `create-release` job
         (`actions/github-script`, pinned to the commit `v8` names, which
         four other workflows here already use) fails if the tag already
-        has a published release, so no bundle goes into a live one;
-        otherwise it reuses the tag's oldest draft or creates one draft,
-        and outputs its id. It reads the tag from `context.ref`, never from
-        an interpolated expression. `build` needs it, fails first unless
-        the id is a positive integer, and runs tauri-action pinned to
+        has a published release, so no bundle goes into a release that was
+        already published when the run started. That check runs once,
+        before builds that took 3 to 13 minutes in the build check's run
+        41461856327, and tauri-action then uploads by id without reading
+        the draft's state (`src/index.ts` 211-241), so a draft that is
+        published while the legs run, by a person who did not wait or by
+        anything holding the token, gets their bundles and `latest.json`
+        as a live release; that is why the release doc says to wait for
+        all three legs. Otherwise `create-release` reuses the tag's oldest
+        draft or creates one draft, and outputs its id. It reads the tag
+        from `context.ref`, never from an interpolated expression. `build`
+        needs it, fails first unless the id is a positive integer, and runs
+        tauri-action pinned to
         v0.6.2 (`84b9d35b5f`) with `releaseId`, `tagName`,
         `releaseDraft: true` and `includeUpdaterJson`, and without
         `releaseName` or `prerelease`. With `releaseId` set, tauri-action
@@ -2622,50 +2695,119 @@ The record's own commit changes no file Trivy reads.
         finish together could each create one. This is the action's
         documented matrix pattern (`examples/publish-to-manual-release.yml`)
         without its publish job. No secret was added.
-    -   **`release.yml` on `v*` tags (`27be012`, which needs the
-        operator's yes).** Its `release` job runs
-        `softprops/action-gh-release` twice, with no `draft` input. At
-        v2.6.2 each step looks the release up by tag, which never returns a
-        draft, so it creates one, then keeps the tag's oldest draft (the
-        desktop one, made seconds after the push while this job waits for
-        three builds), deletes its own empty duplicate and uploads into the
-        kept draft (`src/github.ts` 732-748 and 779-884). `finalizeRelease`
-        then publishes it, as latest, unless the `draft` input is true
-        (624-680, 631). Unchanged, `release.yml` would therefore have
-        published every `v*` tag's desktop release with no person in
-        between, possibly while the legs were still uploading. `27be012`
-        sets `draft: true` on both steps and pins them to v2.6.2
-        (`3bb12739c2`), so a `v*` tag ends with one draft holding the web,
-        mobile, SBOM, signature and desktop files. That also makes
-        `release.yml`'s own GitHub release a draft, which is wider than the
-        decision's words; its images, cosign signatures, deploy webhook and
-        Matrix message still run at tag time, and when the desktop draft
-        came first the kept draft has no generated notes. The alternative is
-        to revert `27be012` and drop `v*` from the desktop tags, so that
-        desktop releases come only from `release-*` tags; that departs from
-        the decision's words too. Leaving both unchanged would leave `v*`
-        releases published with no person, against this item.
+    -   **`release.yml` on `v*` tags (`27be012`, then `b70100d` and
+        `826bc48`; `27be012` and `b70100d` each need the operator's yes).**
+        Its `release` job runs `softprops/action-gh-release` twice, with no
+        `draft` input. At v2.6.2 each step looks the release up by tag,
+        which never returns a draft, so it creates one, then keeps the tag's
+        oldest draft (the desktop one, made seconds after the push while
+        this job waits for three builds), deletes its own empty duplicate
+        and uploads into the kept draft (`src/github.ts` 732-748 and
+        779-884). `finalizeRelease` then publishes it, as latest, unless the
+        `draft` input is true (624-680, 631). Unchanged, `release.yml` would
+        therefore have published every `v*` tag's desktop release with no
+        person in between, possibly while the legs were still uploading.
+        `27be012` set `draft: true` on both steps and pinned them to v2.6.2
+        (`3bb12739c2`), so that a `v*` tag ended with one draft holding the
+        web, mobile, SBOM, signature and desktop files.
+
+        The second review (2026-11-08) found that this sharing defeats the
+        remedy for a platform lost from `latest.json`. `release.yml`
+        uploads every file under `artifacts/**` (softprops `src/util.ts`
+        159-173 returns every file under the glob): the web build alone is
+        390 files with unique names (`apps/blackout-client/dist` here), plus
+        the APK and the iOS `.app`'s contents, and the second step adds a
+        `.sig`, `.pem` and `.bundle` for each. tauri-action v0.6.2 never
+        paginates: `uploadVersionJSON` reads one page of 50 assets
+        (`src/upload-version-json.ts` 60-65) to find the existing
+        `latest.json` (66) and its own uploads (114-138), and if it finds no
+        signature it warns and returns (168-173), so the step still passes;
+        `uploadAssets` reads one page of 100 (`src/upload-release-assets.ts`
+        26-33) to find the same-named assets it deletes before uploading
+        (46-73), with one attempt (78-91). A leg that uploads after
+        `release.yml`'s first step can therefore (a) not see its own files
+        and add nothing to `latest.json`, or (b) not see `latest.json` and
+        write one holding only its own platform, after which re-uploading
+        that name gets a 422 while the old one sits beyond the page. A
+        re-run reads the same first page, so "re-run all jobs" repairs
+        nothing there. Which assets land on page 1 depends on GitHub's
+        listing order, which was not checked; under ASCII sorting 267 of
+        the 390 web names come before `latest.json`, ignoring case 209.
+        None of this publishes the draft, so it fails closed, and today
+        every leg stops before uploading (the placeholder pubkey), but the
+        remedy this item and the release doc gave was wrong for `v*` tags.
+
+        So `b70100d` drops `v*` from the desktop workflow's tags: desktop
+        releases come only from `release-*` tags, and the desktop draft
+        holds the installers, the updater artifacts, their signatures and
+        `latest.json`, a dozen or so files, well inside one page, so the
+        re-run remedy holds. This is the alternative the first version of
+        this bullet named; it departs from the decision's words
+        ("`release-*` and `v*` tags") and needs the operator's yes. A
+        product version then takes two tags: `v*` for `release.yml` and
+        `release-*` for the desktop. `27be012` stays, for a different
+        reason now: the desktop updater reads
+        `releases/latest/download/latest.json`, a `v*` release never has
+        `latest.json`, and softprops publishes with `make_latest` unset,
+        which GitHub treats as latest; so an automatic `v*` publish would
+        404 every installed desktop's update check until the next desktop
+        release is published. With `draft: true` a person publishes it and
+        leaves "Set as the latest release" unticked (the release doc says
+        so). If the operator would rather `release.yml` publish on its own,
+        the fallback is `make_latest: false` on its first softprops step,
+        which also needs a yes; doing neither leaves that 404. `826bc48`
+        rewrites `release.yml`'s comments for this and changes its Matrix
+        message, which said "Blackout release <tag> is live." while the
+        GitHub release is a draft; it now says the production deploy was
+        requested and the GitHub release is a draft until a person
+        publishes it. The images tagged `latest` and `stable`, cosign, the
+        production deploy webhook and that message still run at tag time
+        with no person involved: pushing a `v*` tag deploys the server, and
+        only its GitHub release waits (the release doc says so too, where
+        before it named only the release files).
+
     -   **What a person checks before publishing**, now in
         `docs/operations/wrapper-build-and-release.md`: `latest.json` has
         `linux-x86_64`, `darwin-aarch64` and `windows-x86_64` (there is no
         Intel macOS leg: on 2026-11-02 the operator chose not to add one
         yet), every URL in it names `/download/<the tag>/`, every signature
-        is non-empty and the installers are signed; on a `v*` tag,
-        `release.yml`'s files are in the draft too. "Set as the latest
+        is non-empty and the installers are signed. "Set as the latest
         release" stays ticked only if the release carries `latest.json`,
-        because the updater reads whichever release is latest.
+        because the updater reads whichever release is latest. The doc also
+        names the secrets each leg needs first (the Apple ones for the macOS
+        leg, which imports the certificate before it builds), and says to
+        wait for all three legs before touching the draft.
     -   **What it does not change.** The legs still merge `latest.json` one
         after another (`src/upload-version-json.ts` 60-112 and 269-301, one
         attempt each), so two that finish together can lose a platform or
         get a 422; the doc says to re-run all jobs, which reuses the draft
         and replaces each leg's files (`src/upload-release-assets.ts`
-        46-73). The pubkey is still item 1's placeholder and the Windows
-        thumbprint a literal, so the legs still stop at updater signing and
-        at signtool. The app's version is still 0.1.0, which the tag does
-        not change, so no release reaches an installed desktop until it is
-        raised. tauri-action still runs the CLI through npm (`tauriScript`
-        unset), and the release job's setup-node, pnpm and Rust actions are
-        still unpinned.
+        46-73), and since `b70100d` that holds because the draft has only
+        the desktop's dozen or so files (above). The pubkey is still item
+        1's placeholder and the Windows thumbprint a literal, so the legs
+        still stop at updater signing and at signtool, and the macOS leg,
+        with the Apple secrets unset, earlier still, at the certificate
+        import before the build. The app's version is still 0.1.0, which
+        the tag does not change, so no release reaches an installed desktop
+        until it is raised. tauri-action still runs the CLI through npm
+        (`tauriScript` unset). The build job's setup-node, pnpm and Rust
+        actions were unpinned, one of them a moving branch, and its
+        checkout kept the token in `.git/config` for every later step;
+        since `b70100d` they are pinned to the build check's commits
+        (`6044e13b`, `fc06bc12`, `b725eda5`, which built on all three
+        runners in run 41461856327) and the checkout keeps no credentials.
+        What that does not change: the job's token can publish the draft
+        (`updateRelease` with `draft: false`), and it still reaches the
+        build itself, because tauri-action gets `GITHUB_TOKEN` in its
+        environment, which `beforeBuildCommand` and the install and build
+        scripts inherit. "Nothing here publishes" is true of the workflow's
+        own steps, not of the code they run. The complete fix is a
+        build-only leg with no token and a separate upload job; left to the
+        operator. On a `v*` tag `release.yml`'s jobs have the workflow's
+        `contents: write` and run unpinned actions (`download-artifact@v4`,
+        `docker/*@v3`, `cosign-installer@v3`, `sbom-action@v0`,
+        `setup-java@v4`), so they too could publish any open draft, a
+        desktop one included.
     -   **A signed test build** now means pushing a `release-*` tag, which
         makes a draft; to discard it, delete the draft and then the tag
         (deleting a draft leaves its tag). The tag and the run's logs are
@@ -2683,8 +2825,9 @@ The record's own commit changes no file Trivy reads.
         softprops v2.6.2 (their built `dist/index.js` has the same
         branches) and GitHub's REST documentation; `create-release`'s script
         ran only against mocked `github`, `context` and `core` objects, in
-        six cases. actionlint 1.7.12 with shellcheck 0.9.0 reports nothing
-        on either workflow.
+        six cases (again after `b70100d`). actionlint 1.7.12 with shellcheck
+        0.9.0 reports nothing on either workflow, after `b70100d` and
+        `826bc48` too.
 
 7.  **`release-drafter.yml` would retag an open draft (2026-11-02).** Not
     changed here. It runs on pushes to `staging`, a branch that does not
@@ -2701,7 +2844,11 @@ The record's own commit changes no file Trivy reads.
     `/download/<the old tag>/`, which would 404 once published, so updates
     would fail closed. The workflow is Element and matrix-js-sdk residue
     (`_extends: matrix-org/matrix-js-sdk`). Whoever creates `staging` has
-    to deal with it first, or it can be removed.
+    to deal with it first, or it can be removed. The reusable workflow is
+    called at `@develop`, a branch, so "a dispatch would stop at that
+    checkout" holds only while that third-party branch keeps
+    `ref: staging`; the job has `contents: write`. Pinning the reference
+    to a commit, or removing the workflow, is the operator's call.
 8.  **`build_debian.yaml` reacts when a person publishes a release
     (2026-11-02).** Not changed here. It runs on `release: published`. A
     release that tauri-action published with `GITHUB_TOKEN` would have
@@ -2710,11 +2857,23 @@ The record's own commit changes no file Trivy reads.
     (`environment: packages.element.io`): it downloads `element-web`'s
     release of the same tag name from `element-hq`, so for a `release-*`
     tag it fails red at that download. For a `v*` tag that matches an
-    element-web version it would build Element's `.deb` and, if the
-    release is not a prerelease, try to publish it with
-    `ELEMENT_BOT_TOKEN` and the `CF_R2_*` secrets. Whether those secrets or
-    the environment exist here could not be read (the proxy refuses
-    `/environments`). Its removal is offered to the operator.
+    element-web version the download succeeds, but the job cannot reach
+    its publish step: "Build deb package" runs `dpkg-gencontrol` at the
+    repository root, which needs `debian/control`, and the repository has
+    no root `debian/` directory (the tracked ones are
+    `apps/blackout-server/debian/` and `deploy/debian/`; "Prepare" only
+    creates `debian/tmp/DEBIAN` and copies the files at depth 1 of
+    `debian/`, of which there are none), so that step fails ("cannot read
+    debian/control", exit 25; reproduced here with a changelog of the shape
+    the "Write changelog" step makes), and if `vars.GPG_FINGERPRINT` is
+    unset it fails one step earlier, at "Check GPG signature"
+    (`gpg --fingerprint ""`: "Invalid user ID", exit 2). So no `.deb` is
+    built or published; every publish gives a red run. Until 2026-11-08
+    this item said it would build Element's `.deb` and try to publish it
+    with `ELEMENT_BOT_TOKEN` and the `CF_R2_*` secrets, which overstated
+    it. Whether those secrets or the environment exist here could not be
+    read (the proxy refuses `/environments`). Its removal is offered to the
+    operator.
 
 ## Not verified
 
@@ -2736,8 +2895,9 @@ The record's own commit changes no file Trivy reads.
     job's own npm invocation (on Linux only as far as the version-mismatch
     check and a probe hook, on macOS and Windows not at all), and the
     updater against a real release.
--   The release path after `9ff8159` and `27be012`. Neither workflow has
-    run, and nothing was dispatched or tagged. Taken from GitHub's
+-   The release path after `9ff8159`, `27be012`, `b70100d` and `826bc48`.
+    Neither workflow has run, and nothing was dispatched or tagged. Taken
+    from GitHub's
     documentation or the actions' code, not observed: that GitHub accepts
     several drafts with one `tag_name`; that a draft's asset URLs have the
     form `/releases/download/untagged-…/`; that `getReleaseByTag` never
@@ -2746,16 +2906,19 @@ The record's own commit changes no file Trivy reads.
     person's publish fires `release: published` while a `GITHUB_TOKEN`
     push or release starts no workflow; and that a re-run of all jobs gets
     the same draft from `create-release`. The `latest.json` merge race and
-    the 422 on a concurrent upload were read from the code. `release.yml`'s
-    adoption of the desktop draft, `release-drafter`'s retagging and
-    `build_debian.yaml`'s reaction were read, not run. No real
+    the 422 on a concurrent upload were read from the code, as were
+    tauri-action's one-page reads and what they would have done on a draft
+    shared with `release.yml` (the order in which GitHub lists a release's
+    assets was not checked; `b70100d` makes it moot for the desktop draft).
+    `release-drafter`'s retagging and `build_debian.yaml`'s reaction were
+    read, not run, apart from the two local commands in item 8. No real
     `latest.json` was produced: the signing key, the pubkey and the
     thumbprint are not set up.
 -   The case-only name guard against Unicode: it lowercases with
     `String.prototype.toLowerCase`, which NTFS's and APFS's folding tables
     differ from in corner cases, and does not normalize NFC against NFD,
-    which APFS ignores. Its non-ASCII test ran on Linux only; git's
-    `core.precomposeUnicode` on macOS was not tried.
+    which APFS ignores. Its non-ASCII test and its symlink test ran on
+    Linux only; git's `core.precomposeUnicode` on macOS was not tried.
 -   That libdbus-1-dev is installed on the release job's ubuntu-22.04
     runner, which has never run. The check's ubuntu-22.04 leg, with the
     release job's apt packages, shows it: in job 125333517929 of run
