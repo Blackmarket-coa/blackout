@@ -29,13 +29,17 @@ import { DeviceVerificationReset, DeviceVerificationSetup } from './DeviceVerifi
  * nudge, the undecryptable-message chip and the legacy Devices page's Enable
  * button.
  *
- * A verdict a screen shows can be hours old. The SDK re-checks its own backup
- * only at start-up, on the user's own identity update and after an upload
- * failure of an active backup, and it emits `KeyBackupStatus` only when THIS
- * device enables or disables backup (matrix-js-sdk 40.2.0,
- * `lib/rust-crypto/backup.js`, `enableKeyBackup` and `disableKeyBackup`).
+ * A verdict a screen shows can be hours old. A screen refreshes it on
+ * `KeyBackupStatus`, which the SDK emits only when THIS device enables or
+ * disables backup (matrix-js-sdk 40.2.0, `lib/rust-crypto/backup.js`,
+ * `enableKeyBackup` and `disableKeyBackup`). The SDK's own re-checks of the
+ * backup (forced at start-up, on the user's own identity update, after an
+ * upload failure, after this device's own `resetKeyBackup` and when the app
+ * calls `checkKeyBackupAndEnable`, which Blackout never does; unforced until a
+ * check first succeeds) enable nothing on a device that trusts neither the
+ * account's identity nor a backup signed by it, so there they emit nothing.
  * Another device of the account can create cross-signing and a backup while
- * the screen sits open, and nothing tells this one. So no entry opens the
+ * the screen sits open, and nothing refreshes the screen. So no entry opens the
  * from-scratch setup from a stored verdict: `open()` asks the homeserver again
  * at the click, with the overlay already up in a checking state, and only the
  * answer to the latest click opens a flow: a `'none'` opens

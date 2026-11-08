@@ -226,6 +226,22 @@ describe('MessageBadEncryptedContent chip', () => {
         expect(CHIP_CHECK_FAILED).toMatch(/key backup or cross-signing/);
     });
 
+    it('the not-verified text says what is closed to this device, not that the key can never come', () => {
+        // Round 4 of S9: "so it can’t get this message’s key." was absolute,
+        // but a key the sender's device sends later is used at once
+        // (`rust-crypto.js` `onRoomKeysUpdated` retries the waiting events).
+        // What is closed is a backup and the account's other sessions
+        // (room-key requests are off).
+        expect(CHIP_NOT_VERIFIED).not.toMatch(/can’t get this message’s key\./);
+        expect(CHIP_NOT_VERIFIED).toMatch(/from a backup or from your other sessions/);
+        expect(CHIP_NOT_VERIFIED).toMatch(
+            /If the sender’s device sends the key later, the message becomes readable here\./
+        );
+        expect(CHIP_NOT_VERIFIED).toMatch(
+            /Another of your sessions that has the key can still read it\./
+        );
+    });
+
     it('the offer texts say the setup won’t make this message readable, then the nudge’s text for the row', () => {
         expect(CHIP_SETUP_WONT_FIX).toBe(
             'Setting up a backup won’t, by itself, make this message readable: a new backup starts with only the keys this device already has.'

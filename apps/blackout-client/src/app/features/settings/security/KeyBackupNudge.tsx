@@ -46,8 +46,8 @@ import { KEY_BACKUP_NUDGE_GUARD_TEXTS, selectKeyBackupNudge } from './encryption
  * already trusts and no backup; otherwise nothing is offered and the text
  * says why (see `selectKeyBackupNudge` for the table).
  *
- * The banner's row can be stale: nothing tells this device when another
- * device of the account sets up cross-signing and a backup (the SDK emits
+ * The banner's row can be stale: nothing refreshes it when another device of
+ * the account sets up cross-signing and a backup (the SDK emits
  * `KeyBackupStatus` only for this device's own backup). So the button never
  * opens a flow from the stored row. It re-asks the homeserver at the click
  * (`useKeyBackupSetupGuard`) and opens the setup or the reset only on the

@@ -385,11 +385,16 @@ export const DeviceVerificationReset = forwardRef<HTMLDivElement, DeviceVerifica
                             <Text size="T300">Resetting device verification is permanent.</Text>
                             {/* What the guarded flow does (S9,
                                 docs/security/key-backup-nudge-2026-11-02.md):
-                                `SetupVerification` in mode "reset" refuses
-                                before its first write while the account has
-                                a backup or the backup check fails, so no
-                                backup is lost; it replaces cross-signing and
-                                secret storage and creates a new backup. */}
+                                `SetupVerification` in mode "reset" checks
+                                once, right before its first write, and
+                                refuses while the account has a backup or the
+                                backup check fails, so a backup that exists
+                                when the form is submitted is not deleted;
+                                otherwise it replaces cross-signing and secret
+                                storage and creates a new backup. A backup
+                                another app creates while the password prompt
+                                is open would still be deleted (the record's
+                                "What remains"). */}
                             <Text size="T300">
                                 Anyone you have verified with will see security alerts, and you will
                                 get a new recovery key and a new key backup. If your account already

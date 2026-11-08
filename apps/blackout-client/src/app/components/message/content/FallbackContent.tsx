@@ -59,8 +59,18 @@ export const CHIP_LABEL = 'Why?';
 export const CHIP_CHECKING = 'Checking your key backup on your homeserver…';
 export const CHIP_BACKUP_EXISTS =
     'Your account has a key backup on your homeserver, but Blackout has no screen that restores keys from it. Setting up a new backup would delete it, so Blackout doesn’t offer that here. Another Matrix app that you sign in to with your recovery key or passphrase may be able to show this message.';
+/**
+ * Shown when the account has cross-signing and no backup, and this device
+ * doesn't trust the account's cross-signing. What is closed to this device:
+ * a backup (there is none, and Blackout has no screen to restore from one)
+ * and asking the account's other sessions (room-key requests are off,
+ * `lib/rust-crypto/index.js` `roomKeyRequestsEnabled = false`). What is not:
+ * a key the sender's device sends later is used at once (`rust-crypto.js`
+ * `onRoomKeysUpdated` retries every event waiting for that session), so the
+ * text doesn't say the message can never be read here.
+ */
 export const CHIP_NOT_VERIFIED =
-    'This device isn’t verified, and Blackout has no screen that verifies it or restores keys, so it can’t get this message’s key. Another of your sessions that has the key can still read it.';
+    'This device isn’t verified, and Blackout has no screen that verifies it or restores keys, so it can’t get this message’s key from a backup or from your other sessions. If the sender’s device sends the key later, the message becomes readable here. Another of your sessions that has the key can still read it.';
 export const CHIP_CHECK_FAILED =
     'Blackout couldn’t finish checking whether your account already has a key backup or cross-signing, so it doesn’t offer to set one up right now.';
 /**
