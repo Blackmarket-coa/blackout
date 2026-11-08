@@ -19,6 +19,14 @@ import { CryptoEvent } from 'matrix-js-sdk/lib/crypto-api';
  *   - `backupTrusted: 'no'` or
  *     `crossSigningReady: 'no'`                  → cross-signing/trust state
  *
+ * 2026-11-08 (S9, `docs/security/key-backup-nudge-2026-11-02.md`): on a new
+ * device the second bullet names no real path. Blackout has no restore, no
+ * device verification and no room-key requests, so a new device of an
+ * account that has a backup shows `activeBackup: 'no'` for that reason alone.
+ * `backupFailures` counts `KeyBackupFailed`, which the SDK emits when this
+ * device's upload to its active backup is refused because that version was
+ * replaced or deleted, not a failed restore. See KNOWN_ISSUES.md, BO-1 notes.
+ *
  * The snapshot is module-level and synchronous to read, mirroring
  * `getSuppressedLogCounts()` in ./matrixLogger — `collectDiagnostics()` is
  * synchronous and React-free, so it cannot await the CryptoApi directly.

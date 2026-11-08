@@ -182,7 +182,9 @@ export const KEY_BACKUP_NUDGE_GUARD_TEXTS = {
  * | `'unknown'`       | any               | none           | —                         |
  *
  * Row 1 is safe because the homeserver answered 404 `M_NOT_FOUND` for the
- * backup and has no master key for the account: there is nothing to replace.
+ * backup and has no master key for the account: there is no backup and no
+ * cross-signing to replace. (The check does not read secret storage, which
+ * the setup also replaces; see the S9 record's "What remains".)
  * Row 2 deletes no backup (the check answered "none") and the reset flow
  * carries its own warning and confirm step. A `'backup'` or `'unknown'`
  * answer offers nothing: a setup would delete the existing backup, and
