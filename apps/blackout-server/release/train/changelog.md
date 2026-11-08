@@ -17,6 +17,8 @@ Release date: `2026-03-19`
 
 > **2026-11-02.** The profile-aware entrypoint and the image lifecycle workflow these bullets name, `services/blackout-server/entrypoint.sh` and `.github/workflows/blackout-image-lifecycle.yml`, were removed with the Railway template in commit 42f68f2, with the image's Dockerfile; the operator chose removal over fixing the template. The workflow never ran in this repository. The managed-hosting readiness helpers and smoke scripts remain. This changelog is kept as the RC1 record.
 
+> **2026-11-02.** The managed-hosting readiness helpers and smoke scripts the note above says remain were removed on 2026-11-02 in commit 9493f41, with the profile helpers and their tests; the operator chose removal ("remove both"). This changelog is kept as the RC1 record.
+
 ## Security Backports
 
 - No additional upstream security patch backports are bundled in RC1 beyond the selected `1.98.0` upstream baseline.
