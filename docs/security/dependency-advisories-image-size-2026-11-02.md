@@ -12,8 +12,9 @@ build it now.
 -   **image-size is gone from the lock** (`grep -c image-size pnpm-lock.yaml`
     is 0). metro 0.83.8 measures images with a parser of its own.
 -   **No override is committed.** `pnpm.overrides` and the lock's
-    `overrides:` block are as on develop. A temporary override was used
-    between two installs (Lockfile).
+    `overrides:` block are as on develop (`27d8c17051`, merged into this
+    branch on 2026-11-08). A temporary override was used between two
+    installs (Lockfile).
 -   **No importer moves**, and nothing in the client's tree moves.
 -   **The ignores are deleted:** both `[[IgnoredVulns]]` and their comment in
     `osv-scanner.toml`, the two GHSAs and their CVE aliases in
@@ -21,10 +22,11 @@ build it now.
 -   **Nothing here runs metro**, before or after. On react-native's own
     images and the repository's committed ones, metro 0.83.8 gives the same
     sizes, scales and hashes as 0.83.5 (Behaviour check).
--   **Both OSV gates are red on 2026-11-08 for a reason outside this
-    change:** lodash 4.18.0 (GHSA-f23m-r3pf-42rh, fixed 4.18.1), reported
-    since OSV changed that record on 2026-11-03, on develop and here alike.
-    This change does not move lodash (Gates, "Re-run on 2026-11-08").
+-   **develop is merged in** (`27d8c17051`, 2026-11-08), which brings #998's
+    lodash 4.18.1. The merge was clean, and against develop the lock change
+    is the same as it was against the old base `0367abdd69`. On the merged
+    head the OSV gates, Trivy, `pnpm audit` and the frozen install pass
+    (Gates, "Re-run on the merged head").
 
 ---
 
@@ -61,14 +63,17 @@ no longer lists image-size. 0.83.6 and 0.83.7 still do.
 
 Parsed as YAML, against develop's lock: packages 1,491 → 1,493, 15 removed,
 17 added, 1 snapshot changed, 0 importer lines, `overrides:` and
-`settings:` unchanged.
+`settings:` unchanged. The diff is the same against the old base
+`0367abdd69` and against `27d8c17051`, the develop merged in on 2026-11-08,
+whose only lock change is lodash.
 
 | Change                                                                                                                                   | Reason                                                                                                                                                                                                                                                                  |
 | ---------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | metro, metro-config, metro-core 0.83.5 → 0.83.8                                                                                          | the cli-plugin's own `^0.83.1` dependencies; metro 0.83.8 also pins the other two exactly                                                                                                                                                                               |
 | metro-babel-transformer, -cache, -cache-key, -file-map, -minify-terser, -resolver, -transform-plugins, -transform-worker 0.83.5 → 0.83.8 | metro 0.83.8 and its siblings pin them exactly; the 0.83.5 copies had no other user                                                                                                                                                                                     |
 | + metro-runtime, metro-source-map, metro-symbolicate, ob1 0.83.8, beside their 0.83.5 copies                                             | pinned exactly by metro 0.83.8 and its siblings. The 0.83.5 copies stay because react-native 0.82.1 depends on metro-runtime and metro-source-map `^0.83.1` itself, and metro-source-map 0.83.5 in turn pins metro-symbolicate and ob1 0.83.5; metro does not move them |
-| hermes-parser, hermes-estree 0.33.3 → 0.35.0                                                                                             | exact pins of metro and metro-babel-transformer 0.83.8; 0.33.3's only users were their 0.83.5 copies                                                                                                                                                                    |
+| hermes-parser 0.33.3 → 0.35.0                                                                                                            | pinned exactly by metro and metro-babel-transformer 0.83.8; 0.33.3's only users were their 0.83.5 copies                                                                                                                                                                |
+| hermes-estree 0.33.3 → 0.35.0                                                                                                            | pinned exactly by hermes-parser 0.35.0; 0.33.3's only user was hermes-parser 0.33.3                                                                                                                                                                                     |
 | − image-size 1.2.1, − queue 6.0.2                                                                                                        | metro 0.83.8 does not depend on image-size; queue's only user was image-size                                                                                                                                                                                            |
 | ~ `@react-native/community-cli-plugin@0.82.1`                                                                                            | its metro, metro-config and metro-core now resolve to 0.83.8                                                                                                                                                                                                            |
 
@@ -125,6 +130,27 @@ commit.
     segment length under 2. The WebP chunk loop stops when the next offset
     does not move forward. TIFF reads the entries of one directory, after
     checking they fit in the file. SVG looks only at the first 64 KiB.
+-   One known divergence from image-size, in SVG. The 0.83.8 parser finds
+    the root `<svg>` tag's dimensions with
+    `/\b(width|height|viewBox)\s*=\s*(?:"([^"]*)"|'([^']*)')/gi` (line 258)
+    and keeps the last match of each name. `-` is a word boundary, so a
+    `stroke-width`, `data-height` or any other `*-width` or `*-height`
+    attribute that comes after the real one overwrites it. image-size 1.2.1
+    requires whitespace before the name (`\swidth=`). Measured with the
+    installed 0.83.8 against image-size 1.2.1: a Lucide-style root
+    `width="24" height="24" viewBox="0 0 24 24" … stroke-width="2"` gives
+    2×24 (image-size 24×24); `viewBox="0 0 24 24" stroke-width="2"` gives
+    2×2 (24×24); `width="100" height="50" data-height="7"` gives 100×7
+    (100×50). With `stroke-width` before `width` both give 24×24. Upstream
+    changed the pattern to `(?<![\w:-])(width|height|viewBox)` in metro
+    0.87.2 (2026-10-26), and 0.87.3 and 0.88.0 have it; 0.83.8 (the newest
+    0.83.x), 0.84.6 (`0.84-stable`) and 0.87.1 still have `\b`, so the fix
+    is not on the 0.83 line. Nothing here is affected: none of the four
+    tracked SVGs has such an attribute on its root tag (all four measure the
+    same under both parsers, part B of the behaviour check), `packages/ui`
+    and `legacy/blackout-web` hold no image files, and nothing runs metro.
+    An SVG asset added later with a `stroke-width` on its root would be
+    measured wrongly by 0.83.8.
 -   `src/Assets.js`: `getAssetSize` calls `getImageDimensions` where it
     called `imageSize(content)`. `getAssetData` used to pass a file path to
     image-size, which read the file. It now reads the first file's bytes
@@ -154,20 +180,23 @@ metro's own API:
     the bundle.
 
 The baseline ran on develop's install (metro 0.83.5). The run after ran on
-a fresh `git archive` of this change with `pnpm install --frozen-lockfile`.
+a fresh `git archive` of this change with `pnpm install --frozen-lockfile`,
+and again on 2026-11-08 on a fresh `git archive` of the merge with develop
+(`7a0ffafb72`), with the same results; the table gives that run.
 
 | Part                             | metro 0.83.5 (develop)                                                     | metro 0.83.8 (this change)                                                    |
 | -------------------------------- | -------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
 | A                                | 10 of 10, e.g. alert-triangle 48×42, close 28×28, loader 44×44             | identical: names, sizes, scales, hashes                                       |
 | B                                | 70 of 70, 0 errors                                                         | identical: sha256, width and height                                           |
-| C                                | ok on both platforms, 9,836 bytes, 5 assets                                | ok on both, 9,541 bytes, 5 assets                                             |
+| C                                | ok on both platforms, 9,836 bytes, 5 assets                                | ok on both, 9,581 bytes, 5 assets                                             |
 | module that measured `close.png` | image-size 1.2.1's `dist/` (25 files, with `heif.js`, `icns.js`, `jxl.js`) | `metro/src/lib/imageSize.js` only; `image-size` cannot be resolved from metro |
 
 The only difference: the 5 `registerAsset` objects in the bundles differ
 in `httpServerLocation`, a relative path from the scratch project to the
 installed react-native, which sits in a different directory in the two
 runs. With those 5 strings set aside the bundles are byte-identical, and the
-295-byte difference is those strings.
+255-byte difference is those strings (295 bytes on 2026-11-02, from another
+install directory).
 
 ## Gates
 
@@ -175,8 +204,9 @@ Run on 2026-11-02 on the tree the `fix(deps)` commit holds: Trivy and the
 frozen install on a `git archive` of it, with node 22.22.0 and pnpm 9.15.4.
 OSV, Trivy and the frozen install were run again on the tree with this
 record added. The OSV and pnpm audit rows describe that date; both read
-advisory data that changed afterwards, and "Re-run on 2026-11-08" below
-says how.
+advisory data that changed afterwards. develop was merged in on 2026-11-08
+and every gate ran again on the merged head ("Re-run on the merged head"
+below).
 
 | Gate           | Command                                                                                                                                                                                             | Result                                                                                                                                                                                                                    |
 | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -198,78 +228,98 @@ moved. Counted from `pnpm-lock.yaml` read as YAML: start at the importer
 `packages/core`, `packages/blackout-protocol` and `packages/blackout-sdk`
 (and the sdk's own link to the protocol) with the same three fields, then
 walk each snapshot's `dependencies` and `optionalDependencies`, counting
-snapshot keys. That reaches 1,032 snapshots on develop (`0367abdd69`) and
-1,032 here, the same set; with the `link:` entries skipped it is 1,028 and
-1,028, the same set. Neither set holds a metro, hermes, ob1, queue or
-image-size entry.
+snapshot keys. That reaches 1,032 snapshots on develop and 1,032 here, the
+same set, both before the merge (`0367abdd69` against `0053f8bfb8`) and
+after it (`27d8c17051` against the merged head); with the `link:` entries
+skipped it is 1,028 and 1,028, the same set. The merge moves lodash inside
+that set, on develop and here alike. Neither set holds a metro, hermes,
+ob1, queue or image-size entry.
 
-### Re-run on 2026-11-08
+### Re-run on the merged head, 2026-11-08
 
-Run after the review, on this tree with the record changes staged (they
-touch no gate input): OSV, pnpm audit and guard:audit-clean in the worktree;
-Trivy and the frozen install on a `git archive` of it, with node 22.22.0 and
+develop (`27d8c17051`) was merged in with `7a0ffafb72`. git merged
+`package.json` and `pnpm-lock.yaml` without a conflict, so the lock was not
+regenerated. Parsed as YAML, the merged lock differs from develop's exactly
+as the Lockfile section says, and from `0053f8bfb8`'s only in lodash 4.18.0
+→ 4.18.1, develop's change. Trivy ran on a fresh `git archive` of
+`7a0ffafb72` with nothing installed; the frozen install, the behaviour
+check and the package builds on another, installed by that frozen install;
+OSV, pnpm audit and guard:audit-clean in the worktree with this round's
+edits (the `osv-scanner.toml` comment and this record) staged. The commits
+after the merge change only that comment and this record. Node 22.22.0,
 pnpm 9.15.4.
 
--   **OSV exits 1 in all three time zones**, on one row this change did not
-    touch: `GHSA-f23m-r3pf-42rh | 6.5 | npm | lodash | 4.18.0 | 4.18.1`
+| Gate                                                         | Result                                                                                                                                                                                                                                                              |
+| ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| OSV, `TZ` = `UTC`, `Etc/GMT-3`, `Pacific/Kiritimati`, 04:21Z | exit 0 in all three: 1,493 packages, "No issues found", 1 filtered (deepmerge), no image-size or lodash row. One line, `osv-scanner.toml has unused ignores: GHSA-g3hv-75wg-m249`: the minimatch entry, not one of this change's (below). It does not fail the gate |
+| OSV, control                                                 | develop's lock (`27d8c17051`) with this `osv-scanner.toml`: exit 1, GHSA-5p2g and GHSA-w3rx on image-size 1.2.1, fixed 2.0.3, no other row                                                                                                                          |
+| Trivy                                                        | DB of 2026-11-08T00:37Z with `--skip-db-update`: exit 0, 0 in all six targets; `--show-suppressed` lists the four Twisted entries only                                                                                                                              |
+| pnpm audit                                                   | `--prod --audit-level high` and guard:audit-clean: exit 0 both, "1 vulnerabilities found, Severity: 1 low" (deepmerge GHSA-gcqx-w48m-w2h4)                                                                                                                          |
+| frozen install                                               | exit 0, "Lockfile is up to date", lock byte-identical (sha256 `89e30d37…8a7c`); metro 0.83.8 and lodash 4.18.1 under `node_modules/.pnpm`, no image-size                                                                                                            |
+| overrides                                                    | all 39 bind: no version in the lock is left inside an override's selector range and outside its target; the same result as on develop's lock                                                                                                                        |
+| behaviour check                                              | as in the Behaviour check table: A 10 of 10 and B 70 of 70 identical to the baseline, C identical apart from `httpServerLocation`                                                                                                                                   |
+| packages                                                     | `pnpm --filter "@blackout/ui^..."` build (its workspace dependencies), then `--filter @blackout/ui` build, test, lint and `--filter @blackout/blackout-web` lint, build: exit 0 each                                                                                |
+| client                                                       | `pnpm --filter @blackout/client build`: exit 0. Its unit tests and typecheck were not run: it reaches the same snapshots as on develop (above)                                                                                                                      |
+| prettier                                                     | `prettier --check` on the changed Markdown and `package.json`: pass (it has no parser for `osv-scanner.toml` or `.trivyignore`)                                                                                                                                     |
+| gitleaks                                                     | 8.21.2, `gitleaks detect --redact` over `0367abdd69..HEAD` and over `origin/develop..HEAD` (the PR range); `gitleaks dir` over this record and `osv-scanner.toml`: no leaks                                                                                         |
+
+-   **Before the merge** the OSV scan exited 1 from 2026-11-03 on one row
+    this change did not touch: lodash 4.18.0, GHSA-f23m-r3pf-42rh
     (CVE-2026-2950, prototype pollution through array paths in `_.unset`,
-    `_.omit` and `_.pullAt`; GitHub rates it Moderate). OSV's record was
-    modified on 2026-11-03T15:45Z and now reads `introduced 4.17.23`,
-    `fixed 4.18.1`; lodash 4.18.1 was published on 2026-04-01. lodash 4.18.0
-    has been in the lock since 2026-08-30 (`ea3d85d2c7`, under the override
-    `"lodash@4.17.23": "4.18.0"`, loosened to the current
-    `"lodash@4.17.23": "^4.18.0"` on 2026-09-04 in `50335a9b06`), from
-    slate-dom 0.112.2 and slate-react 0.112.1 in `apps/blackout-client` and
-    from workbox-build 7.4.0 (dev). Its
-    lines are byte-identical on develop and here, and it is not a metro
-    dependency, so moving it is outside this change's lock rule. develop's
-    own lock with develop's `osv-scanner.toml` exits 1 on the same row, and
-    develop's runs of 2026-11-04T00:31Z on `7bda9eb72a` (Blackout CI
-    41747526572, Security checks 41747526887) failed exactly the jobs
+    `_.omit` and `_.pullAt`; fixed 4.18.1), reported since OSV modified
+    that record on 2026-11-03T15:45Z. It was develop-wide and not a metro
+    dependency. #998 (`77e6e68182`, merged as `27d8c17051` at
+    2026-11-08T03:36Z) moved the override to `"lodash@4.17.23": "^4.18.1"`
+    and lodash to 4.18.1 on develop, and the merge brought that here.
+-   **The unused-ignore line.** GitHub narrowed GHSA-g3hv-75wg-m249 to
+    `introduced 7.0.0`, `fixed 11.0.1` on 2026-11-04 (OSV record modified
+    17:01Z), so minimatch 3.1.5 is out of range, and that entry and its
+    `pnpm.auditConfig.ignoreGhsas` mirror are dead, on develop and here.
+    #999 removes them (Overlap); this change leaves them and qualifies the
+    `osv-scanner.toml` header sentence it edits. pnpm audit no longer
+    reports the minimatch Moderate for the same reason.
+-   **CI.** develop's runs on `27d8c17051` (Blackout CI 42443420808,
+    Security checks 42443420809, 2026-11-08T03:36Z) succeeded, with
     `Dependency audit (no un-triaged advisories, any severity)` and
-    `Dependency vulnerability audit`, with no later run. So the PR for this change
-    opens red on `ci.yml`'s `audit-clean` and `security.yml`'s
-    `dependency_audit` for a reason outside it, until lodash moves to 4.18.1
-    in its own change or this one is stacked on that. With a lodash ignore
-    added as a control, the scan exits 0 with "No issues found": lodash is
-    the only driver. No run shows an image-size row.
--   **The scan reports GHSA-g3hv-75wg-m249 as an unused ignore**
-    (`osv-scanner.toml has unused ignores: GHSA-g3hv-75wg-m249`) and filters
-    1 (deepmerge), not 2. GitHub narrowed
-    the minimatch advisory to `introduced 7.0.0`, `fixed 11.0.1` (OSV record
-    modified 2026-11-04T17:01Z), so minimatch 3.1.5 is out of range and that
-    entry and its `pnpm.auditConfig.ignoreGhsas` mirror are dead on develop
-    and here. The line alone does not fail the gate (the control above
-    prints it and exits 0). Removing them is -v54's change, not this one.
--   **pnpm audit** `--prod --audit-level high` and **guard:audit-clean**
-    exit 0: "1 vulnerabilities found, Severity: 1 low" (deepmerge
-    GHSA-gcqx-w48m-w2h4). The minimatch Moderate is no longer reported.
--   **Trivy** 0.69.3 with `security.yml`'s flags, DB of 2026-11-08T00:37Z
-    with `--skip-db-update`: exit 0, 0 in all six targets;
-    `--show-suppressed` lists the four Twisted entries only.
--   **frozen install** in a fresh `git archive`: exit 0, lock byte-identical
-    (sha256 `ffeaeda5…f9d4b`), metro 0.83.8 and no image-size under
-    `node_modules/.pnpm`.
+    `Dependency vulnerability audit` among their jobs. With develop merged
+    in, the branch head carries lodash 4.18.1 too: `ci.yml`'s `push`
+    trigger, which has no branch filter, runs `audit-clean` on the head,
+    and the PR's merge ref is what `security.yml`'s `pull_request` run
+    audits. Neither has run on this head; the branch is not pushed.
 
 ## Overlap with other open branches
 
--   **-v52** (the Twisted 26.10.0 lock, not merged) rewrites the same
+-   **-v52** (the Twisted 26.10.0 lock, not pushed) rewrites the same
     image-size lines: the `osv-scanner.toml` block and both reasons, the
     `.trivyignore` block with `exp:2026-11-30`, and a bullet under item 8
     of the 2026-10-30 record, where this change adds its cross-reference.
     Whichever of the two merges second resolves the conflict by removal:
     the image-size entries and the comments about them go.
--   **-v54** (minimatch, not merged) moves `packages/ui` to react-native
-    `^0.87.1`, which brings metro 0.87.2 and no image-size, and plans to
-    delete the same ignores. Whichever lands first makes the other's
-    image-size work moot. A lockfile conflict between the two is resolved by
-    re-running `pnpm install` after the merge, never by hand. Then
-    `grep -c image-size pnpm-lock.yaml` should be 0, and the cli-plugin's
-    metro 0.83.8, or 0.87.2 once -v54 is in. Since 2026-11-04 OSV reports
-    the GHSA-g3hv-75wg-m249 entry as an unused ignore (Re-run on
-    2026-11-08): -v54's premise has changed, the entry is dead now rather
-    than lapsing on 2026-12-01, and its removal, with the
-    `pnpm.auditConfig` mirror, stands on that ground.
+-   **#999** (-v61, open since 2026-11-08T03:41Z) removes the dead
+    minimatch GHSA-g3hv-75wg-m249 entry and its `pnpm.auditConfig` mirror,
+    drops the brace-expansion GHSA-mh99-v99m-4gvg mirror from
+    `ignoreGhsas`, and rewrites the headers of `osv-scanner.toml` and
+    `.trivyignore`. `git merge-tree` of the two branches conflicts in two
+    files. In `osv-scanner.toml`, this change appends its image-size
+    sentence to the header sentence #999 rewrites, and deletes the
+    image-size block #999 keeps. In `package.json`, this change keeps
+    GHSA-mh99 and GHSA-g3hv in `ignoreGhsas` and #999 keeps GHSA-5p2g and
+    GHSA-w3rx. `.trivyignore` merges cleanly. Whichever merges second takes
+    both removals: `ignoreGhsas` ends empty, the image-size block and the
+    minimatch entry leave `osv-scanner.toml`, and its header keeps #999's
+    sentences and this change's image-size sentence, without this change's
+    minimatch clause, which #999's text replaces. A lockfile conflict is
+    resolved by re-running `pnpm install`, never by hand.
+-   **-v54** (eslint 8 → 10 and minimatch, local and not pushed) moves
+    `packages/ui` to react-native `^0.87.1`, which brings metro 0.87.2 and
+    no image-size, and planned on 2026-11-02 to delete the same image-size
+    ignores. metro 0.87.2 also has the SVG fix (What metro 0.83.8 uses
+    instead). Whichever of -v54 and this change lands first makes the
+    other's image-size work moot. A lockfile conflict between the two is
+    resolved by re-running `pnpm install` after the merge, never by hand.
+    Then `grep -c image-size pnpm-lock.yaml` should be 0, and the
+    cli-plugin's metro 0.83.8, or 0.87.2 once -v54 is in. The
+    GHSA-g3hv-75wg-m249 removal is #999's.
 
 ## Corrected after review
 
@@ -280,16 +330,17 @@ repeat the OSV result ("exit 0 … 2 filtered … no unused-ignore line"), the
 pnpm audit result ("1 moderate ignored") and the plain update's "126 added";
 this section is their correction.
 
-1.  **The OSV gates exit 1 since 2026-11-03**, on lodash 4.18.0
+1.  **The OSV gates exited 1 from 2026-11-03**, on lodash 4.18.0
     (GHSA-f23m-r3pf-42rh, fixed 4.18.1): develop-wide, not a metro
-    dependency, not moved here. The Gates rows are dated, and "Re-run on
-    2026-11-08" gives the finding, the develop runs that fail on it, and
-    why this change leaves lodash alone.
+    dependency, not moved by this change. #998 fixed it on develop, and
+    since the merge of 2026-11-08 the gates exit 0 here ("Re-run on the
+    merged head").
 2.  **"2 filtered (deepmerge, minimatch), no unused-ignore line"** and
     **"1 moderate (1 ignored)"** held on 2026-11-02. GitHub narrowed
     GHSA-g3hv-75wg-m249 to minimatch ≥ 7.0.0 on 2026-11-04; the scanner now
     filters deepmerge only and reports that ignore as unused, and pnpm audit
-    reports 1 low. The -v54 bullet says what that means for that branch.
+    reports 1 low. The #999 bullet names the open PR that removes the dead
+    entry.
 3.  **The lock table** left out two in-snapshot changes, metro 0.83.8
     dropping chalk and metro-babel-transformer 0.83.8 adding
     metro-cache-key, and put the kept metro-symbolicate and ob1 0.83.5
@@ -315,11 +366,54 @@ clause of item 8.
     `dependencies` and `optionalDependencies`, snapshot keys), gives 1,032
     for that method and 1,028 with the links skipped, and keeps what it was
     there to say: the same set before and after.
-8.  **"since 2026-08-30, under develop's override `"lodash@4.17.23": "^4.18.0"`"**
-    joined a date to a spelling the override did not have then. lodash
-    4.18.0 entered the lock on 2026-08-30 (`ea3d85d2c7`) under
-    `"lodash@4.17.23": "4.18.0"`; the `^4.18.0` spelling dates from
-    2026-09-04 (`50335a9b06`). The clause now dates both.
+8.  **The lodash dating.** The first version said "since 2026-08-30,
+    under develop's override `"lodash@4.17.23": "^4.18.0"`", and the second
+    review's correction said lodash 4.18.0 entered the lock on 2026-08-30
+    in `ea3d85d2c7` under `"4.18.0"`. Both start dates were wrong. This
+    checkout is a shallow clone (`git rev-parse --is-shallow-repository`
+    is true) whose history stops at the boundary commits `eb71cc56c3`,
+    `8669c26480` and `ea3d85d2c7` (2026-08-10 to 2026-08-30), and
+    `git log -S` attributes every older line to a boundary commit. Read
+    through the GitHub REST API: the override `"lodash@4.17.23": "4.18.0"`
+    and lodash 4.18.0 entered `package.json` and `pnpm-lock.yaml` on
+    2026-04-22 in `2eaa6dbdfa` ("gitcheck fixes"), whose parent
+    `3d06f75d88` has lodash 4.17.23 and no lodash override; `50335a9b06`
+    (2026-09-04) made it `"^4.18.0"`, and #998 `"^4.18.1"`. With develop
+    merged in, the record no longer needs that history, so the sentence is
+    removed rather than dated again. A line dated from a boundary commit
+    needs that commit's parent in the clone first.
+
+A third review on 2026-11-08, of `0053f8bfb8`, made seven findings, two
+of them the lodash dating of item 8. All are corrected above. The commit
+messages of `1a54bfa7cb` and `0053f8bfb8` repeat that dating, and the
+message of `1a54bfa7cb` the statements of item 11; this section is their
+correction.
+
+9.  **The SVG divergence.** "What metro 0.83.8 uses instead" described the
+    parser's formats and bounds but not the one known way it measures
+    differently from image-size 1.2.1: an `*-width` or `*-height`
+    attribute after the real one on the root `<svg>`. A bullet now gives
+    the pattern, the measurements, the upstream fix (metro 0.87.2, not on
+    the 0.83 line) and why nothing here is affected.
+10. **The lodash dating** (item 8).
+11. **The statements about develop and the PR.** "Both OSV gates are red
+    … on develop and here alike", "develop's own lock … exits 1", "the PR
+    for this change opens red … until lodash moves to 4.18.1" and "the
+    current `^4.18.0`" went stale at 2026-11-08T03:36Z, when #998 merged
+    as `27d8c17051`, 38 minutes after `0053f8bfb8`. develop is now merged
+    in, the gates ran again on the merged head, and the record names the
+    base its develop comparisons refer to.
+12. **#999 was missing from the overlap section**, and the removal of the
+    dead GHSA-g3hv-75wg-m249 entry was credited to -v54. #999 is open,
+    makes that removal, and conflicts with this branch in `osv-scanner.toml`
+    and `package.json`. A bullet now gives the files and the resolution.
+13. **The `osv-scanner.toml` header line this change edits** still said
+    one minimatch version "is left in that advisory's range", false since
+    2026-11-04. The clause now says it was, until GitHub moved the range's
+    start to 7.0.0, and that the scanner reports the entry as unused.
+14. **The lock table's hermes row** gave hermes-estree the reason that
+    fits hermes-parser. The row is split: metro and metro-babel-transformer
+    pin hermes-parser, and hermes-parser pins hermes-estree.
 
 ## Not verified
 
@@ -329,4 +423,7 @@ clause of item 8.
     metro-runtime 0.83.5 while metro uses 0.83.8, which the `^0.83.1`
     ranges allow and nothing here runs.
 -   No `react-native bundle` was run (see Behaviour check).
--   CI's runners were not observed.
+-   CI has not run on this branch's head: it is not pushed. develop's runs
+    on `27d8c17051` were read through `gh run view`.
+-   The SVG divergence was measured on synthetic root tags and the four
+    tracked SVGs, not on a real React Native asset.
