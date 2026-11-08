@@ -3271,6 +3271,7 @@ test('the column never moves a switch that fired or was cancelled, and a check-i
     await armed(60); // due at the pass: its move is the statement held
     const fired = await armed(3600);
     const checkedIn = await armed(3600);
+    const cancelled = await armed(3600);
     const worker = await otherProcess();
     let open!: () => void;
     const gate = new Promise<void>((resolve) => {
@@ -3285,11 +3286,14 @@ test('the column never moves a switch that fired or was cancelled, and a check-i
             0
         );
         assert.equal(statements.calls(), 1);
-        for (const sw of [fired, checkedIn]) {
+        for (const sw of [fired, checkedIn, cancelled]) {
             assert.equal((await post(sw.owner, `/switches/${sw.switchId}/check-in`)).status, 503);
             assert.ok(here.ownerWriteUnansweredAt(sw.switchId));
         }
-        // Meanwhile, on another process: one fires, the other's owner checks in.
+        // Meanwhile, on another process: one fires, another's owner checks in,
+        // and the third is cancelled there (its last check-in unchanged, so
+        // only the status condition refuses the carry: round 14's check that
+        // the cancelled status is refused on its own).
         assert.ok(
             await worker.advanceDeadmanSwitch(
                 fired.switchId,
@@ -3298,6 +3302,10 @@ test('the column never moves a switch that fired or was cancelled, and a check-i
             )
         );
         checkInOn(worker, checkedIn.switchId, new Date());
+        worker.updateDeadmanSwitch(cancelled.switchId, {
+            status: 'cancelled',
+            encryptedPayload: '',
+        });
         await worker.drain();
     } finally {
         open();
@@ -3307,15 +3315,18 @@ test('the column never moves a switch that fired or was cancelled, and a check-i
         await until(
             () =>
                 here.ownerWriteUnansweredAt(fired.switchId) === undefined &&
-                here.ownerWriteUnansweredAt(checkedIn.switchId) === undefined,
+                here.ownerWriteUnansweredAt(checkedIn.switchId) === undefined &&
+                here.ownerWriteUnansweredAt(cancelled.switchId) === undefined,
             5_000,
-            'both carries refused'
+            'the three carries refused'
         );
         await settled();
     });
     here.switchStatementTimeoutMs = 30_000;
-    assert.equal(notCarried, 2, 'Postgres refused both, and both notes ended');
+    assert.equal(notCarried, 3, 'Postgres refused all three, and the three notes ended');
     assert.equal(await columnOf(fired.switchId), null, 'a fired switch takes no column');
+    assert.equal(await columnOf(cancelled.switchId), null, 'a cancelled switch takes none either');
+    assert.equal((await stored(cancelled.switchId))?.status, 'cancelled');
     assert.equal((await stored(fired.switchId))?.status, 'triggered');
     assert.equal((await stored(fired.switchId))?.released_at?.toISOString(), firedAt.toISOString());
     assert.equal(
@@ -3357,8 +3368,11 @@ test('the column never moves a switch that fired or was cancelled, and a check-i
     await here.drain();
     assert.equal(await columnOf(toCancel.switchId), null, 'cleared by the cancel');
     assert.equal(here.getDeadmanSwitch(toCancel.switchId)?.ownerAttemptRefusedAt, undefined);
-    deliver(here, { src: 'x', m: 'deadmanSwitches', op: 'u', kv: [checkedIn.switchId] });
+    for (const sw of [checkedIn, cancelled]) {
+        deliver(here, { src: 'x', m: 'deadmanSwitches', op: 'u', kv: [sw.switchId] });
+    }
     await new Promise((r) => setTimeout(r, 100));
+    assert.equal(here.getDeadmanSwitch(cancelled.switchId)?.status, 'cancelled');
     here.updateDeadmanSwitch(checkedIn.switchId, { status: 'cancelled', encryptedPayload: '' });
     await here.drain();
     await worker.drain();
@@ -3484,10 +3498,41 @@ test('the deletion’s last statement takes every switch of the owner’s and ev
         ).kind,
         'armed'
     );
+    // And two more this process never had, each carrying a refused attempt of
+    // the owner's in Postgres (decision 31, carried by another process): one
+    // armed, which the last statement cancels, and one cancelled with nothing
+    // else left, which it rewrites for that column alone (round 14's checks
+    // that the last statement erases the column, and that its narrowed
+    // `WHERE` still reaches a row whose only remnant is the column).
+    const unlabelled = async (checkInIntervalSeconds: number) => {
+        const named = await person();
+        const envelope = await protocol.buildReleaseEnvelope({
+            ownerKeySet: owner.keySet,
+            recipients: [named.keySet.identity],
+            message: 'Synthetic test text.',
+        });
+        const outcome = await armReleaseSwitch({
+            ownerId: owner.id,
+            input: { checkInIntervalSeconds, gracePeriodSeconds: 0, envelope },
+        });
+        assert.equal(outcome.kind, 'armed');
+        return envelope.releaseId;
+    };
+    const refusedArmed = await unlabelled(3600);
+    const refusedSpent = await unlabelled(3600);
+    assert.equal((await post(owner, `/switches/${refusedSpent}/cancel`)).status, 200);
     await here.drain();
     const worker = await otherProcess();
     forget(gone.switchId);
     forget(quietEnvelope.releaseId);
+    for (const id of [refusedArmed, refusedSpent]) {
+        forget(id);
+        await pg.query(
+            'UPDATE deadman_switches SET owner_attempt_refused_at = now() WHERE id = $1',
+            [id]
+        );
+        assert.ok((await columnOf(id)) instanceof Date);
+    }
     assert.equal(here.getDeadmanSwitch(gone.switchId), undefined);
     assert.equal(here.listDeadmanReleaseWraps(gone.switchId).length, 0);
     assert.equal(here.getDeadmanSwitch(quietEnvelope.releaseId), undefined);
@@ -3576,6 +3621,15 @@ test('the deletion’s last statement takes every switch of the owner’s and ev
         releasedCopiesFor(quietNamed.id).some((r) => r.releaseId === quietEnvelope.releaseId),
         'served here too'
     );
+    // The two carrying a refused attempt: each loses it, the armed one
+    // cancelled, the spent one rewritten for the column alone.
+    for (const id of [refusedArmed, refusedSpent]) {
+        assert.equal(await columnOf(id), null, 'the owner’s refused attempt erased');
+        assert.equal((await stored(id))?.status, 'cancelled');
+        assert.equal(here.getDeadmanSwitch(id)?.status, 'cancelled', 'taken into this mirror');
+        assert.equal(here.getDeadmanSwitch(id)?.ownerAttemptRefusedAt, undefined);
+    }
+    assert.equal((await stored(refusedArmed))?.encrypted_payload, '', 'emptied');
     await worker.drain();
 });
 

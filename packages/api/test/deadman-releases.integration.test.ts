@@ -2369,4 +2369,28 @@ test('a refused attempt carried into a switch’s record (decision 31) is read i
     assert.equal(db.getDeadmanSwitch(toCancel.id)?.status, 'cancelled');
     assert.equal(db.getDeadmanSwitch(toCancel.id)?.ownerAttemptRefusedAt, undefined);
     db.updateDeadmanSwitch(held.id, { status: 'cancelled', encryptedPayload: '' });
+    // And the owner's deletion erases it with the switch, fired or not
+    // (`erasedSwitchRecord`, the memory and file stores' erase).
+    const leaving = await freshPerson();
+    const unfired = seedLegacy(leaving.user, {
+        ownerAttemptRefusedAt: new Date(Date.now() + 1_000).toISOString(),
+    });
+    const firedBefore = seedLegacy(leaving.user, {
+        status: 'triggered',
+        ownerAttemptRefusedAt: new Date(Date.now() + 1_000).toISOString(),
+    });
+    const issued = lifecycle.requestAccountDeletion({ userId: leaving.user.id })!;
+    assert.equal(
+        (await lifecycle.confirmAccountDeletion(issued.token, leaving.user.id)).kind,
+        'ok'
+    );
+    assert.equal(db.getDeadmanSwitch(unfired.id)?.status, 'cancelled');
+    assert.equal(db.getDeadmanSwitch(firedBefore.id)?.status, 'triggered');
+    for (const id of [unfired.id, firedBefore.id]) {
+        assert.equal(
+            db.getDeadmanSwitch(id)?.ownerAttemptRefusedAt,
+            undefined,
+            'the owner’s refused attempt erased by the deletion'
+        );
+    }
 });
