@@ -1,14 +1,25 @@
 name: blackout-desktop-tauri
 
-# The signed desktop release. A pushed release-* or v* tag gets one draft
-# GitHub release (create-release), and the three build legs sign their
-# bundles and upload them, with the updater's latest.json, into that draft
-# (build). Nothing here publishes: a person checks the draft and publishes
-# it, and only then can the updater endpoint in tauri.conf.json
+# The signed desktop release. A pushed release-* tag gets one draft GitHub
+# release (create-release), and the three build legs sign their bundles and
+# upload them, with the updater's latest.json, into that draft (build).
+# Nothing here publishes: a person checks the draft and publishes it, and
+# only then can the updater endpoint in tauri.conf.json
 # (releases/latest/download/latest.json) serve it. Operator decision of
 # 2026-11-02; docs/security/dependency-advisories-server-desktop-2026-10-30.md,
 # Found outside scope, item 6, and docs/operations/wrapper-build-and-release.md
 # (what to check before publishing).
+# Not on v* tags. Those are release.yml's, whose release holds every file of
+# the web build (390 today) and the mobile builds, plus a signature, a
+# certificate and a bundle for each. tauri-action reads one page of a
+# release's assets: 50 when it merges latest.json
+# (src/upload-version-json.ts 60-65; if it then finds no signature it warns
+# and returns, 168-173) and 100 when it replaces its own files
+# (src/upload-release-assets.ts 26-33). A draft shared with release.yml
+# would put latest.json, or a leg's own files, past that page, so a
+# platform could go missing from latest.json and re-running the legs would
+# not restore it. Alone, this draft holds the installers, the updater
+# artifacts, their signatures and latest.json: a dozen or so files.
 # To test a build, dispatch blackout-desktop-build-check.yml: it builds the
 # same bundles unsigned and uploads nothing. A signed test build means
 # pushing a release-* tag; discard it by deleting the draft, then the tag.
@@ -24,11 +35,12 @@ on:
     # Tags only: with no `branches` under push, a branch push does not start
     # this workflow, and there is no workflow_dispatch. Push the tag; do not
     # create it from GitHub's release form, which publishes the release
-    # first, so create-release would refuse it.
+    # first, so create-release would refuse it. The two release jobs also
+    # check the tag's prefix, so adding a pattern here does not alone make
+    # them run for it.
     push:
         tags:
             - 'release-*'
-            - 'v*'
 
 # Each job asks for what it needs; only the two release jobs can write.
 permissions:
@@ -66,7 +78,7 @@ jobs:
 
     create-release:
         name: Draft release for the tag
-        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/release-')
         runs-on: ubuntu-latest
         permissions:
             contents: write
@@ -90,7 +102,11 @@ jobs:
                       const tag = context.ref.replace(/^refs\/tags\//, '');
                       // A published release would serve whatever the legs
                       // upload, latest.json included, with no person in
-                      // between, so refuse one.
+                      // between, so refuse one. This runs once, before
+                      // builds of some minutes; tauri-action uploads by id
+                      // without reading the draft state, so a draft that is
+                      // published while the legs run gets their uploads.
+                      // The release doc says to wait for all three legs.
                       try {
                           const { data } = await github.rest.repos.getReleaseByTag({ owner, repo, tag });
                           core.setFailed(
@@ -102,8 +118,8 @@ jobs:
                           if (error.status !== 404) throw error;
                       }
                       // getReleaseByTag never returns a draft. Reuse the
-                      // oldest draft for this tag: a re-run's, or on a v* tag
-                      // release.yml's, which adopts the oldest draft too.
+                      // oldest draft for this tag, a re-run's, so that a
+                      // re-run replaces each leg's files in the same draft.
                       const releases = await github.paginate(github.rest.repos.listReleases, {
                           owner,
                           repo,
@@ -117,13 +133,11 @@ jobs:
                           core.setOutput('release_id', String(drafts[0].id));
                           return;
                       }
-                      // A v* tag's release also carries release.yml's web and
-                      // mobile files, so it is named after the tag alone.
                       const { data } = await github.rest.repos.createRelease({
                           owner,
                           repo,
                           tag_name: tag,
-                          name: tag.startsWith('v') ? tag : `Blackout Desktop ${tag}`,
+                          name: `Blackout Desktop ${tag}`,
                           draft: true,
                           prerelease: false,
                           target_commitish: context.sha,
@@ -135,7 +149,7 @@ jobs:
         # Never on a pull request (it needs the signing secrets and the Rust
         # toolchain), and only once create-release has a draft for the tag.
         needs: create-release
-        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/release-')
         permissions:
             contents: write
         strategy:
@@ -167,21 +181,36 @@ jobs:
                           ;;
                   esac
 
+            # This job's token can publish the draft, so what runs here with
+            # it matters. persist-credentials false keeps it out of
+            # .git/config, where every later step (pnpm's install scripts,
+            # cargo's build scripts) could read it; nothing in the build
+            # uses it (Cargo.lock has no git source, pnpm-lock.yaml no git
+            # dependency), and the build check builds this way. The three
+            # setup actions below are the commits the build check pins,
+            # which built on all three runners in run 41461856327, so a moved
+            # tag or branch cannot change what runs with the token. The
+            # token still reaches the build itself: tauri-action gets
+            # GITHUB_TOKEN in its environment, which beforeBuildCommand and
+            # the build scripts inherit (the record's item 6 says what a
+            # build-only leg plus a separate upload job would change).
             - name: Checkout
               uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+              with:
+                  persist-credentials: false
 
             - name: Setup Node
-              uses: actions/setup-node@v4
+              uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6
               with:
                   node-version: 22
 
             - name: Setup pnpm
-              uses: pnpm/action-setup@v5
+              uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v5
               with:
                   version: 9.15.4
 
             - name: Setup Rust
-              uses: dtolnay/rust-toolchain@stable
+              uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
 
             - name: Install Linux deps
               if: runner.os == 'Linux'

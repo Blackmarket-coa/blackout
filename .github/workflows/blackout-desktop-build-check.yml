@@ -9,19 +9,21 @@ name: blackout-desktop-build-check
 # The job summary lists only the bundles' names and sizes. It references no
 # secret.
 #
-# The release is blackout-desktop-tauri.yml. It cannot be dispatched: it runs
-# only on a pushed release-* or v* tag, uploads into a draft release, and a
-# person publishes it (docs/security/dependency-advisories-server-desktop-2026-10-30.md,
-# Found outside scope, item 6). To test a build, dispatch this one. Keep the
-# setup below in step with that workflow's build job.
+# The release is blackout-desktop-tauri.yml. It cannot be dispatched: its
+# release jobs run only on a pushed release-* tag (not v*; that file's header
+# says why), upload into a draft release, and a person publishes it
+# (docs/security/dependency-advisories-server-desktop-2026-10-30.md, Found
+# outside scope, item 6). Its notification harness also runs on pull
+# requests to main, a branch that does not exist. To test a build, dispatch
+# this one. Keep the setup below in step with that workflow's build job.
 # Where this file's triggers, permissions, concurrency, steps or step
 # settings differ from that job's, a comment says why. That workflow's
 # create-release job, and its build job's first step, which requires the
 # draft's id, have no counterpart here: this check uploads nothing.
 
-# The release job runs only on release-* and v* tags, never on a pull
-# request or a dispatch. This check exists to build before a tag, so it runs
-# on pull requests to develop, the default branch, and on dispatch.
+# The release jobs run only on release-* tags, never on a pull request or a
+# dispatch. This check exists to build before a tag, so it runs on pull
+# requests to develop, the default branch, and on dispatch.
 on:
     pull_request:
         branches: [develop]
@@ -53,8 +55,8 @@ on:
             # The frontend build's own configuration. This job is the only
             # pull-request build of the client on macOS or Windows. The
             # release job's macOS and Windows legs also build it, but only on
-            # release-* and v* tags, and have never run, so a break that
-            # shows only on macOS or Windows is caught before a release only
+            # release-* tags, and have never run, so a break that shows only
+            # on macOS or Windows is caught before a release only
             # here. ci.yml builds the client on every pull request, on Linux
             # only. A break outside these paths can still show only on macOS
             # and Windows: the first run (41461043012) found two files in one
@@ -65,7 +67,8 @@ on:
             # name is now caught on every pull request: ci.yml's
             # deployment-readiness job runs tools/ci/check-duplicate-paths.mjs
             # (pnpm guard:duplicate-paths), which compares names without the
-            # last extension as well as whole paths. Any other break that
+            # last extension, a name against a sibling's name without its
+            # last extension, and whole paths. Any other break that
             # shows only on macOS or Windows, in a change to the rest of the
             # client, is still built on Linux only.
             - 'apps/blackout-client/vite.config.*'
@@ -118,7 +121,7 @@ jobs:
         timeout-minutes: 60
 
         steps:
-            # persist-credentials false is hardening the release job lacks.
+            # persist-credentials false, as in the release job's build job.
             # Nothing in the build uses the token: Cargo.lock has no git
             # source and pnpm-lock.yaml no git dependency.
             - name: Checkout
@@ -126,27 +129,29 @@ jobs:
               with:
                   persist-credentials: false
 
-            # The release job has setup-node@v4. This is v6.2.0, the commit
-            # security.yml and load.yml pin. Both install Node 22, and
-            # neither caches here: there is no cache input, and v6 caches on
-            # its own only when packageManager names npm (it names pnpm).
+            # v6.2.0, the commit security.yml, load.yml and the release job's
+            # build job pin (that workflow's notification harness has @v4).
+            # Node 22 either way, and no cache here: there is no cache input,
+            # and v6 caches on its own only when packageManager names npm (it
+            # names pnpm).
             - name: Setup Node
               uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6
               with:
                   node-version: 22
 
-            # The release job has pnpm/action-setup@v5, as do the other
-            # workflows, except one use of @v4 in mobile-native-ci.yml.
-            # This is the commit v5 (and v5.0.0) names on 2026-11-02, pinned
-            # like checkout and setup-node so that a moved tag cannot change
-            # what runs here.
+            # The commit v5 (and v5.0.0) names on 2026-11-02, which the
+            # release job's build job pins too; its notification harness and
+            # the other workflows have @v5, except one use of @v4 in
+            # mobile-native-ci.yml. Pinned like checkout and setup-node so
+            # that a moved tag cannot change what runs here.
             - name: Setup pnpm
               uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v5
               with:
                   version: 9.15.4
 
-            # The commit at the head of the action's stable branch; it installs
-            # the current stable Rust, as the release job's @stable does.
+            # The commit at the head of the action's stable branch on
+            # 2026-11-02, which the release job's build job pins too; it
+            # installs the current stable Rust.
             - name: Setup Rust
               uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
 

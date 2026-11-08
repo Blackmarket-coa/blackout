@@ -82,9 +82,13 @@ For the source-of-truth triage with tier/owner detail see
     workflow, `.github/workflows/blackout-desktop-tauri.yml`, built the app
     only on pushes to `main`, on tags and on dispatch (on pull requests, to
     `main` only, it ran just a notification harness). Both are fixed. Since
-    2026-11-02 that workflow runs only on pushed `release-*` and `v*` tags,
-    uploads into a draft release and leaves publishing to a person; it has
-    never run, and it does not run on `develop` pull requests. Also since
+    2026-11-02 that workflow's release jobs run only on pushed `release-*`
+    tags (not `v*`: `release.yml`'s release holds hundreds of files, and
+    `tauri-action` reads one page of a release's assets, so a draft shared
+    with it could lose `latest.json`), upload into a draft release and leave
+    publishing to a person; its notification harness still runs on pull
+    requests to `main`, a branch that does not exist. It has never run, and
+    it does not run on `develop` pull requests. Also since
     2026-11-02 a build-only check,
     `.github/workflows/blackout-desktop-build-check.yml`, builds unsigned
     bundles on Linux, macOS and Windows for `develop` pull requests that
@@ -102,7 +106,9 @@ For the source-of-truth triage with tier/owner detail see
     chose not to add an x86_64 leg yet). `ci.yml`'s deployment-readiness
     job now also fails on any pull request whose tree has two such names
     (`tools/ci/check-duplicate-paths.mjs` compares names without the last
-    extension, ignoring case). A pull request that changes the client
+    extension, ignoring case, and a name against a sibling's name without
+    its last extension, as `foo.css` beside `Foo.css.ts`). A pull request
+    that changes the client
     anywhere else is still built only on Linux (by `ci.yml`), so any other
     break that shows only in the desktop shell or on a case-insensitive
     filesystem can still land unseen until a release.
