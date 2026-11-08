@@ -781,8 +781,17 @@ with `mint-invite-token.sh` next to it as the issuing helper.
 
 The API's own sign-up routes honour the same gate: with `REQUIRE_INVITE_TOKEN=1`,
 `POST /v1/auth/register` and, since 2026-10-25, the no-PII
-`POST /v1/auth/account-number` refuse without an invitation token. Before that
-date the account-number route minted a Matrix account with no invite check
+`POST /v1/auth/account-number` refuse without an invitation token. A presented
+token is checked before any account is created, so an unusable one creates
+nothing, and account creation refuses a username the homeserver already holds
+rather than writing to the existing account of that name. Each check leaves one
+narrow race window it cannot fully close: an invitation that stops being usable
+between the check and its redemption (its last use goes elsewhere, it is
+revoked, or it expires) leaves the new homeserver account in place, and an
+account of the same name created between the lookup and the create is written
+to before the request is refused. Both are described in
+[`docs/security/register-account-collision-2026-10-26.md`](docs/security/register-account-collision-2026-10-26.md).
+Before 2026-10-25 the account-number route minted a Matrix account with no invite check
 (D3 in [`docs/black-mask-account-link-design.md`](docs/black-mask-account-link-design.md) §7;
 fixed in [`docs/security/api-findings-triage-2026-10-25.md`](docs/security/api-findings-triage-2026-10-25.md)).
 Since 2026-10-26 the web client's anonymous sign-up sends the invitation token

@@ -210,13 +210,30 @@ auth.post('/register', async (c) => {
     }
 
     // Invite-gated mode: when REQUIRE_INVITE_TOKEN=1 the public /register
-    // route is closed unless the caller presents a valid token. We do the
-    // up-front lookup so we never create a user we're about to roll back.
+    // route is closed unless the caller presents a valid token.
     if (process.env.REQUIRE_INVITE_TOKEN === '1' && !inviteToken) {
         return c.json(
             { code: 'invite_required', message: 'Registration requires an invitation token' },
             403
         );
+    }
+
+    // A presented token is checked before anything is created, so an unusable
+    // one never creates a local row or a Matrix account (it is consumed after,
+    // below), exactly as account-number sign-up does. With the gate on this is
+    // also what closes it: no usable token, nothing created.
+    if (inviteToken) {
+        const preview = previewInvitation(inviteToken);
+        if (preview.kind !== 'ok') {
+            return c.json(
+                {
+                    code: 'invite_token_invalid',
+                    message: 'Invitation token is not usable',
+                    reason: preview.kind,
+                },
+                400
+            );
+        }
     }
 
     // Hash first, off the event loop. The await yields, so it must come before
@@ -266,6 +283,17 @@ auth.post('/register', async (c) => {
     // the caller can retry with the same email/username.
     if (!matrix.ok && !('reason' in matrix && matrix.reason === 'matrix_not_configured')) {
         db.deleteUser(user.id);
+        // The homeserver already has this username. Answer it as a local
+        // username collision does: the status and body tell the caller that
+        // the name is taken, but not whether it belongs to a Blackout account
+        // or only to a homeserver account (the answer can take longer for a
+        // name only the homeserver holds, since it waits for the lookup). When the lookup found the account, nothing was
+        // written to it. When the create itself answered 200 (an account of
+        // that name appeared between the lookup and the create), that write
+        // has already happened; matrixClient logs it at error level.
+        if ('reason' in matrix && matrix.reason === 'matrix_user_exists') {
+            return c.json({ code: 'user_exists', message: 'User already exists' }, 409);
+        }
         return c.json(
             {
                 code: 'matrix_provisioning_failed',
@@ -278,8 +306,13 @@ auth.post('/register', async (c) => {
 
     // Redeem the invitation, if one was presented. Done after Matrix
     // provisioning so the auto-room-invite can target the freshly-minted
-    // Matrix account. A bad token rolls back the local + Matrix accounts so
-    // the caller can retry with a corrected link.
+    // Matrix account. The token was previewed up front, so an unusable one
+    // created nothing; it can still fail here if it stopped being usable
+    // between that preview and now (its last use went elsewhere, it was
+    // revoked, or it expired), and the rollback below then deletes only the
+    // local row — the Matrix account stays, created with the caller's
+    // password. That residual window is noted in
+    // docs/security/register-account-collision-2026-10-26.md.
     let inviteRedemption:
         | { ok: true; matrixInvite?: { ok: boolean } }
         | { ok: false; reason: string }
