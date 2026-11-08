@@ -728,9 +728,12 @@ shipped (only incremental adoption remains).
 -   A process can still act on a copy that has not yet heard of a change from
     another process. In that window a password-reset, verification, deletion
     or sign-in link, a refresh-token rotation, an invitation admission or a
-    bounty accept can be accepted once on each process. The database keeps the
-    first, and the other process corrects its copy, but the second request
-    has already succeeded.
+    bounty accept can be accepted once on each process. For a link or a
+    bounty accept the database keeps the first, and the other process
+    corrects its copy. For a rotation or an admission the last write wins:
+    two processes rotating the same refresh token this way can leave both
+    new refresh tokens live. Either way the second request has already
+    succeeded.
 -   That window ends only when the process hears of the change, and some
     processes never do. A process that starts while others are writing loads
     its copy before it starts listening, and nothing re-reads what changed in
