@@ -177,6 +177,7 @@ import {
 } from './coalitionSeed';
 import {
     buildUpsertSql,
+    deserializeValue,
     hydrateMap,
     introspectColumns,
     recordToRow,
@@ -9702,19 +9703,29 @@ export class PostgresBackedDb extends InMemoryDb {
      * process-wide on purpose, and since round 11 a statement waits only for
      * this process's earlier writes to the same switch, so a backlog of
      * writes to other tables no longer sets it. It stands until the
-     * statement answers or fails, which nothing here bounds: the shared pool
-     * sets no connection or statement timeout and no TCP keepalive, so a
-     * statement whose bytes the database's host acknowledged before it went
-     * silent is never given up on and stands until the process restarts (the
-     * operating system runs no timer on a connection waiting for an answer),
-     * and one sent into the silence fails only once the operating system
-     * gives up retransmitting it (about 15 minutes at Linux's defaults; what
-     * the process does with that connection's error is a matter of the
-     * shared pool's error handling, which a separate change addresses). The
-     * carry of a refused owner write is not held back by it (round 16 of
-     * part 2's review), and holds a switch that falls due meanwhile back for
-     * one backlog window only (round 17: the documents put a bound of
-     * minutes on the stall).
+     * statement answers or fails and, where it landed, until the switch's
+     * read back has ended (`settleSwitchStatement`), which nothing here
+     * bounds: the shared pool sets no connection or statement timeout and no
+     * TCP keepalive, so a statement whose bytes the database's host
+     * acknowledged before it went silent is never given up on here (the
+     * operating system runs no timer on a connection waiting for an answer)
+     * and stands until the process restarts where that host is gone or the
+     * silence outlasts the host's own retransmission of its answer (about 15
+     * minutes at Linux's defaults; a fault that heals sooner lets the answer
+     * through), and one sent into the silence fails, while it lasts, once
+     * the operating system gives up: about 15 minutes at Linux's defaults on
+     * a connection already open, about 2 minutes where the call opens a new
+     * one, which fails at connect (no `connectionTimeoutMillis`); what the
+     * process does with that connection's error is a matter of the shared
+     * pool's error handling, which a separate change addresses. The read
+     * back has the same lack of bound, and until it ends this mirror holds
+     * the switch as before the statement, but for a carried column, which is
+     * read back on its own (`confirmCarriedColumns`, round 18 of part 2's
+     * review). The carry of a refused owner write is not held back by it
+     * (round 16), and holds a switch that falls due meanwhile back for one
+     * backlog window only (round 17: the documents put a bound of minutes on
+     * the stall; round 18: they named a network fault as standing until
+     * restart without the condition).
      */
     private stalledSwitchStatement: Promise<unknown> | null = null;
 
@@ -9757,8 +9768,10 @@ export class PostgresBackedDb extends InMemoryDb {
      * connection the database never answered, a socket a failover left
      * black-holed, held its note as on its way for as long as that
      * connection stood, which for a statement the database's host had
-     * acknowledged is until the process restarts, and nothing tried it
-     * again). A field, so a test can shorten it.
+     * acknowledged is until the process restarts where that host is gone or
+     * the silence outlasts its own retransmission, and nothing tried it
+     * again). The read back of a carried column (`confirmCarriedColumns`)
+     * has the same bound. A field, so a test can shorten it.
      */
     carryTimeoutMs = 5_000;
 
@@ -9773,13 +9786,47 @@ export class PostgresBackedDb extends InMemoryDb {
 
     /**
      * The switches a settle is reading back (`settleSwitchStatement`), each
-     * with the notes whose carry landed meanwhile, whose column is taken once
-     * the settle has taken its row (round 17 of part 2's review).
+     * with the notes whose carry landed meanwhile: a settle that took its
+     * row takes their column after it; otherwise they are left to
+     * `confirmCarriedColumns` (round 17 of part 2's review; round 18: they
+     * were taken whatever the settle did, so after a failed read back the
+     * column went onto the earlier row this mirror still held, which
+     * Postgres had cancelled without one).
      */
     private readonly carriesBehindSettle = new Map<
         string,
         { reading: number; notes: Array<{ at: string; lastCheckInAt: string }> }
     >();
+
+    /**
+     * Landed carries whose column waits to be read back from Postgres before
+     * this mirror takes it (`confirmCarriedColumns`), by switch: each whose
+     * answer came while a settle of the switch was reading it back (round 18
+     * of part 2's review: the column was then kept out of this mirror until
+     * that read ended, which nothing bounds, so for as long as it stood this
+     * process's export lacked a refused attempt Postgres held).
+     */
+    private readonly carriedColumnsToConfirm = new Map<
+        string,
+        Array<{ at: string; lastCheckInAt: string }>
+    >();
+
+    /** The read of carried columns under way (`runColumnConfirmPass`), if one is. */
+    private columnConfirmPass: Promise<void> | null = null;
+
+    /** Asked to read carried columns while a read was under way: read again when it ends well. */
+    private columnConfirmAgain = false;
+
+    /** The timer of the next read of carried columns, after one that failed. */
+    private columnConfirmTimer: ReturnType<typeof setTimeout> | null = null;
+
+    /**
+     * Each mirror entry `takeCarriedColumn` made, mapped to the entry it
+     * replaced: a settle reading the switch back treats a change that is
+     * only a carried column as no change (`unchangedButCarriedColumn`), so a
+     * column taken while its read is out does not keep its row out.
+     */
+    private readonly carriedColumnOver = new WeakMap<object, Record<string, unknown>>();
 
     /** Set by `shutdown`: no retry timer is set from then on. */
     private carryStopped = false;
@@ -9965,8 +10012,11 @@ export class PostgresBackedDb extends InMemoryDb {
      * mirror where the mirror's entry is the one the carry read, no
      * conditional write of the switch is in flight and no settle of the
      * switch is reading it back (`settleSwitchStatement`), otherwise the
-     * column alone (`takeCarriedColumn`), at once or, while such a settle is
-     * reading, once it has taken its row; and the switch is announced.
+     * column alone (`takeCarriedColumn`): at once, or, while such a settle
+     * is reading, once Postgres is read to hold it (`confirmCarriedColumns`,
+     * on a connection of its own, whatever that read is doing) and again
+     * after the settle's row where the settle took one; and the switch is
+     * announced.
      *
      * Round 17 of part 2's review: the carry runs outside the switch's lane,
      * so its row is what Postgres held when it ran, which can be older than
@@ -9995,6 +10045,10 @@ export class PostgresBackedDb extends InMemoryDb {
         const behindSettle = this.carriesBehindSettle.get(id);
         if (behindSettle) {
             behindSettle.notes.push(note);
+            const waiting = this.carriedColumnsToConfirm.get(id);
+            if (waiting) waiting.push(note);
+            else this.carriedColumnsToConfirm.set(id, [note]);
+            this.confirmCarriedColumns();
         } else if (current === seen && !this.switchWritesInFlight.has(id)) {
             map.set(id, rowToRecord(plan, row));
         } else {
@@ -10033,7 +10087,154 @@ export class PostgresBackedDb extends InMemoryDb {
         }
         const held = current.ownerAttemptRefusedAt;
         if (typeof held === 'string' && held > note.at) return;
-        map.set(id, { ...current, ownerAttemptRefusedAt: note.at });
+        const next = { ...current, ownerAttemptRefusedAt: note.at };
+        this.carriedColumnOver.set(next, current);
+        map.set(id, next);
+    }
+
+    /**
+     * Whether the mirror's entry `current` is `seen`, or was made from it by
+     * carried columns alone (`takeCarriedColumn`).
+     */
+    private unchangedButCarriedColumn(
+        current: Record<string, unknown> | undefined,
+        seen: Record<string, unknown> | undefined
+    ): boolean {
+        for (let entry = current; entry !== undefined; entry = this.carriedColumnOver.get(entry)) {
+            if (entry === seen) return true;
+        }
+        return current === seen;
+    }
+
+    /**
+     * Read back from Postgres the column of each landed carry waiting in
+     * `carriedColumnsToConfirm`, and take it into the mirror
+     * (`takeCarriedColumn`, with its conditions) only where Postgres holds
+     * that same refused attempt now (round 18 of part 2's review). A carry's
+     * answer that comes while a settle of its switch is reading it back
+     * cannot be put on this mirror's entry as it is, since a statement that
+     * landed after the carry may have cleared the column (a cancel, a
+     * check-in) and that entry does not show it yet; and the settle's read,
+     * in the switch's lane behind the statement, is bounded by nothing. This
+     * read is one statement per switch on a connection of its own, outside
+     * the write-behind queue, within `carryTimeoutMs`, as the carry is, made
+     * when such an answer comes and, after a read that failed or passed its
+     * bound, again `carryRetryMs` later until one answers; so the column
+     * reaches the mirror once Postgres answers a new connection from this
+     * process, whatever the settle's read is doing, as long as the pool
+     * hands over a connection. Postgres's answer settles each note it was
+     * asked about: the column is taken where Postgres holds it, and dropped
+     * where it does not (a later statement cleared it, or a later attempt
+     * replaced it, which reaches this mirror on its own). The rest of what
+     * Postgres holds for the switch, the statement's own change included,
+     * reaches the mirror only with the settle's row.
+     */
+    private confirmCarriedColumns(): void {
+        const plan = this.plans.get('deadmanSwitches');
+        const pool = this.pool;
+        if (!plan || !pool) return;
+        if (this.columnConfirmPass) {
+            this.columnConfirmAgain = true;
+            return;
+        }
+        if (this.carriedColumnsToConfirm.size === 0) return;
+        this.columnConfirmAgain = false;
+        const pass: Promise<void> = this.runColumnConfirmPass(pool, plan).then((wholePass) => {
+            if (this.columnConfirmPass === pass) this.columnConfirmPass = null;
+            if (!wholePass) {
+                this.columnConfirmAgain = false;
+                this.scheduleColumnConfirmRetry();
+                return;
+            }
+            if (this.columnConfirmAgain) {
+                this.columnConfirmAgain = false;
+                this.confirmCarriedColumns();
+            }
+        });
+        this.columnConfirmPass = pass;
+    }
+
+    /**
+     * One read of the waiting carried columns, as `runCarryPass` makes one
+     * try of the carry: a connection of its own, each step within
+     * `carryTimeoutMs`, false where any step failed or passed its bound,
+     * logged (`deadman_owner_attempt_column_read_failed`), with the notes
+     * not answered left waiting.
+     */
+    private async runColumnConfirmPass(pool: PgPool, plan: TablePlan): Promise<boolean> {
+        const table = plan.descriptor.tableName;
+        const column = plan.columns.find((c) => c.name === 'owner_attempt_refused_at');
+        const acquiring = pool.connect();
+        let client: PgClient;
+        try {
+            client = await this.withinCarryBound(acquiring);
+        } catch (err) {
+            void acquiring.then(
+                (late) => late.release?.(),
+                () => undefined
+            );
+            log.warn('deadman_owner_attempt_column_read_failed', {
+                error: err instanceof Error ? err.message : String(err),
+            });
+            return false;
+        }
+        let failure: Error | undefined;
+        try {
+            for (const [id, waiting] of [...this.carriedColumnsToConfirm]) {
+                const asked = [...waiting];
+                let held: unknown;
+                try {
+                    const rows = await this.withinCarryBound(
+                        client
+                            .query<Record<string, unknown>>(
+                                `SELECT owner_attempt_refused_at FROM ${table} WHERE id = $1`,
+                                [id]
+                            )
+                            .then((answer) => answer.rows)
+                    );
+                    held = rows[0]
+                        ? deserializeValue(
+                              rows[0].owner_attempt_refused_at,
+                              column?.dataType ?? 'timestamp with time zone'
+                          )
+                        : null;
+                } catch (err) {
+                    failure = err instanceof Error ? err : new Error(String(err));
+                    log.warn('deadman_owner_attempt_column_read_failed', {
+                        error: failure.message,
+                    });
+                    return false;
+                }
+                const still = this.carriedColumnsToConfirm.get(id);
+                if (still) {
+                    const left = still.filter((note) => !asked.includes(note));
+                    if (left.length > 0) this.carriedColumnsToConfirm.set(id, left);
+                    else this.carriedColumnsToConfirm.delete(id);
+                }
+                for (const note of asked) {
+                    if (!still?.includes(note)) continue;
+                    if (held === note.at) this.takeCarriedColumn(id, note);
+                    else log.info('deadman_owner_attempt_column_not_held', {});
+                }
+            }
+            return true;
+        } finally {
+            client.release?.(failure);
+        }
+    }
+
+    /**
+     * Read the waiting carried columns again in `carryRetryMs`, on a timer
+     * that does not keep the process alive and is not set after `shutdown`.
+     */
+    private scheduleColumnConfirmRetry(): void {
+        if (this.columnConfirmTimer || this.carryStopped) return;
+        if (this.carriedColumnsToConfirm.size === 0) return;
+        this.columnConfirmTimer = setTimeout(() => {
+            this.columnConfirmTimer = null;
+            this.confirmCarriedColumns();
+        }, this.carryRetryMs);
+        this.columnConfirmTimer.unref?.();
     }
 
     /**
@@ -10163,10 +10364,12 @@ export class PostgresBackedDb extends InMemoryDb {
      * A statement that answered after its bound and landed: the switch is
      * read again from Postgres, in the row's lane, so after any write of it
      * this process queued meanwhile; the row goes into the mirror unless the
-     * mirror's entry changed while it was read (a write of this process's or
-     * a refresh, each at least as new; a carry's answer, whose row can be
-     * older, does not change it while the read is out, and its column is
-     * taken after the row: round 17 of part 2's review) or a conditional
+     * mirror's entry changed while it was read other than by a carried
+     * column (a write of this process's or a refresh, each at least as new;
+     * a carry's answer, whose row can be older, does not change it while the
+     * read is out but for its column once Postgres is read to hold it, and a
+     * settle that took its row takes the column again after it: rounds 17
+     * and 18 of part 2's review) or a conditional
      * write of the switch is in flight (its own merge takes the row); with `withCopies` (the
      * arm), the switch's copies the mirror lacks go in too; the switch and
      * each such copy are announced to the other processes; and a switch
@@ -10190,7 +10393,8 @@ export class PostgresBackedDb extends InMemoryDb {
         const map = this.mapByName('deadmanSwitches');
         const seen = map.get(id);
         // While the read is out, a carry's answer for the switch leaves the
-        // mirror alone and is taken after it (`takeCarryAnswer`).
+        // mirror alone but for its column once Postgres is read to hold it
+        // (`takeCarryAnswer`, `confirmCarriedColumns`).
         let behind = this.carriesBehindSettle.get(id);
         if (!behind) {
             behind = { reading: 0, notes: [] };
@@ -10198,14 +10402,14 @@ export class PostgresBackedDb extends InMemoryDb {
         }
         behind.reading += 1;
         const reading = behind;
+        let tookRow = false;
         return this.readSwitchAndCopiesInLane(id, withCopies)
             .then((found) => {
                 if (!found) return;
-                this.takeSwitchFromPostgres(
-                    id,
-                    found,
-                    map.get(id) === seen && !this.switchWritesInFlight.has(id)
-                );
+                tookRow =
+                    this.unchangedButCarriedColumn(map.get(id), seen) &&
+                    !this.switchWritesInFlight.has(id);
+                this.takeSwitchFromPostgres(id, found, tookRow);
                 const current = this.getDeadmanSwitch(id);
                 log.info('deadman_switch_write_landed', { status: current?.status });
                 if (current?.status === 'cancelled') this.blankHeldCopiesOf(id);
@@ -10219,7 +10423,18 @@ export class PostgresBackedDb extends InMemoryDb {
                 reading.reading -= 1;
                 if (reading.reading > 0) return;
                 this.carriesBehindSettle.delete(id);
-                for (const note of reading.notes) this.takeCarriedColumn(id, note);
+                // Only a row taken from Postgres is one the column can go
+                // onto (round 18 of part 2's review: after a failed read, or
+                // a row kept out, the mirror still held the earlier entry,
+                // and a column taken onto it was one Postgres could have
+                // cleared); otherwise the notes are left to their read back.
+                if (!tookRow) return;
+                const waiting = this.carriedColumnsToConfirm.get(id);
+                for (const note of reading.notes) {
+                    this.takeCarriedColumn(id, note);
+                    if (waiting?.includes(note)) waiting.splice(waiting.indexOf(note), 1);
+                }
+                if (waiting?.length === 0) this.carriedColumnsToConfirm.delete(id);
             });
     }
 
@@ -11307,6 +11522,7 @@ export class PostgresBackedDb extends InMemoryDb {
         // A try of the carry under way (it is outside the queue since round
         // 16), and one it started again on its way out; each is bounded.
         while (this.carryPass) await this.carryPass;
+        while (this.columnConfirmPass) await this.columnConfirmPass;
     }
 
     /**
@@ -11318,6 +11534,8 @@ export class PostgresBackedDb extends InMemoryDb {
         this.carryStopped = true;
         if (this.carryRetryTimer) clearTimeout(this.carryRetryTimer);
         this.carryRetryTimer = null;
+        if (this.columnConfirmTimer) clearTimeout(this.columnConfirmTimer);
+        this.columnConfirmTimer = null;
         this.carryRefusedOwnerWrites();
         await this.drain();
         await this.transport?.close();
