@@ -13,19 +13,17 @@ queue, and on every PR that touches a path the workflow watches (`apps/**`,
 `blackout-desktop/**`, `services/**`, `.trivyignore`, `pnpm-lock.yaml`,
 `package.json`, the workflow itself, `.gitleaksignore` and `osv-scanner.toml`;
 a docs-only PR starts no run). They are removed here, with the lock that makes
-them unnecessary. The same change corrects the reason the two image-size
-ignores give, which has been false since 2026-09-14, and goes one step
-further there: `.trivyignore`'s four image-size lines now carry
-`exp:2026-11-30`, the date `osv-scanner.toml`'s `ignoreUntil` already gives
-the same two advisories on `develop`. So on 2026-11-30, unless the metro
-update has landed, the two OSV gates go red whichever way this PR lands, and
-with this PR merged the Trivy filesystem scan goes red with them; without
-it, Trivy goes red that day for the Twisted entries instead and keeps
-ignoring image-size with no date. The operator approved the Twisted lock and
-the image-size reason correction in the one PR on 2026-11-02; the `exp:`
-suffixes are this change's addition, and removing those four suffixes alone
-returns the Trivy lines to `develop`'s open-ended form
-([image-size](#image-size-the-ignores-reason-corrected)).
+them unnecessary. The operator approved the Twisted lock and a correction of
+the reason the two image-size ignores gave (false since 2026-09-14) in the
+one PR on 2026-11-02, and until its eleventh round this change carried that
+correction and added `exp:2026-11-30` to `.trivyignore`'s four image-size
+lines. #1001 (metro 0.83.8; opened 2026-11-08 05:17:59 UTC, merged 06:28:36
+UTC as `97756ff`) took image-size out of `pnpm-lock.yaml` and removed the
+image-size entries from all three ignore lists on `develop`. The eleventh
+round merged it (commit `4e759b4`) and took those removals in every
+conflict, so this change now changes no image-size line, and no ignore file
+holds an image-size entry
+([image-size](#image-size-superseded-by-1001)).
 
 Reviews of this change also found bugs in the fork's manhole host-key
 handling that the bump neither caused nor changed, and errors in the
@@ -63,7 +61,11 @@ SHA-1. The review of the ninth round found that `54043e4`'s message put the
 limit of signing at a subgroup order longer than 160 bits, which a
 non-standard order just over 160 bits contradicts; from commit `8c74e04` it
 names the 224- and 256-bit orders of the standard keys, with which the
-server in practice cannot sign.
+server in practice cannot sign. The review of the tenth round found that the
+check ran whatever the listeners, so a homeserver with no manhole listener
+and a stale `manhole_settings` block, which `develop` runs, stopped at
+startup; from commit `b1b91e8` it runs only for a process that starts a
+manhole listener.
 If the approved scope is to stay exact, the operator can still split the
 manhole fixes out: return `synapse/util/manhole.py`,
 `synapse/config/server.py`, `docs/manhole.md` and
@@ -75,7 +77,7 @@ sentence and the asyncssh clause of its key-exchange sentence, and remove or
 reword every sentence of this record that relies on the fixes, not only its
 manhole section. `grep -n -i 'manhole\|ssh_p'` on this file finds them in: this
 paragraph; the first and fourth Result bullets; the Method's Tests and Boot
-bullets and its fourth- to tenth-round bullets; the `SSHSession` and
+bullets and its fourth- to eleventh-round bullets; the `SSHSession` and
 key-exchange rows of
 [What changed](#what-changed-in-the-modules-the-fork-imports); the closing
 paragraph of [The gate](#the-gate); the targeted, full-suite, Boot, Lint and
@@ -85,13 +87,16 @@ second, items 1, 9, 12 and 13 of the third, the fourth list's opening
 sentence and its items 1, 13, 14 and 20, the fifth list's opening sentence
 and its items 1, 2, 3, 4 and 6, the sixth list's opening sentence and its
 items 1, 2, 4 and 5, the seventh list's opening sentence and its items
-1, 5, 6 and 11, the eighth list's opening sentence and its item 1, and the
-ninth list's opening sentence and its item 1; and the Commit messages note.
-Seventeen more rely on the fixes
+1, 5, 6 and 11, the eighth list's opening sentence and its item 1, the
+ninth list's opening sentence and its item 1, and the tenth list's opening
+sentence and its items 1 (its mention of the manhole section) and 5; and the
+Commit messages note.
+Nineteen more rely on the fixes
 though the grep does not find them, since none names the manhole or an
 `ssh_p` setting: items 15 and 22 of the fourth list, items 7, 8 and 9 of the
 fifth, items 3 and 8 of the sixth, items 2, 3, 4, 9 and 13 of the
-seventh, items 2, 3 and 8 of the eighth, and items 2 and 4 of the ninth. Its other hits stay true either way: the
+seventh, items 2, 3 and 8 of the eighth, items 2 and 4 of the ninth, and
+items 4 and 6 of the tenth. Its other hits stay true either way: the
 GHSA-cwm5 row, the "Not used" row's `--manhole` help-string clause, the
 import paragraph under that table and Validation's Import bullet (both import
 `synapse.util.manhole`, which `develop` has), Validation's Semgrep bullet (a
@@ -110,7 +115,7 @@ that commit's record corrections
 | Twisted 26.4.0 (fork)  | GHSA-2qrf-pqgx-qh9v (CVE-2026-115774) | Moderate | 26.10.0rc1             | same                                      |
 | Twisted 26.4.0 (fork)  | GHSA-jj36-9pvh-vj5r (CVE-2026-83813)  | Low      | 26.10.0rc1             | same                                      |
 | Twisted 26.4.0 (fork)  | GHSA-8pqf-f4m5-798g (CVE-2026-106454) | Moderate | none listed            | not reachable; see [its item](#ghsa-8pqf) |
-| image-size 1.2.1 (npm) | GHSA-5p2g-fcmc-qvqq (CVE-2025-71329)  | High     | 2.0.3 (1.x has no fix) | ignore kept; its reason corrected         |
+| image-size 1.2.1 (npm) | GHSA-5p2g-fcmc-qvqq (CVE-2025-71329)  | High     | 2.0.3 (1.x has no fix) | ignore removed by #1001 (metro 0.83.8)    |
 | image-size 1.2.1 (npm) | GHSA-w3rx-r6r6-pgpr (CVE-2025-71330)  | High     | 2.0.3 (1.x has no fix) | same                                      |
 
 **Result:**
@@ -134,7 +139,8 @@ that commit's record corrections
     pair whenever the public key's path was unset; and it filed every host
     key under `ssh-rsa`, so with an Ed25519 or ECDSA key no connection to the
     manhole succeeded. `synapse/config/server.py`, which now refuses at
-    startup a key file the manhole could not use or should not offer: a
+    startup, for a process that starts a manhole listener, a key file the
+    manhole could not use or should not offer: a
     public key as the private one, a public key that is not the private
     key's, an EC key on a curve Twisted has no SSH key type for, or a DSA
     key (every ssh-dss signature uses SHA-1, and one whose subgroup order
@@ -149,19 +155,16 @@ that commit's record corrections
 -   **The four Twisted entries leave `.trivyignore`, with their CVE aliases.**
     `.trivyignore` now holds pnpm-lock.yaml entries only; its header,
     `security.yml`'s comment and the `pyproject.toml` comment say so.
--   **The image-size ignores stay, with a true reason.** Both files said no
-    fixed version existed. OSV and GitHub list 2.0.3 as the fix (records last
-    modified 2026-09-24). The entries stay because the one consumer, metro
-    0.83.5, cannot take 2.x (it passes a file path, which 2.x's `imageSize()`
-    refuses), and the fix path is a metro update within its allowed range,
-    which removes image-size altogether. That update also re-resolves build
-    tools the web clients use (terser, which both vite versions in the lock
-    resolve, and workbox-build's `@babel/preset-env`), was not approved for
-    this PR, and this change does not schedule it; the deadline stays
-    2026-11-30 ([Before merge or release](#before-merge-or-release)).
-    `.trivyignore`'s four image-size lines now carry `exp:2026-11-30` too,
-    where before only the OSV gates enforced the date; that suffix is this
-    change's addition beyond the approved correction (Scope).
+-   **Image-size: this change's part was superseded by #1001.** Until the
+    eleventh round this change kept the two image-size ignores with a
+    corrected reason (OSV and GitHub list 2.0.3 as the fix, and the one
+    consumer, metro 0.83.5, cannot take 2.x) and put `exp:2026-11-30` on
+    `.trivyignore`'s four image-size lines. #1001 did the within-range metro
+    update this change named as the fix and left to its own change: metro
+    0.83.8 no longer depends on image-size, and #1001 removed the three
+    ignores on `develop`. The eleventh round's merge took that removal, so
+    none of this change's image-size edits remains
+    ([image-size](#image-size-superseded-by-1001)).
 -   **What an operator can see of the bump is the manhole's key exchange
     and three edge cases.** The suite, compared test by test before and
     after, has the same outcomes, and a homeserver boots and answers under
@@ -193,8 +196,11 @@ that commit's record corrections
     an EC key on a curve other than P-256, P-384 or P-521, at
     `ssh_priv_key_path` also stops startup with a `ConfigError` now, where
     `develop` loads it and, with it alone, crashes as above
-    ([the curve paragraph](#curve-refusal), [DSA](#dsa-refusal)). No tracked
-    config enables the manhole
+    ([the curve paragraph](#curve-refusal), [DSA](#dsa-refusal)). Each of
+    these refusals applies only to a process that starts a manhole
+    listener; without one, `manhole_settings` loads unchecked, as on
+    `develop` ([Only for a process that starts a
+    manhole](#listener-condition)). No tracked config enables the manhole
     ([Host keys other than RSA](#host-key-types)).
 
 ---
@@ -488,7 +494,9 @@ that commit's record corrections
     duplicate-paths guard's case rules and tests, `release.yml`,
     `KNOWN_LIMITATIONS.md`, the wrapper release doc and the 2026-10-30
     server/desktop record. #1001, which removes the image-size ignores whose
-    reasons this branch rewrites, had not merged. Only `.trivyignore`
+    reasons this branch rewrites, had not merged (it merged at 06:28:36 UTC,
+    18 minutes after this round's record commit `71fdfce`; eleventh round,
+    below). Only `.trivyignore`
     conflicted, in its header, where both sides rewrote how the three
     ignore files differ: the resolution keeps `develop`'s date (2026-11-08)
     and its minimatch and brace-expansion bullets, this branch's removal of
@@ -519,6 +527,50 @@ that commit's record corrections
     `0f9df74`. The full suite, the targeted modules as a whole and
     `blackout_runtime_tests` did not run, Semgrep did not run, and no
     homeserver was booted.
+-   **The eleventh round** starts with a merge of `origin/develop` at
+    `97756ff`, commit `4e759b4`: #1001 (opened 2026-11-08 05:17:59 UTC,
+    merged 06:28:36 UTC) moves metro to 0.83.8 under react-native 0.82.1,
+    which takes image-size out of `pnpm-lock.yaml`, and removes both
+    image-size `[[IgnoredVulns]]` from `osv-scanner.toml`, the four
+    image-size lines from `.trivyignore` and both entries of
+    `pnpm.auditConfig.ignoreGhsas` (now empty), with
+    `dependency-advisories-image-size-2026-11-02.md` and a resolved note in
+    the 2026-10-30 record. Three files conflicted, each where this branch
+    had rewritten an image-size entry, and each was resolved by removal, as
+    that record's overlap section planned: `.trivyignore`'s header keeps
+    `develop`'s image-size bullet and this branch's paragraph on
+    `pnpm-lock.yaml` and `poetry.lock` and lists all five records, and its
+    body drops this branch's image-size block and `develop`'s Twisted
+    blocks, leaving the two brace-expansion lines; `osv-scanner.toml` and
+    the 2026-10-30 record take `develop`'s side whole. No ignore file holds
+    an image-size entry, and nothing under `apps/blackout-server` changed.
+    Of the six files the merge changes against this branch, the three
+    prettier parses (the two records and `package.json`) are formatted as
+    the root config would have them; it skips `.trivyignore`,
+    `osv-scanner.toml` and `pnpm-lock.yaml`. The round then changes
+    `synapse/config/server.py`, the test module, `docs/manhole.md`, the
+    manhole paragraph of `config_documentation.md` and PATCHES.md (commit
+    `b1b91e8`; `0d36d47` then re-dates a docstring of the test module and
+    reflows a paragraph of `docs/manhole.md`), and this record; no lock
+    file, no ignore file and no `manhole.py` change. Its checks ran with
+    each venv's Python and this branch's tree first on `PYTHONPATH` (under
+    both, `synapse` and `tests` import from the worktree), with
+    `v52/finish/r6/` under the session's
+    scratch directory as working directory and log directory: the manhole
+    module under both venvs in the worktree before and after the change,
+    and again on `0d36d47`'s tree (`finish/r6/docstring-*.log`);
+    `tests.config` and `tests.blackout_runtime` under both venvs on
+    `b1b91e8`'s tree, each started with the 1-minute load under 3.5; eight
+    homeserver boots, four shapes under each version
+    ([Only for a process that starts a manhole](#listener-condition)); a
+    check of the 1024-bit DSA key with a 161-bit q under both versions
+    (`finish/r6/q161-check.log`); mypy evenly on the two changed Python
+    files in `git archive` copies of `4e759b4` and `b1b91e8`;
+    `poetry lock --check`; and the scanners on `git archive` exports of
+    `b1b91e8` and of `develop`'s `97756ff`. The scripts are kept in
+    `finish/r6/scripts.log`. The full suite, the targeted modules as a whole
+    and `blackout_runtime_tests` did not run, Semgrep did not run, and no
+    OpenSSH client was run.
 -   **npm:** the registry's JSON for `image-size` (dist-tags, versions,
     publish times); metro 0.83.5's `src/Assets.js` and `package.json` from
     the worktree's `node_modules`; image-size 2.0.4's and metro 0.83.8's
@@ -1034,7 +1086,16 @@ tenth round counted 122 and 100 on the same key
 (`finish/r5/logs/dsa-sign-count.txt`). Nothing ordinary makes such a key:
 cryptography and OpenSSL generate q of 160, 224 or 256 bits only,
 cryptography's numbers API refuses any other q, and Twisted's own
-`Key.fromString` refuses the key's public blob. A 1024-bit key loads in the
+`Key.fromString` refuses the key's public blob. Such a key serves no
+session either. The review of the tenth round served it, past the check,
+over loopback to Twisted's client 30 times under each version and got no
+session: the server raised `OverflowError`, or the client refused the host
+key with cryptography's "q must be exactly 160, 224, or 256 bits long".
+And OpenSSL rejects the signatures the server does make: in the eleventh
+round `Key.sign` returned 46 and 71 of 200 under 26.4.0 and 26.10.0, and
+cryptography 50.0.2's DSA verification (OpenSSL 4.0.3) rejected all of them,
+though the pure-Python check above accepts the review's
+(`finish/r6/q161-check.log`). A 1024-bit key loads in the
 OpenSSH format and signs; the seventh round's review got a session on one
 with Twisted's client. It is the one size `ssh-keygen` writes for DSA where
 it writes DSA at all: OpenSSH 9.9p1's `ssh-keygen.c` has "Invalid DSA key
@@ -1142,12 +1203,70 @@ startup after `Error in configuration at
 'manhole_settings.ssh_priv_key_path':` and the DSA message in `57d9d26`'s
 wording (above).
 
+<a id="listener-condition"></a>**Only for a process that starts a manhole**
+(found by the review of the tenth round, fixed in the eleventh, commit
+`b1b91e8`). From `6c0aab8` to `8c74e04`, `ServerConfig.read_config` called
+`_check_manhole_host_key` whatever the listeners. Upstream loads
+`manhole_settings` without checking it, and only a process that starts a
+manhole listener uses it, so a homeserver with no manhole listener and a
+`manhole_settings` block the check refuses (a DSA key, a mismatched `.pub`,
+a public key as the private one, a curve Twisted has no SSH key type for),
+which `develop` loads and runs, stopped at config load. The review booted
+one with an http listener only and an `openssl` 2048/256 DSA key: exit 1
+under both versions with "Error in configuration at
+'manhole_settings.ssh_priv_key_path'"; and through `HomeServerConfig` that
+config and one with an RSA key beside another RSA key's `.pub` loaded on
+`develop`'s files and were refused on this branch's. The rationale this
+record and PATCHES.md gave for every refusal, a manhole that "would start
+... on which no SSH session completes, or not start", did not hold for
+those configs, and no document said the refusal reached them. Now the check
+runs only when `_starts_manhole_listener` finds a manhole listener for the
+process the config is loaded for: in the main process a `type: manhole`
+entry of `listeners` or the `manhole` option, in a worker an entry of
+`worker_listeners` or the `worker_manhole` option, the listeners
+`synapse/app/homeserver.py` and `synapse/app/generic_worker.py` start.
+`WorkerConfig` parses the worker's listeners after `ServerConfig`, so the
+function reads them from the raw config, and it takes
+`worker_app: synapse.app.homeserver` for the main process, as `WorkerConfig`
+canonicalises it. A key file that cannot be read still stops startup with
+or without a listener, as upstream's `Key.fromFile` call always has. Both
+documentation pages say when the checks run, and PATCHES.md's rationale
+sentence names the condition.
+
+Tests (four new, twenty-nine in all), in `ManholeListenerTestCase`: five
+refused shapes (a public key as the private one, another RSA key's public
+key, an RSA public key beside an Ed25519 key, a 2048-bit DSA key and a
+secp256k1 key) load for five processes that start no manhole (the main
+process with an http listener only, with no listener, and with a manhole
+only in `worker_listeners`; a worker with an http listener only, and one
+beside a manhole only in the shared `listeners`) and are refused at their
+setting for five that start one (a `listeners` entry, the same under
+`worker_app: synapse.app.homeserver`, the `manhole` option, a worker's
+`worker_listeners` entry and `worker_manhole`); a matching Ed25519 pair
+loads for all ten; and a missing key file is refused for all ten with
+"Failed to read manhole private key file". The existing config tests now
+give the main process a manhole listener (`_load_manhole_settings`'s
+default), so they pin the refusals as before. Against the worktree before
+the change (the merge `4e759b4` with the new module), the no-manhole test
+errors with the `ConfigError` of its first shape and the other twenty-eight
+pass, under each version; with the change all twenty-nine pass under both
+(`finish/r6/before-*.log`, `finish/r6/after-*.log`). Live, from this
+branch's tree under each version (`finish/r6/scripts.log`, `boot.sh`: sqlite
+and an http listener on loopback): with an http listener only and an
+`openssl` 2048/256 DSA key, or an RSA key beside another RSA key's `.pub`,
+the homeserver answered `/health` and exited 0 on SIGTERM; with a loopback
+manhole listener added, each exited 1 after "Error in configuration at
+'manhole_settings.ssh_priv_key_path':" and "Error in configuration at
+'manhole_settings.ssh_pub_key_path':" (`finish/r6/boot-*.log`).
+
 **Scope.** The operator approved the Twisted lock and the image-size
-correction. These fixes are a third thing, kept to `manhole.py`, the manhole
+correction (the latter superseded by #1001 in the eleventh round,
+[image-size](#image-size-superseded-by-1001)). These fixes are a third
+thing, kept to `manhole.py`, the manhole
 check in `synapse/config/server.py`, the tests and the two manhole
 documentation pages, in commits separate from the lock and the ignore changes
 (`20362e4`, which also carries this record's second-round corrections,
-`ce1bca9`, `6c0aab8`, `2bf76ad`, `57d9d26`, `54043e4` and `8c74e04`), so they can be dropped from
+`ce1bca9`, `6c0aab8`, `2bf76ad`, `57d9d26`, `54043e4`, `8c74e04`, `b1b91e8` and `0d36d47`), so they can be dropped from
 the PR if the approved
 scope is to stay exact (the Scope paragraph says how); leaving them out would
 leave a known startup crash in a documented security feature with its fix in
@@ -1159,7 +1278,21 @@ fails in practice, and this
 record's and PATCHES.md's statements about the generated host key describing
 a code path that cannot run.
 
-## image-size: the ignores' reason corrected
+## image-size: superseded by #1001
+
+**Eleventh round (2026-11-08).** #1001 did the within-range metro update
+this section names as the fix: metro 0.83.8 under react-native 0.82.1
+(opened 05:17:59 UTC, merged 06:28:36 UTC as `97756ff`, with its own record,
+`dependency-advisories-image-size-2026-11-02.md`). It took image-size out of
+`pnpm-lock.yaml` and deleted the image-size entries from all three ignore
+lists, and the eleventh round's merge (`4e759b4`) took those deletions in
+each of the three files where this branch had rewritten them. So the reason
+correction and the `exp:2026-11-30` suffixes described below are no longer
+part of this change: no ignore file holds an image-size entry, and
+`pnpm.auditConfig.ignoreGhsas` is empty. What follows is what this change
+did and found before that merge, kept as the record of it; its present
+tense describes the tree before `4e759b4`. This record did not check #1001's
+own verification.
 
 `pnpm-lock.yaml` has image-size 1.2.1 through one path: react-native 0.82.1 →
 `@react-native/community-cli-plugin` 0.82.1 → metro 0.83.5 (`image-size
@@ -1254,9 +1387,10 @@ four are the second round's, with the database of 2026-11-02 01:14 UTC; the
 next four are the third round's and the next four the fourth round's, both
 with the database of 2026-11-02 07:17 UTC; the next eight are the fifth
 round's and the next four the sixth round's, both with the database of
-2026-11-02 13:15 UTC; and the last sixteen are the seventh to tenth
+2026-11-02 13:15 UTC; and the last twenty are the seventh to eleventh
 rounds', four each, all with the database of 2026-11-08 00:37 UTC
-([Method](#method)).
+([Method](#method)). The image-size suppressions in rows before the
+eleventh round's describe trees before #1001.
 
 | Run                                                                                                          | High/Critical reported                                                                                                                                                                       | Exit |
 | ------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
@@ -1307,10 +1441,16 @@ rounds', four each, all with the database of 2026-11-08 00:37 UTC
 | same, `--show-suppressed` (tenth round)                                                                      | none; suppressed: the four Twisted ids and the two image-size ids                                                                                                                            | 0    |
 | this branch, `git archive` of `8c74e04` (tenth round)                                                        | none                                                                                                                                                                                         | 0    |
 | same, `--show-suppressed` (tenth round)                                                                      | none; suppressed: image-size 1.2.1 under CVE-2025-71329 and CVE-2025-71330 (fixed 2.0.3), and nothing else                                                                                   | 0    |
+| `develop` (`97756ff`), `git archive`, eleventh round (same database)                                         | none                                                                                                                                                                                         | 0    |
+| same, `--show-suppressed` (eleventh round)                                                                   | none; suppressed: the four Twisted ids, and no image-size id                                                                                                                                 | 0    |
+| this branch, `git archive` of `b1b91e8` (eleventh round)                                                     | none                                                                                                                                                                                         | 0    |
+| same, `--show-suppressed` (eleventh round)                                                                   | none; nothing suppressed                                                                                                                                                                     | 0    |
 
 So the gate is green on both sides, and on this branch it is green without any
-Twisted entry: Twisted 26.10.0 matches no advisory in any of the four
-databases. On `develop` only the seven Twisted lines carry `exp:`. The first
+Twisted entry: Twisted 26.10.0 matches no advisory in any of the five
+databases used here, from 2026-11-01 19:08 to 2026-11-08 00:37 UTC (until
+the eleventh round this said "four"; the seventh to tenth rounds added the
+fifth). On `develop` only the seven Twisted lines carry `exp:`. The first
 round's two probe rows ran on a copy of its `.trivyignore` whose entries were given that
 date, the image-size ones included, as the image-size ids in the first row
 show (the edited copy was not kept, and the dead brace-expansion entries
@@ -1322,7 +1462,8 @@ round's four probe rows show that the start is 00:00Z on any host: under
 `TZ=Pacific/Kiritimati`, where the local date was already 2026-11-03, an
 entry dated 2026-11-03 still applied. The
 `develop` run with `--show-suppressed` also shows that Trivy matches image-size
-by CVE, which is why both ignore lists carry the CVE lines.
+by CVE, which is why both ignore lists carried the CVE lines until #1001
+removed them.
 
 The record's commits change no file Trivy reads; neither do the manhole
 commits (`20362e4`, `ce1bca9`), `d5fa741` and `89c1606` (PATCHES.md). The
@@ -1348,7 +1489,13 @@ minimatch ignore from `osv-scanner.toml` and of the minimatch and
 brace-expansion entries from `pnpm.auditConfig.ignoreGhsas`, none of which
 Trivy applies. `.trivyignore`'s two brace-expansion lines stay and still
 suppress nothing. Both gates stay green on both sides, and the OSV runs no
-longer list an unused ignore ([Validation](#validation), OSV).
+longer list an unused ignore ([Validation](#validation), OSV). The eleventh
+round's are on `b1b91e8`, which changes no file Trivy reads, and on
+`develop` at `97756ff`; the merge `4e759b4` between them brings in #1001's
+`pnpm-lock.yaml`, without image-size, and its removal of the image-size
+entries, so on this branch Trivy reports and suppresses nothing, and on
+`develop` it suppresses only the four Twisted ids. Both gates stay green on
+both sides ([Validation](#validation), OSV).
 
 ## Validation
 
@@ -1361,7 +1508,8 @@ longer list an unused ignore ([Validation](#validation), OSV).
     `git archive` of `57d9d26`, the ninth on one of `54043e4`'s
     `pyproject.toml` and `poetry.lock`, with poetry 1.3.2,
     `finish/r4/scan/poetry-lock-check.log`; the tenth on `8c74e04`'s clean
-    tree, `finish/r5/scan/poetry-lock-check.log`). Every file
+    tree, `finish/r5/scan/poetry-lock-check.log`; the eleventh on
+    `b1b91e8`'s clean tree, `finish/r6/scan/poetry-lock-check.log`). Every file
     hash in
     the two new lock entries matches PyPI's JSON (2 of 2 for twisted, 50 of 50 for
     zope-interface). `poetry export --extras all --without-hashes`, with and
@@ -1425,7 +1573,13 @@ longer list an unused ignore ([Validation](#validation), OSV).
     manhole module's twenty-five among them), all passing under each
     version (`finish/r5/logs/config-*.log`, `finish/r5/logs/runtime-*.log`,
     each headed with the commit and a clean worktree, and
-    `finish/r5/logs/heavy.log`). All 40
+    `finish/r5/logs/heavy.log`). The eleventh round ran the two again under
+    each venv on `b1b91e8`'s tree, under the same load rule: `tests.config`,
+    103 tests, and `tests.blackout_runtime`, 80 (the manhole module's
+    twenty-nine among them), all passing under each version
+    (`finish/r6/tests.config-*.log`, `finish/r6/tests.blackout_runtime-*.log`,
+    each headed with the paths `synapse` and `tests` were imported from, and
+    `finish/r6/heavy.log`). All 40
     failures and
     errors are in `tests.http`: 18 failures and 1 error in the federation
     agent's module, 13 and 6 in the federation client's, 2 failures in the
@@ -1520,7 +1674,7 @@ longer list an unused ignore ([Validation](#validation), OSV).
 -   **`blackout_runtime_tests`:** 85 passed under each venv (`pytest -q`,
     pytest 8.3.5 added with `--no-deps` as before), and 85 again from the
     after venv in the second, third, fourth and fifth rounds (not run in the
-    sixth, seventh, eighth, ninth or tenth). `tests/blackout_runtime`
+    sixth, seventh, eighth, ninth, tenth or eleventh). `tests/blackout_runtime`
     is in the trial suite above.
 -   **Boot, before and after:** `--generate-config` wrote a sqlite config
     with the 8008 listener on `['::1', '127.0.0.1']`, `tls: false`, `client`
@@ -1604,7 +1758,13 @@ family not supported by protocol`, the same traceback apart from Twisted's
     of the two from this branch's tree under each version, each stopping
     with its `ConfigError` ([DSA](#dsa-refusal)). The ninth round booted
     nothing; its 2048-bit DSA key with a 160-bit subgroup order was served
-    only in the session test. The tenth round booted nothing either.
+    only in the session test. The tenth round booted nothing either. The
+    eleventh round booted eight times, four shapes under each version, each
+    with an http listener on loopback: an `openssl` 2048/256 DSA key, and an
+    RSA key beside another RSA key's `.pub`, each with no manhole listener
+    (answering `/health`, exit 0 on SIGTERM) and with one (exit 1 with the
+    `ConfigError`) ([Only for a process that starts a
+    manhole](#listener-condition)).
 -   **Lint:** the first round changed no Python file, so ruff, black, isort
     and mypy did not run then. The second round's two Python files
     (`synapse/util/manhole.py`, `tests/blackout_runtime/test_manhole.py`)
@@ -1635,7 +1795,9 @@ family not supported by protocol`, the same traceback apart from Twisted's
     began with `type:`, which it reads as a type comment, and the comment
     was reflowed (`finish/r4/mypy/after-*-typecomment.txt`). The tenth
     round's two (the same files) pass ruff, black and isort as written,
-    under both venvs (`finish/r5/logs/lint-wip.txt`).
+    under both venvs (`finish/r5/logs/lint-wip.txt`). The eleventh round's
+    two (the same files) pass ruff, black and isort as written, under both
+    venvs (`finish/r6/lint-*.log`).
 -   **mypy, before and after, compared evenly from the third round on.** The
     second round ran mypy on the two manhole files from both venvs in the
     worktree, got the same single `stubs/txredisapi.pyi` error, and
@@ -1707,7 +1869,11 @@ family not supported by protocol`, the same traceback apart from Twisted's
     `git archive` copies of `d673fe6` without and with `8c74e04`'s
     versions: again 55 in 27 under 26.4.0 and 53 in 26 under 26.10.0 on
     each side, the same error lines before and after (sorted output
-    identical), none in the two files (`finish/r5/mypy/`).
+    identical), none in the two files (`finish/r5/mypy/`). The eleventh
+    round's, on the same two files in `git archive` copies of `4e759b4` and
+    of `b1b91e8`: again 55 in 27 under 26.4.0 and 53 in 26 under 26.10.0 on
+    each side, the same error lines before and after (sorted output
+    identical), none in the two files (`finish/r6/mypy/`).
 -   **OSV:** osv-scanner 2.3.3 on `pnpm-lock.yaml` with `TZ=UTC`,
     `TZ=Etc/GMT-3` and `TZ=Pacific/Kiritimati`: exit 0 each time, "Filtered 4
     vulnerabilities" (deepmerge, the two image-size entries with the new
@@ -1743,7 +1909,14 @@ family not supported by protocol`, the same traceback apart from Twisted's
     the same six times: exit 0, "Filtered 3 vulnerabilities" (deepmerge and
     the two image-size entries, each side printing its own image-size
     reason), no unused-ignore line, and "No issues found"
-    (`finish/r5/scan/osv-*.log`). On
+    (`finish/r5/scan/osv-*.log`). The eleventh round's runs, on a
+    `git archive` of `b1b91e8` and on one of `develop`'s `97756ff`, after
+    #1001 took image-size out of the lock (1,493 packages, from 1,491) and
+    its two entries out of `osv-scanner.toml`, each in all three time zones,
+    give the same six times: exit 0, "Filtered 1 vulnerability" (deepmerge),
+    no unused-ignore line, and "No issues found"
+    (`finish/r6/scan/osv-*.log`); no run prints an image-size reason any
+    more. On
     `apps/blackout-server/poetry.lock`, which no gate scans this way:
     `develop`'s lock shows the eight Twisted rows (the seven above and
     GHSA-8pqf, `--` for its fix) plus black 23.10.1, pygments 2.15.1 and
@@ -1765,6 +1938,10 @@ family not supported by protocol`, the same traceback apart from Twisted's
     `git archive` copies of `8c74e04` and of `develop`'s `0f9df74`, after
     #999 dropped two `ignoreGhsas` entries that matched nothing: exit 0 and
     "1 low | 2 high (2 ignored)" from each (`finish/r5/scan/pnpm-*.log`).
+    The eleventh round ran both on `git archive` copies of `b1b91e8` and of
+    `develop`'s `97756ff`, after #1001 took image-size out of the lock and
+    emptied `ignoreGhsas`: exit 0 and "1 low" from each, the two ignored
+    highs, image-size's, gone (`finish/r6/scan/pnpm-*.log`).
     Unchanged by this PR.
 -   **gitleaks 8.21.2** over `origin/develop..HEAD`: after the first two
     commits, 2 commits scanned, no leaks; after the fourth (`20362e4`), 4
@@ -1781,7 +1958,10 @@ family not supported by protocol`, the same traceback apart from Twisted's
     commits scanned of the 24 in the range, no leaks
     (`finish/r4/scan/gitleaks-after-fix.log`); in the tenth, after the
     fourth merge and `8c74e04`, 23 commits scanned of the 27 in the range
-    (four merge commits), no leaks (`finish/r5/scan/gitleaks-code.log`).
+    (four merge commits), no leaks (`finish/r5/scan/gitleaks-code.log`); in
+    the eleventh, after the fifth merge and `b1b91e8`, 25 commits scanned of
+    the 30 in the range (five merge commits), no leaks
+    (`finish/r6/scan/gitleaks-code.log`).
 -   **Semgrep 1.95.0**, the version the third review used, from PyPI into a
     scratch venv, with `security.yml`'s rulesets (`p/security-audit`,
     `p/secrets`) over the files the branch changes, each time in a
@@ -1799,8 +1979,8 @@ family not supported by protocol`, the same traceback apart from Twisted's
     own with an empty `.semgrepignore` in the copy, gives 0 findings (115 rules
     on 1 file). Whether the workflow's `semgrep ci` skips it the same way was
     not checked. The fifth round's bullet gave the summary's count and left out
-    the skip. Semgrep did not run in the seventh, eighth, ninth or tenth
-    round.
+    the skip. Semgrep did not run in the seventh, eighth, ninth, tenth or
+    eleventh round.
 -   **Centralized CI Parity** (`centralized-ci-parity.yml`, which this PR
     triggers through `docs/**`) runs `pnpm lint`, `pnpm test`, `pnpm build`,
     `guard:ops-artifacts` and the smoke-aligned checks. Run here:
@@ -1853,14 +2033,22 @@ tools/ci/check-auth-secrets.mjs`.
     wheel is pure Python; zope-interface 8.7 ships cp311 manylinux wheels
     for x86_64 and aarch64). Checking `pip show twisted zope.interface` in
     the built `blackout-synapse:stable` once (26.10.0 and 8.7) is enough.
--   **The metro update, before 2026-11-30.** The image-size ignores lapse at
+-   **The metro update, before 2026-11-30.** Done by #1001 (eleventh round;
+    the rest of this bullet is as the earlier rounds wrote it). #1001 was
+    opened on 2026-11-08 at 05:17:59 UTC and merged at 06:28:36 UTC, and
+    the merge `4e759b4` brought it here, so no image-size ignore is left to
+    lapse. "No change for it exists yet", below, was true when the first
+    round wrote it (`648c914`, 2026-11-02) and false when the tenth round
+    kept it: #1001 had been open since 05:17:59 UTC, and that round's Method
+    bullet names it. As written before: the image-size
+    ignores lapse at
     the start of that day in all three places that enforce a date (the two
     OSV gates through `ignoreUntil`, Trivy through `exp:`). The OSV gates'
     `ignoreUntil` is that date on `develop` already, so they go red then
     whether or not this change merges. No change
     for it exists yet, and this one does not schedule it, so it needs
     queuing. The fix is a within-range metro update that removes image-size
-    from the lock ([image-size](#image-size-the-ignores-reason-corrected)).
+    from the lock ([image-size](#image-size-superseded-by-1001)).
     The recorded method re-resolves build tools the web clients use as well
     as the React Native toolchain; a narrower route, such as
     `pnpm.overrides` entries for metro and its `metro-*` packages that leave
@@ -1930,10 +2118,14 @@ tools/ci/check-auth-secrets.mjs`.
     round's task again listed `venv-r5` among the venvs to delete before
     making one; it is this record's 26.4.0 baseline, so it was kept (none was
     made this round, and the other three paths listed no longer exist).
-3.  **The within-range metro update is pending**, as above. The dry run also
-    printed pnpm's `unmet peer react@^18.2.0: found 19.2.5` for the React
-    Native tree; whether that warning exists on `develop`'s lock as well was
-    not checked, and the update's own change should look at it.
+3.  **The within-range metro update was pending** when this item was
+    written. (Eleventh round: #1001, opened 2026-11-08 05:17:59 UTC and
+    merged 06:28:36 UTC, is that update, and the merge `4e759b4` brought it
+    here; [Before merge or release](#before-merge-or-release).) The dry run
+    also printed pnpm's `unmet peer react@^18.2.0: found 19.2.5` for the
+    React Native tree; whether that warning exists on `develop`'s lock,
+    before or after #1001, was not checked, and #1001's record does not
+    mention it.
 4.  **`.trivyignore` still carries the dead brace-expansion entries** that the
     2026-10-30 record's item 7 describes. Unchanged here. (Tenth round: #999
     removed their `pnpm.auditConfig.ignoreGhsas` mirror on `develop`, and the
@@ -2037,7 +2229,8 @@ tools/ci/check-auth-secrets.mjs`.
 -   metro 0.83.8's own image parser on any image file (the two consumers
     track none; react-native's LogBox PNGs are what a bundle would read),
     and the client build after the metro update. Only the lockfile-only dry
-    run was done; the update is the follow-up.
+    run was done here. (Eleventh round: #1001 made the update; its record
+    reports runs of both, which this record did not repeat.)
 
 ## Corrected after the first review
 
@@ -2741,6 +2934,77 @@ Found while making these changes:
     notes, and Validation's OSV and pnpm audit bullets give this round's
     runs, with no unused-ignore line.
 
+## Corrected after the tenth review
+
+The tenth round (commits `d673fe6`, `8c74e04`, `71fdfce`) was reviewed
+under three lenses, the manhole's behaviour, the merge and its gates, and
+the record's claims, and its findings reached this round in the task that
+carried them: six, two marked high (one merge conflict, found under two
+lenses) and four low. This round first merged `develop` again (`4e759b4`,
+[Method](#method)). Each finding and what changed, in that merge, in commit
+`b1b91e8` (`synapse/config/server.py`, the test module, the two manhole
+documentation pages and PATCHES.md), in `0d36d47` (a test docstring and a
+reflowed paragraph) and in this record:
+
+1.  **The branch no longer merged cleanly with `develop`.** Two lenses
+    found it. #1001 (metro 0.83.8) merged at 06:28:36 UTC as `97756ff`, 18
+    minutes after `71fdfce`, and
+    `git merge-tree --write-tree HEAD origin/develop` conflicted in
+    `.trivyignore`, `osv-scanner.toml` and the 2026-10-30 record, each
+    where this branch had rewritten an image-size entry that #1001 deletes; kept, this branch's entries would have been
+    unused ignores against a lock with no image-size. The merge `4e759b4`
+    takes #1001's removals in all three and keeps this branch's Twisted
+    removal ([Method](#method)). Every image-size claim of this record now
+    carries an eleventh-round note or is rewritten: the Scope opening, the
+    summary table's image-size rows, the third Result bullet, the
+    image-size section (now headed "superseded by #1001", with a note at
+    its head), the gate's opening paragraph, its rows and its closing
+    paragraph, Validation's OSV and pnpm audit bullets, the metro bullet of
+    [Before merge or release](#before-merge-or-release), item 3 of [Found
+    outside scope](#found-outside-scope-not-fixed-here), the metro bullet
+    of [Not verified](#not-verified), the tenth-round Method bullet's
+    "#1001 ... had not merged", and the manhole section's Scope paragraph.
+    PATCHES.md describes no image-size edit, and the 2026-10-30 record now
+    carries `develop`'s "Resolved on 2026-11-02" bullet where this branch
+    had its "Corrected by" bullet. This round's scans, on `b1b91e8` and on
+    `develop`'s `97756ff`, pass on both sides and find no image-size
+    package ([The gate](#the-gate), [Validation](#validation)).
+2.  **The metro bullet of Before merge or release said no change for the
+    update existed**, while the same round's Method bullet named #1001,
+    open since 05:17:59 UTC. The sentence came from `648c914` and was
+    false when the tenth round kept it. The bullet and item 3 of Found
+    outside scope now say that #1001 was opened at 05:17:59 UTC and merged
+    at 06:28:36 UTC, and the bullet says the sentence was false when the
+    tenth round kept it.
+3.  **The gate's closing paragraph said Twisted 26.10.0 matches no advisory
+    "in any of the four databases"**, written in `648c914` when four had
+    been used; the seventh to tenth rounds added rows on a fifth (2026-11-08
+    00:37 UTC) without updating it. It now says five and gives their range.
+    The claim holds on the fifth, in this round's rows too.
+4.  **PATCHES.md said a DSA key with a subgroup order just over 160 bits
+    would serve a session "on the key exchanges whose signature fits".**
+    The server signs some key exchanges with such a key, but Twisted's
+    client refuses its host key, and the review got no session in 30
+    connections under each version; this round's check found OpenSSL
+    rejecting every signature `Key.sign` returned with it (46 and 71 of 200
+    under 26.4.0 and 26.10.0). PATCHES.md's rationale sentence, rewritten in
+    `b1b91e8`, puts such a key with the configs that serve no session and
+    says what it said before; the DSA paragraph of this record says the
+    same ([DSA](#dsa-refusal)).
+5.  **The host-key check ran when no manhole listener was configured**, so a
+    homeserver that runs no manhole and has a stale `manhole_settings`
+    block, which `develop` runs, stopped at config load, and no document
+    said so. From `b1b91e8` the check runs only for a process that starts a
+    manhole listener, four tests pin it, both documentation pages and
+    PATCHES.md say so, and the first and fourth Result bullets and the
+    opening paragraph name the condition
+    ([Only for a process that starts a manhole](#listener-condition)).
+
+Found while making these changes:
+
+6.  **The commit messages of `d673fe6`, `8c74e04` and `71fdfce`** carry
+    sentences this round supersedes; see the note below.
+
 ## Commit messages
 
 No commit may be amended, so these sentences stand in the branch's history;
@@ -2830,7 +3094,8 @@ each is superseded as follows.
 -   `6c0aab8`: "ten new" tests and "all eighteen pass": twelve new and
     twenty from the seventh round's two curve tests, fifteen new and
     twenty-three from the eighth round's three DSA tests, seventeen new and
-    twenty-five from the ninth round's two; "the three refusals": five after
+    twenty-five from the ninth round's two, twenty-one new and twenty-nine
+    from the eleventh round's four; "the three refusals": five after
     the seventh round, seven after the eighth, eight after the ninth
     ([Host keys other than RSA](#host-key-types), [DSA](#dsa-refusal)).
 -   `cd6b0a4`: "the ten new tests with what fails before the change (eight
@@ -2838,13 +3103,15 @@ each is superseded as follows.
     them, after the seventh round, and the eighth round's three run against
     its own baseline ([DSA](#dsa-refusal)); "the manhole module 18 of 18":
     true of that tree, twenty after the seventh round, twenty-three after
-    the eighth and twenty-five after the ninth.
+    the eighth, twenty-five after the ninth and twenty-nine after the
+    eleventh.
 -   `2bf76ad`: "`_manhole_key_type` now turns that KeyError into a
     ConfigError at the setting whose file holds the key": at
     `ssh_priv_key_path`, or at `ssh_pub_key_path` beside a private key; a
     public key with no private key is not checked
     ([the curve paragraph](#curve-refusal)). "two new (twenty in all)":
-    twenty-three since the eighth round, twenty-five since the ninth.
+    twenty-three since the eighth round, twenty-five since the ninth and
+    twenty-nine since the eleventh.
 -   `0bd19b9`: "the security workflow's OSV step fails on every pull request
     until develop moves lodash to 4.18.1": on every push to `develop` and
     every pull request that touches a path the workflow watches, and only
@@ -2861,13 +3128,13 @@ each is superseded as follows.
     SHA-1 ([DSA](#dsa-refusal)). "(the size ssh-keygen
     wrote)": in builds that write DSA at all, which a default OpenSSH 9.9p1
     build does not. "three new (twenty-three in all)": twenty-five since the
-    ninth round.
+    ninth round and twenty-nine since the eleventh.
 -   `6f9117b`: "a 2048-bit one then failing every key exchange with
     OverflowError": as for `57d9d26`. "osv-scanner exits 0 again on this
     branch and on develop, in three time zones": `develop` was scanned under
     `TZ=UTC` only in that round; the ninth round scanned it in all three.
     "the manhole module 23 of 23" and "tests.blackout_runtime 74": 25 and 76
-    since the ninth round.
+    since the ninth round, 29 and 80 since the eleventh.
 -   `54043e4`: "the SSH server cannot sign at all with a DSA key whose
     subgroup order is longer than 160 bits" (the message it quotes) and "so
     it fails on the subgroup order q": `Key.sign` fails when r or s is
@@ -2881,3 +3148,16 @@ each is superseded as follows.
     54043e4's clean tree": true, but the logs the record cited for those
     runs were overwritten; `finish/r4/logs/heavy.log` keeps their results
     (ninth list, item 3).
+-   `d673fe6` (the tenth round's merge): "#1001 has not merged, so this
+    branch's image-size reasons stay": #1001 merged at 06:28:36 UTC, and the
+    eleventh round's merge `4e759b4` removed those reasons with the entries
+    ([image-size](#image-size-superseded-by-1001)).
+-   `8c74e04`: "with the change all 25 pass under both": true of that tree;
+    29 since the eleventh round.
+-   `71fdfce`: "the manhole module 25 of 25 and tests.config 103 and
+    tests.blackout_runtime 76": 25, 103 and 76 on that tree; 29, 103 and 80
+    since the eleventh round. "pnpm audit '1 low | 2 high (2 ignored)' on
+    both sides": true then; "1 low" on both since #1001 took image-size out
+    of the lock (Validation, pnpm audit). The record it commits kept the
+    metro bullet's "No change for it exists yet" and said #1001 had not
+    merged; both have eleventh-round notes (tenth list, items 1 and 2).
