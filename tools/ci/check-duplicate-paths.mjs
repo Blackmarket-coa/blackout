@@ -50,7 +50,13 @@
  * `a.tsx`: `./a` is probed as `a.ts`, which matches `a.TS` only on a
  * case-insensitive filesystem; the stems are exactly equal and the whole
  * names differ, so checks 1 to 3 all pass it, and catching it would take the
- * resolver's probe order); Unicode case folding beyond
+ * resolver's probe order); a resolver suffix with more than one dot beside a
+ * name in another case (`Foo.d.ts` beside `foo.ts`: TypeScript probes
+ * `./Foo` as `Foo.ts`, `Foo.tsx`, then `Foo.d.ts`, so a type-only import
+ * finds `Foo.d.ts` on Linux and `foo.ts` where case does not matter, which
+ * only a type check there shows, since the bundler erases the import; the
+ * stems `Foo.d` and `foo` differ and neither whole name is the other's
+ * stem, so this too would take the probe order); Unicode case folding beyond
  * String.prototype.toLowerCase; and the NFC/NFD normalization that APFS
  * ignores. There is no allowlist: rename one file of a group instead.
  *
@@ -61,8 +67,12 @@
  * nothing when imported; the test imports that module. This file runs the
  * scan whenever it is loaded, however it is loaded, so there is no
  * main-module question for it to get wrong (through a symlink, under
- * --import, or with a process.argv[1] that names no file): no way of
- * starting it can skip the scan and exit 0. Nothing should import it.
+ * --import, or with a process.argv[1] that names no file). And it scans the
+ * whole repository from whatever directory it is started in: it finds the
+ * top level with `git rev-parse --show-toplevel` and lists and reads every
+ * tracked path from there, since `git ls-files` alone lists only the paths
+ * under the directory it runs in. So no way of starting it can skip the
+ * scan, or scan only part of the tree, and exit 0. Nothing should import it.
  */
 import {
     checkCaseInsensitivePathCollisions,
@@ -70,6 +80,7 @@ import {
     findCaseOnlyDirectoryCollisions,
     findCaseOnlyNameCollisions,
     findNameAgainstStemCollisions,
+    getRepositoryRoot,
     getTrackedFiles,
 } from './duplicate-paths-rules.mjs';
 
@@ -82,13 +93,14 @@ function printOk(message) {
 }
 
 function runCli() {
-    const files = getTrackedFiles();
+    const root = getRepositoryRoot();
+    const files = getTrackedFiles(root);
 
     const pathCollisions = checkCaseInsensitivePathCollisions(files);
     const nameCollisions = findCaseOnlyNameCollisions(files);
     const stemCollisions = findNameAgainstStemCollisions(files);
     const directoryCollisions = findCaseOnlyDirectoryCollisions(files);
-    const duplicateRoutePaths = collectRoutePathLiterals(files);
+    const duplicateRoutePaths = collectRoutePathLiterals(files, root);
 
     if (pathCollisions.length === 0) {
         printOk('No case-insensitive file path collisions found.');

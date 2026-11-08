@@ -6,16 +6,28 @@
  */
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
-import { extname, posix } from 'node:path';
+import { extname, join, posix } from 'node:path';
 
 const textExtensions = new Set(['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs']);
 
-export function getTrackedFiles(cwd = process.cwd()) {
+// The repository's top level, from whatever directory `cwd` is inside.
+// `git ls-files` lists only the paths under the directory it runs in, so the
+// scan lists and reads every path from here. Throws outside a work tree.
+export function getRepositoryRoot(cwd = process.cwd()) {
+    const out = execFileSync('git', ['rev-parse', '--show-toplevel'], {
+        cwd,
+        encoding: 'utf8',
+    });
+    return out.replace(/\r?\n$/, '');
+}
+
+// Every tracked path, relative to the top level.
+export function getTrackedFiles(root = getRepositoryRoot()) {
     // -z: without it git quotes a path that has a non-ASCII byte, in octal
     // (core.quotePath), and the quoted forms no longer compare by case.
     // maxBuffer: the list is about 390 KB today; the default is 1 MiB.
     const out = execFileSync('git', ['ls-files', '-z'], {
-        cwd,
+        cwd: root,
         encoding: 'utf8',
         maxBuffer: 64 * 1024 * 1024,
     });
@@ -133,7 +145,8 @@ function shouldSkipFile(file) {
     return SCAN_SKIP_PREFIXES.some((prefix) => file.startsWith(prefix));
 }
 
-export function collectRoutePathLiterals(files) {
+// `files` are paths relative to `root`, as getTrackedFiles returns them.
+export function collectRoutePathLiterals(files, root = getRepositoryRoot()) {
     // Track unique (path, file) pairs so multiple same-path entries inside one
     // file (e.g. different HTTP methods on the same resource) don't count as
     // duplicates — only collisions across distinct files do.
@@ -144,7 +157,7 @@ export function collectRoutePathLiterals(files) {
     for (const file of files) {
         if (shouldSkipFile(file)) continue;
 
-        const content = readFileSync(file, 'utf8');
+        const content = readFileSync(join(root, file), 'utf8');
         for (const pattern of patterns) {
             for (const match of content.matchAll(pattern)) {
                 const value = match[2]?.trim();

@@ -366,3 +366,49 @@ test('the script reads non-ASCII paths unquoted (git ls-files -z)', () => {
     assert.equal(res.status, 1, res.stdout + res.stderr);
     assert.match(res.stderr, /café\/Á\.ts {2}<-> {2}café\/á\.tsx/);
 });
+
+test('the script scans the whole repository when started from a subdirectory', () => {
+    // `git ls-files` lists only the paths under the directory it runs in, so
+    // a scan listed from the working directory saw b/ alone here, or a/t/ as
+    // bare names, and could pass. The pair must be found, under its paths
+    // from the top level, from either directory.
+    const { dir, env } = makeRepo({
+        'a/t/ToolBag.tsx': 'export default function ToolBag() { return null; }\n',
+        'a/t/toolbag.ts': 'export const entries = [];\n',
+        'b/readme.txt': 'not part of the pair\n',
+    });
+    try {
+        for (const cwd of [path.join(dir, 'b'), path.join(dir, 'a', 't')]) {
+            const res = spawnSync('node', [scriptPath], { cwd, env, encoding: 'utf8' });
+            assert.equal(res.status, 1, `from ${cwd}: ${res.stdout}${res.stderr}`);
+            assert.match(res.stderr, /a\/t\/ToolBag\.tsx {2}<-> {2}a\/t\/toolbag\.ts/);
+        }
+    } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+    }
+});
+
+test('started from a subdirectory, the script reads every file from the top level', () => {
+    // The route-literal check reads each tracked file. Both declarations of
+    // one route lie outside the starting directory: listed from there they
+    // are not seen, and read relative to it they are not found.
+    const { dir, env } = makeRepo({
+        'src/a/routes.ts': "export const route = { path: '/same' };\n",
+        'src/b/routes.ts': "export const route = { path: '/same' };\n",
+        'docs/readme.txt': 'start here\n',
+    });
+    try {
+        const res = spawnSync('node', [scriptPath], {
+            cwd: path.join(dir, 'docs'),
+            env,
+            encoding: 'utf8',
+        });
+        assert.equal(res.status, 1, res.stdout + res.stderr);
+        assert.match(res.stderr, /Duplicate absolute route path literals found/);
+        assert.match(res.stderr, /• src\/a\/routes\.ts/);
+        assert.match(res.stderr, /• src\/b\/routes\.ts/);
+        assert.doesNotMatch(res.stderr, /ENOENT/);
+    } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+    }
+});
