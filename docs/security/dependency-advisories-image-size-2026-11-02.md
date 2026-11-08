@@ -90,14 +90,17 @@ integrity of all 17 new entries matches
 `npm view <name>@<version> dist.integrity`.
 
 **How it was made.** The plain update is not narrow. A lockfile-only
-`pnpm update -r --depth Infinity metro 'metro-*' ob1` on develop gave, on
-2026-11-02, 100 removed and 126 added, with @babel/core 7.29.7, terser
+`pnpm update -r --depth Infinity metro 'metro-*' ob1` on develop
+(`0367abdd69`) gave, on 2026-11-02, 100 removed and 126 added, with @babel/core 7.29.7, terser
 5.46.1 → 5.51.2 and 10 importer lines in the client and the legacy web. On
-2026-11-08 the same command gives 100 removed and 130 added, with
+2026-11-08, on the same base, the same command gave 100 removed and 130
+added, with
 @babel/core 7.29.13 (published 2026-11-04), the same terser move and the
 same 10 importer lines (8 in `apps/blackout-client`, 2 in
-`legacy/blackout-web`): the added count follows the registry; that babel
-and terser move in the two vite trees does not. In pnpm 9.15.4's
+`legacy/blackout-web`). On `27d8c17051` it gives 129 added, because that
+develop already has lodash 4.18.1, which the update otherwise adds. So the
+added count follows the registry and the base; that babel and terser move
+in the two vite trees does not. In pnpm 9.15.4's
 `dist/pnpm.cjs`, update mode resolves with no lockfile-preferred versions,
 a dependency whose parent has no snapshot in the lock (every child of the
 new metro) resolves as an update, and `ctx.updatedSet` then moves every
@@ -130,8 +133,17 @@ commit.
     segment length under 2. The WebP chunk loop stops when the next offset
     does not move forward. TIFF reads the entries of one directory, after
     checking they fit in the file. SVG looks only at the first 64 KiB.
--   One known divergence from image-size, in SVG. The 0.83.8 parser finds
-    the root `<svg>` tag's dimensions with
+-   It measures differently from image-size 1.2.1 in several cases,
+    measured on 2026-11-08 with the installed 0.83.8 against image-size
+    1.2.1 on synthetic inputs, through each metro's own
+    `Assets.getAssetSize` and through the raw parsers. Two now throw
+    `Invalid svg image asset` where image-size measured, so a bundle that
+    builds with 0.83.5 fails with 0.83.8: an SVG root with `width="0"
+height="0"` and a `viewBox` (common in sprites; image-size gives 24×24
+    from the viewBox, while 0.83.8 takes 0×0 and rejects any size that is
+    not positive), and a dimension in `m` (image-size 38×38; 0.83.8 has no
+    `m` unit). The third is an overwrite. The 0.83.8 parser finds the root
+    `<svg>` tag's dimensions with
     `/\b(width|height|viewBox)\s*=\s*(?:"([^"]*)"|'([^']*)')/gi` (line 258)
     and keeps the last match of each name. `-` is a word boundary, so a
     `stroke-width`, `data-height` or any other `*-width` or `*-height`
@@ -145,12 +157,23 @@ commit.
     changed the pattern to `(?<![\w:-])(width|height|viewBox)` in metro
     0.87.2 (2026-10-26), and 0.87.3 and 0.88.0 have it; 0.83.8 (the newest
     0.83.x), 0.84.6 (`0.84-stable`) and 0.87.1 still have `\b`, so the fix
-    is not on the 0.83 line. Nothing here is affected: none of the four
-    tracked SVGs has such an attribute on its root tag (all four measure the
-    same under both parsers, part B of the behaviour check), `packages/ui`
+    is not on the 0.83 line. The rest give a different size, or now
+    measure where image-size did not. Spaces around `=` and uppercase
+    `WIDTH`/`HEIGHT` give 24×24 against image-size's 48×48 (it matches only
+    a lowercase `\swidth=` and falls back to the viewBox). `pc` units give
+    48×48 where image-size threw. A comma-separated viewBox gives 30×20
+    where image-size gave no size. A root tag that ends after byte 1000
+    measures where image-size did not detect SVG. Outside SVG, a BMP with
+    an OS/2 core header, a JPEG with SOF3 or SOF9, a big-endian KTX1 and a
+    WebP whose VP8X is not the first chunk measure correctly on 0.83.8,
+    where image-size gave wrong sizes or threw. Nothing here is affected:
+    all 70 committed images and the 10 react-native images measure the same
+    under both (parts A and B of the behaviour check), none of the four
+    tracked SVGs has any of these patterns on its root tag, `packages/ui`
     and `legacy/blackout-web` hold no image files, and nothing runs metro.
-    An SVG asset added later with a `stroke-width` on its root would be
-    measured wrongly by 0.83.8.
+    An asset added later with one of them would fail the bundle (a
+    zero-size root with a viewBox, an `m` unit) or be measured wrongly (a
+    `*-width` or `*-height` attribute after the real one) by 0.83.8.
 -   `src/Assets.js`: `getAssetSize` calls `getImageDimensions` where it
     called `imageSize(content)`. `getAssetData` used to pass a file path to
     image-size, which read the file. It now reads the first file's bytes
@@ -179,7 +202,9 @@ metro's own API:
     with a no-op asset registry. The `registerAsset` objects are read out of
     the bundle.
 
-The baseline ran on develop's install (metro 0.83.5). The run after ran on
+The baseline ran on the 2026-11-02 install of develop at `0367abdd69`
+(metro 0.83.5); develop changed no image file and no metro entry in the
+lock between that and `27d8c17051`. The run after ran on
 a fresh `git archive` of this change with `pnpm install --frozen-lockfile`,
 and again on 2026-11-08 on a fresh `git archive` of the merge with develop
 (`7a0ffafb72`), with the same results; the table gives that run.
@@ -415,6 +440,20 @@ correction.
     fits hermes-parser. The row is split: metro and metro-babel-transformer
     pin hermes-parser, and hermes-parser pins hermes-estree.
 
+A fourth review on 2026-11-08, of `267b2bbd94`, made two low findings. Both
+are corrected above.
+
+15. **The parser's differences.** The bullet named one way 0.83.8 measures
+    differently from image-size 1.2.1. It now names the others measured on
+    synthetic inputs, first the two that throw where image-size measured (a
+    zero-size SVG root with a viewBox, and an `m` unit), and widens the
+    warning about assets added later to them.
+16. **The plain update's count.** "On 2026-11-08 the same command gives
+    100 removed and 130 added" was measured on `0367abdd69` and did not say
+    so. On `27d8c17051` it gives 129, because that develop already has
+    lodash 4.18.1. The sentence and the behaviour baseline now name their
+    base.
+
 ## Not verified
 
 -   metro's other changed files between 0.83.5 and 0.83.8 (the server, HMR,
@@ -423,7 +462,8 @@ correction.
     metro-runtime 0.83.5 while metro uses 0.83.8, which the `^0.83.1`
     ranges allow and nothing here runs.
 -   No `react-native bundle` was run (see Behaviour check).
--   CI has not run on this branch's head: it is not pushed. develop's runs
-    on `27d8c17051` were read through `gh run view`.
--   The SVG divergence was measured on synthetic root tags and the four
-    tracked SVGs, not on a real React Native asset.
+-   CI had not run on this branch's head when this record was committed;
+    the PR runs it. develop's runs on `27d8c17051` were read through
+    `gh run view`.
+-   The parser's differences were measured on synthetic inputs and the
+    committed images, not on a real React Native asset.
