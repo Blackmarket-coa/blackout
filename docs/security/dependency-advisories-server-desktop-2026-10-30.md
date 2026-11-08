@@ -1886,9 +1886,11 @@ libayatana-appindicator3-dev librsvg2-dev`):
     ran nothing and exited 0, even on a tree with the tool-bag pair; it now
     compares `realpathSync(process.argv[1])` with the module's real path
     (CI and `pnpm guard:duplicate-paths` use a relative path and were not
-    affected). The test has 17 cases (four more unit groups and three more
-    runs of the script, one through a symlink), and four more mutations in
-    scratch copies each turned it red. Not covered: a file against a
+    affected). The test has 17 cases, four more than before: one unit case
+    for the new check (the pairs above) and three more runs of the script
+    (the `foo.css` pair, the exact-name pair, and the tool-bag pair through
+    a symlink); four more mutations in scratch copies each turned it red.
+    Not covered: a file against a
     sibling directory (`Foo.ts` beside `foo/`, where `./foo` finds the file
     on macOS and the directory's index on Linux; a prototype finds none in
     this tree), the `a.TS` case above, Unicode case folding beyond
