@@ -52,7 +52,11 @@ decision's words and needs the operator's yes), and `cbd023b` to widen the
 guard; a third review the same day led `3214d80` to widen it again (two
 directories whose paths differ only by case, and a silent pass when the
 script could not tell whether it was invoked directly) and `6c7809c` to run
-the release workflow one run at a time per tag. No x86_64 macOS leg was
+the release workflow one run at a time per tag; a fourth review the same day
+led `fc44d38` to make each build leg stop, right before it builds and
+uploads, unless the release is still a draft (a re-run of failed jobs
+skipped `create-release`'s check), and `340b415` to move the guard's rules
+into a module that runs nothing when imported. No x86_64 macOS leg was
 added: the operator chose not to add one yet.
 
 | Package (lock)        | Advisory                              | Severity | Fixed in   | Outcome                                         |
@@ -329,8 +333,14 @@ comments and Matrix message), then `1502b6a` and `83cf81d` (the record).
 After the third review: `3214d80` (the guard's fourth check and its
 fail-closed main guard), `6c7809c` (the release workflow's concurrency
 group, and the dates in `KNOWN_LIMITATIONS.md` and the release doc), then
-this version of the record. The versions since `ddd4a41` also correct what
-this branch's commit messages got wrong
+`7378e71` (the record). After the fourth review: `00165d7` (`develop`
+merged in at `27d8c17`, which brought #998 to this branch), `fc44d38` (each
+build leg's draft check, the notification harness's pinned actions and the
+concurrency comments, with the build check, the release doc and
+`KNOWN_LIMITATIONS.md`), `340b415` (the guard's rules in a module of their
+own, and its check-4 comment), then this version of the record. The
+versions since `ddd4a41` also correct what this branch's commit messages
+got wrong
 ([Before merge or release](#before-merge-or-release), last bullet).
 
 ## What the review changed
@@ -1852,8 +1862,9 @@ libayatana-appindicator3-dev librsvg2-dev`):
     `git ls-files`, no other two files in one directory have names that
     differ only by case, compared whole or without the last extension, and
     no two directories do (re-run at `9eab8c9`, 6,600 files, for
-    `9831091`, 6,594 files once `develop`'s removals came in, and for this
-    version, 6,595 files: none; the same script at `f0b6469` finds only the
+    `9831091`, 6,594 files once `develop`'s removals came in, for
+    `7378e71`, 6,595 files, and for this version, 6,589 files once #998's
+    removals came in: none; the same script at `f0b6469` finds only the
     tool-bag pair). A
     whole-name comparison alone, such as `git ls-files | sort -f | uniq -di`,
     finds nothing even at `f0b6469`: the two names differ in extension
@@ -1920,10 +1931,14 @@ libayatana-appindicator3-dev librsvg2-dev`):
     And the main guard compared `import.meta.url`, in which the ESM loader
     has resolved symlinks, with `pathToFileURL(process.argv[1])`, which
     keeps the path as given, so the script called through a symlinked path
-    ran nothing and exited 0, even on a tree with the tool-bag pair; it now
-    compares `realpathSync(process.argv[1])` with the module's real path
-    (CI and `pnpm guard:duplicate-paths` use a relative path and were not
-    affected). The test has 17 cases, four more than before: one unit case
+    ran nothing and exited 0, even on a tree with the tool-bag pair; it
+    then compared `realpathSync(process.argv[1])` with the module's real
+    path (since `340b415` the script has no main guard; below). CI's and
+    `pnpm guard:duplicate-paths`'s path to the script has no symlink on it,
+    so they were not affected; until this version this sentence said they
+    use a relative path, but Node makes `process.argv[1]` absolute before
+    the script runs, so how the path was spelled never mattered. The test
+    had 17 cases, four more than before: one unit case
     for the new check (the pairs above) and three more runs of the script
     (the `foo.css` pair, the exact-name pair, and the tool-bag pair through
     a symlink); four more mutations in scratch copies each turned it red.
@@ -1934,8 +1949,12 @@ libayatana-appindicator3-dev librsvg2-dev`):
     `src/foo/y.ts`), passed every check and were on no "not covered" list,
     though they are paths a case-insensitive filesystem cannot tell apart,
     the header's own subject: a checkout on macOS or Windows writes both
-    directories' files into one, and git then reports the other spelling's
-    files as deleted and the checkout's as untracked. The script now has a
+    directories' files into one, and git may not show it (clone sets
+    `core.ignoreCase` on such a filesystem, and git then takes a name in
+    another case for the tracked one; from git-config's documentation, not
+    tried. Until this version this paragraph said git reports the other
+    spelling's files as deleted and the checkout's as untracked, which was
+    not observed). The script now has a
     fourth check: every directory on the way to a tracked file, grouped
     ignoring case, fails when it has more than one spelling, and each
     level that differs is its own group. It is a checkout hazard, not a
@@ -1950,9 +1969,10 @@ libayatana-appindicator3-dev librsvg2-dev`):
     shape `cbd023b` had fixed for symlinks, one level down. The case
     exists, though ci.yml's invocation never reaches it:
     `node --import <the script> <a missing file>` evaluates the script
-    before node reports the missing main module. The `catch` now prints
-    what could not be resolved, says that nothing was scanned and that
-    this is a failure, and exits 1. `import.meta.main` would answer the
+    before node reports the missing main module. The `catch` then printed
+    what could not be resolved, said that nothing was scanned and that
+    this is a failure, and exited 1 (`340b415` removed the guard; below).
+    `import.meta.main` would answer the
     question directly, but it exists only since Node 22.18 and
     `package.json`'s engines allow 22.11, where it is undefined and would
     read as "not the main module". The test has 20 cases, three more: one
@@ -1964,6 +1984,38 @@ libayatana-appindicator3-dev librsvg2-dev`):
     directory check returning nothing, directories compared exactly, only
     the immediate parent compared, the check not failing the run, and the
     `catch` returning false or true).
+
+    The fourth review (2026-11-08) found that importing the script as a
+    library could end the importing process: the main guard ran when the
+    module was evaluated and exited 1 whenever
+    `realpathSync(process.argv[1])` threw, and Node 22's single-process
+    test mode with a glob positional
+    (`node --experimental-test-isolation=none --test 'tools/ci/check-duplicate-pa*.test.mjs'`)
+    leaves `argv[1]` as the unexpanded pattern, so the test file's own
+    import aborted the run with the guard's message and no test ran.
+    Fail-closed, and CI's invocation never reached it. `340b415` removes
+    the question. The checks move unchanged to
+    `tools/ci/duplicate-paths-rules.mjs`, which runs nothing when imported
+    and which the test imports, and `tools/ci/check-duplicate-paths.mjs`
+    keeps the header and the report and calls `runCli()` whenever it is
+    loaded, so no way of starting it (through a symlink, under `--import`,
+    with an `argv[1]` that names no file) can skip the scan and exit 0;
+    its header says nothing should import it. The header's check 4 no
+    longer says git reports a merged directory's files as deleted and
+    untracked (above). The test has 21 cases, one more: the `--import`
+    case now requires a scan that fails on the tool-bag pair before node
+    reaches the missing module, and the new case imports the rules module
+    in a fixture holding that pair, from `node -e` and under `--import`
+    with a missing main, and sees no scan. Three mutations in scratch
+    copies each turned it red (the script behind an as-given main guard,
+    behind a guard that returns false when `argv[1]` cannot be resolved,
+    and the rules module with the old fail-closed guard appended), and the
+    reviewer's glob command now runs all 21 cases. At this version the
+    script exits 0 on 6,589 tracked paths; on a scratch copy of the tree
+    (`git archive`, 6,586 files) with `toolbag.ts` restored from `f0b6469`
+    beside `ToolBag.tsx` it exits 1 and names exactly that pair. `ci.yml`'s
+    two steps, which run the script and the test by path, are unchanged.
+
     Not covered: a file against a
     sibling directory (`Foo.ts` beside `foo/`, where `./foo` finds the file
     on macOS and the directory's index on Linux; a prototype finds none in
@@ -2113,6 +2165,19 @@ libayatana-appindicator3-dev librsvg2-dev`):
         no, revert this commit and drop v\*" no longer describes the
         choice: the desktop workflow drops that tag pattern either way, and
         `27be012` stays for a different reason (item 6).
+    -   `cbd023b` says CI and `pnpm guard:duplicate-paths` "use a relative
+        path and were not affected" by the symlink skip. Node makes
+        `process.argv[1]` absolute before the script runs, so the old
+        guard skipped the scan whenever the path to the script crossed a
+        symlink, however it was spelled; CI was not affected because its
+        path has none. `3214d80` says that on a case-insensitive checkout
+        of two case-variant directories git reports the other spelling's
+        files as deleted and the checkout's as untracked: that was not
+        observed, and git's documented `core.ignoreCase` handling suggests
+        it may report nothing. `6c7809c` says "A tag's run is never
+        cancelled", and `7378e71` that a tag's second run is "never
+        cancelled": a third push cancels a waiting run; only a running one
+        is never cancelled.
 
 ## The gate
 
@@ -2647,8 +2712,8 @@ The record's own commit changes no file Trivy reads.
 6.  **The desktop release workflow was configured to publish a public,
     non-draft release named after whatever ref ran it, once its build
     passed (2026-11-02).** (Changed on 2026-11-02 in `9ff8159`, with
-    `27be012` for `release.yml`, and on 2026-11-08 in `b70100d` and
-    `826bc48`; see the end of this item.) When this item
+    `27be012` for `release.yml`, and on 2026-11-08 in `b70100d`, `826bc48`,
+    `6c7809c` and `fc44d38`; see the end of this item.) When this item
     was written nothing had been run, dispatched or changed in that
     workflow. `blackout-desktop-tauri.yml`'s `build` job ran
     `tauri-apps/tauri-action@v0` with
@@ -2751,14 +2816,16 @@ The record's own commit changes no file Trivy reads.
         (`actions/github-script`, pinned to the commit `v8` names, which
         four other workflows here already use) fails if the tag already
         has a published release, so no bundle goes into a release that was
-        already published when the run started. That check runs once,
-        before builds that took 3 to 13 minutes in the build check's run
-        41461856327, and tauri-action then uploads by id without reading
-        the draft's state (`src/index.ts` 211-241), so a draft that is
-        published while the legs run, by a person who did not wait or by
-        anything holding the token, gets their bundles and `latest.json`
-        as a live release; that is why the release doc says to wait for
-        all three legs. Otherwise `create-release` reuses the tag's oldest
+        already published when the run started. That check runs once per
+        attempt of the job, before builds that took 3 to 13 minutes in the
+        build check's run 41461856327, and tauri-action then uploads by id
+        without reading the draft's state (`src/index.ts` 211-241). Until
+        `fc44d38` it was the only check, so a draft published while the
+        legs ran, by a person who did not wait or by anything holding the
+        token, got their bundles and `latest.json` as a live release, and
+        so did a release published before a re-run of failed jobs (the
+        `fc44d38` bullet below); each leg now checks again just before it
+        builds. Otherwise `create-release` reuses the tag's oldest
         draft or creates one draft, and outputs its id. It reads the tag
         from `context.ref`, never from an interpolated expression. `build`
         needs it, fails first unless the id is a positive integer, and runs
@@ -2790,14 +2857,57 @@ The record's own commit changes no file Trivy reads.
         firmly than this item said. The workflow now has
         `concurrency: group: blackout-desktop-tauri-${{ github.ref }}`
         with `cancel-in-progress` true only for a `pull_request` event: a
-        tag's second run waits for the first (GitHub keeps one running and
-        one pending run per group, so a third replaces the pending one),
-        its `create-release` then finds the first run's draft, the oldest
-        for the tag, and its legs replace each leg's files, as a re-run
-        does; a tag's run is never cancelled, so no upload is cut off. The
-        harness's pull-request runs are cancelled by a newer push, as the
-        build check's are. That a queued run waits rather than cancels is
-        from GitHub's documentation, not observed.
+        tag's second run waits for the first, its `create-release` then
+        finds the first run's draft, the oldest for the tag, and its legs
+        replace each leg's files, as a re-run does. A running run for a tag
+        is never cancelled, so no upload is cut off. A waiting one can be:
+        GitHub keeps at most one running and one pending run per group, so
+        a third push while one run is in flight and one waits cancels the
+        waiting run, which shows as cancelled but had not started (no
+        draft, no upload), and the newest run goes ahead once the running
+        one ends. Until `fc44d38` this bullet, the workflow's comment, the
+        release doc and the build check's comment said a tag's run is
+        never cancelled, which holds only for a running one. The harness's
+        pull-request runs are cancelled by a newer push, as the build
+        check's are. That a queued run waits rather than cancels, and that
+        a third push cancels the waiting one, is from GitHub's
+        documentation, not observed.
+
+    -   **Each leg checks that the release is still a draft (`fc44d38`).**
+        The fourth review (2026-11-08) found a way around
+        `create-release`'s check. GitHub's "Re-run failed jobs" does not
+        re-run the jobs that succeeded and hands their outputs to the jobs
+        it re-runs ("Jobs that aren't included keep their outputs from the
+        previous attempt", GitHub's documentation on re-running workflows),
+        so a leg that failed (signtool, the certificate import and updater
+        signing are all live stop points today) would be re-run with the
+        first attempt's `release_id` and no new look at the release.
+        tauri-action v0.6.2 uploads by id without reading the release's
+        state: it deletes and re-uploads its same-named assets
+        (`src/upload-release-assets.ts` 46-91) and downloads, merges and
+        re-uploads `latest.json` (`src/upload-version-json.ts` 60-112 and
+        269-301). Had a person published the release in between, which the
+        release doc allowed once the legs were done, CI would have written
+        a new `latest.json` into the release the updater endpoint serves,
+        with no person checking it: the outcome the operator's decision
+        exists to prevent. Each leg now runs, as its last step before
+        tauri-action and under bash on all three runners,
+        `gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" --jq .draft`,
+        with `GH_TOKEN` set to the job's own token and `RELEASE_ID` to
+        `create-release`'s output (which the first step has already
+        required to be a positive integer), and exits 1 unless the call
+        succeeds and prints `true`, so that tauri-action does not run. The
+        GitHub CLI is on all three runner images (2.103 in the
+        ubuntu-22.04, macOS 26 arm64 and Windows Server 2025 software
+        lists, the images `macos-latest` and `windows-latest` name today);
+        nothing new is pinned and no secret is added. That closes the
+        re-run path: a full re-run stops at `create-release`, and a re-run
+        of failed jobs at each re-run leg's check. It narrows, and does not
+        close, the window for a release published while a leg runs: one
+        published after the check, during tauri-action's build, still gets
+        that leg's uploads. The release doc says to wait for all three
+        legs, and to rebuild a published release from a new `release-*`
+        tag rather than by re-running its jobs.
     -   **`release.yml` on `v*` tags (`27be012`, then `b70100d` and
         `826bc48`; `27be012` and `b70100d` each need the operator's yes).**
         Its `release` job runs `softprops/action-gh-release` twice, with no
@@ -2878,8 +2988,10 @@ The record's own commit changes no file Trivy reads.
         release" stays ticked only if the release carries `latest.json`,
         because the updater reads whichever release is latest. The doc also
         names the secrets each leg needs first (the Apple ones for the macOS
-        leg, which imports the certificate before it builds), and says to
-        wait for all three legs before touching the draft.
+        leg, which imports the certificate before it builds), says to wait
+        for all three legs before touching the draft, and says that a
+        published release is rebuilt from a new `release-*` tag, not by
+        re-running its jobs.
     -   **What it does not change.** The legs still merge `latest.json` one
         after another (`src/upload-version-json.ts` 60-112 and 269-301, one
         attempt each), so two that finish together can lose a platform or
@@ -2899,6 +3011,12 @@ The record's own commit changes no file Trivy reads.
         since `b70100d` they are pinned to the build check's commits
         (`6044e13b`, `fc06bc12`, `b725eda5`, which built on all three
         runners in run 41461856327) and the checkout keeps no credentials.
+        The notification harness's pnpm and setup-node actions, tag
+        references carried from `develop` (`@v5`, `@v4`), are pinned to
+        the same two commits since `fc44d38` (setup-node moving to the
+        v6.2.0 commit, whose `action.yml` still takes `cache: pnpm`); the
+        harness has `contents: read` and runs only on pull requests to
+        `main`, a branch that does not exist.
         What that does not change: the job's token can publish the draft
         (`updateRelease` with `draft: false`), and it still reaches the
         build itself, because tauri-action gets `GITHUB_TOKEN` in its
@@ -2911,11 +3029,27 @@ The record's own commit changes no file Trivy reads.
         true of the workflow's
         own steps, not of the code they run. The complete fix is a
         build-only leg with no token and a separate upload job; left to the
-        operator. On a `v*` tag `release.yml`'s jobs have the workflow's
+        operator. Any job with `contents: write` can publish any open
+        draft, a desktop one included, and five other workflows have such
+        jobs. On a `v*` tag `release.yml`'s jobs have the workflow's
         `contents: write` and run unpinned actions (`download-artifact@v4`,
         `docker/*@v3`, `cosign-installer@v3`, `sbom-action@v0`,
-        `setup-java@v4`), so they too could publish any open draft, a
-        desktop one included.
+        `setup-java@v4`). `turborepo-ci.yml` grants `contents: write` to
+        the whole workflow and runs on every push to `develop`, the default
+        branch, as well as on pull requests to `main` and on dispatch; its
+        `gates` job checks out with the token kept in `.git/config` (no
+        `persist-credentials: false`), runs `pnpm install` and then the
+        repository's own lint, typecheck, test and build scripts through
+        turbo, so every merge to `develop` runs repository and dependency
+        code that can reach a draft-publishing token while a desktop draft
+        waits for a person. `visual-regression.yml`'s `regenerate` job (on
+        dispatch) and `upstream-advisories.yml` (daily at 03:30 UTC and on
+        dispatch, with `persist-credentials: true`) hold the same scope,
+        and so does `release-drafter.yml`'s job (item 7). All of this
+        predates this branch and is not changed here. Of
+        `turborepo-ci.yml`'s two jobs only `release-tag`, which runs only
+        on pushes to `main`, writes; `contents: read` for its `gates` job
+        is offered to the operator.
     -   **A signed test build** now means pushing a `release-*` tag, which
         makes a draft; to discard it, delete the draft and then the tag
         (deleting a draft leaves its tag). The tag and the run's logs are
@@ -2935,7 +3069,12 @@ The record's own commit changes no file Trivy reads.
         ran only against mocked `github`, `context` and `core` objects, in
         six cases (again after `b70100d`). actionlint 1.7.12 with shellcheck
         0.9.0 reports nothing on either workflow, after `b70100d`,
-        `826bc48` and `6c7809c` too.
+        `826bc48`, `6c7809c` and `fc44d38` too. `fc44d38`'s draft check ran
+        only as a script: taken from the parsed workflow and run under
+        `bash --noprofile --norc -eo pipefail` with a stand-in `gh`, it
+        exits 0 for `true` and 1 for `false`, for an empty answer and for a
+        failed call; the real `gh` prints a boolean field as a bare
+        `false`.
 
 7.  **`release-drafter.yml` would retag an open draft (2026-11-02).** Not
     changed here. It runs on pushes to `staging`, a branch that does not
@@ -3003,8 +3142,8 @@ The record's own commit changes no file Trivy reads.
     job's own npm invocation (on Linux only as far as the version-mismatch
     check and a probe hook, on macOS and Windows not at all), and the
     updater against a real release.
--   The release path after `9ff8159`, `27be012`, `b70100d`, `826bc48` and
-    `6c7809c`.
+-   The release path after `9ff8159`, `27be012`, `b70100d`, `826bc48`,
+    `6c7809c` and `fc44d38`.
     Neither workflow has run, and nothing was dispatched or tagged. Taken
     from GitHub's
     documentation or the actions' code, not observed: that GitHub accepts
@@ -3016,8 +3155,11 @@ The record's own commit changes no file Trivy reads.
     push or release starts no workflow; that a re-run of all jobs gets
     the same draft from `create-release`; and that a second run for the
     same tag, in a concurrency group whose `cancel-in-progress` is false,
-    waits for the first rather than cancelling it, and a third replaces
-    the pending one (`6c7809c`). The `latest.json` merge race and
+    waits for the first rather than cancelling it, and a third push
+    cancels the pending one (`6c7809c`); that a re-run of failed jobs
+    hands the re-run legs `create-release`'s output from the earlier
+    attempt, and that the GitHub CLI is on the three runner images, from
+    their published software lists (`fc44d38`). The `latest.json` merge race and
     the 422 on a concurrent upload were read from the code, as were
     tauri-action's one-page reads and what they would have done on a draft
     shared with `release.yml` (the order in which GitHub lists a release's
@@ -3032,7 +3174,10 @@ The record's own commit changes no file Trivy reads.
     which APFS ignores. Its non-ASCII, symlink and directory-pair tests
     ran on Linux only (the directory-pair test skips itself on a
     case-insensitive filesystem); git's `core.precomposeUnicode` on macOS
-    was not tried.
+    was not tried. Nor was what git shows on a case-insensitive checkout
+    of two case-variant directories: no such filesystem was available
+    here, and the guard's header says only what git's documentation
+    says.
 -   That libdbus-1-dev is installed on the release job's ubuntu-22.04
     runner, which has never run. The check's ubuntu-22.04 leg, with the
     release job's apt packages, shows it: in job 125333517929 of run
