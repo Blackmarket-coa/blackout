@@ -71,7 +71,7 @@ stall said to settle, and 15 s without its qualifier) are made true, with
 decision 35 put to the operator again on a corrected basis; the carry's
 take racing a late statement's settle is fixed in code and two surviving
 mutants are pinned; the shared pool's missing error handler, which is
-`develop`'s, is fixed in a separate change; and the model names are
+`develop`'s, is being fixed in a separate change; and the model names are
 recorded with no action.
 
 **State read:** the PR 2 branch at `6ae33bc2e2` (#991), on `develop` at
@@ -1616,7 +1616,7 @@ message, and nothing here makes a release happen on time (§10, R12).
     operating system gives up retransmitting it (about 15 minutes at
     Linux's `tcp_retries2` default), and what the process does with that
     connection's error is the shared pool's error handling, which is
-    `develop`'s and is fixed in a separate change (`-v62`); a statement that
+    `develop`'s and is being fixed in a separate change (`-v62`); a statement that
     fails after its bound ends the stall without the switch being read
     back. Every check-in and cancel on that process is refused 503 at once
     meanwhile; the carry of each such refusal is not held back by it
@@ -2782,8 +2782,8 @@ records what the API sends.
     restarts; a statement sent into the silence fails once TCP's
     retransmission gives up (about 15 minutes at Linux's `tcp_retries2`
     default), and what the process then does with the connection's error
-    is the shared pool's error handling, which is `develop`'s and is fixed
-    in a separate change (`-v62`). For that time every check-in and cancel
+    is the shared pool's error handling, which is `develop`'s and is being
+    fixed in a separate change (`-v62`). For that time every check-in and cancel
     on that process is refused 503 at once; each is carried, which holds a
     switch that falls due back for one backlog window (72 h by default) per
     missed check-in, after which the switch fires with its owner still
@@ -8576,7 +8576,7 @@ into the silence what decides it is the process's handling of that
 connection's error; "(within 15 s)" and "does not hold it back" without the
 qualifiers `KNOWN_LIMITATIONS.md` and §15 carry; the model names). Each is
 fixed in code or made true here, except the pool's handler, which is
-`develop`'s and is fixed in a separate change, and the model names,
+`develop`'s and is being fixed in a separate change, and the model names,
 recorded with no action. `origin/develop` had not moved past `97756ff4ec`.
 
 -   **The carry's take raced a late statement's settle (Low, fix quality;
@@ -8612,11 +8612,11 @@ recorded with no action. `origin/develop` had not moved past `97756ff4ec`.
     carried, refreshed into the mirror while the carry's answer was held,
     is kept). S01 to S04.
 -   **The shared pool has no `error` listener (Medium, fix quality;
-    `develop`'s, fixed separately).** `src/config/postgres.ts` is
+    `develop`'s, being fixed separately).** `src/config/postgres.ts` is
     unchanged by this branch and attaches nothing to the pool it makes; the
     verifier's probe built the pool as it does and had a fake server send
-    57P01 to an idle connection. It is fixed in a separate change against
-    `develop` (`-v62`), not here. The documents here say only that what the
+    57P01 to an idle connection. It is being fixed in a separate change
+    against `develop` (`-v62`), not here. The documents here say only that what the
     process does with a failed connection's error is that handling's, and
     point at the separate change; Still open notes for it that pg-pool's
     listener covers idle connections only, so the queue's, the lane calls'
@@ -8638,8 +8638,8 @@ recorded with no action. `origin/develop` had not moved past `97756ff4ec`.
     statement the database's host acknowledged holds no unacknowledged
     bytes, so the operating system runs no timer on it: the verifier's
     probe found such a socket in state 01 with no timer, still standing
-    after 91 s in a namespace where a statement sent into the same silence
-    failed in 6.7 s. Such a statement, the stall it opens and a pool held
+    after 91 s in a network namespace whose retransmission was cut to three
+    tries, where a statement sent into the same silence failed in 6.7 s. Such a statement, the stall it opens and a pool held
     whole by such statements stand until the process restarts; only a
     statement sent into the silence ends by retransmission, about 15 minutes
     at Linux's defaults. Meanwhile each refused check-in or cancel is
@@ -8679,7 +8679,8 @@ recorded with no action. `origin/develop` had not moved past `97756ff4ec`.
     the operating system gives up. For a statement sent into the silence the
     operating system does give up, and node-postgres then raises the
     connection's error; what the process does with it is the pool's error
-    handling, `develop`'s and fixed separately, to which each now points. A
+    handling, `develop`'s and being fixed separately, to which each now
+    points. A
     statement that fails after its bound ends the stall without the switch
     being read back, which §15 and decision 35 now say.
 -   **"(within 15 s)" and "does not hold it back" (Low, claims; made true).**
@@ -8773,6 +8774,32 @@ assertion each failed on, `fix/mut/r17/`). Seven mutants, all caught.
 All tests named here are in `deadman-switch-writes-postgres.integration.test.ts`,
 which now has 50 tests; run whole, 50 of 50 pass. Not counted as checks:
 the comments and the documents.
+
+The verifiers' race probes, run again against this round's code
+(`fix/r17/rerun-r1b-race.log`, `rerun-r1b-control.log`, `rerun-r1.log`):
+`r1b-cancel-vs-settle.mts` in both orders ends with Postgres and the API
+process both holding the switch cancelled, its content gone, no copy held
+and no column; `r1-carry-vs-settle.mts` ends with the API process holding
+the landed check-in with no column, as Postgres does, and its stall ended.
+
+The gates on `ae4b1ac9fe`, the round's head before this paragraph
+(`fix/gates-r17`, against `origin/develop` at `97756ff4ec`), all finished
+and passed: API lint and typecheck; the pr-gate suite 2,109 of 2,109 and the
+post-merge suite 2,229 of 2,229 (round 16's 2,103 and 2,223 plus this
+round's six tests, 45 to 50 of the switch-writes file); launch smoke 14 of
+14; the core and design builds; the client's typecheck and lint; the client
+suite 3,643 passed and 3 skipped in 519 files; the protocol and SDK
+typechecks; dead-drop parity 2 of 2; the migration guard (107 migrations,
+the latest `107_deadman_owner_attempt_refused`) and the ephemeral migration
+run; the trust page; room encryption; the feature registry; auth secrets;
+prettier over the 94 files the branch changes; and gitleaks over the branch
+(90 commits, no leaks). The runner waited for the machine's load to fall
+below 3 before each suite, from 09:56 to 10:31. The commit that adds this
+paragraph changes this record (this paragraph and the one before it, "is
+being fixed" in place of "is fixed" for the pool's handler, and the
+namespace of the verifiers' black-hole probe) and the line breaks and one
+word of a store comment ("addresses" for "fixes"); API lint and typecheck,
+prettier and gitleaks were run again on it.
 
 ### Still open
 
@@ -8907,8 +8934,8 @@ the comments and the documents.
     not meet, which the code did not ask). Stated in §15 and
     `KNOWN_LIMITATIONS.md`.
 -   **The shared database pool's handling of a connection's error** is
-    `develop`'s, outside this branch, and is fixed in a separate change
-    (`-v62`); what a process does when a connection of the pool fails (a
+    `develop`'s, outside this branch, and is being fixed in a separate
+    change (`-v62`); what a process does when a connection of the pool fails (a
     database restart, or a statement sent into a silence once TCP gives up)
     is that handling's, and this branch changes nothing of it. For that
     change: pg-pool emits the pool's `error` only for an idle connection

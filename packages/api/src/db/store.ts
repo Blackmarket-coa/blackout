@@ -9710,11 +9710,11 @@ export class PostgresBackedDb extends InMemoryDb {
      * and one sent into the silence fails only once the operating system
      * gives up retransmitting it (about 15 minutes at Linux's defaults; what
      * the process does with that connection's error is a matter of the
-     * shared pool's error handling, which a separate change fixes). The
-     * carry of a refused
-     * owner write is not held back by it (round 16 of part 2's review), and
-     * holds a switch that falls due meanwhile back for one backlog window
-     * only (round 17: the documents put a bound of minutes on the stall).
+     * shared pool's error handling, which a separate change addresses). The
+     * carry of a refused owner write is not held back by it (round 16 of
+     * part 2's review), and holds a switch that falls due meanwhile back for
+     * one backlog window only (round 17: the documents put a bound of
+     * minutes on the stall).
      */
     private stalledSwitchStatement: Promise<unknown> | null = null;
 
