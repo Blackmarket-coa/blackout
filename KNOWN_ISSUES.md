@@ -68,11 +68,19 @@ account has, again at every click, and offer the from-scratch setup only when
 it answered that there is neither a backup nor cross-signing, and the warned
 reset only when this device already trusts the account's cross-signing and no
 backup exists; the chip explains first, and the setup form checks once more
-before its first write. Otherwise they say what is true and offer nothing. A
-setup or reset that stops after its first write keeps its new recovery key on
-screen and says how far it got, since the account's secret storage may by then
-open only with that key; where it may have created a backup, it offers no way
-on (sixth review of the same record). The restore path itself is still missing.
+before its first write. Otherwise they say what is true and offer nothing.
+Closing the setup or reset window before that write stops it with nothing
+changed; from that write until the attempt ends the window can't be closed.
+An attempt that stops after its first write (a failed step, a cancelled
+account confirmation, or a confirmation Blackout can't do) keeps its new
+recovery key on screen and says how far it got, since the account's secret
+storage may by then open only with that key (or the passphrase entered with
+it); where it may have created a backup, it offers no way on (sixth and
+seventh reviews of the same record). That key is still lost if the page
+closes or reloads during the attempt, or if the message whose "Why?" chip
+opened the window stops showing as undecryptable meanwhile (it becomes
+readable, say), which takes the window with it. The restore path itself is
+still missing.
 
 What BO-1 gates is anything that routes trust through Blackout
 (`TRANSMUTATION_NOTES.md` §5). It does not gate coalition external sync:
