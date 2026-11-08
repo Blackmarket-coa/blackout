@@ -192,8 +192,16 @@ says how.
 | gitleaks       | 8.21.2, `gitleaks git` over `fix(deps)`; `gitleaks dir` over the two record files                                                                                                                   | no leaks                                                                                                                                                                                                                  |
 
 The client's unit tests and typecheck were not run: nothing they load
-moved. The 1,032 snapshots reachable from `apps/blackout-client` are the
-same before and after.
+moved. Counted from `pnpm-lock.yaml` read as YAML: start at the importer
+`apps/blackout-client` (its `dependencies`, `devDependencies` and
+`optionalDependencies`), follow its three `link:` entries to the importers
+`packages/core`, `packages/blackout-protocol` and `packages/blackout-sdk`
+(and the sdk's own link to the protocol) with the same three fields, then
+walk each snapshot's `dependencies` and `optionalDependencies`, counting
+snapshot keys. That reaches 1,032 snapshots on develop (`0367abdd69`) and
+1,032 here, the same set; with the `link:` entries skipped it is 1,028 and
+1,028, the same set. Neither set holds a metro, hermes, ob1, queue or
+image-size entry.
 
 ### Re-run on 2026-11-08
 
@@ -208,9 +216,11 @@ pnpm 9.15.4.
     `_.omit` and `_.pullAt`; GitHub rates it Moderate). OSV's record was
     modified on 2026-11-03T15:45Z and now reads `introduced 4.17.23`,
     `fixed 4.18.1`; lodash 4.18.1 was published on 2026-04-01. lodash 4.18.0
-    has been in the lock since 2026-08-30, under develop's override
-    `"lodash@4.17.23": "^4.18.0"`, from slate-dom 0.112.2 and slate-react
-    0.112.1 in `apps/blackout-client` and from workbox-build 7.4.0 (dev). Its
+    has been in the lock since 2026-08-30 (`ea3d85d2c7`, under the override
+    `"lodash@4.17.23": "4.18.0"`, loosened to the current
+    `"lodash@4.17.23": "^4.18.0"` on 2026-09-04 in `50335a9b06`), from
+    slate-dom 0.112.2 and slate-react 0.112.1 in `apps/blackout-client` and
+    from workbox-build 7.4.0 (dev). Its
     lines are byte-identical on develop and here, and it is not a metro
     dependency, so moving it is outside this change's lock rule. develop's
     own lock with develop's `osv-scanner.toml` exits 1 on the same row, and
@@ -293,6 +303,23 @@ this section is their correction.
     says which part of the finding is stable.
 6.  **"all 70 committed images"** left out `favicon.ico`, which metro does
     not parse. The check's scope is now stated.
+
+A second review on 2026-11-08, of `1a54bfa7cb`, found two more. Both are
+corrected above; the commit message of `1a54bfa7cb` repeats the lodash
+clause of item 8.
+
+7.  **"The 1,032 snapshots reachable from `apps/blackout-client`"** gave no
+    counting method, and two traversals of the lock got 1,028 and 1,035 for
+    it. The sentence now says how the count is made (the importer's three
+    dependency fields, its workspace links followed, each snapshot's
+    `dependencies` and `optionalDependencies`, snapshot keys), gives 1,032
+    for that method and 1,028 with the links skipped, and keeps what it was
+    there to say: the same set before and after.
+8.  **"since 2026-08-30, under develop's override `"lodash@4.17.23": "^4.18.0"`"**
+    joined a date to a spelling the override did not have then. lodash
+    4.18.0 entered the lock on 2026-08-30 (`ea3d85d2c7`) under
+    `"lodash@4.17.23": "4.18.0"`; the `^4.18.0` spelling dates from
+    2026-09-04 (`50335a9b06`). The clause now dates both.
 
 ## Not verified
 
