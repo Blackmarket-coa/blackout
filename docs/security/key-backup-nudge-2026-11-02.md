@@ -519,7 +519,12 @@ What an attempt has written when it stops, read from the SDK (matrix-js-sdk
     (`CrossSigningIdentity.js` `resetCrossSigning`: "Update 4S before uploading
     cross-signing keys"). So after a cancel there the account's secret storage
     holds keys the homeserver never received, and the account's own
-    cross-signing keys are no longer in it under any key. The verifier's probe showed the rest on round 5's head: the default key new, the `m.cross_signing.master` secret under the new key id, the homeserver's master key unchanged, and the recovery key never shown. The code shows why the error line was empty: the password stage's ✕ called the cancel with its click event, which has no `message`, and the form rendered `error.message`.
+    cross-signing keys are no longer in it under any key. The verifier's probe
+    showed the rest on round 5's head: the default key new, the
+    `m.cross_signing.master` secret under the new key id, the homeserver's
+    master key unchanged, and the recovery key never shown. The code shows why
+    the error line was empty: the password stage's ✕ called the cancel with its
+    click event, which has no `message`, and the form rendered `error.message`.
 -   `resetKeyBackup()` creates the backup (`POST /room_keys/version`), saves
     its key on this device, and only then stores it in secret storage
     (`rust-crypto.js:1232-1246`, `backup.js:505-529`). A failure after the
@@ -710,8 +715,8 @@ their own timeout and a test timeout above it.
 | `src/app/features/settings/security/encryptionPosture.test.ts` (updated)             | 19    | the two existing cases pass `accountState` and keep every assertion; the three refusing rows; whole-text pins; the negative wording pin; the unknown text names both checks; row 2 names no next screen; the overlay text map; (third review) rows 1 and 2 say whose keys a backup holds, row 1 that a later Blackout session doesn't add to it, row 2's "can't restore" is qualified; the nudge's overlay texts have no `offer`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | `tests/unit/features/settings/security/keyBackupNudge.test.ts` (updated)             | 6     | the three existing cases pass `accountState` and keep every assertion; the three refusing rows                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 
-143 tests in 10 files pass on the fixed tree, 0 unhandled errors (round 5: 139; round 4: 119 in 8; round 3: 118;
-round 2: 100; round 1: 68 in 7).
+143 tests in 10 files pass on the fixed tree, 0 unhandled errors (round 5: 139;
+round 4: 119 in 8; round 3: 118; round 2: 100; round 1: 68 in 7).
 
 ### Fail without the fix
 
@@ -769,7 +774,9 @@ keep a created backup's `auth_data`).
 Round 6 (sixth review): `DeviceVerificationSetup.tsx` swapped for round 5's
 (`376d6d0450`, which imports a text constant this round removed, so its partway
 line renders nothing), the partial and guard files run, the file restored and
-compared by checksum: **9 of 18 failed** on the final test files (`scratchpad/v60/r7/fail-without-dvs-3.txt`; the two earlier runs, before the last assertions were added, gave the same 9):
+compared by checksum: **9 of 18 failed** on the final test files
+(`scratchpad/v60/r7/fail-without-dvs-3.txt`; the two earlier runs, before the
+last assertions were added, gave the same 9):
 the reset-warning pin and all 8 partial cases (seven waits for a partway
 screen or the cancel's message that never came, one missing partway text); the
 guard file's nine refusal and goes-on cases passed, as they must.
@@ -819,7 +826,11 @@ afterwards; in round 3 each mutation was undone with `git checkout HEAD -- src`
 and `git diff` was empty after each (`scratchpad/v60/r4/mut-*.txt`). Mutations 7 and 11 were run again over all eight files after the
 `waitFor` change (`scratchpad/v60/r3/mut-*.txt`).
 In round 6 each mutated file was restored from a saved copy and checked against
-its SHA-256 afterwards (`scratchpad/v60/r7/tools/mut.sh`). Mutations 28 to 30 and 32 ran before two assertions were added (the forced submit in the backup-created case, secret storage's master key in the reset-cancel case), which only add checks; mutations 31 and 33 and the swap above were run again on the final file, with the same results.
+its SHA-256 afterwards (`scratchpad/v60/r7/tools/mut.sh`). Mutations 28 to 30
+and 32 ran before two assertions were added (the forced submit in the
+backup-created case, secret storage's master key in the reset-cancel case),
+which only add checks; mutations 31 and 33 and the swap above were run again on
+the final file, with the same results.
 
 ## Gates
 
@@ -954,6 +965,39 @@ a full suite; the type-checks and the new files' tests were repeated inside the
 gates above, where the load rule was kept, and the mutation and reproduction
 runs were not repeated.
 
+Round 6 (sixth review). Develop had not moved past `97756ff4ec`, so nothing
+was merged, and round 4's develop baseline on that commit stands as the
+comparison. Free space on `/` was 5.2 GB at the start of the round and 4.7 GB
+during the gates. The gates ran on `cc40a96954` (the fixes and this record
+before this paragraph), Node 22, `pnpm` from the repository root, `npx` from
+`apps/blackout-client`; logs in `scratchpad/v60/r7/gates/`.
+
+| Gate                            | Command                                                                                                   | `cc40a96954`                                                                                                                            | develop `97756ff4ec` (round 4's run)                          |
+| ------------------------------- | --------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| core and design builds          | `pnpm --filter @blackout/core run build`, `pnpm --filter @blackout/design run build`                      | exit 0, both                                                                                                                            | exit 0, both                                                  |
+| client typecheck                | `pnpm --filter @blackout/client run typecheck` (`tsc --noEmit`, covers `src`)                             | exit 0                                                                                                                                  | exit 0                                                        |
+| test files typecheck            | `npx tsc -p scratchpad/v60/r7/tsconfig.tests.json` (the 9 guard test files under `tests/`, the 2 helpers) | exit 0                                                                                                                                  | —                                                             |
+| eslint, as CI                   | `pnpm --filter @blackout/client exec eslint "src/**/*.{ts,tsx}" --max-warnings=0`                         | exit 0                                                                                                                                  | exit 0                                                        |
+| guard tests                     | `npx vitest run` on the ten files of the Tests table                                                      | 10 files, 143 passed                                                                                                                    | —                                                             |
+| client unit suite, as CI        | `pnpm --filter @blackout/client run test:coverage`                                                        | 527 files, 3769 passed, 3 skipped, 0 unhandled errors; coverage 45.88 % statements, 36.94 branches, 36.82 functions, 46.95 lines; 293 s | 519 files, 3643 passed, 3 skipped; 45.31, 36.36, 36.23, 46.36 |
+| client integration suite, as CI | `pnpm --filter @blackout/client run test:integration`                                                     | 3 files, 13 passed                                                                                                                      | 3 files, 13 passed                                            |
+| client build                    | `pnpm --filter @blackout/client run build`                                                                | both Vite bundles built, exit 0                                                                                                         | the same                                                      |
+| bundle size, as CI              | `du -sk --exclude='*.map' apps/blackout-client/dist`, threshold `MAX_BUNDLE_KB` 29696                     | 25324 KB                                                                                                                                | 25312 KB                                                      |
+| prettier                        | root `npx prettier --check` on the 28 files the branch changes against develop                            | clean                                                                                                                                   | —                                                             |
+| trust page                      | `node tools/ci/build-trust-page.mjs --check` (`TRUST.md` not changed this round)                          | OK, `public/trust.html` matches                                                                                                         | —                                                             |
+| gitleaks 8.21.2                 | `gitleaks git --log-opts="origin/develop..HEAD"`, before this paragraph's commit                          | 26 commits scanned (the range's 30 less its 4 merges), no leaks                                                                         | —                                                             |
+| load rule                       | each step waited for a 1-minute load under 3.5, polling every 30 s (`scratchpad/v60/r7/gates/load.txt`)   | kept; the highest start was 3.49 (the guard tests); the test files' typecheck waited 4.5 min, the integration suite 1 min               | —                                                             |
+
+The unit suite's difference from develop is this branch's tests and nothing
+else: round 5's 122 and this round's 4 new cases in the partial-setup file, the
+same 3 skipped. The load rule held for the gates above. It did not hold for
+every single-file run this round: the verifiers' probes (09:52 to 09:55 UTC)
+and the second of the three swap runs started with the 1-minute load between
+3.7 and 7.8 while other sessions' suites ran; the mutation runs started between
+0.8 and 2.3.
+None of those is a full suite, and every test file they touched passed again
+inside the gates above.
+
 ## Second review, 2026-11-08
 
 Fourteen findings; each is fixed above or explained here.
@@ -1080,7 +1124,9 @@ The round-5 verifiers' two probes ran once on this round's tree, copied into
 ends on the partway screen: "The account confirmation step was cancelled, so
 the setup stopped there." with the `cross_signing` text, the key and "Press
 Continue to try the rest again with this same recovery key."; 500 ms after the
-cancel the form was still in its loading state (Continue disabled), and the partway screen came about 1 s after the cancel; the probe takes its snapshot at 500 ms (`scratchpad/v60/r7/probe-resetcancel-timing.json`).
+cancel the form was still in its loading state (Continue disabled), and the
+partway screen came about 1 s after the cancel; the probe takes its snapshot at
+500 ms (`scratchpad/v60/r7/probe-resetcancel-timing.json`).
 The partway probe's first Continue now ends on the `backup_unclear` screen with
 no Continue; its second, a submit it dispatches on the form, now starts
 nothing, so the probe times out waiting for a refusal that no longer comes
