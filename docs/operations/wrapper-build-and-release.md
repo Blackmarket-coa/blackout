@@ -81,15 +81,33 @@ To release:
    it builds, and stops there without them), and `WINDOWS_CERTIFICATE` with its
    thumbprint for the Windows leg (the full list is below).
 2. Push the tag, for example `git push origin release-<name>` after tagging the
-   commit. Do not create the tag from GitHub's release form: publishing from the
+   commit. Tag only a commit that carries this version of
+   `blackout-desktop-tauri.yml`: on `develop`, one at or after the merge that
+   brought it in (`git show <commit>:.github/workflows/blackout-desktop-tauri.yml`
+   has the `create-release` job and the step "Require that the release is still a
+   draft"). Do not create the tag from GitHub's release form: publishing from the
    form creates the tag and a published release together, and `create-release`
-   then refuses to upload into it. A `v*` tag does not build the desktop. The
-   workflow runs one run at a time per tag and never cancels a running one: a tag
-   moved, or deleted and pushed again, while a run is in flight starts a run that
-   waits for the first, then reuses its draft and replaces each leg's files, as a
-   re-run does. A third push while one run is in flight and one waits cancels the
-   waiting run, which had not started (no draft, no upload); the newest run goes
-   ahead once the running one ends.
+   then refuses to upload into it. A `v*` tag does not build the desktop.
+
+    GitHub runs a workflow file as it is at the pushed tag's commit, and for a
+    dispatch as it is on the dispatched branch (from GitHub's documentation, not
+    tried here). So a `release-*` tag on an older commit, a `v*` tag on one whose
+    version also takes `v*` (`develop`'s does today), or a dispatch of an older
+    branch runs that commit's version, which is set to publish a non-draft release
+    that becomes latest, with no person involved; and a `v*` tag on an older commit
+    also runs that commit's `release.yml`, which publishes its own release as latest
+    at tag time. Today the desktop half stops before it creates a release, because
+    every such commit still has the placeholder updater public key: an accident,
+    not a control. The `release.yml` half does not stop.
+
+    The workflow runs one run at a time per tag and never cancels a running one: a
+    tag moved, or deleted and pushed again, while a run is in flight starts a run
+    that waits for the first, then reuses its draft and replaces each leg's files,
+    as a re-run does. The workflow sets no `queue` key, so GitHub keeps at most one
+    waiting run per tag (its default, `single`): a third push while one run is in
+    flight and one waits cancels the waiting run, which had not started (no draft,
+    no upload), and the newest run goes ahead once the running one ends.
+
 3. Wait for all three build legs before touching the draft. `create-release`
    checks once, at the start, that the tag has no published release, and each leg
    checks again, as its last step before `tauri-action`, that the release is still
@@ -128,9 +146,10 @@ web and mobile artifacts, pushes `ghcr.io/blackmarket-coa/blackout` as `latest`,
 to the Matrix room: the server is deployed when the tag is pushed. Its GitHub
 release, which holds the web, mobile, SBOM and signature files and no desktop file,
 is a **draft** (since 2026-11-02, pending the operator's yes) that a person
-publishes. When publishing it, untick "Set as the latest release": it has no
-`latest.json`, so making it latest would 404 the desktop updater endpoint until the
-next desktop release is published.
+publishes, for a tag on a commit that carries this `release.yml`; on an older
+commit it is published at tag time, as latest (step 2). When publishing it, untick
+"Set as the latest release": it has no `latest.json`, so making it latest would 404
+the desktop updater endpoint until the next desktop release is published.
 
 The app's version is 0.1.0 in `tauri.conf.json`, `Cargo.toml` and `package.json`,
 and the tag does not change it. Tauri's updater installs only a higher version, so

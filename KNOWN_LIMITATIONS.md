@@ -89,8 +89,14 @@ For the source-of-truth triage with tier/owner detail see
     with it could lose `latest.json`), upload into a draft release and leave
     publishing to a person (each build leg stops unless the release is still
     a draft just before it builds, but a draft published while a leg builds
-    still gets that leg's files); its notification harness still runs on pull
-    requests to `main`, a branch that does not exist. It has never run, and
+    still gets that leg's files). That holds for a tag on a commit that has
+    this version of the workflow: GitHub runs the file as it is at the tagged
+    commit, so a tag on an older commit, or a dispatch of an older branch,
+    runs a version set to publish a non-draft release on its own, which today
+    stops only because the updater public key is still a placeholder
+    (`docs/operations/wrapper-build-and-release.md`, step 2). Its
+    notification harness still runs on pull requests to `main`, a branch that
+    does not exist. It has never run, and
     it does not run on `develop` pull requests. Also since
     2026-11-02 a build-only check,
     `.github/workflows/blackout-desktop-build-check.yml`, builds unsigned

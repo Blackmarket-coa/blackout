@@ -87,12 +87,12 @@ permissions:
 
 # The release workflow also runs one run at a time per ref, but never
 # cancels a tag's running run: a second run for the same tag waits, then
-# reuses the first run's draft, and a third push while one runs and one
-# waits cancels the waiting run, which had not started (it cancels a
-# running run only for its pull-request harness). Here a newer push to the
-# same pull request cancels the running build, whose result would be
-# stale, and so does a later dispatch on the same branch; a cancelled leg
-# shows as cancelled, not as passed.
+# reuses the first run's draft, and, with no `queue` key (GitHub's default),
+# a third push while one runs and one waits cancels the waiting run, which
+# had not started (it cancels a running run only for its pull-request
+# harness). Here a newer push to the same pull request cancels the running
+# build, whose result would be stale, and so does a later dispatch on the
+# same branch; a cancelled leg shows as cancelled, not as passed.
 concurrency:
     group: blackout-desktop-build-check-${{ github.ref }}
     cancel-in-progress: true

@@ -38,7 +38,12 @@ on:
     # create it from GitHub's release form, which publishes the release
     # first, so create-release would refuse it. The two release jobs also
     # check the tag's prefix, so adding a pattern here does not alone make
-    # them run for it.
+    # them run for it. GitHub runs this file as it is at the tagged commit,
+    # so all of this holds only for a tag on a commit that has this version:
+    # an older commit's version is set to publish a non-draft release itself
+    # (its build stops first today, at the placeholder updater pubkey), and
+    # a dispatch of an older branch runs that branch's version (the release
+    # doc, step 2).
     push:
         tags:
             - 'release-*'
@@ -54,13 +59,16 @@ permissions:
 # before either created one and so make two drafts for one tag, or six legs
 # could upload into one draft at once. The second run waits; its
 # create-release then finds the first run's draft (the oldest for the tag)
-# and its legs replace each leg's files, as a re-run does. GitHub keeps at
-# most one running and one pending run per group, so a third push while one
-# run is in flight and one waits cancels the waiting run: it shows as
-# cancelled, but it had not started (no draft, no upload), and the newest
-# run goes ahead once the running one ends. The harness's pull-request runs
-# are the one case where cancelling a running run is right (a newer push
-# makes it stale, as in the build check), which the expression selects.
+# and its legs replace each leg's files, as a re-run does. With no `queue`
+# key (GitHub's default, `single`) a group keeps at most one pending run, so
+# a third push while one run is in flight and one waits cancels the waiting
+# run: it shows as cancelled, but it had not started (no draft, no upload),
+# and the newest run goes ahead once the running one ends. `queue: max`
+# would keep the waiting runs, in order; GitHub's documentation rejects it
+# beside cancel-in-progress: true, which the expression gives pull requests,
+# so it is left to the operator. The harness's pull-request runs are the
+# one case where cancelling a running run is right (a newer push makes it
+# stale, as in the build check), which the expression selects.
 concurrency:
     group: blackout-desktop-tauri-${{ github.ref }}
     cancel-in-progress: ${{ github.event_name == 'pull_request' }}
