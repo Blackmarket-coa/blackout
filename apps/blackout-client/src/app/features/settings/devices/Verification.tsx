@@ -1,4 +1,4 @@
-import React, { MouseEventHandler, useCallback, useState } from 'react';
+import React, { MouseEventHandler, useCallback, useEffect, useState } from 'react';
 import {
     Badge,
     Box,
@@ -35,6 +35,12 @@ import { stopPropagation } from '../../../utils/keyboard';
 import { useAuthMetadata } from '../../../hooks/useAuthMetadata';
 import { withSearchParam } from '../../../pages/pathUtils';
 import { useAccountManagementActions } from '../../../hooks/useAccountManagement';
+import { useAlive } from '../../../hooks/useAlive';
+import {
+    accountKeyVerdict,
+    checkAccountKeyState,
+    type AccountKeyVerdict,
+} from '../../../../client/keyBackupCheck';
 
 type VerificationStatusBadgeProps = {
     verificationStatus: VerificationStatus;
@@ -221,21 +227,53 @@ export function VerifyOtherDeviceTile({ crypto, deviceId }: VerifyOtherDeviceTil
 type EnableVerificationProps = {
     visible: boolean;
 };
+/**
+ * "Enable" opens the from-scratch `DeviceVerificationSetup`, which replaces
+ * the account's secret storage and cross-signing and deletes every key backup
+ * version it has. `visible` comes from account data (`useCrossSigningActive`),
+ * which never says whether a backup exists, so the button renders only once
+ * the homeserver itself answered that the account has neither a backup nor
+ * cross-signing (S9, `docs/security/key-backup-nudge-2026-11-02.md`). This
+ * page is not mounted in the shipped app today; the guard is here for when it
+ * is.
+ */
 export function EnableVerification({ visible }: EnableVerificationProps) {
+    const mx = useMatrixClient();
+    const alive = useAlive();
     const [open, setOpen] = useState(false);
+    const [accountState, setAccountState] = useState<AccountKeyVerdict | null>(null);
+
+    useEffect(() => {
+        if (!visible) return undefined;
+        let current = true;
+        const check = async () => {
+            const crypto = mx.getCrypto();
+            const [state, crossSigningReady] = await Promise.all([
+                checkAccountKeyState(mx),
+                crypto ? crypto.isCrossSigningReady() : Promise.resolve(false),
+            ]);
+            if (current && alive()) setAccountState(accountKeyVerdict(state, crossSigningReady));
+        };
+        void check();
+        return () => {
+            current = false;
+        };
+    }, [mx, visible, alive]);
 
     const handleCancel = useCallback(() => setOpen(false), []);
 
+    const offered = visible && accountState === 'none';
+
     return (
         <>
-            {visible && (
+            {offered && (
                 <Button size="300" radii="300" onClick={() => setOpen(true)}>
                     <Text as="span" size="B300">
                         Enable
                     </Text>
                 </Button>
             )}
-            {open && (
+            {offered && open && (
                 <Overlay open backdrop={<OverlayBackdrop />}>
                     <OverlayCenter>
                         <FocusTrap

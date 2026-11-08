@@ -3,6 +3,8 @@ import {
     DEFAULT_ONBOARDING_POLICY,
     onboardingBlocked,
     selectKeyBackupNudge,
+    KEY_BACKUP_NUDGE_ACTION_LABEL,
+    KEY_BACKUP_NUDGE_TEXT,
     summarizePosture,
     type AccountPosture,
 } from './encryptionPosture';
@@ -96,7 +98,11 @@ describe('summarizePosture', () => {
 
 describe('selectKeyBackupNudge', () => {
     it('nudges a cross-signed account that has no key backup', () => {
-        const v = selectKeyBackupNudge({ crossSigningReady: true, keyBackupReady: false });
+        const v = selectKeyBackupNudge({
+            crossSigningReady: true,
+            keyBackupReady: false,
+            accountState: 'cross_signing',
+        });
         expect(v).not.toBeNull();
         expect(v?.severity).toBe('warn');
         expect(v?.actions[0].id).toBe('enable_key_backup');
@@ -104,19 +110,92 @@ describe('selectKeyBackupNudge', () => {
         // since the consumer routes cross-signed users through the
         // explicitly-confirmed reset flow.
         expect(v?.detail).toMatch(/resets device verification/i);
+        expect(v?.headline).toBe(KEY_BACKUP_NUDGE_TEXT.crossSigningReady.headline);
+        expect(v?.detail).toBe(KEY_BACKUP_NUDGE_TEXT.crossSigningReady.detail);
     });
 
     it('nudges when encryption is not set up at all', () => {
-        const v = selectKeyBackupNudge({ crossSigningReady: false, keyBackupReady: false });
+        const v = selectKeyBackupNudge({
+            crossSigningReady: false,
+            keyBackupReady: false,
+            accountState: 'none',
+        });
         expect(v).not.toBeNull();
         expect(v?.severity).toBe('warn');
         expect(v?.headline).toMatch(/backup/i);
         expect(v?.actions[0].id).toBe('enable_key_backup');
+        expect(v?.actions[0].label).toBe(KEY_BACKUP_NUDGE_ACTION_LABEL);
+        expect(v?.headline).toBe(KEY_BACKUP_NUDGE_TEXT.none.headline);
+        expect(v?.detail).toBe(KEY_BACKUP_NUDGE_TEXT.none.detail);
     });
 
     it('stays silent once a key backup exists', () => {
-        expect(selectKeyBackupNudge({ crossSigningReady: false, keyBackupReady: true })).toBeNull();
-        expect(selectKeyBackupNudge({ crossSigningReady: true, keyBackupReady: true })).toBeNull();
+        for (const accountState of ['none', 'backup', 'cross_signing', 'unknown'] as const) {
+            expect(
+                selectKeyBackupNudge({
+                    crossSigningReady: false,
+                    keyBackupReady: true,
+                    accountState,
+                })
+            ).toBeNull();
+            expect(
+                selectKeyBackupNudge({
+                    crossSigningReady: true,
+                    keyBackupReady: true,
+                    accountState,
+                })
+            ).toBeNull();
+        }
+    });
+
+    // The account-level guard (S9, docs/security/key-backup-nudge-2026-11-02.md):
+    // an action is offered only when the homeserver answered that there is
+    // nothing to replace, or when this device already trusts the account's
+    // cross-signing and no backup exists.
+    it('offers nothing when cross-signing exists but this device is not verified', () => {
+        const v = selectKeyBackupNudge({
+            crossSigningReady: false,
+            keyBackupReady: false,
+            accountState: 'cross_signing',
+        });
+        expect(v?.actions).toEqual([]);
+        expect(v?.headline).toBe(KEY_BACKUP_NUDGE_TEXT.crossSigningNotReady.headline);
+        expect(v?.detail).toBe(KEY_BACKUP_NUDGE_TEXT.crossSigningNotReady.detail);
+    });
+
+    it('offers nothing when the account already has a backup, whatever this device says', () => {
+        for (const crossSigningReady of [false, true]) {
+            const v = selectKeyBackupNudge({
+                crossSigningReady,
+                keyBackupReady: false,
+                accountState: 'backup',
+            });
+            expect(v?.actions).toEqual([]);
+            expect(v?.headline).toBe(KEY_BACKUP_NUDGE_TEXT.backup.headline);
+            expect(v?.detail).toBe(KEY_BACKUP_NUDGE_TEXT.backup.detail);
+        }
+    });
+
+    it('offers nothing when the check failed, and says it could not check', () => {
+        for (const crossSigningReady of [false, true]) {
+            const v = selectKeyBackupNudge({
+                crossSigningReady,
+                keyBackupReady: false,
+                accountState: 'unknown',
+            });
+            expect(v?.actions).toEqual([]);
+            expect(v?.headline).toBe(KEY_BACKUP_NUDGE_TEXT.unknown.headline);
+            expect(v?.detail).toBe(KEY_BACKUP_NUDGE_TEXT.unknown.detail);
+            expect(v?.detail).toMatch(/couldn.t check/i);
+        }
+    });
+
+    it('no verdict promises a recovery Blackout cannot do', () => {
+        for (const text of Object.values(KEY_BACKUP_NUDGE_TEXT)) {
+            expect(text.detail).not.toMatch(
+                /recover(ed|able)? when you sign in on a new device|don.t lose access/i
+            );
+        }
     });
 });
 

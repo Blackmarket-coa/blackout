@@ -23,26 +23,37 @@ import {
     getLocalStorageItem,
     setLocalStorageItem,
 } from '../../../state/utils/atomWithLocalStorage';
+import {
+    accountKeyVerdict,
+    checkAccountKeyState,
+    type AccountKeyVerdict,
+} from '../../../../client/keyBackupCheck';
 import { selectKeyBackupNudge } from './encryptionPosture';
 
 /**
- * Discoverable nudge prompting users who have no encrypted message backup to
- * set one up, so message history is recoverable on future devices. This is the
- * forward fix for the "no key backup on the server" decryption errors — keys
- * for messages sent before a backup exists can never be recovered, but turning
- * on backup makes everything from here on recoverable.
+ * Nudge shown while this device has no active key backup.
  *
- * It appears whenever no key backup exists — see `selectKeyBackupNudge` —
- * which includes accounts that already have cross-signing (exactly the
- * population that hits "no key backup on the server").
+ * A backup keeps copies of message keys on the homeserver, locked with a
+ * recovery key. Another Matrix app signed in with that key can restore older
+ * messages from it. Blackout has no screen that restores from a backup yet,
+ * so here a backup does not bring older messages back after a new sign-in,
+ * and the text says so.
  *
- * Safety: the action never drives crypto directly from here. When
- * cross-signing is NOT set up it opens the from-scratch
- * DeviceVerificationSetup flow (non-destructive — nothing exists yet). When
- * cross-signing IS set up, the from-scratch flow would silently RESET existing
- * secret storage, so the action opens DeviceVerificationReset instead, whose
- * own warning + confirm step gates the reset. Dismissing snoozes the nudge for
- * a week; it hides permanently the moment a backup exists.
+ * What it offers depends on what the ACCOUNT has on the homeserver, not on
+ * this device: `isCrossSigningReady()` and `getActiveSessionBackupVersion()`
+ * are false on every new device, whatever the account has, and the
+ * from-scratch setup (`DeviceVerificationSetup`) replaces the account's secret
+ * storage and cross-signing and deletes every backup version it has. So each
+ * refresh also asks the homeserver (`checkAccountKeyState`) and the nudge
+ * stays hidden until that answer is in, so it never flashes an action the
+ * answer would remove. The setup is offered only when the homeserver answered
+ * that the account has neither a backup nor cross-signing; the warned reset
+ * (`DeviceVerificationReset`) only when it has cross-signing that this device
+ * already trusts and no backup; otherwise nothing is offered and the text
+ * says why (see `selectKeyBackupNudge` for the table).
+ *
+ * Dismissing snoozes the nudge for a week; it hides the moment this device's
+ * backup is active.
  */
 
 const SNOOZE_KEY = 'blackout.keyBackupNudge.snoozeUntil';
@@ -62,20 +73,23 @@ export function KeyBackupNudge() {
     const [loaded, setLoaded] = useState(false);
     const [crossSigningReady, setCrossSigningReady] = useState(false);
     const [keyBackupReady, setKeyBackupReady] = useState(false);
+    const [accountState, setAccountState] = useState<AccountKeyVerdict>('unknown');
     const [snoozeUntil, setSnoozeUntil] = useAtom(keyBackupNudgeSnoozeAtom);
     const [setupOpen, setSetupOpen] = useState(false);
 
     const refresh = useCallback(async () => {
         if (!crypto) return;
-        const [cs, backupVersion] = await Promise.all([
+        const [cs, backupVersion, account] = await Promise.all([
             crypto.isCrossSigningReady(),
             crypto.getActiveSessionBackupVersion(),
+            checkAccountKeyState(mx),
         ]);
         if (!alive()) return;
         setCrossSigningReady(cs);
         setKeyBackupReady(typeof backupVersion === 'string');
+        setAccountState(accountKeyVerdict(account, cs));
         setLoaded(true);
-    }, [crypto, alive]);
+    }, [mx, crypto, alive]);
 
     useEffect(() => {
         void refresh();
@@ -93,13 +107,15 @@ export function KeyBackupNudge() {
         setSnoozeUntil(Date.now() + SNOOZE_MS);
     }, [setSnoozeUntil]);
 
-    // Avoid a flash before the async crypto checks resolve.
+    // Nothing renders until this device's state and the homeserver's answer
+    // are both in, so no action can flash that the answer would remove.
     if (!crypto || !loaded) return null;
 
-    const verdict = selectKeyBackupNudge({ crossSigningReady, keyBackupReady });
+    const verdict = selectKeyBackupNudge({ crossSigningReady, keyBackupReady, accountState });
     if (!verdict) return null;
     if (Date.now() < snoozeUntil) return null;
 
+    // Only the two rows that offer an action render the button and the flow.
     const action = verdict.actions[0];
 
     return (
@@ -159,20 +175,22 @@ export function KeyBackupNudge() {
                             Not now
                         </Text>
                     </Button>
-                    <Button
-                        size="300"
-                        variant="Primary"
-                        radii="300"
-                        onClick={() => setSetupOpen(true)}
-                    >
-                        <Text as="span" size="B300">
-                            {action?.label ?? 'Set up backup'}
-                        </Text>
-                    </Button>
+                    {action && (
+                        <Button
+                            size="300"
+                            variant="Primary"
+                            radii="300"
+                            onClick={() => setSetupOpen(true)}
+                        >
+                            <Text as="span" size="B300">
+                                {action.label}
+                            </Text>
+                        </Button>
+                    )}
                 </div>
             </div>
 
-            {setupOpen && (
+            {action && setupOpen && (
                 <Overlay open backdrop={<OverlayBackdrop />}>
                     <OverlayCenter>
                         <FocusTrap
