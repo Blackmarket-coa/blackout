@@ -46,6 +46,21 @@ on:
 permissions:
     contents: read
 
+# One run at a time per ref, and a tag's run is never cancelled. A release-*
+# tag that is moved, or deleted and pushed again, while a run is in flight
+# starts a second run for the same ref; without this the two create-release
+# jobs could both list the tag's drafts before either created one and so
+# make two drafts for one tag, or six legs could upload into one draft at
+# once. The second run waits; its create-release then finds the first run's
+# draft (the oldest for the tag) and its legs replace each leg's files, as
+# a re-run does. GitHub keeps one running and one pending run per group, so
+# a third run replaces the pending one. The harness's pull-request runs are
+# the one case where cancelling is right (a newer push makes the running
+# one stale, as in the build check), which the expression selects.
+concurrency:
+    group: blackout-desktop-tauri-${{ github.ref }}
+    cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
     # Fast, toolchain-free gate: proves a desktop notification / deep link routes
     # to the right in-app location. Runs on PRs (the heavy bundle build below does

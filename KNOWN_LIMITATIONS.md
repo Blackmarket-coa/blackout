@@ -82,8 +82,9 @@ For the source-of-truth triage with tier/owner detail see
     workflow, `.github/workflows/blackout-desktop-tauri.yml`, built the app
     only on pushes to `main`, on tags and on dispatch (on pull requests, to
     `main` only, it ran just a notification harness). Both are fixed. Since
-    2026-11-02 that workflow's release jobs run only on pushed `release-*`
-    tags (not `v*`: `release.yml`'s release holds hundreds of files, and
+    2026-11-02 that workflow's release jobs run only on pushed tags, and
+    since 2026-11-08 only on `release-*` tags (not `v*`: `release.yml`'s
+    release holds hundreds of files, and
     `tauri-action` reads one page of a release's assets, so a draft shared
     with it could lose `latest.json`), upload into a draft release and leave
     publishing to a person; its notification harness still runs on pull

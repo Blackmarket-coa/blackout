@@ -54,8 +54,9 @@ pnpm bundle              # produce real installers → src-tauri/target/release/
     `https://github.com/blackmarket-coa/blackout/releases/...`.
 
 **CI / release:** `.github/workflows/blackout-desktop-tauri.yml` is the sole owner
-of desktop bundles. Since 2026-11-02 its release jobs run only when a `release-*`
-tag is pushed: there is no branch trigger and no `workflow_dispatch` (its
+of desktop bundles. Since 2026-11-02 its release jobs run only when a tag is
+pushed, and since 2026-11-08 only for a `release-*` tag: there is no branch
+trigger and no `workflow_dispatch` (its
 toolchain-free notification harness also runs on pull requests to `main`, a branch
 that does not exist). It does not run on `v*` tags, which are `release.yml`'s (see
 below). Its `create-release` job makes one **draft** GitHub release for the tag, or
@@ -82,7 +83,11 @@ To release:
 2. Push the tag, for example `git push origin release-<name>` after tagging the
    commit. Do not create the tag from GitHub's release form: publishing from the
    form creates the tag and a published release together, and `create-release`
-   then refuses to upload into it. A `v*` tag does not build the desktop.
+   then refuses to upload into it. A `v*` tag does not build the desktop. The
+   workflow runs one run at a time per tag and never cancels one: a tag moved, or
+   deleted and pushed again, while a run is in flight starts a run that waits for
+   the first, then reuses its draft and replaces each leg's files, as a re-run
+   does.
 3. Wait for all three build legs before touching the draft. `create-release`
    checks once, at the start, that the tag has no published release; the legs then
    upload by the draft's id without reading its state, so a draft published while
