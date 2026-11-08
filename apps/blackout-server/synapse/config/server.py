@@ -1107,8 +1107,9 @@ def _check_manhole_host_key(
     - a public key of the same type that is not the private key's public half.
 
     A DSA key is refused at the same two places (`_manhole_key_type` says why):
-    one larger than 1024 bits serves no session, and a 1024-bit one would sign
-    with SHA-1.
+    every ssh-dss signature uses SHA-1, and one whose subgroup order is longer
+    than 160 bits, as in every standard DSA key larger than 1024 bits, serves
+    no session.
 
     With no private key configured the public key is not checked here:
     `manhole()` ignores it, with a warning, and uses a generated key.
@@ -1164,14 +1165,15 @@ def _manhole_key_type(key: Key, path: Optional[str], setting: str) -> str:
     passed the config and the manhole raised that KeyError in
     `start_listening`, stopping the homeserver without naming the setting.
 
-    A DSA key (`ssh-dss`) is refused too. Twisted's `Key.sign` packs an
+    A DSA key (`ssh-dss`) is refused too, because every ssh-dss signature
+    uses SHA-1 (`Key._getHashAlgorithm`). Twisted's `Key.sign` also packs an
     ssh-dss signature's r and s into 20 bytes each, which fits only a 160-bit
     subgroup order, as in a 1024-bit key; every standard DSA key larger than
     that has a longer one. Such a key loads from a PEM `DSA PRIVATE KEY`
     file, and without this it passed the config and the server raised
-    OverflowError on every key exchange, logging nothing at startup. A
-    1024-bit key does serve a session, but ssh-dss signs with SHA-1
-    (`Key._getHashAlgorithm`), so it is refused as well rather than offered.
+    OverflowError on every key exchange, logging nothing at startup. A key
+    with a 160-bit subgroup order, a 1024-bit one or a non-standard larger
+    one, does serve a session, and is refused for SHA-1 rather than offered.
     """
     try:
         key_type = key.sshType().decode("ascii")
@@ -1187,10 +1189,11 @@ def _manhole_key_type(key: Key, path: Optional[str], setting: str) -> str:
     if key_type == "ssh-dss":
         raise ConfigError(
             f"The manhole key file {path} holds a DSA key (ssh-dss), which the"
-            " manhole does not use: the SSH server cannot sign with a DSA key"
-            " larger than 1024 bits, and a 1024-bit one signs with SHA-1. The"
-            " manhole host key must be an RSA, Ed25519 or ECDSA P-256, P-384 or"
-            " P-521 key.",
+            " manhole does not use: every ssh-dss signature uses SHA-1, and the"
+            " SSH server cannot sign at all with a DSA key whose subgroup order"
+            " is longer than 160 bits, as every standard DSA key larger than"
+            " 1024 bits has. The manhole host key must be an RSA, Ed25519 or"
+            " ECDSA P-256, P-384 or P-521 key.",
             ("manhole_settings", setting),
         )
     return key_type

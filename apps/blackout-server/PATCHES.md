@@ -1558,16 +1558,24 @@ Error during startup`), under either Twisted; a configured key pair never
   `start_listening` with that bare `KeyError`, or, at `ssh_pub_key_path`, in
   this check's own type comparison. From the eighth round (found by the
   review of the seventh), a DSA (`ssh-dss`) key is refused at the same two
-  places: Twisted's `Key.sign` packs an ssh-dss signature's r and s into 20
-  bytes each, so a DSA key larger than 1024 bits, which Twisted loads from a
-  PEM `DSA PRIVATE KEY` file, passed the config, and the server raised
-  `OverflowError` on every key exchange while the homeserver ran and logged
-  nothing about it at startup; a 1024-bit key (the kind `ssh-keygen` wrote)
-  does serve a session, and is refused because ssh-dss signs with SHA-1.
+  places, because every ssh-dss signature uses SHA-1
+  (`Key._getHashAlgorithm`). Twisted's `Key.sign` also packs an ssh-dss
+  signature's r and s into 20 bytes each, so a DSA key whose subgroup order
+  is longer than 160 bits, as in every standard DSA key larger than 1024
+  bits, which Twisted loads from a PEM `DSA PRIVATE KEY` file, passed the
+  config, and the server raised `OverflowError` on every key exchange while
+  the homeserver ran and logged nothing about it at startup; a key with a
+  160-bit subgroup order (a 1024-bit key, the kind `ssh-keygen` wrote, or a
+  non-standard larger one) does serve a session. Until the ninth round
+  (found by the review of the eighth) the message said the server cannot
+  sign with any DSA key larger than 1024 bits; a 2048-bit key with a 160-bit
+  subgroup order signs, and the message now gives SHA-1 as the reason for
+  every DSA key and the subgroup order as the reason the server cannot sign.
   Each message names the file and what it holds, and the curve and DSA
   messages name the types that work. Upstream loads both files without
-  comparing them. Each refused config but the 1024-bit DSA key would start a
-  manhole on which no SSH session completes, or not start. Keep it through a
+  comparing them. Each refused config but a DSA key with a 160-bit subgroup
+  order would start a manhole on which no SSH session completes, or not
+  start. Keep it through a
   reconciliation. Tests in `tests/blackout_runtime/test_manhole.py`, through
   `HomeServerConfig`: a public key at `ssh_priv_key_path` and another key of
   the same type at `ssh_pub_key_path`, each for RSA, Ed25519 and ECDSA
@@ -1576,18 +1584,27 @@ Error during startup`), under either Twisted; a configured key pair never
   secp256k1 PEM key at `ssh_priv_key_path` (the test also pins that the key
   loads and that `manhole()` itself raises `KeyError` on it) and at
   `ssh_pub_key_path` beside a P-256 key; a 2048-bit DSA PEM key at
-  `ssh_priv_key_path` (the test also pins that the key loads and that
-  signing with it raises `OverflowError`, and a loopback session test pins
-  that the manhole, given that key directly, drops the connection before
-  authentication with the `OverflowError` logged), and a 1024-bit DSA key in
-  the OpenSSH format at `ssh_priv_key_path` and, as its `.pub`, at
-  `ssh_pub_key_path` beside an RSA key; the five tests failing against the
+  `ssh_priv_key_path` (the test also pins that the key loads, that its
+  subgroup order is longer than 160 bits and that signing with it raises
+  `OverflowError`, and a loopback session test pins that the manhole, given
+  that key directly, drops the connection before authentication with the
+  `OverflowError` logged); a 1024-bit DSA key in the OpenSSH format at
+  `ssh_priv_key_path` and, as its `.pub`, at `ssh_pub_key_path` beside an RSA
+  key; and, from the ninth round, a 2048-bit DSA PEM key with a 160-bit
+  subgroup order (fixed FIPS 186-2-style parameters from `openssl`) at
+  `ssh_priv_key_path`, refused with SHA-1 named as the reason (the test also
+  pins that the key signs and verifies, and a loopback session test that the
+  manhole, given that key directly, serves a full session on `ssh-dss`); the
+  five tests failing against the
   file before the sixth round's change ("the config loaded"), the two curve
   tests against the sixth round's file too (the private-key one with "the
   config loaded", the public-key one with the bare `KeyError: b'secp256k1'`
-  from the type comparison), and the two DSA refusal tests against the
-  seventh round's file ("the config loaded"); and matching pairs and private
-  keys alone still loading.
+  from the type comparison), the three DSA refusal tests against the
+  seventh round's file ("the config loaded"), and the ninth round's refusal
+  test against the eighth round's file too, on the message's reason (the
+  two DSA session tests pass against both, since neither goes through the
+  config); and
+  matching pairs and private keys alone still loading.
 - `docs/manhole.md`: its option list and example named `ssh_priv_key` and
   `ssh_pub_key`. `synapse/config/server.py` reads only `ssh_priv_key_path`
   and `ssh_pub_key_path`, and `_MANHOLE_SETTINGS_SCHEMA` accepts unknown

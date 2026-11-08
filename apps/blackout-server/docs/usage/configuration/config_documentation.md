@@ -687,8 +687,9 @@ on the manhole [here](../../manhole.md). Manhole sub-options include:
   The keys that encrypt the manhole traffic come from the SSH key exchange on
   each connection, not from this pair. An RSA, Ed25519 or ECDSA key works, in
   the format `ssh-keygen` writes and without a passphrase. A DSA key does not:
-  the SSH server cannot sign with one larger than 1024 bits, and a 1024-bit
-  one signs with SHA-1.
+  every ssh-dss signature uses SHA-1, and the SSH server cannot sign at all
+  with one whose subgroup order is longer than 160 bits, as every standard
+  DSA key larger than 1024 bits has.
   `ssh_priv_key_path` alone is enough: the public half is derived from the
   private key. A public key at `ssh_priv_key_path`, an `ssh_pub_key_path`
   that is not the public half of that private key, or a DSA key or an EC key

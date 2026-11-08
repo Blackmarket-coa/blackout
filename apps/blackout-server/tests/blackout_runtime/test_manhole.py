@@ -30,9 +30,10 @@ a word and every connection failed. ``synapse/config/server.py`` now also
 refuses, at config load, a public key at ``ssh_priv_key_path``, a configured
 public key that is not the private key's public half, an EC key on a curve
 Twisted has no SSH key type for (which loads, and which ``manhole()`` would
-otherwise fail on with a bare KeyError), and a DSA key (one larger than 1024
-bits loads from a PEM file, and every key exchange then fails; a 1024-bit one
-would sign with SHA-1). The session tests for those key types load the key
+otherwise fail on with a bare KeyError), and a DSA key (every ssh-dss
+signature uses SHA-1, and one whose subgroup order is longer than 160 bits, as
+in every standard DSA key larger than 1024 bits, loads from a PEM file and then
+fails every key exchange). The session tests for those key types load the key
 files through the homeserver config, as a deployment does.
 
 Records: docs/security/dependency-advisories-twisted-2026-11-02.md (repository
@@ -47,7 +48,7 @@ import struct
 import tempfile
 from typing import Any, Dict, List, Optional, Tuple, cast
 
-from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import dsa, ec, ed25519
 
 from twisted.conch import manhole_ssh
@@ -109,6 +110,43 @@ def _dsa_key(key_size: int) -> Key:
     return Key(dsa.generate_private_key(key_size=key_size))
 
 
+# A 2048-bit DSA prime p with a 160-bit prime q dividing p - 1: FIPS 186-2-style
+# parameters, made by OpenSSL 3.0.13's `openssl genpkey -genparam` for DSA with
+# the options dsa_paramgen_bits:2048, dsa_paramgen_q_bits:160 and
+# the option type:fips186_2. No standard names this pair of sizes, and
+# cryptography cannot generate it; the parameters are public, and each test
+# draws its own private key from them.
+_DSA_2048_Q160_P = int(
+    "e765212f2f094ef08f29eba80f90c22ef578cf64862fe16b775735fe52de736f"
+    "fa3d9de122192c1b504d7d429e767e532f36f457ea71ba01e90dee7cbe6fb2b9"
+    "d9bf1bfcaf8d82f6b540b1407c9240f27453c6a24c01641f5d3a9e46426092a8"
+    "6b16ead98a3e4fdadebe3347ed07854f42b8a5d7dd67726e21342010bcab985b"
+    "ca75ce9f2cd695802fa943573550daa00a11334efc428b0fc1ad2054113efdd0"
+    "8fc588d39013d504b9c943b448697128f783c1766a14e9c72570455fb98c70d4"
+    "4a968d87ed494469a3a72d2c3921b57f79166d2dd774a9b477bcaabf42c7892f"
+    "caa849b40a4fe95f7732c87b34f73a43c3d88266a746aa75c24fd246c0e3e8ed",
+    16,
+)
+_DSA_2048_Q160_Q = int("e851942c2aadd8ae754f42d08abccb4ececb6949", 16)
+
+
+def _dsa_2048_q160_key() -> Key:
+    """A 2048-bit DSA key with a 160-bit subgroup order, which Twisted can sign with.
+
+    g is 2^((p-1)/q) mod p, as FIPS 186-2's generator procedure starts.
+    """
+    p, q = _DSA_2048_Q160_P, _DSA_2048_Q160_Q
+    g = pow(2, (p - 1) // q, p)
+    params = dsa.DSAParameterNumbers(p, q, g).parameters()
+    return Key(params.generate_private_key())
+
+
+def _dsa_q_bits(key: Key) -> int:
+    """The bit length of a DSA key's subgroup order q."""
+    crypto_key = cast(dsa.DSAPrivateKey, key._keyObject)
+    return crypto_key.parameters().parameter_numbers().q.bit_length()
+
+
 def _key_kinds() -> List[Tuple[str, Key]]:
     """One private key of each type the manhole must serve."""
     return [
@@ -153,9 +191,11 @@ def _write_pem_private_key(directory: str, name: str, key: Key) -> str:
     writes: ssh-keygen cannot write a key on a curve OpenSSH has no name for
     (cryptography refuses the OpenSSH serialization of secp256k1), so only a
     PEM file can put one at `ssh_priv_key_path` or `ssh_pub_key_path`. For a
-    DSA key it is a `DSA PRIVATE KEY`, the one format here that holds a DSA key
-    larger than 1024 bits and that Twisted loads (cryptography refuses the
-    OpenSSH serialization of one, and Twisted does not read PKCS#8 PEM).
+    DSA key it is a `DSA PRIVATE KEY`, what `openssl pkey -traditional` writes
+    (Twisted does not read the PKCS#8 PEM `openssl` 3 writes by default). A DSA
+    key larger than 1024 bits can also be written in the OpenSSH format, by
+    Twisted's serializer, though not by cryptography, which refuses it; the PEM
+    file stands here for a key made with `openssl`.
     """
     path = os.path.join(directory, name)
     with open(path, "wb") as f:
@@ -436,10 +476,11 @@ class ManholeKeyConfigTestCase(TestCase):
 
     def test_a_dsa_key_is_refused(self) -> None:
         # A 2048-bit DSA key in a PEM file loads, and Twisted calls it ssh-dss,
-        # but its signature does not fit the 20-byte halves Twisted's ssh-dss
-        # format packs. Before this check the config loaded it and the server
-        # raised OverflowError on every key exchange; `ManholeSessionTestCase`
-        # pins that session.
+        # but its subgroup order is longer than 160 bits (cryptography gives a
+        # 2048-bit key a 256-bit one), so its signature does not fit the
+        # 20-byte halves Twisted's ssh-dss format packs. Before this check the
+        # config loaded it and the server raised OverflowError on every key
+        # exchange; `ManholeSessionTestCase` pins that session.
         directory = _key_dir(self)
         path = _write_pem_private_key(directory, "dsa2048.pem", _dsa_key(2048))
         e = self._refusal("DSA-2048 at ssh_priv_key_path", path)
@@ -454,9 +495,35 @@ class ManholeKeyConfigTestCase(TestCase):
         loaded = Key.fromFile(path)
         self.assertEqual(loaded.type(), "DSA")
         self.assertEqual(loaded.size(), 2048)
+        self.assertGreater(_dsa_q_bits(loaded), 160)
         self.assertEqual(loaded.sshType(), b"ssh-dss")
         self.assertFalse(loaded.isPublic())
         self.assertRaises(OverflowError, loaded.sign, b"exchange hash")
+
+    def test_a_dsa_key_that_can_sign_is_refused_too(self) -> None:
+        # A 2048-bit DSA key with a 160-bit subgroup order fits Twisted's
+        # 20-byte halves: it signs, and `ManholeSessionTestCase` pins that the
+        # manhole serves a session on it. It is refused all the same, and the
+        # message gives the reason that holds for every DSA key: each ssh-dss
+        # signature uses SHA-1.
+        directory = _key_dir(self)
+        path = _write_pem_private_key(
+            directory, "dsa2048q160.pem", _dsa_2048_q160_key()
+        )
+        e = self._refusal("DSA-2048/160 at ssh_priv_key_path", path)
+        self.assertEqual(e.path, ("manhole_settings", "ssh_priv_key_path"))
+        self.assertIn(path, e.msg)
+        self.assertIn("holds a DSA key (ssh-dss)", e.msg)
+        self.assertIn("every ssh-dss signature uses SHA-1", e.msg)
+        self.assertIn("RSA, Ed25519 or ECDSA P-256, P-384 or P-521", e.msg)
+
+        loaded = Key.fromFile(path)
+        self.assertEqual(loaded.size(), 2048)
+        self.assertEqual(_dsa_q_bits(loaded), 160)
+        self.assertEqual(loaded.sshType(), b"ssh-dss")
+        self.assertIsInstance(loaded._getHashAlgorithm(b"ssh-dss"), hashes.SHA1)
+        signature = loaded.sign(b"exchange hash")
+        self.assertTrue(loaded.public().verify(signature, b"exchange hash"))
 
     def test_a_1024_bit_dsa_key_in_ssh_keygen_format_is_refused(self) -> None:
         # The DSA key ssh-keygen wrote: 1024 bits, in the OpenSSH format. It
@@ -785,5 +852,21 @@ class ManholeSessionTestCase(TestCase):
             self.assertFalse(probe.authenticated)
             self.assertFalse(probe.shell_opened)
             self.assertEqual(len(self.flushLoggedErrors(OverflowError)), 1)
+
+        return defer.ensureDeferred(run())
+
+    def test_a_160_bit_q_dsa_key_serves_a_session_without_the_config_check(
+        self,
+    ) -> "defer.Deferred[None]":
+        # The other side of the 160-bit line: a 2048-bit DSA key whose
+        # subgroup order fits the 20-byte halves, handed to the manhole
+        # directly, serves a full session. The config refuses it for SHA-1,
+        # not because the server could not sign with it.
+        priv = _dsa_2048_q160_key()
+
+        async def run() -> None:
+            probe, host_key = await self._session(_settings(priv), {"answer": 41})
+            self.assertEqual(probe.key_alg, b"ssh-dss")
+            self.assertEqual(probe.host_key_blob, priv.public().blob())
 
         return defer.ensureDeferred(run())
