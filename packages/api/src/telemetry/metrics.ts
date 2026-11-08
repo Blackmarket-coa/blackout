@@ -302,7 +302,7 @@ export const dbWriteBehindFailuresTotal = new Counter(
 
 export const dbPoolClientErrorsTotal = new Counter(
     'db_pool_client_errors_total',
-    'Pooled Postgres connections that failed (backend terminated, network reset), by whether the client was idle in the pool or checked out; the pool opens a new one on the next checkout.',
+    'Error events from pooled Postgres connections (backend terminated, network reset), by whether the client was idle in the pool or checked out. A failure seen only by the query in flight is reported by that query and not counted here.',
     ['state']
 );
 

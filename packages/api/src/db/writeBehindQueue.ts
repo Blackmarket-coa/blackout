@@ -11,6 +11,7 @@ import { log } from '../telemetry/logger';
 import { dbWriteBehindDepth, dbWriteBehindFailuresTotal } from '../telemetry/metrics';
 import type { PgPool } from './migrate';
 import type { StoreChangeTransport } from './pgNotify';
+import { withPooledClient } from './pooledClient';
 import { resyncMap, snakeToCamel, upsertRecord, type TablePlan } from './pgWriter';
 
 type WriteOp =
@@ -58,19 +59,18 @@ export class WriteBehindQueue {
             return;
         }
         try {
-            await this.withRetry(async () => {
-                const client = await this.pool.connect();
-                try {
+            // A failed attempt gives its connection back with the error, so the
+            // retry gets a new one rather than the same dead client.
+            await this.withRetry(() =>
+                withPooledClient(this.pool, async (client) => {
                     if (op.kind === 'upsert') {
                         await upsertRecord(client, plan, op.record);
                     } else {
                         const map = this.getMap(op.mapName);
                         if (map) await resyncMap(client, plan, map);
                     }
-                } finally {
-                    client.release?.();
-                }
-            });
+                })
+            );
             // Tell peer replicas to refresh their mirror for this change.
             if (this.transport) {
                 if (op.kind === 'upsert') {

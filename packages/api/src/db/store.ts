@@ -177,6 +177,7 @@ import { MUTATOR_SPECS, TABLE_DESCRIPTORS } from './pgDescriptors';
 import { WriteBehindQueue } from './writeBehindQueue';
 import { PgNotifyTransport, type StoreChangePayload, type StoreChangeTransport } from './pgNotify';
 import type { PgPool } from './migrate';
+import { withPooledClient } from './pooledClient';
 import { log } from '../telemetry/logger';
 import { randomUUID } from 'node:crypto';
 
@@ -8313,11 +8314,16 @@ export class FileBackedDb extends InMemoryDb {
  */
 type MutableMap = Map<string, Record<string, unknown>>;
 
+/** How long a failed re-hydrate (after a dropped LISTEN connection) waits before trying again. */
+export const REHYDRATE_RETRY_MS = 5_000;
+
 export class PostgresBackedDb extends InMemoryDb {
     private readonly plans = new Map<string, TablePlan>();
     private queue: WriteBehindQueue | null = null;
     private pool: PgPool | null = null;
     private transport: StoreChangeTransport | null = null;
+    private rehydrateRetry: ReturnType<typeof setTimeout> | null = null;
+    private stopped = false;
     /** Identifies this replica so it can ignore its own change notifications. */
     private readonly instanceId = randomUUID();
 
@@ -8364,8 +8370,7 @@ export class PostgresBackedDb extends InMemoryDb {
      */
     async init(pool: PgPool, transport?: StoreChangeTransport): Promise<void> {
         this.pool = pool;
-        const client = await pool.connect();
-        try {
+        await withPooledClient(pool, async (client) => {
             for (const descriptor of TABLE_DESCRIPTORS) {
                 const columns = await introspectColumns(client, descriptor.tableName);
                 if (columns.length === 0) {
@@ -8380,9 +8385,7 @@ export class PostgresBackedDb extends InMemoryDb {
                 this.plans.set(descriptor.mapName, plan);
                 await hydrateMap(client, plan, this.mapByName(descriptor.mapName));
             }
-        } finally {
-            client.release?.();
-        }
+        });
         this.transport = transport ?? null;
         this.queue = new WriteBehindQueue(
             pool,
@@ -8401,28 +8404,45 @@ export class PostgresBackedDb extends InMemoryDb {
         }
     }
 
-    /** Re-load every table from Postgres into the mirror (used on listener reconnect). */
+    /**
+     * Re-load every table from Postgres into the mirror (used on listener
+     * reconnect). Never rejects: it runs un-awaited, and an unhandled rejection
+     * ends the process. A failure, a connection that cannot be opened included,
+     * is logged and retried every REHYDRATE_RETRY_MS until a reload succeeds,
+     * since peers' changes may have been missed while the listener was down.
+     */
     private async rehydrateAll(): Promise<void> {
-        if (!this.pool) return;
-        const client = await this.pool.connect();
+        const pool = this.pool;
+        if (!pool || this.stopped) return;
+        if (this.rehydrateRetry) {
+            clearTimeout(this.rehydrateRetry);
+            this.rehydrateRetry = null;
+        }
         try {
-            for (const [mapName, plan] of this.plans) {
-                const fresh: MutableMap = new Map();
-                const res = await client.query<Record<string, unknown>>(
-                    `SELECT * FROM ${plan.descriptor.tableName}`
-                );
-                for (const row of res.rows) {
-                    const record = rowToRecord(plan, row);
-                    fresh.set(plan.descriptor.keyOf(record), record);
+            await withPooledClient(pool, async (client) => {
+                for (const [mapName, plan] of this.plans) {
+                    const fresh: MutableMap = new Map();
+                    const res = await client.query<Record<string, unknown>>(
+                        `SELECT * FROM ${plan.descriptor.tableName}`
+                    );
+                    for (const row of res.rows) {
+                        const record = rowToRecord(plan, row);
+                        fresh.set(plan.descriptor.keyOf(record), record);
+                    }
+                    (this as unknown as Record<string, MutableMap>)[mapName] = fresh;
                 }
-                (this as unknown as Record<string, MutableMap>)[mapName] = fresh;
-            }
+            });
         } catch (err) {
             log.warn('pg_store_rehydrate_failed', {
                 error: err instanceof Error ? err.message : String(err),
+                retryInMs: REHYDRATE_RETRY_MS,
             });
-        } finally {
-            client.release?.();
+            if (this.stopped || this.rehydrateRetry) return;
+            this.rehydrateRetry = setTimeout(() => {
+                this.rehydrateRetry = null;
+                void this.rehydrateAll();
+            }, REHYDRATE_RETRY_MS);
+            this.rehydrateRetry.unref?.();
         }
     }
 
@@ -8436,39 +8456,41 @@ export class PostgresBackedDb extends InMemoryDb {
         const plan = this.plans.get(payload.m);
         if (!plan || !this.pool) return;
         const pool = this.pool;
+        // Un-awaited, so it must not reject (an unhandled rejection ends the
+        // process): a connection that cannot be opened is logged like any other
+        // failure, and the row stays as it was in this mirror.
         void (async () => {
-            const client = await pool.connect();
             try {
-                if (payload.op === 'u' && payload.kv) {
-                    const where = plan.descriptor.conflictColumns
-                        .map((c, i) => `${c} = $${i + 1}`)
-                        .join(' AND ');
-                    const res = await client.query<Record<string, unknown>>(
-                        `SELECT * FROM ${plan.descriptor.tableName} WHERE ${where}`,
-                        payload.kv
-                    );
-                    if (res.rows.length > 0) {
-                        const record = rowToRecord(plan, res.rows[0]);
-                        this.mapByName(payload.m).set(plan.descriptor.keyOf(record), record);
+                await withPooledClient(pool, async (client) => {
+                    if (payload.op === 'u' && payload.kv) {
+                        const where = plan.descriptor.conflictColumns
+                            .map((c, i) => `${c} = $${i + 1}`)
+                            .join(' AND ');
+                        const res = await client.query<Record<string, unknown>>(
+                            `SELECT * FROM ${plan.descriptor.tableName} WHERE ${where}`,
+                            payload.kv
+                        );
+                        if (res.rows.length > 0) {
+                            const record = rowToRecord(plan, res.rows[0]);
+                            this.mapByName(payload.m).set(plan.descriptor.keyOf(record), record);
+                        }
+                    } else if (payload.op === 'r') {
+                        const fresh: MutableMap = new Map();
+                        const res = await client.query<Record<string, unknown>>(
+                            `SELECT * FROM ${plan.descriptor.tableName}`
+                        );
+                        for (const row of res.rows) {
+                            const record = rowToRecord(plan, row);
+                            fresh.set(plan.descriptor.keyOf(record), record);
+                        }
+                        (this as unknown as Record<string, MutableMap>)[payload.m] = fresh;
                     }
-                } else if (payload.op === 'r') {
-                    const fresh: MutableMap = new Map();
-                    const res = await client.query<Record<string, unknown>>(
-                        `SELECT * FROM ${plan.descriptor.tableName}`
-                    );
-                    for (const row of res.rows) {
-                        const record = rowToRecord(plan, row);
-                        fresh.set(plan.descriptor.keyOf(record), record);
-                    }
-                    (this as unknown as Record<string, MutableMap>)[payload.m] = fresh;
-                }
+                });
             } catch (err) {
                 log.warn('pg_store_peer_refresh_failed', {
                     map: payload.m,
                     error: err instanceof Error ? err.message : String(err),
                 });
-            } finally {
-                client.release?.();
             }
         })();
     }
@@ -8491,6 +8513,9 @@ export class PostgresBackedDb extends InMemoryDb {
 
     /** Flush queued writes and tear down the change subscription — graceful shutdown only. */
     async shutdown(): Promise<void> {
+        this.stopped = true;
+        if (this.rehydrateRetry) clearTimeout(this.rehydrateRetry);
+        this.rehydrateRetry = null;
         await this.drain();
         await this.transport?.close();
     }

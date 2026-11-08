@@ -11,6 +11,7 @@
 // be swapped for an in-process one in tests (two stores sharing one database).
 
 import { log } from '../telemetry/logger';
+import { withPooledClient } from './pooledClient';
 
 export interface StoreChangePayload {
     /** Originating instance id — used to skip self-notifications. */
@@ -53,6 +54,8 @@ export class PgNotifyTransport implements StoreChangeTransport {
     private changeHandler: ((payload: StoreChangePayload) => void) | null = null;
     private closed = false;
     private reconnectPending = false;
+    /** LISTEN clients already given back to the pool; pg-pool throws on a second release. */
+    private readonly released = new WeakSet<NotifyClient>();
 
     constructor(private readonly pool: NotifyPool) {}
 
@@ -61,15 +64,9 @@ export class PgNotifyTransport implements StoreChangeTransport {
         // the write-behind queue calls this, so peers will see it on refresh.
         void (async () => {
             try {
-                const client = await this.pool.connect();
-                try {
-                    await client.query('SELECT pg_notify($1, $2)', [
-                        CHANNEL,
-                        JSON.stringify(payload),
-                    ]);
-                } finally {
-                    client.release?.();
-                }
+                await withPooledClient(this.pool, (client) =>
+                    client.query('SELECT pg_notify($1, $2)', [CHANNEL, JSON.stringify(payload)])
+                );
             } catch (err) {
                 log.warn('pg_notify_publish_failed', {
                     error: err instanceof Error ? err.message : String(err),
@@ -102,21 +99,35 @@ export class PgNotifyTransport implements StoreChangeTransport {
                 });
             }
         });
-        // pg reports one dropped connection twice (the server's message, then the
-        // socket closing). Reconnect once, and give the dead client back to the
-        // pool to be destroyed: each extra reconnect left one more LISTEN session,
+        // pg can report one dropped connection twice, and in either order: a
+        // socket reset emits 'error' and then rejects the query in flight, while
+        // a backend terminated under LISTEN rejects LISTEN with the server's FATAL
+        // and emits 'error' only when the socket closes. Whichever comes first
+        // gives the dead client back to the pool to be destroyed, once, and one
+        // reconnect follows: each extra reconnect left one more LISTEN session,
         // and a dead client never released kept its pool slot for good.
-        let failed = false;
         client.on('error', (err: unknown) => {
-            if (failed || this.listenClient !== client) return;
-            failed = true;
+            if (this.released.has(client)) return;
             log.warn('pg_notify_listen_error', {
                 error: err instanceof Error ? err.message : String(err),
             });
-            client.release?.(err instanceof Error ? err : new Error(String(err)));
-            this.scheduleReconnect();
+            this.release(client, err instanceof Error ? err : new Error(String(err)));
+            if (this.listenClient === client) this.scheduleReconnect();
         });
-        await client.query(`LISTEN ${CHANNEL}`);
+        try {
+            await client.query(`LISTEN ${CHANNEL}`);
+        } catch (err) {
+            this.release(client, err instanceof Error ? err : new Error(String(err)));
+            if (this.listenClient === client) this.listenClient = null;
+            throw err;
+        }
+    }
+
+    /** Give a LISTEN client back to the pool once; with an error, the pool destroys it. */
+    private release(client: NotifyClient, err?: Error): void {
+        if (this.released.has(client)) return;
+        this.released.add(client);
+        client.release?.(err);
     }
 
     private scheduleReconnect(): void {
@@ -150,7 +161,7 @@ export class PgNotifyTransport implements StoreChangeTransport {
         } catch {
             // best effort
         }
-        this.listenClient?.release?.();
+        if (this.listenClient) this.release(this.listenClient);
         this.listenClient = null;
     }
 }

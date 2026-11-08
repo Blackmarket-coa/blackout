@@ -46,10 +46,14 @@ const reportClientError = (state: 'idle' | 'held', err: Error): void => {
  *   - a client checked out with connect() has none either (pg-pool takes its
  *     own off while the client is out), so each gets one from checkout until
  *     release.
- * The pool drops an idle client that failed. A held client that failed is
- * marked unusable by pg (client._queryable = false), so release() destroys it
- * rather than pooling it; the holder's next query on it rejects. Either way the
- * next connect() opens a fresh connection.
+ * The pool drops an idle client that failed. A held client whose 'error' has
+ * fired is marked unusable by pg (client._queryable = false), so even a plain
+ * release() destroys it rather than pooling it. A server FATAL that reaches a
+ * query in flight is not an 'error' event yet: pg hands it to that query and
+ * marks the client unusable only when the socket closes, a moment later, and a
+ * plain release() in between pools the dead client for the next connect(). So
+ * the store gives a client back with the error its work failed with
+ * (db/pooledClient.ts), and pg-pool destroys it.
  */
 export function handlePoolClientErrors(pool: PgPoolEvents): void {
     pool.on('error', (err) => reportClientError('idle', err));
