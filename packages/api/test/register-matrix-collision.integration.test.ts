@@ -4,11 +4,12 @@
  * `PUT /_synapse/admin/v2/users/{mxid}` both creates and updates, so
  * `registerUser` and `provisionBurner` look the account up first (only a 404
  * proceeds, any other answer fails closed) and treat a PUT that answers 200
- * ("modified") as a collision rather than a success. `/v1/auth/register` maps
- * that collision to the same `409 user_exists` a local name clash gives, so
- * the answer does not reveal which Matrix accounts exist, and it rolls the
- * local row back; a presented invite token is checked up front so an unusable
- * one creates nothing.
+ * ("modified", so it has already written to that account) as a collision
+ * rather than a success. `/v1/auth/register` maps that collision to the same
+ * `409 user_exists` a local name clash gives and rolls the local row back. The
+ * answer says that the name is taken, but not whether it belongs to a Blackout
+ * account or only to a homeserver account. A presented invite token is checked
+ * up front so an unusable one creates nothing.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';

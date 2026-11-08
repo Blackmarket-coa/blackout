@@ -12,9 +12,9 @@ process.env.BLACKOUT_DB_MODE = 'memory';
 process.env.MATRIX_HOMESERVER = process.env.MATRIX_HOMESERVER ?? 'https://matrix.test.local';
 process.env.MATRIX_BOT_TOKEN = process.env.MATRIX_BOT_TOKEN ?? 'syt_test_admin_token';
 
-// Minimal Synapse stub: the mint endpoint returns a token; everything else
-// (account provisioning during register) gets an empty 200, which the register
-// path tolerates — mirrors invitations.integration.test.ts.
+// Minimal Synapse stub: the mint endpoint returns a token; account provisioning
+// during register is looked up (404) and then created (201), below; everything
+// else gets an empty 200 — mirrors invitations.integration.test.ts.
 globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url =
         typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
