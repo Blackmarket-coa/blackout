@@ -7,6 +7,9 @@ Updated: 2026-03-17
 > open item, a standalone deploy of that template on Railway, will not be done.
 > The fork's separate Nixpacks files for Railway, `nixpacks.toml` and
 > `scripts-dev/railway/start.sh`, which this tracker does not list, stay.
+>
+> **2026-11-02.** Those Nixpacks files were removed on 2026-11-02 in `d88e884`,
+> with `docs/railway_deploy.md`; the operator chose removal ("remove both").
 
 ## Status snapshot
 

@@ -242,6 +242,13 @@ finding without its comment and none with it.
 | `missing-internal`                       | `deploy/docker/blackout-backend/nginx/nginx.conf`                                                                                                                                         | `proxy_pass $blackout_app` uses the constant set on the line before. It is a variable only so that the resolver looks `blackout-app` up per request. It is not request input. This is the public `location /`, so `internal` would make the whole site return 404.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | `react-dangerouslysetinnerhtml` ×2       | `apps/blackout-client/.../profile/ProfileModal.tsx`, `MiniProfile.tsx`                                                                                                                    | A user's bio rendered as HTML. Re-read for this pass rather than taken from the previous one: `mdToHtml` escapes `& < > " '` before adding any markup, so its output can only hold attribute-less `strong`/`em`/`code`/`br` and escaped text. `sanitizeMatrixHtml` then unwraps any tag outside its allowlist and strips every attribute except `data-mx-*` and an `href` starting `https://`, `http://`, `mailto:` or `mxc://`. Either step alone would do. `MiniProfile.tsx` is reported by semgrep 1.36.0 only.                                                                                                                                                                                                                                                                                                              |
 
+**2026-11-02.** `synapse/util/managed_hosting.py` was removed in `9493f41`,
+with `synapse/util/hosting_smoke.py`, which held the fixed URL, and with it
+the call the `dynamic-urllib-use-detected` row above records and that call's
+`nosemgrep`; the operator chose removal ("remove both"). The row is kept as
+the record of this pass; see
+[dependency-advisories-server-desktop-2026-10-30.md](dependency-advisories-server-desktop-2026-10-30.md#2026-11-02-the-nixpacks-path-and-the-hosting-helpers-are-removed).
+
 **A correction to 2026-09-13.** That pass found that a `nosemgrep` comment does
 not attach to `react-dangerouslysetinnerhtml` "in JSX attribute position", and
 left the finding visible. That is true of attribute position. It is not where
@@ -269,7 +276,8 @@ says so.
     Synapse stub.
 3.  **`synapse/util/managed_hosting.py` was unrecorded.** It is a Blackout file
     outside `blackout_runtime/` that was not recorded in `PATCHES.md`. This
-    pass's entry there names it.
+    pass's entry there names it. (2026-11-02: the file was removed in
+    `9493f41`; the operator chose removal.)
 4.  **Same defect in a file the rule cannot see.** Finding F2 in
     [framing-headers-2026-10-09.md](framing-headers-2026-10-09.md)
     (`deploy/docker/nginx-templates/default.conf.template`) has the same
