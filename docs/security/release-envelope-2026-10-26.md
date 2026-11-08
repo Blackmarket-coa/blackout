@@ -7835,7 +7835,13 @@ fork's Nixpacks path and the hosting helpers it called removed, and the
 lodash override raised to 4.18.1 for GHSA-f23m-r3pf-42rh; twelve commits)
 and was merged in first (`2faedf0170`, no conflict: none of its 34 files is
 one this branch touches; `pnpm install --frozen-lockfile --offline` took
-lodash 4.18.1 from the store).
+lodash 4.18.1 from the store). It moved again during the round, to
+`0f9df74349` (#999, the 2026-11-08 advisories and the unused minimatch and
+brace-expansion ignores dropped; #1000, the desktop release workflow's
+draft-only releases and the duplicate-paths guard's tests; 31 commits),
+and was merged again before the gates (`8a135d8468`, no conflict: of its 15
+files only `KNOWN_LIMITATIONS.md` is one this branch touches, in other
+sections; no lockfile change).
 
 -   **A failed carry was tried again only at another switch statement's
     answer (Medium, attack replay; Low, claims; fixed in code).**
