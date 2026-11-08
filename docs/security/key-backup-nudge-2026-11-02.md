@@ -801,6 +801,42 @@ updated files (`encryptionPosture.test.ts` 14 → 19, `keyBackupNudge.test.ts`
 3 → 6), 102 in all, the same 3 skipped. No test of develop's fails or was
 removed.
 
+Round 5 (fifth review). Develop had not moved past `97756ff4ec`, so nothing
+was merged, and round 4's develop baseline on that commit stands as the
+comparison. Free space on `/` was 6.4 GB at the start of the round and 5.3 GB
+during the gates. The gates ran
+on `4aa3183d97` (the fixes and this record before this paragraph), Node 22,
+`pnpm` from the repository root, `npx` from `apps/blackout-client`; logs in
+`scratchpad/v60/r6/gates/`.
+
+| Gate                            | Command                                                                                                   | `4aa3183d97`                                                                                                                            | develop `97756ff4ec` (round 4's run)                          |
+| ------------------------------- | --------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| core and design builds          | `pnpm --filter @blackout/core run build`, `pnpm --filter @blackout/design run build`                      | exit 0, both                                                                                                                            | exit 0, both                                                  |
+| client typecheck                | `pnpm --filter @blackout/client run typecheck` (`tsc --noEmit`, covers `src`)                             | exit 0                                                                                                                                  | exit 0                                                        |
+| test files typecheck            | `npx tsc -p scratchpad/v60/r6/tsconfig.tests.json` (the 9 guard test files under `tests/`, the 2 helpers) | exit 0                                                                                                                                  | —                                                             |
+| eslint, as CI                   | `pnpm --filter @blackout/client exec eslint "src/**/*.{ts,tsx}" --max-warnings=0`                         | exit 0                                                                                                                                  | exit 0                                                        |
+| guard tests                     | `npx vitest run` on the ten files of the Tests table                                                      | 10 files, 139 passed                                                                                                                    | —                                                             |
+| client unit suite, as CI        | `pnpm --filter @blackout/client run test:coverage`                                                        | 527 files, 3765 passed, 3 skipped, 0 unhandled errors; coverage 45.86 % statements, 36.89 branches, 36.79 functions, 46.92 lines; 362 s | 519 files, 3643 passed, 3 skipped; 45.31, 36.36, 36.23, 46.36 |
+| client integration suite, as CI | `pnpm --filter @blackout/client run test:integration`                                                     | 3 files, 13 passed                                                                                                                      | 3 files, 13 passed                                            |
+| client build                    | `pnpm --filter @blackout/client run build`                                                                | both Vite bundles built, exit 0                                                                                                         | the same                                                      |
+| bundle size, as CI              | `du -sk --exclude='*.map' apps/blackout-client/dist`, threshold `MAX_BUNDLE_KB` 29696                     | 25324 KB                                                                                                                                | 25312 KB                                                      |
+| prettier                        | root `npx prettier --check` on the 27 files the branch changes against develop                            | clean                                                                                                                                   | —                                                             |
+| trust page                      | `node tools/ci/build-trust-page.mjs --check` (`TRUST.md` not changed this round)                          | OK, `public/trust.html` matches                                                                                                         | —                                                             |
+| gitleaks 8.21.2                 | `gitleaks git --log-opts="origin/develop..HEAD"`, before this paragraph's commit                          | 21 commits scanned (the range's 25 less its 4 merges), no leaks                                                                         | —                                                             |
+| load rule                       | each step waited for a 1-minute load under 3.5, polling every 30 s (`scratchpad/v60/r6/gates/load.txt`)   | kept; the highest start was 3.42 (the unit suite); the core build waited 1 min and the test files' typecheck 4 min                      | —                                                             |
+
+The unit suite's difference from develop is this branch's tests and nothing
+else: round 4's 102, and this round's 20 (6 in `keyBackupCheck.test.ts`, the
+new focus-trap file's 9, the new partial-setup file's 4, the chip's new
+real-crypto case), in 2 new files; the same 3 skipped. The load rule held for
+the gates above. It did not hold for every single-file run this round: the
+focus-trap file's first run, the `src` and test-file type-checks before the
+fix commits, and some mutation and reproduction runs started with the 1-minute
+load between 3.7 and 10.2, while other sessions' suites ran. None of those is
+a full suite; the type-checks and the new files' tests were repeated inside the
+gates above, where the load rule was kept, and the mutation and reproduction
+runs were not repeated.
+
 ## Second review, 2026-11-08
 
 Fourteen findings; each is fixed above or explained here.
