@@ -9100,6 +9100,25 @@ probes (`d30-attacks`, `d30-r15-mark`, `d31-attacks`, `d31-r15`), round
 attack replay's own R17v-AR1 probe was appended to its scratch copy of the
 switch-writes file and not kept; test 53 is that scenario.
 
+The gates on `f0c1f97190`, the round's head before this paragraph
+(`fix/gates-r18`, against `origin/develop` at `97756ff4ec`), all finished
+and passed: API lint and typecheck; the pr-gate suite 2,112 of 2,112 and the
+post-merge suite 2,232 of 2,232 (round 17's 2,109 and 2,229 plus this
+round's three tests, 51 to 53 of the switch-writes file); launch smoke 14 of
+14; the core and design builds; the client's typecheck and lint; the client
+suite 3,643 passed and 3 skipped in 519 files; the protocol and SDK
+typechecks; dead-drop parity 2 of 2; the migration guard (107 migrations,
+the latest `107_deadman_owner_attempt_refused`) and the ephemeral migration
+run; the trust page; room encryption; the feature registry; auth secrets;
+prettier over the 94 files the branch changes; and gitleaks over the branch
+(94 commits, no leaks). The runner waited for the machine's load to fall
+below 3 before each suite, from 11:47 to 12:21. Before the runner, each
+changed test file was run alone: the switch-writes file 53 of 53, and the
+other Postgres-backed dead-man files (`deadman-backlog-postgres`,
+`deadman-release-notices-postgres`, `deadman-releases-postgres`) 2, 16 and 3
+of theirs. The commit that adds this paragraph changes this record only;
+API lint and typecheck, prettier and gitleaks were run again on it.
+
 ### Still open
 
 -   **A recipient-side refusal of an owner** (decision 19), which the
