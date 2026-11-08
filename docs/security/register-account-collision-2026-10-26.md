@@ -20,11 +20,14 @@ account. A Matrix account can exist without a Blackout row — the two id spaces
 are separate — so a registration naming such an account would write to it
 instead of being refused. The `PUT` with no lookup has been in `registerUser`
 since `registerUser`'s first commit on `develop` (`9713cfd181`, 2026-03-23 UTC),
-and `/register` has called it since that same commit. Until `bcdbb5c7db`
-(2026-05-21 UTC), though, `registerUser` wrote every account id with the
-domain `blackout.local`, and Synapse's admin `PUT` refuses an id that is not
-local to the homeserver (`400`, "This endpoint can only be used with local
-users"), so those builds wrote nothing on a homeserver of any other name.
+and `/register` has called it since that same commit (served at
+`/api/auth/register`, and from `77c27bd253`, 2026-04-05 UTC, also at
+`/v1/auth/register`; "Disclosure" says which later processes still serve the
+`/api` path). Until `bcdbb5c7db` (2026-05-21 UTC), though, `registerUser` wrote
+every account id with the domain `blackout.local`, and Synapse's admin `PUT`
+refuses an id that is not local to the homeserver (`400`, "This endpoint can
+only be used with local users"), so those builds wrote nothing on a homeserver
+of any other name.
 `bcdbb5c7db` takes the domain from `MATRIX_HOMESERVER_DOMAIN` (default
 `blackout.local`). The builds affected are therefore: on a homeserver whose
 `server_name` is `blackout.local` (the API's development default), every build
@@ -92,19 +95,21 @@ creates: it refuses a name the homeserver already has.
 
 Copy the homeserver's log, which holds its access lines, off the server now,
 before the fix is deployed and before rotation discards more of it. It is the
-only evidence that can show an account was not written to, and only for the
-period it still covers; every day it is left in place can take a day of that
-period with it.
+only evidence that covers every account, and it does so only for the period it
+still reaches; every day it is left in place can take a day of that period with
+it.
 
-Whether the first gap was used before the fix is deployed can be read from the
-homeserver's access log only for the period that log still covers, and the
-affected code has been on `develop` since March 2026, and able to write to an
-account on a homeserver not named `blackout.local` since May 2026 (above). For
-any earlier period nothing answers the question for certain: what remains are
-two traces in room timelines and one cross-check on the API side, each of which
-can find an account written to but none of which can clear one. The API recorded
-nothing that marks such a request on its own: each registration row is ordinary
-by itself.
+Whether the first gap was used before the fix is deployed can be read for every
+account from the homeserver's access log, but only for the period that log
+still covers, and the affected code has been on `develop` since March 2026, and
+able to write to an account on a homeserver not named `blackout.local` since
+May 2026 (above). For any earlier period nothing covers every account. Some
+evidence can clear one account at a time: a device or access token that the
+account had before the period and still has, or a password hash unchanged from
+a database backup taken before the period. Two traces in room timelines and one
+cross-check on the API side can find an account written to, but none of them
+can clear one. The API recorded nothing that marks such a request on its own:
+each registration row is ordinary by itself.
 
 -   **Synapse's access log.** Every account the API created is a
     `PUT /_synapse/admin/v2/users/…` made with the bot's token. A new account
@@ -140,6 +145,27 @@ by itself.
     such a container keeps all its console output since it was last created,
     which can be months; recreating the container discards it.
 
+-   **What can clear one account.** Every write a registration made to an
+    existing account was an admin `PUT` that carried a password and left
+    `logout_devices` at its default. So wherever one set the account's
+    password, Synapse also deleted every device of the account except one
+    whose id is the device id of the API's own token, and every access token
+    of the account except the API's own (`set_password` in
+    `apps/blackout-server/synapse/handlers/set_password.py`). Two things
+    therefore show that no registration set an account's password during a
+    period. One is a device with any other id, or an access token, that the
+    account had before the period and still has: an owner who has stayed
+    signed in on the same session since before it, for instance, or a device
+    whose keys Synapse has held since before it
+    (`e2e_device_keys_json.ts_added_ms`; Synapse deletes a device's keys with
+    the device). For the bot account, that means any device or token other
+    than the API's own token and that token's device. The other is the
+    account's `users.password_hash` in Synapse's database equal to its value
+    in a database backup taken before the period: Synapse salts each new hash
+    afresh, so a password set during the period leaves a different hash, even
+    where it is the same password. Neither works the other way round: owners
+    also sign out and change passwords, so a missing device or a changed hash
+    does not show a write.
 -   **The account's own trail.** An account written to this way was signed out
     of all its devices (Synapse keeps the token that made the request, so for
     the bot account: all but the API's own token), its display name was set to
@@ -236,16 +262,21 @@ discarding it meanwhile.
    cannot tell which build first served the route, start at the earlier, which
    only widens the search), any later interval in which the block was off (after
    a proxy restart that followed a sync, for instance), and any period in which
-   an API process started before 2026-08-31 (UTC) served `/api/auth/register`,
-   which the block does not cover (see "Disclosure"). A
-   `PUT /_synapse/admin/v2/users/…` made with the bot's token that answered
-   `200` modified an existing account. For the part of those periods that the
-   log no longer covers, look for the room traces and the `users` rows described
-   above, and treat the homeserver's admin accounts and the bot account as
-   possibly written to: reset their passwords as a precaution (for the bot, the
-   way step 3 says) and rotate `MATRIX_BOT_TOKEN`. After the upgrade, the error
-   log `matrix.account_create_updated_existing` marks the residual race
-   described under "What the fix does not close".
+   the route was served at `/api/auth/register`, which the block does not cover
+   (see "Disclosure"): by any build before `261b79c2f3` (2026-04-05 UTC),
+   whatever its start date, and by a later build in an API process started
+   before 2026-08-31 (UTC). A `PUT /_synapse/admin/v2/users/…` made with the
+   bot's token that answered `200` modified an existing account. For the part
+   of those periods that the log no longer covers, look for the room traces and
+   the `users` rows described above, and check the homeserver's admin accounts
+   and the bot account for the evidence that can clear one account (above).
+   Treat each of them that it does not clear as possibly written to: reset its
+   password as a precaution (for the bot, the way step 3 says, and rotate
+   `MATRIX_BOT_TOKEN`), and review what an admin could have done since the
+   start of that uncovered part, as step 3 describes, since the reset does not
+   undo it. After the upgrade, the error log
+   `matrix.account_create_updated_existing` marks the residual race described
+   under "What the fix does not close".
 3. For each account found: its password is the one the request carried, so
    set a new one (the admin `PUT /_synapse/admin/v2/users/{mxid}` with
    `password` signs out its devices by default) and treat the account as having
@@ -257,19 +288,33 @@ discarding it meanwhile.
    the account, retrying (see "What an operator should check"): the new
    password still applies, but find out whose the row is before removing it.
 
-    If the bot account itself was written to, two more things hold. Synapse
+    If an account found is a server admin (`users.admin = 1`), the bot among
+    them, the caller could sign in as it with the password they sent and use
+    the homeserver's admin API, so review what an admin could have done since
+    the write. A password reset does not undo what was done with those
+    powers: among other things an admin can create accounts, make an account
+    a server admin, set another account's password, add an email address to
+    an account, and sign in as any account, another admin included
+    (`POST /_synapse/admin/v1/users/{mxid}/login`). Synapse stores a token
+    that login API mints under the id of the admin account that minted it, so
+    the token lasts until that account's tokens are deleted, which a password
+    reset that signs its devices out does, or until the expiry it was minted
+    with, if any; a token minted while acting as another admin through that
+    API is stored under that other admin. In Synapse's database, look at the
+    accounts created since the write (`users.creation_ts`), the server admins
+    against the ones you expect (`users.admin = 1`), the email addresses added
+    since (`user_threepids.added_at`), and the tokens minted through that
+    login API (`access_tokens` rows with `puppets_user_id` set, whose
+    `user_id` is the account that minted each).
+
+    If the bot account itself was written to, one more thing holds. Synapse
     keeps only the token that made a password reset, so the API's own token
     survived the caller's write and nothing failed at the time — and for the
     same reason a reset you make now with any token other than the API's
     deletes `MATRIX_BOT_TOKEN`, and every Matrix call from the API fails until
     it is replaced: make that `PUT` with the API's own token, or replace
     `MATRIX_BOT_TOKEN` right after. Rotating it anyway is reasonable for the
-    credential of an account that was in a caller's hands. And the caller
-    could sign in as the bot, a server admin, with the password they sent, so
-    review what an admin could have done since; among other things an admin
-    can mint an access token for any account
-    (`POST /_synapse/admin/v1/users/{mxid}/login`), and resetting the bot's
-    password does not end such tokens on other accounts.
+    credential of an account that was in a caller's hands.
 
 4. **End the interim measures.** The proxy block is this fix's own and comes
    off in step 1, once the fixed image serves the route. The operator's other
@@ -325,9 +370,10 @@ bot's own localpart among them — gets `409` and sends no create; a garbage tok
 with the gate on creates nothing and makes no Matrix call; a `PUT` that answers
 `200` is refused and rolled back; a lookup that is neither `200` nor `404` fails
 closed; ordinary registration still works with one lookup and one create; a
-usable token with the gate on registers once and consumes one use; and
-`registerUser` / `provisionBurner` are covered directly for the lookup,
-create-only and fail-closed paths. Each assertion except the usable-token case,
+usable token with the gate on registers once and consumes one use;
+`registerUser` is covered directly for the lookup, create-only and fail-closed
+paths; and `provisionBurner` for the refusal of a create that answers `200` and
+for an ordinary create. Each assertion except the usable-token case,
 which is a regression guard, was also run against the pre-fix code to confirm it
 fails there: with `develop`'s `matrix-client.ts` in place, 9 of the 11 cases
 fail (all but the garbage-token and usable-token cases); with `develop`'s
@@ -358,14 +404,18 @@ measure for a separate fix that bears on how this one is deployed.
     `3c3c05c`.
 -   **2026-11-02.** The operator confirmed the interim measure in production:
     the reverse proxy (Caddy) answers `503` to `POST /v1/auth/register`, so
-    that path cannot be reached while the block is in place. An API process
+    that path cannot be reached while the block is in place. In a build from
+    `261b79c2f3` (2026-04-05 UTC) on, as every build that can write to an
+    account on a homeserver not named `blackout.local` is, an API process
     started on or after 2026-08-31 (UTC) serves the route on no other path:
     `packages/api/src/index.ts` decides once, at start-up, whether to mount the
     `/api` alias, and mounts it only before `API_ALIAS_REMOVAL_DATE`. A process
-    started earlier also serves `/api/auth/register` until it restarts, and the
-    block does not cover that path. The block is in the server's copy of
-    `deploy/docker/production/Caddyfile`; "After upgrading" step 1 says how it
-    behaves across a deploy, what removes it, and how to take it off. The
+    started earlier also serves `/api/auth/register` until it restarts, and so
+    does an older build whatever its start date (before `77c27bd253`, earlier
+    the same day, on no other path); the block does not cover that path. The
+    block is in the server's copy of `deploy/docker/production/Caddyfile`;
+    "After upgrading" step 1 says how it behaves across a deploy, what removes
+    it, and how to take it off. The
     shipped web client does not call `/v1/auth/register` (its sign-up is
     `/v1/auth/account-number`), and burner and account-number sign-up choose
     server-derived names, so the block takes nothing away from them.
