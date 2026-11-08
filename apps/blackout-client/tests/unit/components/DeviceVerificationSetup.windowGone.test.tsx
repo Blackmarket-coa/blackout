@@ -437,6 +437,19 @@ describe('a second attempt waits for one whose window went away', () => {
             what: 'the first attempt’s key',
         });
         expect(crypto.resetKeyBackup).toHaveBeenCalledTimes(1);
+
+        // The first attempt has settled: the second form's Continue goes on.
+        await click(buttonsNamed('Close')[0]);
+        await waitFor(() => !bodyText().includes(SETUP_KEY_ELSEWHERE_TEXT), {
+            what: 'the handoff to close',
+        });
+        await submit();
+        await waitFor(() => bodyText().includes(RECOVERY_KEY_SCREEN), {
+            what: 'the second attempt’s recovery key',
+        });
+        expect(crypto.bootstrapSecretStorage).toHaveBeenCalledTimes(2);
+        expect(crypto.resetKeyBackup).toHaveBeenCalledTimes(2);
+        expect(bodyText()).not.toContain(SETUP_BUSY_TEXT);
     }, 20_000);
 });
 
