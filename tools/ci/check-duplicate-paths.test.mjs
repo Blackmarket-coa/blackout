@@ -388,7 +388,7 @@ test('the script scans the whole repository when started from a subdirectory', (
     }
 });
 
-test('started from a subdirectory, the script reads every file from the top level', () => {
+test('started from a subdirectory, the script lists and reads from the top level', () => {
     // The route-literal check reads each tracked file. Both declarations of
     // one route lie outside the starting directory: listed from there they
     // are not seen, and read relative to it they are not found.

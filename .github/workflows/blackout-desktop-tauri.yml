@@ -41,7 +41,9 @@ on:
     # them run for it. GitHub runs this file as it is at the tagged commit,
     # so all of this holds only for a tag on a commit that has this version:
     # an older commit's version is set to publish a non-draft release itself
-    # (its build stops first today, at the placeholder updater pubkey), and
+    # (today its build stops by accident: at the placeholder updater pubkey
+    # on every such commit, and earlier, at the invalid bundle category, on
+    # those that still have it), and
     # a dispatch of an older branch runs that branch's version (the release
     # doc, step 2).
     push:

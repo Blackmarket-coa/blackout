@@ -95,10 +95,13 @@ To release:
     version also takes `v*` (`develop`'s does today), or a dispatch of an older
     branch runs that commit's version, which is set to publish a non-draft release
     that becomes latest, with no person involved; and a `v*` tag on an older commit
-    also runs that commit's `release.yml`, which publishes its own release as latest
-    at tag time. Today the desktop half stops before it creates a release, because
-    every such commit still has the placeholder updater public key: an accident,
-    not a control. The `release.yml` half does not stop.
+    also runs that commit's `release.yml`, which can publish its own release as
+    latest at tag time once its builds pass. Today the desktop half stops before it
+    creates a release, because every such commit still has the placeholder updater
+    public key (and those that still have the invalid bundle category stop earlier,
+    there): an accident, not a control. The `release.yml` half has no stop of its
+    own: on some older commits its release job waits on a desktop build that stops
+    the same way, and on the rest only its web and mobile builds stand in the way.
 
     The workflow runs one run at a time per tag and never cancels a running one: a
     tag moved, or deleted and pushed again, while a run is in flight starts a run
@@ -147,7 +150,7 @@ to the Matrix room: the server is deployed when the tag is pushed. Its GitHub
 release, which holds the web, mobile, SBOM and signature files and no desktop file,
 is a **draft** (since 2026-11-02, pending the operator's yes) that a person
 publishes, for a tag on a commit that carries this `release.yml`; on an older
-commit it is published at tag time, as latest (step 2). When publishing it, untick
+commit it can be published at tag time, as latest (step 2). When publishing it, untick
 "Set as the latest release": it has no `latest.json`, so making it latest would 404
 the desktop updater endpoint until the next desktop release is published.
 

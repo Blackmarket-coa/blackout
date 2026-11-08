@@ -348,7 +348,12 @@ review: `1c1bb5a` (the guard scans from the repository's top level, and its
 header's Not covered sentence names multi-dot resolver suffixes),
 `6831303` (a tag only on a commit with this version of the release
 workflow, and the `queue` key, in the release doc, `KNOWN_LIMITATIONS.md`
-and both desktop workflows' comments), then this version of the record. The
+and both desktop workflows' comments), then `34df087` (the record). After
+the sixth review, one commit corrects four sentences (what the guard reads
+from the top level; the build check's dispatch sentences, now limited to
+this version; what stops an older commit's desktop build, which on many
+commits is the invalid bundle category before the pubkey; and that an older
+commit's `release.yml` can publish only once its builds pass). The
 versions since `ddd4a41` also correct what this branch's commit messages
 got wrong
 ([Before merge or release](#before-merge-or-release), last bullet).
@@ -2041,7 +2046,8 @@ libayatana-appindicator3-dev librsvg2-dev`):
     only in that the scan ran. CI and `pnpm guard:duplicate-paths` run it
     at the checkout root, so neither was affected. `1c1bb5a` finds the top
     level with `git rev-parse --show-toplevel` (which fails outside a work
-    tree), lists the tracked paths there and reads each file from there,
+    tree), lists the tracked paths there and reads from there the files the
+    route-literal check scans,
     and the header says so. The test has 23 cases, two more, each in a
     fresh repository: the script started from `b/` and from `a/t/` fails
     on the pair under `a/t/` and names it by its paths from the top level,
@@ -3016,11 +3022,14 @@ The record's own commit changes no file Trivy reads.
         tauri-action creates a release (`src/index.ts` 99-111, then 193),
         and older commits can stop earlier, at the faults above. A branch
         that picked up a real pubkey without this workflow would reopen the
-        path. The `v*` half has no such stop: 747 of those branches carry a
-        `release.yml` whose softprops steps have no `draft` input, so a
-        `v*` tag on one of their commits publishes that release, as latest,
-        at tag time (it has no `latest.json`, so the updater endpoint would
-        404 and updates fail closed). Release doc step 2 now says to tag
+        path. The `v*` half has no stop of its own: 747 of those branches
+        carry a `release.yml` whose softprops steps have no `draft` input,
+        so a `v*` tag on one of their commits can publish that release, as
+        latest, at tag time once its builds pass (on some of them its
+        release job also waits on a desktop build that stops at updater
+        signing, as above; on the rest only its web and mobile builds,
+        which have never run, stand in the way; it has no `latest.json`,
+        so the updater endpoint would 404 and updates fail closed). Release doc step 2 now says to tag
         only a commit that carries this version (on `develop`, at or after
         this branch's merge), how to check it, and what an older tag or
         dispatch runs; its `v*` paragraph and `KNOWN_LIMITATIONS.md` say the

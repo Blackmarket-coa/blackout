@@ -69,9 +69,10 @@
  * main-module question for it to get wrong (through a symlink, under
  * --import, or with a process.argv[1] that names no file). And it scans the
  * whole repository from whatever directory it is started in: it finds the
- * top level with `git rev-parse --show-toplevel` and lists and reads every
- * tracked path from there, since `git ls-files` alone lists only the paths
- * under the directory it runs in. So no way of starting it can skip the
+ * top level with `git rev-parse --show-toplevel`, lists every tracked path
+ * from there, and reads from there the source files the route-literal check
+ * scans, since `git ls-files` alone lists only the paths under the directory
+ * it runs in. So no way of starting it can skip the
  * scan, or scan only part of the tree, and exit 0. Nothing should import it.
  */
 import {

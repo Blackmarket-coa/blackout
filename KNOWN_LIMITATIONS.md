@@ -93,7 +93,9 @@ For the source-of-truth triage with tier/owner detail see
     this version of the workflow: GitHub runs the file as it is at the tagged
     commit, so a tag on an older commit, or a dispatch of an older branch,
     runs a version set to publish a non-draft release on its own, which today
-    stops only because the updater public key is still a placeholder
+    stops only by accident: at the placeholder updater public key on every
+    such commit, and earlier, at the invalid bundle category, on those that
+    still have it
     (`docs/operations/wrapper-build-and-release.md`, step 2). Its
     notification harness still runs on pull requests to `main`, a branch that
     does not exist. It has never run, and

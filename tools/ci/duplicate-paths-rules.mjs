@@ -12,7 +12,8 @@ const textExtensions = new Set(['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs']);
 
 // The repository's top level, from whatever directory `cwd` is inside.
 // `git ls-files` lists only the paths under the directory it runs in, so the
-// scan lists and reads every path from here. Throws outside a work tree.
+// scan lists every path, and reads the files it reads, from here. Throws
+// outside a work tree.
 export function getRepositoryRoot(cwd = process.cwd()) {
     const out = execFileSync('git', ['rev-parse', '--show-toplevel'], {
         cwd,

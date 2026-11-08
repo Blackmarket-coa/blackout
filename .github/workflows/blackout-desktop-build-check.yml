@@ -9,9 +9,11 @@ name: blackout-desktop-build-check
 # The job summary lists only the bundles' names and sizes. It references no
 # secret.
 #
-# The release is blackout-desktop-tauri.yml. It cannot be dispatched: its
-# release jobs run only on a pushed release-* tag (not v*; that file's header
-# says why), upload into a draft release, and a person publishes it
+# The release is blackout-desktop-tauri.yml. This version of it has no
+# workflow_dispatch (a dispatch of an older branch runs that branch's
+# version, which publishes; the release doc, step 2): its release jobs run
+# only on a pushed release-* tag (not v*; that file's header says why),
+# upload into a draft release, and a person publishes it
 # (docs/security/dependency-advisories-server-desktop-2026-10-30.md, Found
 # outside scope, item 6). Its notification harness also runs on pull
 # requests to main, a branch that does not exist. To test a build, dispatch
@@ -23,8 +25,8 @@ name: blackout-desktop-build-check
 # release is still a draft, have no counterpart here: this check uploads
 # nothing.
 
-# The release jobs run only on release-* tags, never on a pull request or a
-# dispatch. This check exists to build before a tag, so it runs on pull
+# At this version the release jobs run only on release-* tags, never on a
+# pull request or a dispatch. This check exists to build before a tag, so it runs on pull
 # requests to develop, the default branch, and on dispatch.
 on:
     pull_request:
