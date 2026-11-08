@@ -1,11 +1,15 @@
-# Gitleaks install: pinned sha256, retried download, verified cache — 2026-11-08
+# Gitleaks install: pinned sha256, retried download, cache kept out of the scan job — 2026-11-08
 
 The **Gitleaks secret scan** job in `.github/workflows/security.yml` failed on
 PRs #1003 and #1004 in its **Install gitleaks** step, before any scan ran. The
 step piped an unverified download into `sudo tar`, with no retry and no cache,
 so one refusal from the release host stopped the gate. This record says what
-failed, what changed in that step, and what the change does not cover. The scan
-steps, the gitleaks version (8.21.2) and the other jobs are unchanged.
+failed, what changed, and what the change does not cover. One job is added
+and the `gitleaks` job now waits for it; the scan steps, the gitleaks version
+(8.21.2) and the other jobs are unchanged. The first version
+of this change restored the cache inside the scan job, which a review showed
+to be unsafe; see **Corrected after review** and **Changed after the first
+review** at the end.
 
 ## What failed
 
@@ -40,29 +44,38 @@ tar: Error is not recoverable: exiting now
 
 ## What changed
 
-All of it is in the `gitleaks` job.
+A new job, `gitleaks_archive` (**Gitleaks archive from the cache**), restores
+the archive from the Actions cache and hands it over as an artifact of the
+run. The `gitleaks` job no longer restores a cache: it checks what it is
+handed against the pin, downloads the archive itself when that check fails or
+there is nothing, and saves a verified download to the cache.
 
 ### Pin
 
 `GITLEAKS_SHA256` is
-`5bc41815076e6ed6ef8fbecc9d9b75bcae31f39029ceb55da08086315316e3ba`, set on the
-job next to `GITLEAKS_VERSION`. It was checked against the release's published
-checksums file, `gitleaks_8.21.2_checksums.txt`, fetched over TLS from
+`5bc41815076e6ed6ef8fbecc9d9b75bcae31f39029ceb55da08086315316e3ba`. It was
+checked against the release's published checksums file,
+`gitleaks_8.21.2_checksums.txt`, fetched over TLS from
 `https://github.com/gitleaks/gitleaks/releases/download/v8.21.2/` at 10:26Z
 (file sha256
-`4dc25a47d7e6f8f8284e1b4a4944af42924024f2a31d90ed14b0b8a038d47ff9`). Its
+`4dc25a47d7e6f8f8284e1b4a4944af42924024f2a31d90ed14b0b8a038d47ff9`) and fetched
+again during the first review round with the same file sha256. Its
 `gitleaks_8.21.2_linux_x64.tar.gz` line has that value. A copy of the
 archive downloaded over TLS from the same URL on 2026-10-26 hashes to the same
 value, and its `gitleaks` binary reports `8.21.2`.
 
-The install step runs `sha256sum --check --strict` on the archive before
-anything is extracted, and extracts only the `gitleaks` member, as before. An
-empty or malformed pin fails the check (tested; see Verification).
+The install step runs `/usr/bin/sha256sum --check --strict` on the archive
+before anything is extracted, and `sudo /usr/bin/tar` extracts only the
+`gitleaks` member, as before. An empty or malformed pin fails the check
+(tested; see Verification).
 
-The two variables are on the job, not the step, so that the cache steps can
-key on them. gitleaks 8.21.2 reads one environment variable, `GITLEAKS_CONFIG`
-(the only `os.Getenv` in its tree at the `v8.21.2` tag, outside test data), so
-the scan steps behave as before.
+`GITLEAKS_VERSION` and `GITLEAKS_SHA256` are set on the `gitleaks` job, so that
+the save step can key on them, and repeated on `gitleaks_archive`, which needs
+them for the key and its own check. If the two copies differ, the `gitleaks`
+job finds no archive it accepts and downloads one: the cache stops helping and
+nothing else changes. gitleaks 8.21.2 reads one environment variable,
+`GITLEAKS_CONFIG` (the only `os.Getenv` in its tree at the `v8.21.2` tag,
+outside test data), so the scan steps behave as before.
 
 ### Retry
 
@@ -84,10 +97,14 @@ ubuntu-24.04 runners ship curl 8.5.0; the simulations below ran curl 8.5.0.
     fast 504s that is 13 attempts in 180 s (measured). `--max-time 60` bounds a
     single attempt; the archive is 3,039,336 bytes. The longest case is a
     failure just under 180 s, a 15 s wait and an attempt that runs to 60 s:
-    about 4 minutes 15 seconds (measured at 254.0 s). The step also has
+    about 4 minutes 15 seconds (measured at 254 s). The step also has
     `timeout-minutes: 10`.
--   A `Retry-After` header replaces the 15 s wait, and one that would carry
-    the retries past 180 s ends them (`src/tool_operate.c` at `curl-8_5_0`).
+-   A `Retry-After` header on the error replaces the 15 s wait, shorter or
+    longer, and one that would carry the retries past 180 s ends them
+    (`src/tool_operate.c` at `curl-8_5_0`). curl 8.5.0 has no flag to ignore
+    it. Against 504s that all carry `Retry-After: 1`, the 13 attempts took
+    12 s (measured). Whether GitHub's edge sends the header on these 504s is
+    not known: the failed job logs show only curl's error line.
 -   Not `--retry-all-errors`: it would also retry a 404 from a wrong version or
     asset name for the full 3 minutes, and curl's own documentation advises
     against it as a default.
@@ -96,30 +113,91 @@ ubuntu-24.04 runners ship curl 8.5.0; the simulations below ran curl 8.5.0.
 
 ### Cache
 
-`actions/cache/restore` and `actions/cache/save` at
-`caa296126883cff596d87d8935842f9db880ef25`, the commit `v5` and `v5.1.0` named
-on 2026-11-08 (`git ls-remote https://github.com/actions/cache`); their
-`action.yml` at that commit runs on `node24`. The repository had no SHA pin
-for `actions/cache` to reuse: its one use, the nav-audit job in `ci.yml`, is
-`actions/cache@v4` by tag. The pin follows the form the repository uses for
-`actions/checkout`, `actions/setup-node` and `actions/upload-artifact`: the
-full commit SHA, with the major version as a comment.
+**Why the restore is not in the scan job.** A cache entry is not signed, and
+restoring one writes outside the cache path. `actions/cache` at the pinned
+commit extracts the entry with `tar -xf <archive> -P -C $GITHUB_WORKSPACE`
+(`dist/restore-only/index.js`); `-P` keeps absolute and `../` member names,
+and members are not filtered. Whoever saved an entry under the key therefore
+decides what lands anywhere the runner user can write. In the scan job, where
+the first version restored it, two routes turn that into a disabled scan:
+`~/.local/bin`, which the ubuntu image puts on `PATH` ahead of
+`/usr/local/bin` (`images/ubuntu/scripts/build/install-python.sh` in
+`actions/runner-images`), so a planted `gitleaks` answers both
+`gitleaks version` and the scan; and a `.gitleaks.toml` in the checkout, which
+`gitleaks detect` uses as its config when there is no `--config` and no
+`GITLEAKS_CONFIG` (the repository tracks none), so an allowlist of `.*` makes
+the real binary report no leaks. The review demonstrated both locally against
+the first version, whose install step printed `OK` for the genuine archive the
+planted entry also carried. GitHub's dependency-caching reference says the
+same in general: "Cache contents are not signed or verified, and any workflow
+run that can read a cache may extract its contents. Extracted caches may
+modify files that are subsequently executed in a workflow run, leading to
+malicious code execution."
 
+**`gitleaks_archive`.** Each job runs on its own runner ("Each job will run
+inside its own virtual machine runner, or inside a container", GitHub's
+Actions overview), so what a restore writes stays on that job's runner. The
+job has no checkout, `permissions: {}`, and a 10-minute timeout.
+
+-   `actions/cache/restore` at `caa296126883cff596d87d8935842f9db880ef25`, the
+    commit `v5` and `v5.1.0` named on 2026-11-08 (`git ls-remote
+https://github.com/actions/cache`); its `action.yml` at that commit runs on
+    `node24`. The repository had no SHA pin for `actions/cache` to reuse: its
+    one use, the nav-audit job in `ci.yml`, is `actions/cache@v4` by tag. The
+    pin follows the form the repository uses for `actions/checkout`,
+    `actions/setup-node` and `actions/upload-artifact`: the full commit SHA,
+    with the major version as a comment.
 -   Path `${{ runner.temp }}/gitleaks`, holding only the archive. Key
     `gitleaks-<version>-linux_x64-<sha256>`, exact match only (no
-    `restore-keys`), so a version or pin change starts a new entry.
--   The restore step has `continue-on-error: true`: a cache that cannot be
-    reached must not fail the scan. The install step then downloads.
--   **A restored archive is not trusted.** The install step checks it against
-    the pin before extracting. If it fails, the step removes it, writes a
-    warning annotation and downloads; the download is checked in turn. A bad
-    entry (a partial restore, or anything else saved under the key) costs a
-    download, not the gate.
--   The save step runs only when the install step passed, so only an archive
-    that matched the pin is saved, and before the scan, so that a scan that
-    finds a leak (and fails the job) still leaves the entry. It is skipped on
-    an exact hit. GitHub does not let an existing key be overwritten; at the
-    pinned commit `saveImpl` catches every error, logs it and passes.
+    `restore-keys`), so a version or pin change starts a new entry. The step
+    has `continue-on-error: true` and `timeout-minutes: 3`: an unreachable,
+    failed or slow cache is a miss.
+-   On a hit, the archive is checked against the pin with `/usr/bin/sha256sum`
+    (by absolute path, since the restore may have put files on `PATH`). A
+    mismatch fails this job, with an error annotation naming the
+    `gh cache delete` command, and nothing is handed over. The check does not
+    make the job trustworthy; the `gitleaks` job checks again.
+-   The archive is uploaded as the artifact `gitleaks-archive` with
+    `actions/upload-artifact` at the SHA the repository already pins
+    (`b7c566a772e6b6bfb58ed0dc250532a479d7789f`, v6), retention 1 day,
+    `overwrite: true` so that a re-run of all jobs replaces the earlier
+    attempt's artifact, `continue-on-error: true` and `timeout-minutes: 3`.
+
+**`gitleaks` job.**
+
+-   `needs: gitleaks_archive` with `if: ${{ !cancelled() }}`: it waits for the
+    archive job and runs whatever that job's result, except when the run is
+    cancelled. Without the condition a failed archive job would skip the scan,
+    and GitHub reports "A job that is skipped will report its status as
+    "Success". It will not prevent a pull request from merging, even if it is
+    a required check." It reads no output of the archive job.
+-   `actions/download-artifact` at `9000827ccba6bdab643e8b6fd33ac0654aef8333`
+    (`v8` and `v8.0.2`, 2026-10-07), into `${{ runner.temp }}/gitleaks-artifact`,
+    outside the checkout and off `PATH`, with `continue-on-error: true` and
+    `timeout-minutes: 3`. The repository used `download-artifact` only as
+    `@v4` by tag (`release.yml`), so there was no SHA to reuse. v8 rather than
+    the v6 that matches the upload: the zip extraction in v8 (and v7) uses
+    unzip-stream's sanitiser from 0.3.2 on, which turns every `..` segment of
+    an entry name into `.`; v6.0.0, v4.3.0 and v4.1.3 bundle 0.3.1's, which
+    strips only leading `../`. A zip with an entry `a/../../escaped-mid.txt`,
+    extracted with unzip-stream 0.3.1 from npm, wrote the file one level
+    above the target; with 0.3.4 it landed inside, as `a/escaped-mid.txt`.
+    download-artifact's own test workflow at v8.0.2 uploads with
+    `upload-artifact@v4` and downloads with v8.
+-   The install step uses the artifact's archive only if it is a regular file
+    that passes the check. Otherwise it writes a warning (when something was
+    there), downloads the archive into `${{ runner.temp }}/gitleaks`, a
+    directory nothing else in the job writes to, and checks it; a download
+    that fails the check fails the step. After a verified download it sets the
+    step output `downloaded=true`.
+-   `actions/cache/save` (same pinned commit) saves `${{ runner.temp }}/gitleaks`
+    only when `downloaded` is `true`, so only an archive this job downloaded
+    and checked is saved. Saving reads files and uploads them and extracts
+    nothing. It runs before the scan, so that a scan that finds a leak (and
+    fails the job) still leaves the entry, with `continue-on-error: true` and
+    `timeout-minutes: 3` so that a cache problem cannot fail the scan. GitHub
+    does not let an existing key be overwritten; at the pinned commit
+    `saveImpl` catches every error and logs it, and the step passes.
 
 **Which runs save an entry others can use.** The workflow runs on
 `pull_request` (with a `paths` filter), on `push` to `develop`, `master` and
@@ -127,14 +205,15 @@ full commit SHA, with the major version as a comment.
 2026-11-08) says a run can restore caches created on its current branch or the
 default branch, and a pull request run also those of its base branch; a pull
 request run's cache is created for its merge ref (`refs/pull/N/merge`), which
-neither the base branch nor other pull requests can restore; and `push` is one
-of the events that may write to the default branch's scope. `develop` is the
-default branch and its `push` trigger has no `paths` filter, so the first push
-to `develop` after this merges saves an entry, if the release host answers
-then, and every branch and pull request can restore it. A pull request run that
-misses before then saves into its own merge ref, which only that pull request's
-later runs restore. Merge-queue runs and pushes to `master` or `main` save into
-their own refs.
+neither the base branch nor other pull requests can restore; and only runs
+triggered by `push`, `workflow_dispatch`, `repository_dispatch`, `delete`,
+`registry_package`, `page_build` or `schedule` may write to the default
+branch's scope. `develop` is the default branch and its `push` trigger has no
+`paths` filter, so the first push to `develop` after this merges, if the cache
+misses and the release host answers, saves an entry every branch and pull
+request can restore. A pull request run that misses before then saves into its
+own merge ref, which only that pull request's later runs restore. Merge-queue
+runs and pushes to `master` or `main` save into their own refs.
 
 ## Not covered
 
@@ -143,60 +222,154 @@ their own refs.
     `develop`'s entry is gone. GitHub's documented rule (same reference): entries
     not accessed in over 7 days are removed, and once a repository reaches its
     cache storage limit (10 GB by default) entries are deleted in order of last
-    access, oldest first. Each run of this job that restores `develop`'s entry
-    is an access, but the limit is shared with the other jobs' caches (pnpm
-    stores, Playwright browsers).
-    The repository's cache usage was not checked: the cache API is not
-    reachable from this session.
+    access, oldest first. Each run that restores `develop`'s entry is an
+    access, but the limit is shared with the other jobs' caches (pnpm stores,
+    Playwright browsers). The repository's cache usage was not checked: the
+    cache API is not reachable from this session.
+-   **Anyone who can save under the key can run code in `gitleaks_archive`.**
+    The key is public (it is in this file). Whenever no entry exists under it
+    (before the first save, after a version bump, after eviction, which whoever
+    can save entries can force by filling the cache), one can be saved by any
+    job, in any workflow of the repository, of a run on `develop` started by
+    one of the triggers above (for example a dependency's install script during
+    a `pnpm install`), and by a pull request run into that pull request's own
+    merge ref. Such an entry has to be assumed to run code in
+    `gitleaks_archive`, which has no checkout and no token permissions. From
+    there it can fail or stall that job (the scan then starts up to 10 minutes
+    later), save caches in the run's own scope, and upload artifacts to the
+    run. The `gitleaks` job downloads only the `gitleaks-archive` artifact,
+    uses its archive only after the pin check, and otherwise downloads; this
+    rests on `download-artifact` v8 keeping the extracted files inside its
+    target directory, as above.
 -   **A bad entry persists while it is read.** A hit skips the save and a key
-    cannot be overwritten, so an entry that fails the check costs a download on
-    every run, with a warning annotation, until it is deleted
-    (`gh cache delete <key>`) or stops being read for 7 days.
+    cannot be overwritten, so an entry that fails the check fails
+    `gitleaks_archive` and costs a download in the scan on every run, until it
+    is deleted (`gh cache delete <key>`) or stops being read for 7 days. An
+    entry that carries the genuine archive and extra files passes the check
+    and raises nothing; its extra files stay on the archive job's runner.
+-   **The scan waits for `gitleaks_archive`.** Every run now schedules one more
+    short job before the scan; the delay was not measured.
+-   **GitHub's `cache-mode` job key is not used.** It would let
+    `gitleaks_archive` only restore and the `gitleaks` job only save, enforced
+    by scoped cache tokens. actionlint 1.7.12 rejects the key ("unexpected key
+    "cache-mode" for "job" section"), so it was left out.
 -   **Failures curl does not retry.** A transfer cut off part way (exit 18), a
     TLS error, or a 4xx other than 408 and 429 (a 404 gave exit 22 after one
     request) fails the step at once. Nothing is extracted and nothing is saved.
 -   **The pin moves with the version.** A bump must change `GITLEAKS_VERSION`
     and `GITLEAKS_SHA256` together, the latter from the new release's checksums
-    file. A bump that leaves the old value fails closed at the check.
+    file, in both jobs. A bump that leaves the old value fails closed at the
+    check.
 -   **Authenticity beyond the checksums file.** The pin ties the archive to the
     checksums file gitleaks published on the release, as fetched on two dates.
     Both come from the same host; gitleaks' `.goreleaser.yml` at `v8.21.2` has
     no signing section, and no signature was checked.
--   **Not yet run in GitHub Actions.** The restore and save behaviour above is
-    from GitHub's documentation and the action's source at the pinned commit;
-    the install script itself ran locally (below). This branch's own pull
-    request run is the first real run: it will miss, download and save into the
-    pull request's merge ref, and a re-run of it should hit.
+-   **Not yet run in GitHub Actions.** The restore, upload, download and save
+    behaviour above is from GitHub's documentation and the actions' source at
+    the pinned commits, not from a run. In particular `permissions: {}` is
+    expected not to affect the cache and artifact actions, which use the
+    runner's own token rather than `GITHUB_TOKEN`. If that is wrong, or the
+    restore, upload or download fails for another reason, the `gitleaks` job
+    downloads the archive, as it does on a miss. This branch's own pull
+    request run is the first real run: it will miss, download and save into
+    the pull request's merge ref, and a re-run of it should restore, hand over
+    and use the artifact.
+-   **Seen while doing this, not changed here.** `release.yml` uses
+    `actions/download-artifact@v4`, which today resolves to v4.3.0 and its
+    unzip-stream 0.3.1 sanitiser. It downloads artifacts uploaded by earlier
+    jobs of the same run.
 
 ## Verification
 
-The install step's `run` script was extracted from the workflow with PyYAML and
-run under `bash -e`, as the runner runs it, against a local Python HTTP server.
-The test harness made three substitutions only: the
+Both scripts were extracted from the workflow with PyYAML and run under
+`bash -e`, as the runner runs them. The extractor also asserts the structure
+described above: the `gitleaks` job has no cache restore, `gitleaks_archive`
+has no checkout and `permissions: {}`, the `gitleaks` job has
+`needs: gitleaks_archive` and `if: ${{ !cancelled() }}`, the two jobs' `env`
+are equal, and `gitleaks version` is the install step's last line.
+
+**Install step (`gitleaks` job)**, against a local Python HTTP server. The test
+harness made three substitutions only: the
 `https://github.com/gitleaks/gitleaks/releases/download/` prefix pointed at the
 local server, `sudo` dropped, and `/usr/local/bin` replaced by an empty
 temporary directory. The server answers the release path with 302 to an asset
-path, as GitHub does.
+path, as GitHub does. "Artifact" is a file placed where `download-artifact`
+puts the archive.
 
-| Case                                                | Exit | Time    | Release-path requests | Extracted                     |
-| --------------------------------------------------- | ---- | ------- | --------------------- | ----------------------------- |
-| 504 for the first 3 requests, then the archive      | 0    | 45.2 s  | 4                     | real binary, reports `8.21.2` |
-| Tampered archive served                             | 1    | 0.0 s   | 1                     | nothing                       |
-| 504 on every request                                | 22   | 180.2 s | 13                    | nothing                       |
-| 504 after 12.7 s ×7, then a request that hangs      | 28   | 254.0 s | 8                     | nothing                       |
-| Transfer cut off half way                           | 18   | 0.0 s   | 1                     | nothing                       |
-| Good archive in the cache path, server always 504   | 0    | 0.1 s   | 0                     | real binary, reports `8.21.2` |
-| Tampered archive in the cache path, server up       | 0    | 0.1 s   | 1                     | real binary, reports `8.21.2` |
-| Tampered archive in the cache path, nothing listens | 7    | 180.2 s | 0 (13 refused)        | nothing                       |
-| Empty `GITLEAKS_SHA256`, server up                  | 1    | 0.0 s   | 1                     | nothing                       |
-| 404 (wrong path)                                    | 22   | 0.0 s   | 1                     | nothing                       |
+| Case                                                  | Exit | Time  | Release-path requests | `downloaded` | Extracted                     |
+| ----------------------------------------------------- | ---- | ----- | --------------------- | ------------ | ----------------------------- |
+| No artifact, 504 for the first 3 requests             | 0    | 45 s  | 4                     | `true`       | real binary, reports `8.21.2` |
+| No artifact, tampered archive served                  | 1    | 0 s   | 1                     | not set      | nothing                       |
+| No artifact, 504 on every request                     | 22   | 180 s | 13                    | not set      | nothing                       |
+| No artifact, 504 on every request with Retry-After: 1 | 22   | 12 s  | 13                    | not set      | nothing                       |
+| No artifact, 504 after 12.7 s ×7, then a hang         | 28   | 254 s | 8                     | not set      | nothing                       |
+| No artifact, transfer cut off half way                | 18   | 0 s   | 1                     | not set      | nothing                       |
+| No artifact, empty `GITLEAKS_SHA256`                  | 1    | 0 s   | 1                     | not set      | nothing                       |
+| No artifact, 404 (wrong path)                         | 22   | 0 s   | 1                     | not set      | nothing                       |
+| Good artifact, server always 504                      | 0    | 0 s   | 0                     | not set      | real binary, reports `8.21.2` |
+| Tampered artifact, server up                          | 0    | 0 s   | 1                     | `true`       | real binary, reports `8.21.2` |
+| A directory where the artifact's archive should be    | 0    | 0 s   | 1                     | `true`       | real binary, reports `8.21.2` |
+| Tampered artifact, nothing listens                    | 7    | 180 s | 0 (13 refused)        | not set      | nothing                       |
 
 "Real binary" means its sha256 equals that of the `gitleaks` member of the
-pinned archive (`50b742ab…e359`). Where a tampered archive was involved, the
-tampered `gitleaks` (a script printing `TAMPERED`) was never written to the
-binary directory.
+pinned archive (`50b742ab…e359`). The tampered `gitleaks` (a script printing
+`TAMPERED`) was never written to the binary directory. Where the artifact was
+tampered with, the download went to the cache path and the tampered file was
+not copied there, so the save step would save only the verified download.
+
+**Check step (`gitleaks_archive`)**: with the genuine archive in the cache path
+it exits 0; with the tampered one it exits 1 and prints the error annotation
+with the `gh cache delete` command.
+
+**Zip extraction.** A zip holding `ok.txt`, `a/../../escaped-mid.txt`,
+`../escaped-lead.txt` and `/abs-escape.txt`, extracted with unzip-stream's
+`Extract` into `outer/dest`: 0.3.1 wrote `outer/escaped-mid.txt`, outside the
+target, and the other three inside it; 0.3.4 wrote all four inside
+(`a/escaped-mid.txt`). The sanitiser line in `download-artifact`'s bundled
+`dist/index.js` is 0.3.1's at v4.1.3, v4.3.0 and v6.0.0, and 0.3.2's (the same
+as 0.3.4's) at v7.0.0 and v8.0.2.
 
 Also run on the changed files: actionlint 1.7.12 with shellcheck 0.9.0 on
-`PATH` (no findings; a seeded unquoted variable in the step was reported, so
-shellcheck did run), a PyYAML parse, Prettier 2.8.1 (`--check`), and gitleaks
-8.21.2 over this branch's commits.
+`PATH` (no findings; a seeded unquoted variable in the install step was
+reported, so shellcheck did run), a PyYAML parse, Prettier 2.8.1 (`--check`),
+the **Hardening guards** job's four commands plus the duplicate-paths,
+deployment-readiness and trust-page guards, and gitleaks 8.21.2 over this
+branch's commits.
+
+## Corrected after review
+
+The first version of this change (`fb90f148d1`) restored the cache inside the
+scan job and said that was safe. It was not; see **Cache**. These sentences in
+its workflow comments and in this record were untrue, and its commit message
+repeats the substance of the first:
+
+1. "Nothing restored here is trusted: the install step checks it against
+   GITLEAKS_SHA256 before extracting." The check covered the archive file
+   only. The rest of the cache entry was extracted without a check, anywhere
+   the runner user could write.
+2. "A bad entry (a partial restore, or anything else saved under the key)
+   costs a download, not the gate." A crafted entry that carried the genuine
+   archive plus a `gitleaks` in `~/.local/bin` or a `.gitleaks.toml` in the
+   checkout passed the check and disabled the scan.
+3. "**A restored archive is not trusted.**" The same overstatement, in the
+   Cache section of this record.
+4. A bad entry costs "a download on every run, with a warning annotation".
+   An entry carrying the genuine archive raised no warning at all.
+5. The workflow comment said `--retry-delay 15` "waits 15 s between
+   attempts" and that fast 504s get "13 attempts in about 3 minutes", without
+   saying that a `Retry-After` header replaces the wait. The record's Retry
+   section already said so.
+
+## Changed after the first review
+
+1. **The cache restore moved to its own job**, `gitleaks_archive`, with no
+   checkout and no token permissions, which hands the archive over as an
+   artifact. The `gitleaks` job restores no cache, waits for the archive job
+   with `if: ${{ !cancelled() }}`, checks the artifact against the pin and
+   downloads when that fails, and saves only its own verified download.
+2. **`sha256sum` and `tar` are called by absolute path** in the install step,
+   and `sha256sum` in the archive job's check.
+3. **The retry comment** now says what `Retry-After` does.
+4. **Timeouts and `continue-on-error`** on the cache and artifact steps, so that
+   a slow or failing cache or artifact service delays the scan by at most a
+   few minutes and never fails it.
