@@ -30,12 +30,15 @@ ToS, the production-like E2E + load run) are tracked in that report's Appendix B
 rather than newly discovered defects.
 
 1. **BO-1 — Key-backup `DecryptionError` / unable-to-decrypt history.** Users on
-   a new device see "unable to decrypt" for historical messages when no
-   server-side key backup exists or it fails to restore. Severity: high — it
-   directly undercuts the encryption claim on the trust page. Workaround: set up
-   recovery (Settings → Encryption); `MessageBadEncryptedContent` surfaces a
-   "Set up backup" action on the affected events. **Not yet fixed**; see the note
-   below.
+   a new device see "unable to decrypt" for historical messages, because
+   Blackout can't yet restore keys from a backup or receive them from the
+   account's other sessions, whether or not a backup exists. Severity: high — it
+   directly undercuts the encryption claim on the trust page. Workaround: none
+   in Blackout yet. Another Matrix app with the account's recovery key may
+   restore backed-up keys there. For an account with no backup and no
+   cross-signing, the key-backup nudge's "Set up backup" starts one, which other
+   Matrix apps can restore from; Blackout can't yet. **Not yet fixed**; see the
+   note below.
 2.
 3.
 4.
@@ -43,14 +46,24 @@ rather than newly discovered defects.
 
 ## Full list
 
-|   ID | First seen | Surface | Severity | Status        | Workaround                               | ETA |
-| ---: | ---------- | ------- | -------- | ------------- | ---------------------------------------- | --- |
-| BO-1 | 2026-08-10 | Client  | high     | Instrumenting | Set up recovery in Settings → Encryption | TBD |
+|   ID | First seen | Surface | Severity | Status        | Workaround                                                     | ETA |
+| ---: | ---------- | ------- | -------- | ------------- | -------------------------------------------------------------- | --- |
+| BO-1 | 2026-08-10 | Client  | high     | Instrumenting | None in Blackout yet (another Matrix app can restore a backup) | TBD |
 
 ### BO-1 notes
 
 Filed by the 2026-08-10 encryption audit
 ([`docs/audits/2026-08-10-encryption-audit.md`](docs/audits/2026-08-10-encryption-audit.md)).
+
+2026-11-02: the earlier workaround here pointed to a "Settings → Encryption"
+that never existed, and to the "Set up backup" action, which on a new device
+of an account that already had a backup replaced the account's secret storage
+and cross-signing and deleted that backup (finding S9,
+[`docs/security/key-backup-nudge-2026-11-02.md`](docs/security/key-backup-nudge-2026-11-02.md)).
+The nudge and the undecryptable-message chip now ask the homeserver what the
+account has and offer the from-scratch setup only when it answered that there
+is neither a backup nor cross-signing; otherwise they say what is true and
+offer nothing. The restore path itself is still missing.
 
 What BO-1 gates is anything that routes trust through Blackout
 (`TRANSMUTATION_NOTES.md` §5). It does not gate coalition external sync:
