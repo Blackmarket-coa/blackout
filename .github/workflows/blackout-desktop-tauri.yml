@@ -1,138 +1,347 @@
 name: blackout-desktop-tauri
 
+# The signed desktop release. A pushed release-* tag gets one draft GitHub
+# release (create-release), and the three build legs sign their bundles and
+# upload them, with the updater's latest.json, into that draft (build).
+# Each leg stops, right before it builds and uploads, unless the release is
+# still a draft. Nothing here publishes: a person checks the draft and
+# publishes it, and only then can the updater endpoint in tauri.conf.json
+# (releases/latest/download/latest.json) serve it. Operator decision of
+# 2026-11-02; docs/security/dependency-advisories-server-desktop-2026-10-30.md,
+# Found outside scope, item 6, and docs/operations/wrapper-build-and-release.md
+# (what to check before publishing).
+# Not on v* tags. Those are release.yml's, whose release holds every file of
+# the web build (390 today) and the mobile builds, plus a signature, a
+# certificate and a bundle for each. tauri-action reads one page of a
+# release's assets: 50 when it merges latest.json
+# (src/upload-version-json.ts 60-65; if it then finds no signature it warns
+# and returns, 168-173) and 100 when it replaces its own files
+# (src/upload-release-assets.ts 26-33). A draft shared with release.yml
+# would put latest.json, or a leg's own files, past that page, so a
+# platform could go missing from latest.json and re-running the legs would
+# not restore it. Alone, this draft holds the installers, the updater
+# artifacts, their signatures and latest.json: a dozen or so files.
+# To test a build, dispatch blackout-desktop-build-check.yml: it builds the
+# same bundles unsigned and uploads nothing. A signed test build means
+# pushing a release-* tag; discard it by deleting the draft, then the tag.
 on:
-  pull_request:
-    branches: [main]
-    paths:
-      - 'blackout-desktop/**'
-      - 'apps/blackout-client/src/platform/**'
-      - '.github/workflows/blackout-desktop-tauri.yml'
-  push:
-    branches: [main]
-    tags:
-      - 'release-*'
-      - 'v*'
-  workflow_dispatch:
+    # The notification harness only. No main branch exists, so in practice
+    # this does not run.
+    pull_request:
+        branches: [main]
+        paths:
+            - 'blackout-desktop/**'
+            - 'apps/blackout-client/src/platform/**'
+            - '.github/workflows/blackout-desktop-tauri.yml'
+    # Tags only: with no `branches` under push, a branch push does not start
+    # this workflow, and there is no workflow_dispatch. Push the tag; do not
+    # create it from GitHub's release form, which publishes the release
+    # first, so create-release would refuse it. The two release jobs also
+    # check the tag's prefix, so adding a pattern here does not alone make
+    # them run for it. GitHub runs this file as it is at the tagged commit,
+    # so all of this holds only for a tag on a commit that has this version:
+    # an older commit's version is set to publish a non-draft release itself
+    # (today its build stops by accident: at the placeholder updater pubkey
+    # on every such commit, and earlier, at the invalid bundle category, on
+    # those that still have it), and
+    # a dispatch of an older branch runs that branch's version (the release
+    # doc, step 2).
+    push:
+        tags:
+            - 'release-*'
 
+# Each job asks for what it needs; only the two release jobs can write.
 permissions:
-  contents: write
+    contents: read
+
+# One run at a time per ref. A running run for a tag is never cancelled, so
+# no upload is cut off. A release-* tag that is moved, or deleted and pushed
+# again, while a run is in flight starts a second run for the same ref;
+# without this the two create-release jobs could both list the tag's drafts
+# before either created one and so make two drafts for one tag, or six legs
+# could upload into one draft at once. The second run waits; its
+# create-release then finds the first run's draft (the oldest for the tag)
+# and its legs replace each leg's files, as a re-run does. With no `queue`
+# key (GitHub's default, `single`) a group keeps at most one pending run, so
+# a third push while one run is in flight and one waits cancels the waiting
+# run: it shows as cancelled, but it had not started (no draft, no upload),
+# and the newest run goes ahead once the running one ends. `queue: max`
+# would keep the waiting runs, in order; GitHub's documentation rejects it
+# beside cancel-in-progress: true, which the expression gives pull requests,
+# so it is left to the operator. The harness's pull-request runs are the
+# one case where cancelling a running run is right (a newer push makes it
+# stale, as in the build check), which the expression selects.
+concurrency:
+    group: blackout-desktop-tauri-${{ github.ref }}
+    cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  # Fast, toolchain-free gate: proves a desktop notification / deep link routes
-  # to the right in-app location. Runs on PRs (the heavy bundle build below does
-  # not) so routing regressions are caught without a full Tauri build.
-  notification-harness:
-    name: Notification routing harness
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - name: Checkout
-        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+    # Fast, toolchain-free gate: proves a desktop notification / deep link routes
+    # to the right in-app location. Runs on PRs (the heavy bundle build below does
+    # not) so routing regressions are caught without a full Tauri build.
+    notification-harness:
+        name: Notification routing harness
+        runs-on: ubuntu-latest
+        permissions:
+            contents: read
+        steps:
+            - name: Checkout
+              uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v5
-        with:
-          version: 9.15.4
+            # Pinned to the commits the build job below and the build check
+            # pin, so that a moved tag cannot change what runs here (it was
+            # @v5 and @v4, as on develop). setup-node v6 still takes
+            # `cache: pnpm` (its action.yml at that commit lists npm, yarn
+            # and pnpm), which needs pnpm set up first, as here.
+            - name: Setup pnpm
+              uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v5
+              with:
+                  version: 9.15.4
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
+            - name: Setup Node
+              uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6
+              with:
+                  node-version: 22
+                  cache: pnpm
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+            - name: Install dependencies
+              run: pnpm install --frozen-lockfile
 
-      - name: Run notification-routing harness (Tauri)
-        run: pnpm --filter blackout-desktop test:unit
+            - name: Run notification-routing harness (Tauri)
+              run: pnpm --filter blackout-desktop test:unit
 
-  build:
-    # Release build only — never on PRs (needs signing secrets + Rust toolchain).
-    if: github.event_name != 'pull_request'
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-22.04
-            bundle: 'deb,rpm,appimage'
-          - os: macos-latest
-            bundle: 'app,dmg'
-          - os: windows-latest
-            bundle: 'msi,nsis'
-    runs-on: ${{ matrix.os }}
+    create-release:
+        name: Draft release for the tag
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/release-')
+        runs-on: ubuntu-latest
+        permissions:
+            contents: write
+        outputs:
+            release_id: ${{ steps.draft.outputs.release_id }}
+        steps:
+            # tauri-action's documented matrix pattern (examples/publish-to-
+            # manual-release.yml at v0.6.2) without its publish-release job.
+            # The draft is made here, once, before the legs start: a leg with
+            # no releaseId looks for the tag's draft only after its build, so
+            # legs that finish together would each create one.
+            # The tag comes from context.ref, never from an Actions
+            # expression in the script: whoever pushes a tag chooses its name,
+            # and an interpolated name would become script source.
+            - name: Find or create this tag's draft release
+              id: draft
+              uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+              with:
+                  script: |
+                      const { owner, repo } = context.repo;
+                      const tag = context.ref.replace(/^refs\/tags\//, '');
+                      // A published release would serve whatever the legs
+                      // upload, latest.json included, with no person in
+                      // between, so refuse one. This runs once per attempt
+                      // of this job, and "Re-run failed jobs" does not
+                      // repeat it (the re-run legs get its earlier output),
+                      // so each build leg checks again, right before
+                      // tauri-action, that the release is still a draft.
+                      try {
+                          const { data } = await github.rest.repos.getReleaseByTag({ owner, repo, tag });
+                          core.setFailed(
+                              `${tag} already has a published release (${data.html_url}); ` +
+                                  'the desktop build uploads only into a draft.'
+                          );
+                          return;
+                      } catch (error) {
+                          if (error.status !== 404) throw error;
+                      }
+                      // getReleaseByTag never returns a draft. Reuse the
+                      // oldest draft for this tag, a re-run's, so that a
+                      // re-run replaces each leg's files in the same draft.
+                      const releases = await github.paginate(github.rest.repos.listReleases, {
+                          owner,
+                          repo,
+                          per_page: 100,
+                      });
+                      const drafts = releases
+                          .filter((r) => r.draft && r.tag_name === tag)
+                          .sort((a, b) => a.id - b.id);
+                      if (drafts.length > 0) {
+                          core.info(`Using draft ${drafts[0].id} for ${tag}`);
+                          core.setOutput('release_id', String(drafts[0].id));
+                          return;
+                      }
+                      const { data } = await github.rest.repos.createRelease({
+                          owner,
+                          repo,
+                          tag_name: tag,
+                          name: `Blackout Desktop ${tag}`,
+                          draft: true,
+                          prerelease: false,
+                          target_commitish: context.sha,
+                      });
+                      core.info(`Created draft ${data.id} for ${tag}`);
+                      core.setOutput('release_id', String(data.id));
 
-    steps:
-      - name: Checkout
-        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+    build:
+        # Never on a pull request (it needs the signing secrets and the Rust
+        # toolchain), and only once create-release has a draft for the tag.
+        needs: create-release
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/release-')
+        permissions:
+            contents: write
+        strategy:
+            fail-fast: false
+            matrix:
+                include:
+                    - os: ubuntu-22.04
+                      bundle: 'deb,rpm,appimage'
+                    - os: macos-latest
+                      bundle: 'app,dmg'
+                    - os: windows-latest
+                      bundle: 'msi,nsis'
+        runs-on: ${{ matrix.os }}
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
+        steps:
+            # Fails in seconds, before the build, if create-release gave no id.
+            # tauri-action reads the input with Number(), so an empty, 0 or
+            # non-numeric id would make it look the release up by tag after
+            # the build instead (and, with no releaseName, create none).
+            - name: Require the draft's id
+              shell: bash
+              env:
+                  RELEASE_ID: ${{ needs.create-release.outputs.release_id }}
+              run: |
+                  case "$RELEASE_ID" in
+                      '' | 0* | *[!0-9]*)
+                          echo "::error::create-release gave no release id"
+                          exit 1
+                          ;;
+                  esac
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v5
-        with:
-          version: 9.15.4
+            # This job's token can publish the draft, so what runs here with
+            # it matters. persist-credentials false keeps it out of
+            # .git/config, where every later step (pnpm's install scripts,
+            # cargo's build scripts) could read it; nothing in the build
+            # uses it (Cargo.lock has no git source, pnpm-lock.yaml no git
+            # dependency), and the build check builds this way. The three
+            # setup actions below are the commits the build check pins,
+            # which built on all three runners in run 41461856327, so a moved
+            # tag or branch cannot change what runs with the token. The
+            # token still reaches the build itself: tauri-action gets
+            # GITHUB_TOKEN in its environment, which beforeBuildCommand and
+            # the build scripts inherit (the record's item 6 says what a
+            # build-only leg plus a separate upload job would change).
+            - name: Checkout
+              uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+              with:
+                  persist-credentials: false
 
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+            - name: Setup Node
+              uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6
+              with:
+                  node-version: 22
 
-      - name: Install Linux deps
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+            - name: Setup pnpm
+              uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v5
+              with:
+                  version: 9.15.4
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+            - name: Setup Rust
+              uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
 
-      # tauri.conf.json references icons/32x32.png, icon.ico, icon.icns, etc.,
-      # which are generated from src-tauri/icons/blackout.svg and gitignored.
-      # Generate them here (cross-platform CLI invocation) before tauri build.
-      - name: Generate app icons
-        working-directory: blackout-desktop
-        run: pnpm tauri icon src-tauri/icons/blackout.svg --output src-tauri/icons
+            - name: Install Linux deps
+              if: runner.os == 'Linux'
+              run: |
+                  sudo apt-get update
+                  sudo apt-get install -y libwebkit2gtk-4.1-dev libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
 
-      - name: Import Apple certificate
-        if: runner.os == 'macOS'
-        env:
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          KEYCHAIN_PASSWORD: ${{ secrets.APPLE_KEYCHAIN_PASSWORD }}
-        run: |
-          echo "$APPLE_CERTIFICATE" | base64 --decode > certificate.p12
-          security create-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
-          security default-keychain -s build.keychain
-          security unlock-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
-          security import certificate.p12 -k build.keychain -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
-          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" build.keychain
+            - name: Install dependencies
+              run: pnpm install --frozen-lockfile
 
-      - name: Setup Windows signing
-        if: runner.os == 'Windows'
-        shell: pwsh
-        env:
-          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
-        run: |
-          [IO.File]::WriteAllBytes('certificate.pfx', [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE))
+            # tauri.conf.json references icons/32x32.png, icon.ico, icon.icns, etc.,
+            # which are generated from src-tauri/icons/blackout.svg and gitignored.
+            # Generate them here (cross-platform CLI invocation) before tauri build.
+            - name: Generate app icons
+              working-directory: blackout-desktop
+              run: pnpm tauri icon src-tauri/icons/blackout.svg --output src-tauri/icons
 
-      - name: Build Tauri bundles
-        uses: tauri-apps/tauri-action@v0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          WINDOWS_CERTIFICATE_THUMBPRINT: ${{ secrets.WINDOWS_CERTIFICATE_THUMBPRINT }}
-          TAURI_UPDATER_PUBKEY: ${{ secrets.TAURI_UPDATER_PUBKEY }}
-        with:
-          projectPath: blackout-desktop
-          tagName: ${{ github.ref_name }}
-          releaseName: Blackout Desktop ${{ github.ref_name }}
-          releaseDraft: false
-          prerelease: false
-          includeUpdaterJson: true
-          args: --bundles ${{ matrix.bundle }}
+            - name: Import Apple certificate
+              if: runner.os == 'macOS'
+              env:
+                  APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+                  APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+                  KEYCHAIN_PASSWORD: ${{ secrets.APPLE_KEYCHAIN_PASSWORD }}
+              run: |
+                  echo "$APPLE_CERTIFICATE" | base64 --decode > certificate.p12
+                  security create-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+                  security default-keychain -s build.keychain
+                  security unlock-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+                  security import certificate.p12 -k build.keychain -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+                  security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" build.keychain
+
+            - name: Setup Windows signing
+              if: runner.os == 'Windows'
+              shell: pwsh
+              env:
+                  WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+              run: |
+                  [IO.File]::WriteAllBytes('certificate.pfx', [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE))
+
+            # tauri-action uploads by releaseId without reading the release's
+            # state (src/index.ts 178 and 211-241), and create-release looks
+            # for a published release only when it runs. "Re-run failed jobs"
+            # re-runs only the failed legs and hands them create-release's
+            # output from the earlier attempt, so without this step a leg
+            # re-run after a person had published the release would replace
+            # its files, and merge latest.json, in the live release. So here,
+            # as the last step before tauri-action, the leg reads the release
+            # by id and stops unless it is still a draft. A release published
+            # after this check, while tauri-action builds (minutes), still
+            # gets this leg's uploads: the release doc says to wait for all
+            # three legs, and to rebuild a published release from a new
+            # release-* tag. gh is on all three runner images and reads
+            # GH_TOKEN; the id is a positive integer (the first step), so it
+            # cannot change the API path.
+            - name: Require that the release is still a draft
+              shell: bash
+              env:
+                  GH_TOKEN: ${{ github.token }}
+                  RELEASE_ID: ${{ needs.create-release.outputs.release_id }}
+              run: |
+                  if ! draft=$(gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" --jq .draft); then
+                      echo "::error::could not read release $RELEASE_ID, so nothing is uploaded"
+                      exit 1
+                  fi
+                  if [ "$draft" != true ]; then
+                      echo "::error::release $RELEASE_ID is not a draft (draft: $draft), so nothing is uploaded into it; push a new release-* tag instead of re-running"
+                      exit 1
+                  fi
+                  echo "Release $RELEASE_ID is still a draft."
+
+            # Pinned to the commit that was read: this job relies on v0.6.2's
+            # src/index.ts 178 (with releaseId set, no release is looked up or
+            # created by tag) and src/create-release.ts 100-101 (without
+            # releaseName it cannot create a release at all).
+            - name: Build Tauri bundles
+              uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0.6.2
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+                  TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+                  APPLE_ID: ${{ secrets.APPLE_ID }}
+                  APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+                  APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+                  WINDOWS_CERTIFICATE_THUMBPRINT: ${{ secrets.WINDOWS_CERTIFICATE_THUMBPRINT }}
+                  TAURI_UPDATER_PUBKEY: ${{ secrets.TAURI_UPDATER_PUBKEY }}
+              with:
+                  projectPath: blackout-desktop
+                  # The draft create-release made; every upload goes there.
+                  releaseId: ${{ needs.create-release.outputs.release_id }}
+                  # Only for latest.json's download URLs, which then name
+                  # /download/<this tag>/ rather than /latest/download/
+                  # (src/upload-version-json.ts 191-197; README caveats). With
+                  # releaseId set it neither finds nor creates a release.
+                  tagName: ${{ github.ref_name }}
+                  # Read only when releaseId is empty, which the first step
+                  # refuses; the README asks for it whenever tagName names a
+                  # draft.
+                  releaseDraft: true
+                  includeUpdaterJson: true
+                  args: --bundles ${{ matrix.bundle }}
