@@ -27,11 +27,11 @@ filed every key under ``b"ssh-rsa"``, as upstream does, while Twisted offers the
 signature algorithms of the key it holds and then looks the negotiated one up
 by key type, so an Ed25519 or ECDSA key at ``ssh_priv_key_path`` started without
 a word and every connection failed. ``synapse/config/server.py`` now also
-refuses, at config load and for a process that starts a manhole listener, a
-public key at ``ssh_priv_key_path``, a configured public key that is not the
-private key's public half, an EC key on a curve
-Twisted has no SSH key type for (which loads, and which ``manhole()`` would
-otherwise fail on with a bare KeyError), and a DSA key (every ssh-dss
+refuses, at config load and when the config declares a manhole listener for
+the process it is loaded as, a public key at ``ssh_priv_key_path``, a
+configured public key that is not the private key's public half, an EC key on
+a curve Twisted has no SSH key type for (which loads, and which ``manhole()``
+would otherwise fail on with a bare KeyError), and a DSA key (every ssh-dss
 signature uses SHA-1, and one whose subgroup order is 224 or 256 bits, as in
 every standard DSA key larger than 1024 bits, loads from a PEM file and then
 fails, in practice, every key exchange). Without a manhole listener the keys
@@ -233,8 +233,9 @@ def _write_openssh_dsa_key(directory: str, name: str, key: Key) -> Tuple[str, st
 # The main process starts the manhole listeners in `listeners` (with the one
 # the `manhole` option adds), a worker those in `worker_listeners` (with the
 # one `worker_manhole` adds): synapse/app/homeserver.py and
-# synapse/app/generic_worker.py. The host-key check runs only for a process
-# that starts one.
+# synapse/app/generic_worker.py. The host-key check runs only when the config
+# declares one for the process it is loaded as, whether or not that process
+# starts it (synapse.app.admin_cmd starts none and is checked all the same).
 _HTTP_LISTENER: Dict[str, Any] = {"port": 0, "type": "http"}
 _MANHOLE_LISTENER: Dict[str, Any] = {
     "port": 9000,
@@ -631,14 +632,15 @@ class ManholeKeyConfigTestCase(TestCase):
 
 
 class ManholeListenerTestCase(TestCase):
-    """The host-key check runs only for a process that starts a manhole.
+    """The host-key check runs only when the config declares a manhole listener.
 
     Upstream loads `manhole_settings` whatever the listeners. The fork's check
     did the same from the round that added it (2026-11-02) until the change's
     eleventh round, so a homeserver with no manhole listener and a stale
     `manhole_settings` block, which loaded on `develop`, stopped at startup.
-    The check now runs only when the process the config is loaded for starts a
-    manhole listener.
+    The check now runs only when the config declares a manhole listener for the
+    process it is loaded as: the listeners the main process or the worker would
+    start.
     """
 
     def _bad_configs(self) -> List[Tuple[str, str, Optional[str], str]]:

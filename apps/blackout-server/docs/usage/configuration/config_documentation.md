@@ -695,12 +695,16 @@ on the manhole [here](../../manhole.md). Manhole sub-options include:
   that is not the public half of that private key, or a DSA key or an EC key
   on a curve other than P-256, P-384 or P-521 at `ssh_priv_key_path`, or at
   `ssh_pub_key_path` beside a private key, stops startup with a configuration
-  error. Those checks run only for a process that starts a manhole listener
-  (in the main process a `type: manhole` entry in `listeners` or the `manhole`
-  option, in a worker one in `worker_listeners` or the `worker_manhole`
-  option), so a `manhole_settings` block left over on a homeserver that runs
-  no manhole does not stop it; a key file that cannot be read stops startup
-  either way. `ssh_pub_key_path` without
+  error. Those checks run only when the configuration declares a manhole
+  listener for the process it is loaded as (for the main process a
+  `type: manhole` entry in `listeners` or the `manhole` option, for a worker
+  one in `worker_listeners` or the `worker_manhole` option), so a
+  `manhole_settings` block left over on a homeserver that runs no manhole does
+  not stop it; a key file that cannot be read stops startup either way. They
+  follow the configuration, not what the process starts:
+  `synapse.app.admin_cmd`, which starts no listener, is checked as the main
+  process when given the homeserver's configuration, and as the worker when
+  given a worker configuration. `ssh_pub_key_path` without
   `ssh_priv_key_path` cannot be used, since a host key must be able to sign,
   and is ignored with a warning.
   Upstream Synapse falls back to a keypair hardcoded in its source when these

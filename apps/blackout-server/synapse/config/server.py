@@ -1089,7 +1089,7 @@ def parse_listener_def(num: int, listener: Any) -> ListenerConfig:
 def _starts_manhole_listener(
     config: JsonDict, listeners: Iterable[ListenerConfig]
 ) -> bool:
-    """Whether the process this config is loaded for starts a manhole listener.
+    """Whether the config declares a manhole listener for the process it names.
 
     A Blackout addition (PATCHES.md, 2026-11-02 Twisted entry), which decides
     whether `_check_manhole_host_key` runs: a homeserver that starts no manhole
@@ -1101,7 +1101,11 @@ def _starts_manhole_listener(
     (`synapse/app/generic_worker.py`). `WorkerConfig` parses the worker's
     listeners after this class, so they are read from the raw config here, and
     a `worker_app` of `synapse.app.homeserver` names the main process, as
-    `WorkerConfig` canonicalises it.
+    `WorkerConfig` canonicalises it. It reads the config, not what the process
+    goes on to start: `synapse.app.admin_cmd` starts no listener, and loads the
+    homeserver's config with no `worker_app` (setting its own afterwards), so
+    it is checked as the main process, or, given a worker config, as that
+    worker.
     """
     worker_app = config.get("worker_app")
     if worker_app is None or worker_app == "synapse.app.homeserver":
@@ -1124,11 +1128,12 @@ def _check_manhole_host_key(
     """Refuse a manhole host key the SSH server cannot use or should not offer.
 
     A Blackout addition (PATCHES.md, 2026-11-02 Twisted entry). Upstream loads
-    both files without comparing them. Called only when the process starts a
-    manhole listener (`_starts_manhole_listener`). The manhole files the host
-    key under the private key's own type and serves `pub_key` as its public
-    half (`synapse/util/manhole.py`), so each of these would start a manhole
-    on which no SSH session completes, or stop startup with a bare KeyError:
+    both files without comparing them. Called only when the config declares a
+    manhole listener for the process it is loaded as (`_starts_manhole_listener`).
+    The manhole files the host key under the private key's own type and serves
+    `pub_key` as its public half (`synapse/util/manhole.py`), so each of these
+    would start a manhole on which no SSH session completes, or stop startup
+    with a bare KeyError:
 
     - a key on a curve Twisted has no SSH key type for (an EC key other than
       P-256, P-384 or P-521, which only a PEM file can hold: ssh-keygen cannot
