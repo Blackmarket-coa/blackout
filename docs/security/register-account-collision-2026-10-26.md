@@ -19,7 +19,7 @@ checked only for an existing **Blackout** row, not an existing **Matrix**
 account. A Matrix account can exist without a Blackout row — the two id spaces
 are separate — so a registration naming such an account would write to it
 instead of being refused. The `PUT` with no lookup has been in `registerUser`
-since the Matrix client's first commit on `develop` (`9713cfd181`, 2026-03-23),
+since `registerUser`'s first commit on `develop` (`9713cfd181`, 2026-03-23 UTC),
 and `/register` has called it since that same commit, so every build of the API
 from that commit to the merge of this fix is affected.
 
@@ -61,26 +61,51 @@ the Matrix account is created, and consumed after; with the gate on, an
 unusable or absent token now creates nothing.
 
 The only other admin endpoint that can create an account,
-`POST /_synapse/admin/v1/register` (nonce flow), is used only by an operations
-shell script (`infra/single-server-baseline/synapse/verify-launch.sh`), not by
-the API, and takes no caller-chosen name.
+`POST /_synapse/admin/v1/register` (the shared-secret nonce flow), is used only
+by an operations shell script
+(`infra/single-server-baseline/synapse/verify-launch.sh`), not by the API, and
+takes no caller-chosen name.
 
 ## What an operator should check
 
 Whether the first gap was used before the fix is deployed can be read from the
-homeserver. The API recorded nothing that marks such a request on its own: each
-registration row is ordinary by itself. One cross-check on the API side does
-exist and is listed last.
+homeserver's access log only for the period that log still covers, and the
+affected code has been on `develop` since March 2026 (above). For any earlier
+period nothing answers the question for certain: what remains are two traces in
+room timelines and one cross-check on the API side, each of which can find an
+account written to but none of which can clear one. The API recorded nothing
+that marks such a request on its own: each registration row is ordinary by
+itself.
 
 -   **Synapse's access log.** Every account the API created is a
     `PUT /_synapse/admin/v2/users/…` made with the bot's token. A new account
     answers `201`; a `200` means an existing account was modified. Look at the
     admin accounts (`users.admin = 1` in Synapse's database) and the bot
-    account first.
+    account first. The log reaches back only as far as the server keeps it.
+    The homeserver template
+    (`infra/single-server-baseline/synapse/homeserver.yaml.template`) points
+    `log_config` at a file on the server that the repository does not hold.
+    The logging configuration Synapse generates rotates the log at midnight
+    and keeps 3 earlier files, and the Docker image's template keeps 6, so
+    unless the server was set to keep more, or the log is shipped elsewhere,
+    it covers days, not months.
 -   **The account's own trail.** An account written to this way was signed out
     of all its devices (Synapse keeps the token that made the request, so for
     the bot account: all but the API's own token), its display name was set to
-    its localpart, and its password became the one the request carried.
+    its localpart, and its password became the one the request carried. Two
+    parts of that trail are events in rooms, timestamped, and last as long as
+    those rooms' history rather than the log. Where the display name changed,
+    Synapse re-sent the account's membership in every room it was joined to,
+    so each of those rooms holds a membership event of the account carrying
+    its localpart as display name. And a registration that went through then
+    joined the account to the welcome room through the admin join API
+    (`autoJoinWelcomeRoom` in `packages/api/src/routes/auth.ts`, in builds
+    from `992b55295f`, 2026-05-24 UTC, wherever `WELCOME_MATRIX_ROOM_ID` was
+    set or the alias `#welcome:<domain>` resolved). Where that join succeeded
+    for an account that was not already a member, it left a join in that
+    room's timeline. Either can have an ordinary cause: an account's owner may
+    set its display name to its localpart, and an account may join the welcome
+    room by itself.
 -   **The API's `users` table.** The API creates the Blackout `users` row and
     the Matrix account together, with the row's `username` as the account's
     localpart. So a `users` row whose username is the localpart of an account
@@ -92,7 +117,8 @@ exist and is listed last.
     later made a server admin has such a row legitimately. For a burner's or
     an account-number account's localpart a row is not a sign by itself:
     `/matrix/exchange`, where provisioning is trusted, creates one with that
-    username legitimately. The access log covers every kind of account.
+    username legitimately. The access log covers every kind of account, for
+    the period it reaches.
 
 ## After upgrading
 
@@ -150,10 +176,16 @@ exist and is listed last.
 2. Read Synapse's access log, as described above, for every period in which
    an affected image served the route with no block in front of it: from the
    first deploy of a build from `9713cfd181` or later until the block was in
-   place, and any later interval in which the block was off (after a proxy
-   restart that followed a sync, for instance). A
-   `PUT /_synapse/admin/v2/users/…` made with the bot's token that answered
-   `200` modified an existing account. After the upgrade, the error log
+   place, any later interval in which the block was off (after a proxy restart
+   that followed a sync, for instance), and any period in which an API process
+   started before 2026-08-31 (UTC) served `/api/auth/register`, which the block
+   does not cover (see "Disclosure"). A `PUT /_synapse/admin/v2/users/…` made
+   with the bot's token that answered `200` modified an existing account. For
+   the part of those periods that the log no longer covers, look for the room
+   traces and the `users` rows described above, and treat the homeserver's
+   admin accounts and the bot account as possibly written to: reset their
+   passwords as a precaution (for the bot, the way step 3 says) and rotate
+   `MATRIX_BOT_TOKEN`. After the upgrade, the error log
    `matrix.account_create_updated_existing` marks the residual race described
    under "What the fix does not close".
 3. For each account found: its password is the one the request carried, so
@@ -184,7 +216,10 @@ exist and is listed last.
    (2026-11-02) and the single-process override (2026-11-08), belong to the
    separate fix named in "Disclosure": they come off once that fix is
    deployed, by its steps, which remove both and restore the `worker`. Leave
-   them in place until then, whichever fix is deployed first.
+   them in place until then, whichever fix is deployed first. Once both fixes
+   serve production, none of the three is left: no override, no
+   `BLACKOUT_AUTH_ROWS_PRUNE=0`, the `worker` running again, and no block on
+   `/v1/auth/register`.
 
 ## What the fix does not close
 
@@ -199,23 +234,25 @@ implicit.
    `PUT` has already run, so **the refusal does not undo the password reset**
    that write applied to the pre-existing account: its password is now the one
    the caller sent. The error log is the operator signal. Closing this fully
-   needs an atomic create-if-absent, which the admin API does not offer; the
-   nonce-based `POST /_synapse/admin/v1/register` is create-only and is the
-   candidate if this is ever load-bearing.
+   needs an atomic create-if-absent, which the bot-token admin `PUT` does not
+   offer. The shared-secret `POST /_synapse/admin/v1/register` is create-only
+   but needs the homeserver's registration shared secret, which the API is not
+   given; it is the candidate if this is ever load-bearing.
 
-2. **An invitation used up between preview and redeem.** On `/register` the
-   token is previewed before anything is created and consumed after. If its
-   last use goes elsewhere in that gap, the redeem fails and the route rolls
-   back — but only the local row; the Matrix account was already created, with
-   the caller's chosen password, and stays. The request is still refused
-   (`400 invite_token_invalid`) and issues no Blackout session, but the
+2. **An invitation that stops being usable between preview and redeem.** On
+   `/register` the token is previewed before anything is created and consumed
+   after, and the redeem checks it again. If in that gap its last use goes
+   elsewhere, it is revoked, or it expires, the redeem fails and the route
+   rolls back — but only the local row; the Matrix account was already
+   created, with the caller's chosen password, and stays. The request is still
+   refused (`400 invite_token_invalid`) and issues no Blackout session, but the
    homeserver account exists and the caller knows its password: they can sign
    in to the homeserver directly and, where exchange provisioning is trusted
    (`BLACKOUT_MATRIX_EXCHANGE_TRUSTED_HS`, which account-number sign-up also
    needs), obtain a Blackout session through `/matrix/exchange`, which
    provisions a row for that localpart and checks no invitation. The
-   invitation was genuinely usable at preview, so this is a race on its final
-   use, not a bypass of the gate.
+   invitation was genuinely usable at preview, so this is a race with its
+   final use, its revocation or its expiry, not a bypass of the gate.
 
 ## Verification
 
@@ -242,22 +279,28 @@ only; nothing was exercised against a real Synapse.
 -   **2026-10-26.** Found and fixed in this change set, against `develop` at
     `3c3c05c`.
 -   **2026-11-02.** The operator confirmed the interim measure in production:
-    the reverse proxy (Caddy) answers `503` to `POST /v1/auth/register`, so the
-    affected route cannot be reached while the block is in place. That is the
-    only path that served the route: its `/api` alias has been off since
-    2026-08-31 (`API_ALIAS_REMOVAL_DATE` in `packages/api/src/index.ts`). The
-    block is in the server's copy of `deploy/docker/production/Caddyfile`;
-    "After upgrading" step 1 says how it behaves across a deploy, what removes
-    it, and how to take it off. The shipped web client does not call
-    `/v1/auth/register` (its sign-up is `/v1/auth/account-number`), and burner
-    and account-number sign-up choose server-derived names, so the block takes
-    nothing away from them.
--   **2026-11-08.** Production moved to a single API process: a
-    `docker-compose.override.yml` on the server has the app run the background
-    loops and scales the `worker` to 0. That is the operator's interim measure
-    for a separate fix, to the API store's writes across processes, which has
-    its own record and advisory; it does not bear on this route, only on how
-    this fix is deployed ("After upgrading" step 1). The same day the operator
-    decided that this fix is published with its pull request to `develop`,
-    with CI, and that the GitHub security advisory for it is published when
-    that pull request merges. The proxy block stays until the fix is deployed.
+    the reverse proxy (Caddy) answers `503` to `POST /v1/auth/register`, so
+    that path cannot be reached while the block is in place. An API process
+    started on or after 2026-08-31 (UTC) serves the route on no other path:
+    `packages/api/src/index.ts` decides once, at start-up, whether to mount the
+    `/api` alias, and mounts it only before `API_ALIAS_REMOVAL_DATE`. A process
+    started earlier also serves `/api/auth/register` until it restarts, and the
+    block does not cover that path. The block is in the server's copy of
+    `deploy/docker/production/Caddyfile`; "After upgrading" step 1 says how it
+    behaves across a deploy, what removes it, and how to take it off. The
+    shipped web client does not call `/v1/auth/register` (its sign-up is
+    `/v1/auth/account-number`), and burner and account-number sign-up choose
+    server-derived names, so the block takes nothing away from them.
+-   **2026-11-08.** Production moved to a single API process, the operator's
+    interim measure for a separate fix, to the API store's writes across
+    processes, which has its own record and advisory. Until that day the
+    `worker` ran the background loops as a second process beside `app`; from
+    then until that fix is deployed, a `docker-compose.override.yml` on the
+    server has `app` run them and scales the `worker` to 0. The measure does
+    not bear on this route, only on how this fix is deployed ("After
+    upgrading" step 1). It changes the app's environment, so production's API
+    has run since then in a container started that day, which does not mount
+    the `/api` alias. The same day the operator decided that this fix is
+    published with its pull request to `develop`, with CI, and that the GitHub
+    security advisory for it is published when that pull request merges. The
+    proxy block stays until the fix is deployed.

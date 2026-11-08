@@ -303,9 +303,10 @@ auth.post('/register', async (c) => {
     // Redeem the invitation, if one was presented. Done after Matrix
     // provisioning so the auto-room-invite can target the freshly-minted
     // Matrix account. The token was previewed up front, so an unusable one
-    // created nothing; it can still fail here if its last use went elsewhere
-    // between that preview and now, and the rollback below then deletes only
-    // the local row — the Matrix account stays, created with the caller's
+    // created nothing; it can still fail here if it stopped being usable
+    // between that preview and now (its last use went elsewhere, it was
+    // revoked, or it expired), and the rollback below then deletes only the
+    // local row — the Matrix account stays, created with the caller's
     // password. That residual window is noted in
     // docs/security/register-account-collision-2026-10-26.md.
     let inviteRedemption:
