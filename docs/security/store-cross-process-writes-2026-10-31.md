@@ -11,10 +11,11 @@ run to show both, what it leaves open, and what the operator has to decide.
 
 **Rating:** High. Fixed by this change, the pull request from
 `claude/bmc-transmutation-strategy-6jenal-v49` to `develop`; every `develop`
-commit from `eb71cc56c3` (the merge of #878, 2026-08-10, which added the
-store's Postgres writer with the resync) up to that merge has the defect. The
-dates and the operator's interim measures are under "Disclosure"; what to do
-at deploy is under "After upgrading".
+commit from `8d3ec56471` (the merge of #728, 2026-05-25, which added
+`pgWriter.ts` with `resyncMap`) up to that merge has the defect, which needs
+more than one process on one database (S1). The dates and the operator's
+interim measures are under "Disclosure"; what to do at deploy is under "After
+upgrading".
 **State read:** `develop` at `ff7d08bfa0`. The fix is the commits after it on the
 branch (listed under "Commits"). The branch has since merged `develop` three
 times, at `f6da7b7d16` (`a0f6012736`), at `7bda9eb72a` (`51a37fa8b9`) and at
@@ -32,7 +33,10 @@ review found two medium findings, both fixed (under "Changed after review round
 round 3"). The sections below describe the code after those changes. A
 review of the text for publication found four sentences in this record that
 were not exact; they are corrected (under "Changed in the publication
-review").
+review"). A second review of that text found five more points, four of them
+in this record (the affected range, the mutation result S1 quoted, the
+signed-in triggers and "After upgrading" step 4); they are corrected (under
+"Changed in the second publication review").
 
 | ID  | Finding                                                                                                                                                                         | Verified                     | Disposition                                                               |
 | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- | ------------------------------------------------------------------------- |
@@ -58,10 +62,10 @@ review").
     neither of them a security table: the daily retention sweep
     (`coalition_external_activity`, when a quarantined reply is due) and, with
     the FBM bridge on, the flash-mob pin sweeper (`coalition_spatial_items`)
-    (S1). The triggers a request reaches (sign-up rollback, the token
-    consumes, sign-out, token refresh, revoke-all, a password change, account
-    deletion, unlinking an account, the keyed deletes) stayed live in the
-    code. In the operator's deployment, the sign-up route whose rollback S1
+    (S1). The triggers a request reaches (S1 lists them; among them sign-up
+    rollback, the token consumes, sign-out, token refresh, revoke-all, a
+    password change, account deletion, unlinking an account, completing an
+    account link and the keyed deletes) stayed live in the code. In the operator's deployment, the sign-up route whose rollback S1
     lists (`POST /v1/auth/register`) has answered `503` at the reverse proxy
     since the same day, a separate measure, recorded with the fix for that
     route; the other routes S1 lists, the consumes that need no sign-in among
@@ -120,10 +124,17 @@ So, for one resync of a table, by the process P that ran it:
     (`routes/auth-oidc.ts`) each consume a row (#2, #3, #14), which resynced
     `password_reset_tokens`, `email_verification_tokens` or
     `pending_oidc_logins`.
--   Any signed-in account: logout and refresh (`services/refreshToken.ts`),
-    revoke-all and password change (`routes/auth.ts`), account deletion
-    (`services/accountLifecycle.ts`), unlinking an account, and deleting a vault
-    item, a webhook or a bridge.
+-   Any signed-in account, among others: logout and refresh
+    (`services/refreshToken.ts`), revoke-all and password change
+    (`routes/auth.ts`), account deletion (`services/accountLifecycle.ts`),
+    unlinking an account, completing a third-party account link (the callback
+    consumes its row of `pending_oauth_links`, #12), unfollowing (#33),
+    accepting a bounty application (#10), the mesh relay's enqueue and sync
+    (#34, #35), posting or voting on a coliseum argument (the score
+    recompute, #37), and the other keyed deletes (#16 to #29, #36, #38), such
+    as deleting a vault item, a webhook, a bridge, a clip, an extension panel,
+    a creator listing or a channel-points reward. The per-mutator table under
+    "The fix" lists every mutator that resynced.
 -   The process that runs the background loops (the `worker` in the production
     compose file), with no request at all. The auth-rows prune
     (`services/authRowsPruneScheduler.ts`) runs at boot and then hourly,
@@ -173,13 +184,21 @@ by the two original probes and the design's three lenses).**
     webhooks, stream destinations, purged tokens).
 
 The regression tests below are those runs: X1 and X2 are the two original
-probes (`resync-revoked` and `resync-users`). With `develop`'s specs they fail,
-with every other new cross-process test but one, on PGlite and on PostgreSQL
-16.15 (Mutation checks, below).
+probes (`resync-revoked` and `resync-users`). Before review round 1, with the
+36 cross-process tests of that time, `develop`'s specs on this branch's writer
+and receivers made 25 of them fail, X1 and X2 among them and every new one but
+X11b, on PGlite and on PostgreSQL 16.15. With today's 41 tests that run does
+not finish: a test never settles and the rest are cancelled (Mutation checks,
+below).
 
 **Detection.** A resync that destroyed rows finished normally: nothing was
 logged, counted or kept. The lost and reverted rows cannot be rebuilt from
-Postgres, and whether any loss happened in production is unknown.
+the live database, and whether any loss happened in production is unknown.
+Comparing earlier database backups with the current tables may show some
+rows that disappeared or reverted, but not every loss: a row written and
+destroyed between two backups is in neither. The repository's production
+cron file schedules a nightly `pg_dump` (`scripts/backup.sh` in
+`deploy/docker/production/cron/production-ops.cron`).
 
 ## The fix (PR 1)
 
@@ -516,7 +535,8 @@ comments; this record's commit changes only the record); "R4" is
 is `51a37fa8b9`, the merge of `develop` at `7bda9eb72a`, run before this
 record's publication commit (`e30c6d5c4f`), which changes only this record;
 "P2" is `f2054bd111`, the merge of `develop` at `27d8c17051`, run before the
-commit after it, which changes only this record:
+two commits after it, `800117a955` and the second publication review's, which
+change only this record:
 
 | Gate                                                                     | Result                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -846,14 +866,27 @@ interim measures dated under "Disclosure".
    later sign-out still accepts that token until it expires. An operator who
    instead accepts that a revived token expires on its own within 24 hours of
    the deploy (decision 3) skips steps 1 and 2.
-3. **Deploy by hand, with a full stop.** Stop every process on the old code,
-   the worker and every API replica, before starting any on the new code, so
-   old and new store code never run side by side: an old process still resyncs
-   whole tables and ignores `'k'` (O7, decision 2). No canary overlay and no
-   rolling replacement. With production on one process ("Disclosure"), that is
-   one process stopped and one started, with the server's
-   `docker-compose.override.yml` and `BLACKOUT_AUTH_ROWS_PRUNE=0` still in
-   place. The `canary` job of `.github/workflows/deploy-compose-prod.yml`
+3. **Deploy by hand, with a full stop, on a named image.** Stop every process
+   on the old code, the worker and every API replica, before starting any on
+   the new code, so old and new store code never run side by side: an old
+   process still resyncs whole tables and ignores `'k'` (O7, decision 2). No
+   canary overlay and no rolling replacement. The production compose file
+   runs `app` and `worker` from
+   `ghcr.io/blackmarket-coa/blackout:${APP_IMAGE_TAG:-stable}`, and compose
+   takes `APP_IMAGE_TAG` from the shell or, when the shell does not set it,
+   from the stack directory's `.env` (`.env.example` sets `stable`). So first
+   set `APP_IMAGE_TAG` in that `.env` to the tag of an image built from
+   `develop` at or after the merge of this change, and check that the shell
+   does not export another value (`echo "${APP_IMAGE_TAG-unset}"` prints
+   `unset`); every `docker compose` command in this step and in step 4 then
+   uses that image. (`stable` is published only by `release.yml`, for a `v*`
+   tag, and the repository had no tag on 2026-11-08; `docker.yml` publishes
+   `latest` and `main-` with the commit's short sha.) With production on one process
+   ("Disclosure"), the deploy is one process stopped and one started, with
+   the server's `docker-compose.override.yml` and `BLACKOUT_AUTH_ROWS_PRUNE=0`
+   still in place: in the stack directory, `docker compose pull app`, then
+   `docker compose stop app`, then `docker compose up -d app`; afterwards
+   `docker compose images app` shows the new tag. The `canary` job of `.github/workflows/deploy-compose-prod.yml`
    starts `app_canary` beside `app`, so it does not fit. That job and
    `full-rollout` also sync `deploy/docker/production/` to the server with
    `rsync --delete`, which replaces the server's `Caddyfile` and removes every
@@ -865,19 +898,25 @@ interim measures dated under "Disclosure".
    its container is recreated; put it back. The change adds no migration.
 4. **Then end this change's interim measures.** Once the new process serves,
    delete the line `BLACKOUT_AUTH_ROWS_PRUNE=0` from the server's
-   `.env.production`, delete the server's `docker-compose.override.yml`, and
-   run `docker compose up -d` in the stack directory: the app is recreated
-   with `BLACKOUT_BACKGROUND_WORKERS_DISABLED` `'1'` from the compose file
-   again, and the `worker` starts and runs the background loops, both on the
-   new code. Restore any other replicas. With
-   every process on the new code the prune is
+   `.env.production`, delete the server's `docker-compose.override.yml`, and,
+   in the stack directory with step 3's `APP_IMAGE_TAG` still in `.env`, run
+   `docker compose up -d app worker`: the app is recreated with
+   `BLACKOUT_BACKGROUND_WORKERS_DISABLED` `'1'` from the compose file again,
+   and the `worker` starts and runs the background loops. Then check that both
+   run the new image: `docker compose images app worker` shows step 3's tag
+   for both, and `docker compose ps app worker` shows both running. If either
+   shows another tag, stop the worker at once (`docker compose stop worker`)
+   and correct `APP_IMAGE_TAG` before going on: an old worker beside the new
+   app, or two old processes with the prune back on, is what step 3 avoids.
+   Restore any other replicas the same way. With every process on the new
+   code the prune is
    `DELETE FROM revoked_sessions WHERE expires_at <= $1` (#9), so the three
    tables it keeps stop growing; until then expiry is checked on read, and
    nothing is lost by the prune's absence.
-5. **The proxy's `503` on `POST /v1/auth/register` is not part of this
-   change.** It is the interim measure for a separate fix to that route, and
-   comes off when that fix is deployed, by that fix's own steps; leave it in
-   place until then.
+5. **Last, once the fix for `POST /v1/auth/register` is also deployed,
+   remove the proxy's `503` on that route** from the server's `Caddyfile`, by
+   that fix's own steps. It is the interim measure for that separate fix, not
+   part of this change; leave it in place until that fix is live.
 
 ## The other findings
 
@@ -1001,12 +1040,12 @@ were not exact. Four were in this record; the others were in the pull request
 text and the advisory text, which are not in the tree. Each was checked here
 first; all were real. Finding numbers are the review's.
 
-| #   | Finding                                                                                                                                                                                                                                                           | Now                                                                                                                                                                                                                                                                   |
-| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 3   | "Disclosure", decision 1 and S1 called the hourly prune "the one trigger that needs no request". The retention sweep (at boot and daily, on by default) and, with the FBM bridge on, the flash-mob pin sweeper also resynced a table with no request (#32, #30)   | "The one request-less trigger on the security tables". S1 lists the two sweeps with their tables and switches; decision 1 says they still run                                                                                                                         |
-| 4   | "Disclosure" said the sign-up rollback trigger "stayed live" from 2026-11-02. In the operator's deployment the proxy has answered `503` to `POST /v1/auth/register` since that day, and a deploy that syncs the stack directory replaces the server's `Caddyfile` | "Disclosure" says the route has been blocked at the proxy since then, as a separate measure, and that the other routes S1 lists stayed reachable. "After upgrading" step 3 says such a sync lifts the block, and step 5 that it comes off with the fix for that route |
-| 5   | The header said every `develop` commit before the merge has the defect. The resync exists only from `eb71cc56c3` (the merge of #878, 2026-08-10), which added `pgWriter.ts` with `resyncMap`                                                                      | The header gives that range                                                                                                                                                                                                                                           |
-| 7   | Decision 3 offered the JWT rotation as one of two choices while "After upgrading" step 2 instructed it, and no decision on it was recorded                                                                                                                        | Step 2 is the recommended option and says what skipping it means; decision 3 says no decision is recorded                                                                                                                                                             |
+| #   | Finding                                                                                                                                                                                                                                                                                                    | Now                                                                                                                                                                                                                                                                   |
+| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 3   | "Disclosure", decision 1 and S1 called the hourly prune "the one trigger that needs no request". The retention sweep (at boot and daily, on by default) and, with the FBM bridge on, the flash-mob pin sweeper also resynced a table with no request (#32, #30)                                            | "The one request-less trigger on the security tables". S1 lists the two sweeps with their tables and switches; decision 1 says they still run                                                                                                                         |
+| 4   | "Disclosure" said the sign-up rollback trigger "stayed live" from 2026-11-02. In the operator's deployment the proxy has answered `503` to `POST /v1/auth/register` since that day, and a deploy that syncs the stack directory replaces the server's `Caddyfile`                                          | "Disclosure" says the route has been blocked at the proxy since then, as a separate measure, and that the other routes S1 lists stayed reachable. "After upgrading" step 3 says such a sync lifts the block, and step 5 that it comes off with the fix for that route |
+| 5   | The header said every `develop` commit before the merge has the defect. The review put the resync's start at `eb71cc56c3` (the merge of #878, 2026-08-10) by this clone's history; the clone is shallow and `eb71cc56c3` is its graft root, so that start was wrong (second publication review, finding 2) | The header gives the range, from `8d3ec56471` (the merge of #728, 2026-05-25, which added `pgWriter.ts` with `resyncMap`), checked against GitHub                                                                                                                     |
+| 7   | Decision 3 offered the JWT rotation as one of two choices while "After upgrading" step 2 instructed it, and no decision on it was recorded                                                                                                                                                                 | Step 2 is the recommended option and says what skipping it means; decision 3 says no decision is recorded                                                                                                                                                             |
 
 Two more changes came with them. The operator confirmed on 2026-11-08 how
 production runs as one process ("Disclosure"), so decision 1 no longer says
@@ -1018,6 +1057,22 @@ sign-in, needs no sign-in and consumed a row through a resync on `develop`
 (#2, #3, #14; `resync('passwordResetTokens')`, `resync('emailVerificationTokens')`
 and `resync('pendingOidcLogins')` in `pgDescriptors.ts` at `ff7d08bfa0`). S1
 now lists them.
+
+## Changed in the second publication review
+
+A second review of the publication text (2026-11-08), at `800117a955`, found
+five points. Four touched this record; the first and the fourth were also, or
+only, in the pull request text and the advisory text, which are not in the
+tree. Each was checked here first; all were real. Finding numbers are the
+review's.
+
+| #   | Finding                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | Now                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | The pull request text gave the result of `develop`'s specs on this branch's writer and receivers (25 tests failing, X1 and X2 among them) as if it held for the tests this pull request ships, and said it came from this head's code. It came from a run before review round 1, with that code's 36 tests; with today's 41 the run does not finish (the first mutation table). S1 quoted the same result in the present tense                                                                                                                                                                                                | S1 dates it to before review round 1 and says the run does not finish with today's tests. The pull request text says the same, and that the other mutations ran at `a8edded8ab`, whose `packages/api/src` is this head's                                                                                                                                                                                                                           |
+| 2   | The header put the start of the affected range at `eb71cc56c3` (the merge of #878, 2026-08-10). This clone is shallow and `eb71cc56c3` is its graft root, so its history made #878 look as if it added `pgWriter.ts`. On GitHub, `pgWriter.ts` (with `resyncMap`) is the same blob in `eb71cc56c3` and in its first parent `ed547434f2`; it was added by `9adc70f719` and reached `develop` in `8d3ec56471`, the merge of #728 (2026-05-25), whose first parent `2c13c0d972` has no `pgWriter.ts`. At `8d3ec56471` the Kubernetes manifest already ran three replicas and the production compose file an `app` and a `worker` | The header gives the range from `8d3ec56471`, and row 5 of the publication review is corrected. Checked with the GitHub API, since the clone is shallow                                                                                                                                                                                                                                                                                            |
+| 3   | "After upgrading" step 4 said `docker compose up -d` brings up the app and the worker "both on the new code". Both run `ghcr.io/blackmarket-coa/blackout:${APP_IMAGE_TAG:-stable}`; compose takes the tag from the shell or the stack's `.env` (`.env.example`: `stable`); the deploy workflows set it only inside their own ssh session; and step 3 did not name the image. From a fresh shell, step 4 could start an old app and an old worker with the prune back on, the defect the deploy removes                                                                                                                        | Step 3 sets `APP_IMAGE_TAG` in the stack's `.env` to the new image's tag, checks that the shell does not override it, and gives the commands that start the app on it. Step 4 runs `docker compose up -d app worker` with the same tag, checks with `docker compose images` that both run it, and says what to do if not. Step 5 says the proxy's block on `POST /v1/auth/register` comes off last, once that route's fix is live                  |
+| 4   | The advisory said whether any row was lost "cannot be determined after the fact". The repository's production cron file schedules a nightly `pg_dump` and a restore check, and comparing an earlier backup with the current tables can show some losses                                                                                                                                                                                                                                                                                                                                                                       | The advisory says that nothing in the API recorded a loss, that the rows cannot be rebuilt from the live database, and that backups may show some losses but not every one. S1's "Detection" adds the same sentence; its "unknown" was exact and is kept                                                                                                                                                                                           |
+| 5   | The "Any signed-in account" lists (S1, the pull request text, the advisory) read as complete and left out calls that resynced a table on `develop`: completing a third-party account link, which consumes a row of `pending_oauth_links` (#12); unfollowing (#33); accepting a bounty application (#10); the mesh relay (#34, #35); the coliseum score recompute (#37); and the other keyed deletes (#16 to #29, #36, #38)                                                                                                                                                                                                    | Each list says "among others", names those, and points to the per-mutator table. Checked first in `develop`'s callers: `routes/linkedAccounts.ts` passes the signed-in account to `completeFlow`, which consumes the row; `routes/circle.ts` (unfollow), `routes/bounties.ts` (accept), `routes/mesh.ts` (`/enqueue`, `/sync`) and `routes/coliseum.ts` (posting an argument and voting, which recompute the scores) each require a signed-in user |
 
 ## Commits
 
@@ -1055,7 +1110,8 @@ On `claude/bmc-transmutation-strategy-6jenal-v49`, after `ff7d08bfa0`:
 | `51a37fa8b9` | Merge `develop` at `7bda9eb72a` (#996, #997 and the documentation commits after them); no file under `packages/api` changed there                                                                                                                      |
 | `e30c6d5c4f` | For publication: "Disclosure", "After upgrading", the header, decisions 1, 3 and 4, O3, and the gates on the merged head                                                                                                                               |
 | `f2054bd111` | Merge `develop` at `27d8c17051` (#998, with lodash 4.18.1); no file under `packages/api` changed there                                                                                                                                                 |
-| this commit  | The publication review: the header's range, the request-less and unauthenticated triggers, the sign-up block, the rotation as the recommended step, the single process's dated facts, "After upgrading" steps 3 to 5, and the gates on the merged head |
+| `800117a955` | The publication review: the header's range, the request-less and unauthenticated triggers, the sign-up block, the rotation as the recommended step, the single process's dated facts, "After upgrading" steps 3 to 5, and the gates on the merged head |
+| this commit  | The second publication review: the affected range from `8d3ec56471`, S1's mutation result dated, the signed-in triggers, "Detection", and "After upgrading" steps 3 to 5 on a named image                                                              |
 
 Release A of the rollout (decision 2) is the receivers: the first three
 commits. Release B is the rest. Which round-1 receiver fixes can also go
