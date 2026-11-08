@@ -134,8 +134,12 @@ each correction.
     as that server process read it, so one made after the switch fired is
     refused rather than taking the release back; one the database does not
     confirm within 30 seconds is answered as unconfirmed, and a cancel
-    confirmed late removes the copies when it is, while the server process
-    that sent it is still running. While the database
+    confirmed late stops the switch from firing from then on and removes
+    the copies once the server process that sent it has read the switch
+    back, which it tries again until the database answers it; if that
+    process stops first, the copies stay in the database, sealed and given
+    to nobody, until the process that runs the sweep learns the switch is
+    cancelled. While the database
     does not answer, check-ins are refused, and the server treats that time
     as an outage of its own for the switches it kept from moving: one due
     then gets the 72-hour grace window instead of firing; such a stall counts
@@ -161,7 +165,9 @@ each correction.
     pool sets no statement timeout or keepalive, so a write the database
     had received before it went silent stands until that server process is
     restarted where the database's host is gone or the silence outlasts
-    that host's own retransmission of its answer (about 15 minutes); a
+    that host's own retransmission of its answer (about 15 minutes), and
+    until the database answers again or that process is restarted where
+    the database server stops answering on a machine that stays up; a
     switch that falls due meanwhile gets its 72-hour grace window where a
     refused check-in or cancel has been written onto it, or where the sweep
     runs in that same process, and then fires while they are still

@@ -707,7 +707,10 @@ For the source-of-truth triage with tier/owner detail see
     unconfirmed, every further check-in and cancel on that process is
     answered 503 at once, without being sent, so those were certainly not
     recorded, until that write is answered and the switch read back into
-    that server's memory, or the write or that read fails. Nothing on the
+    that server's memory, or the write fails; a read back that fails is
+    tried again on a database connection of its own, given up after 5
+    seconds and tried again 10 seconds after each try that failed, until
+    one is answered, and the refusals last until then. Nothing on the
     server bounds how long that takes. The server's database pool sets no
     connection or statement timeout and no TCP keepalive, so a write the
     database's host had received and acknowledged before it went silent is
@@ -715,7 +718,11 @@ For the source-of-truth triage with tier/owner detail see
     that fenced, powered off or restarted it mid-write), or a network fault
     outlasts the host's own retransmission of its answer (about 15 minutes
     at Linux's defaults), the write stands until that server process is
-    restarted; a fault that heals sooner lets the answer through. A write
+    restarted, and a fault that heals sooner lets the answer through; where
+    the database server stops answering on a machine that stays up (a hung
+    database or disk, a paused container), the write stands until it
+    answers again or that server process is restarted, since neither
+    retransmission nor keepalive ends such a connection. A write
     sent after the database went silent fails, if the silence lasts that
     long, once the operating system gives up: about 15 minutes at Linux's
     defaults on a database connection already open, and about 2 minutes
@@ -723,19 +730,29 @@ For the source-of-truth triage with tier/owner detail see
     timeout, so the connection itself fails); what the server process does
     with that connection's error then is a matter of the database pool's
     handling of connection errors, which a separate change addresses. The
-    switch's read back has the same lack of bound. Until it ends, that
-    server's view of the switch, and so your data export from it, is the
-    one before the write, except that a check-in or cancel refused and
-    written onto the switch meanwhile (below) is shown once the database
-    answers a new connection from that process (not while every connection
-    of its pool is held). Each check-in refused
+    switch's read back has the same lack of bound while it waits for its
+    answer; one that fails is tried again as above, so it ends once the
+    database answers a new connection from that process (not while every
+    connection of its pool is held). Until it ends, that server's view of
+    the switch, and so your data export from it, is the one before the
+    write, except that a check-in or cancel refused and written onto the
+    switch meanwhile (below) is shown once the database answers a new
+    connection from that process (not while every connection of its pool
+    is held). Each check-in refused
     meanwhile is still written onto the switch, as below, but that holds a
     switch that falls due back for one backlog window only (72 hours, once
     per missed check-in): when the window ends the switch fires while that
     process still refuses every check-in and cancel, unless it has been
-    restarted by then. A cancel the database confirms late takes effect then
-    (the switch shows cancelled and its copies are removed), and a check-in
-    confirmed late counts. The server's own move of a switch
+    restarted by then. A cancel the database confirms late is in force in
+    the database from then: the switch can no longer fire, and nothing is
+    released from it. That server shows it cancelled, removes its sealed
+    copies and tells the server's other processes once the switch has been
+    read back, as above. If that server process stops before then, the
+    copies stay in the database, sealed and given to nobody, until the
+    process that runs the server's sweep learns that the switch is
+    cancelled (when it restarts, or when its sweep reaches the switch's
+    check-in deadline and finds it so), and a process not yet told shows
+    the switch as armed meanwhile. A check-in confirmed late counts. The server's own move of a switch
     (into grace, or firing it) is checked the same way and reaches the
     process's memory only once the database has it, so nothing is served or
     sent for a firing the database refused; one the database does not

@@ -301,11 +301,12 @@ const ownedSwitch = (id: string, subject: string): DeadmanSwitchRecord | undefin
  * a statement the database's host acknowledged before it went silent
  * stands until that process restarts where that host is gone or the
  * silence outlasts the host's own retransmission of its answer, about 15
- * minutes) the switch fires when the window ends with the owner still
- * refused there (rounds 17 and 18). What stays one process's own is its
- * stalls themselves, and a note whose process stopped before its carry
- * landed; and a deadline that falls before the carry lands finds the note
- * uncarried: one in the time before the refusing process's next try once
+ * minutes, and until the database answers where its process stops
+ * answering on a host that stays up) the switch fires when the window ends
+ * with the owner still refused there (rounds 17 to 19). What stays one
+ * process's own is its stalls themselves, and a note whose process stopped
+ * before its carry landed; and a deadline that falls before the carry lands
+ * finds the note uncarried: one in the time before the refusing process's next try once
  * the database answers its new connections again (that try starts within
  * 15 seconds, and one more try later for each connection its pool hands
  * over that the database no longer answers), or while the database answers
