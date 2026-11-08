@@ -7683,6 +7683,29 @@ tests above, where all four were caught, `fix/mut/r14b/`):
 | R21: the last statement's narrowed `WHERE` misses a row whose only remnant is the column | `deadman-switch-writes-postgres.integration.test.ts` | test 33: the column kept on the spent switch |
 | R22: the memory and file stores' erase keeps the refused attempt                         | `deadman-releases.integration.test.ts`               | test 28: the field kept after the deletion   |
 
+The gates on `484c5253ee`, the head of the round's first two commits
+(`fix/gates-r14`, against `origin/develop` at `7bda9eb72a`, merged in by
+`58d64a0264`), all finished and passed: API lint and typecheck; the pr-gate
+suite 2,095 of 2,095 and the post-merge suite 2,215 of 2,215 (round 13's
+2,082 and 2,202, plus thirteen new tests: tests 28 to 36 of the
+switch-writes file, scheduler tests 19 and 20, the file store's test 3 and
+the memory-mode releases file's test 28); launch smoke 14 of 14; the core
+and design builds; the client's typecheck and lint; the client suite 3,643
+passed and 3 skipped in 519 files; the protocol and SDK typechecks;
+dead-drop parity 2 of 2; the migration guard (107 migrations, the latest
+`107_deadman_owner_attempt_refused`) and the ephemeral migration run; the
+trust page; room encryption; the feature
+registry; auth secrets; prettier over the 93 files the branch changes; and
+gitleaks over the branch and over the brief's range. They were run again on
+`619727f51d`, the head of the two commits above (`fix/gates-r14b`, against
+the same merge base; `origin/develop` at `27d8c17051`, not merged), and all
+finished and passed with the same totals (the checks above extend existing
+tests and add none): pr-gate 2,095 of 2,095, post-merge 2,215 of 2,215,
+launch smoke 14 of 14, the client suite 3,643 passed and 3 skipped in 519
+files, dead-drop parity 2 of 2, and every other gate as listed. The commit
+that adds this paragraph changes this record alone; prettier and gitleaks
+were run again on it.
+
 ### Still open
 
 -   **A recipient-side refusal of an owner** (decision 19), which the
