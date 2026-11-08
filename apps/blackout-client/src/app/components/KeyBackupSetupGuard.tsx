@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { forwardRef, useCallback, useMemo, useRef, useState } from 'react';
 import {
     Box,
     Button,
@@ -226,9 +226,15 @@ type KeyBackupExplanationProps = {
     action?: { label: string; onClick: () => void };
 };
 
-export function KeyBackupExplanation({ text, onClose, action }: KeyBackupExplanationProps) {
-    return (
-        <Dialog>
+/**
+ * Forwards its ref to the `Dialog`, as `DeviceVerificationSetup` does:
+ * `KeyBackupGuardOverlay` wraps it in `FocusTrap`, which finds its container
+ * through that ref. A function component without `forwardRef` drops the ref,
+ * so the trap had no container and Tab could leave the overlay.
+ */
+export const KeyBackupExplanation = forwardRef<HTMLDivElement, KeyBackupExplanationProps>(
+    ({ text, onClose, action }, ref) => (
+        <Dialog ref={ref}>
             <Header
                 style={{
                     padding: `0 ${config.space.S200} 0 ${config.space.S400}`,
@@ -256,8 +262,8 @@ export function KeyBackupExplanation({ text, onClose, action }: KeyBackupExplana
                 </Button>
             </Box>
         </Dialog>
-    );
-}
+    )
+);
 
 /**
  * The overlay for `useKeyBackupSetupGuard`: the setup, the reset, an offer
@@ -295,10 +301,17 @@ export function KeyBackupGuardOverlay({ guard }: { guard: KeyBackupSetupGuard })
         body = <KeyBackupExplanation text={texts[panel]} onClose={close} />;
     }
 
+    // `FocusTrap` takes its container from the child's ref once, when the trap
+    // is created, and keeps it. A child of another component type is a new
+    // DOM node, so each type gets its own trap (`key`); the explanation panels
+    // share one component, and React keeps its node between them.
+    const trapKey = panel === 'setup' || panel === 'reset' ? panel : 'explanation';
+
     return (
         <Overlay open backdrop={<OverlayBackdrop />}>
             <OverlayCenter>
                 <FocusTrap
+                    key={trapKey}
                     focusTrapOptions={{
                         initialFocus: false,
                         clickOutsideDeactivates: false,
