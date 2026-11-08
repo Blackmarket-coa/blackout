@@ -30,9 +30,17 @@ export async function settle(ms = 0): Promise<void> {
     });
 }
 
+/**
+ * Polls `predicate` through act() until it holds. The default gives up after
+ * 4 s, inside Vitest's 5 s test timeout, so a case that fails stops polling
+ * when it fails: a loop that outlived its test kept calling act() into the
+ * next cases of the same file and failed them too (seen when the setup form's
+ * check was removed to show the tests fail without it). A case that waits
+ * longer passes its own `timeoutMs` and a test timeout above it.
+ */
 export async function waitFor(
     predicate: () => boolean,
-    { timeoutMs = 8000, what = 'condition' }: { timeoutMs?: number; what?: string } = {}
+    { timeoutMs = 4000, what = 'condition' }: { timeoutMs?: number; what?: string } = {}
 ): Promise<void> {
     const start = Date.now();
     while (!predicate()) {
