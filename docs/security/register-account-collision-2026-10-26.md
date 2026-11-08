@@ -45,7 +45,7 @@ account that was not theirs: any homeserver account with no Blackout `users` row
 of that username. That covers the accounts created directly on the homeserver,
 among them its admin accounts and the bot account the API itself uses, which
 must be a server admin; and burner accounts (`@burn-…`) and accounts registered
-on the homeserver itself (the web client's Register tab, where the homeserver
+on the homeserver itself (the web client's Create account tab, where the homeserver
 allows registration) or through account-number sign-up, until `/matrix/exchange`
 provisions a row for them, which it does only with
 `BLACKOUT_MATRIX_EXCHANGE_TRUSTED_HS` set (off by default). Burner sign-up
@@ -69,8 +69,10 @@ consistency. Their accounts were still among the ones `/register` could name
 
 **The route.** `/v1/auth/register` maps the refusal to `409 user_exists` and
 rolls the local row back. That is the same answer a local username clash already
-gives, so the response does not tell a caller whether the name belongs to a
-Blackout account or only to a homeserver account. It does say that the name is
+gives, so its status and body do not tell a caller whether the name belongs to
+a Blackout account or only to a homeserver account (the answer can take longer
+for a name only the homeserver holds, since it waits for the homeserver
+lookup). It does say that the name is
 taken, as the homeserver's own availability check
 (`GET /_matrix/client/v3/register/available`) does where the homeserver allows
 registration; with the invite gate on, a `409` does not consume the token, which
@@ -305,7 +307,11 @@ discarding it meanwhile.
     against the ones you expect (`users.admin = 1`), the email addresses added
     since (`user_threepids.added_at`), and the tokens minted through that
     login API (`access_tokens` rows with `puppets_user_id` set, whose
-    `user_id` is the account that minted each).
+    `user_id` is the account that minted each). Synapse stores no time a
+    password changed: a password set on another account shows only in the
+    access log, as a `PUT /_synapse/admin/v2/users/…` carrying `password` made
+    with the written admin's token, and in the database as a `password_hash`
+    that differs from a backup taken before the write.
 
     If the bot account itself was written to, one more thing holds. Synapse
     keeps only the token that made a password reset, so the API's own token
@@ -315,6 +321,25 @@ discarding it meanwhile.
     it is replaced: make that `PUT` with the API's own token, or replace
     `MATRIX_BOT_TOKEN` right after. Rotating it anyway is reasonable for the
     credential of an account that was in a caller's hands.
+
+    If the deployment ran with `REQUIRE_INVITE_TOKEN=1` in those periods, also
+    look for the accounts the second gap left behind (see "The finding"): a
+    `PUT /_synapse/admin/v2/users/…` made with the bot's token that answered
+    `201`, for a localpart that has no Blackout `users` row and is neither a
+    burner's (`burn-` followed by ten hexadecimal characters) nor an
+    account-number account's (`b` followed by twenty characters from `a`–`z`
+    and `2`–`7`). Such an account came from a registration that the invite
+    check then refused: no Blackout account or session was issued, but the
+    account stays on the homeserver with the password the request carried, so
+    its creator can sign in to the homeserver with it and, where
+    `BLACKOUT_MATRIX_EXCHANGE_TRUSTED_HS` is set, get a Blackout session through
+    `/matrix/exchange`, which checks no invitation. Deactivate it
+    (`POST /_synapse/admin/v1/deactivate/{mxid}`) or reset its password, and
+    check whether `/matrix/exchange` has since given it a Blackout `users` row
+    (a row that route makes has an empty password hash and no email). Where the
+    log no longer covers a period, a Synapse `users` row created in it with no
+    Blackout `users` row is a candidate too, though an account registered on
+    the homeserver itself looks the same there.
 
 4. **End the interim measures.** The proxy block is this fix's own and comes
    off in step 1, once the fixed image serves the route. The operator's other
@@ -397,8 +422,10 @@ This record and the fix are published with the fix's pull request to `develop`,
 and the GitHub security advisory for the defect is published when that pull
 request merges. The operator's interim measures in production, dated below, are
 the proxy block on `POST /v1/auth/register` (2026-11-02), which stays until this
-fix is deployed, and production running as a single API process (2026-11-08), a
-measure for a separate fix that bears on how this one is deployed.
+fix is deployed; `BLACKOUT_AUTH_ROWS_PRUNE=0` in the server's `.env.production`
+(2026-11-02) and production running as a single API process (2026-11-08), both
+measures for a separate fix, the second of which bears on how this one is
+deployed.
 
 -   **2026-10-26.** Found and fixed in this change set, against `develop` at
     `3c3c05c`.
@@ -416,8 +443,10 @@ measure for a separate fix that bears on how this one is deployed.
     block is in the server's copy of `deploy/docker/production/Caddyfile`;
     "After upgrading" step 1 says how it behaves across a deploy, what removes
     it, and how to take it off. The
-    shipped web client does not call `/v1/auth/register` (its sign-up is
-    `/v1/auth/account-number`), and burner and account-number sign-up choose
+    shipped web client does not call `/v1/auth/register` (its sign-ups are
+    `/v1/auth/account-number` and, where the homeserver allows registration,
+    the homeserver's own registration on the Create account tab), and burner
+    and account-number sign-up choose
     server-derived names, so the block takes nothing away from them.
 -   **2026-11-08.** Production moved to a single API process, the operator's
     interim measure for a separate fix, to the API store's writes across

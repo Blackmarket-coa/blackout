@@ -7,8 +7,9 @@
  * ("modified", so it has already written to that account) as a collision
  * rather than a success. `/v1/auth/register` maps that collision to the same
  * `409 user_exists` a local name clash gives and rolls the local row back. The
- * answer says that the name is taken, but not whether it belongs to a Blackout
- * account or only to a homeserver account. A presented invite token is checked
+ * answer's status and body say that the name is taken, but not whether it
+ * belongs to a Blackout account or only to a homeserver account (its timing can
+ * differ: a name only the homeserver holds waits for the lookup). A presented invite token is checked
  * up front so an unusable one creates nothing.
  */
 import test from 'node:test';

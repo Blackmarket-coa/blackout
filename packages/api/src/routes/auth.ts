@@ -284,9 +284,10 @@ auth.post('/register', async (c) => {
     if (!matrix.ok && !('reason' in matrix && matrix.reason === 'matrix_not_configured')) {
         db.deleteUser(user.id);
         // The homeserver already has this username. Answer it as a local
-        // username collision does: the caller learns that the name is taken,
-        // but not whether it belongs to a Blackout account or only to a
-        // homeserver account. When the lookup found the account, nothing was
+        // username collision does: the status and body tell the caller that
+        // the name is taken, but not whether it belongs to a Blackout account
+        // or only to a homeserver account (the answer can take longer for a
+        // name only the homeserver holds, since it waits for the lookup). When the lookup found the account, nothing was
         // written to it. When the create itself answered 200 (an account of
         // that name appeared between the lookup and the create), that write
         // has already happened; matrixClient logs it at error level.
