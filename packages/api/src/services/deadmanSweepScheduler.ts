@@ -29,8 +29,12 @@ import { BACKLOG_TOLERANCE_FLOOR_MS, backlogToleranceMs } from './backlogToleran
  * that time the backlog window rather than firing it, as after an outage of
  * its own (round 11); a check-in or cancel any process refused for want of
  * an answer reaches the sweep through the switch's own row once that
- * process's database answered (`ownerAttemptRefusedAt`, decision 31, round
- * 14), so the worker's sweep holds such a switch back too.
+ * process's carry of it has landed (`ownerAttemptRefusedAt`, decision 31,
+ * round 14; tried at once and every 10 seconds after a failed try, each on a
+ * connection of its own, rounds 15 and 16), so the worker's sweep holds such
+ * a switch back from then on, or, where its mirror has not yet heard of the
+ * carry, from when Postgres refuses its trigger over it and it takes the row
+ * (round 15).
  *
  * Its backlog tolerance follows its cadence (backlogTolerance.ts): a switch it
  * reaches later than that gets a backlog grace window instead of firing.

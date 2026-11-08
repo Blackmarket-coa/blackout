@@ -8,7 +8,10 @@
 -- last statement over the owner's switches, the carry of a refused attempt,
 -- and the trigger's condition). With the column dropped and that code still
 -- running, every deletion's erase of a switch fails, so the owner's unfired
--- switches stay armed with their content and copies and fire at their
--- deadlines for an account that is gone; every carry fails; and every trigger
--- fails, so no switch fires. Revert that code first, then run this.
+-- switches stay armed with their content and copies, and would fire at their
+-- deadlines for an account that is gone once the trigger runs again (after
+-- that code is reverted); every carry fails; and every trigger fails, so no
+-- switch fires. Where a process read its table plan before the drop, every
+-- check-in and cancel it makes until it restarts fails too, since each names
+-- the column. Revert that code first, then run this.
 ALTER TABLE deadman_switches DROP COLUMN IF EXISTS owner_attempt_refused_at;

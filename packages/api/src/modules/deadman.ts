@@ -287,16 +287,20 @@ const ownedSwitch = (id: string, subject: string): DeadmanSwitchRecord | undefin
  * the switch). A check-in or cancel refused on another process reaches this
  * one through the switch's own record: the refusing process carries the
  * attempt into the database (`ownerAttemptRefusedAt`, decision 31, the
- * operator's choice of 2026-11-02), trying again on its own every 10
- * seconds until it lands (round 15 of part 2's review), and this sweep reads
- * it as it reads its own note; where this mirror has not yet heard of a carry
- * that landed, the trigger is refused in the database itself and the row
- * taken, so the next pass gives the window (round 15). So in the deployed
- * layout a check-in the API process refused holds the switch back on the
- * worker too, once the carry has landed. What stays one process's own is its
- * stalls themselves, and a note whose process stopped before its carry
- * landed; and a deadline that falls after the database answers again but
- * before the carry's next try finds the note uncarried.
+ * operator's choice of 2026-11-02), trying at once and again on its own 10
+ * seconds after each try that failed or passed its 5-second bound, each on a
+ * connection of its own, whatever its other statements are doing (rounds 15
+ * and 16 of part 2's review), and this sweep reads it as it reads its own
+ * note; where this mirror has not yet heard of a carry that landed, the
+ * trigger is refused in the database itself and the row taken, so the next
+ * pass gives the window (round 15). So in the deployed layout a check-in the
+ * API process refused holds the switch back on the worker too, once the
+ * carry has landed. What stays one process's own is its stalls themselves,
+ * and a note whose process stopped before its carry landed; and a deadline
+ * that falls before the carry lands finds the note uncarried: one in the
+ * time before the refusing process's next try once the database answers
+ * its new connections again (that try starts within 15 seconds), or while
+ * the database answers this process but not that one.
  */
 export async function sweepOverdueDeadmanSwitches(
     now: Date = new Date(),

@@ -285,7 +285,7 @@ test('the sweep leaves terminal switches alone however late it is', () => {
 
 test('a refused attempt of the owner’s holds the switch only after its last landed check-in: later counts, the same moment or earlier does not, and none at all does not (decision 31)', () => {
     // Round 14 of part 2's review: the column the API process carries into
-    // the switch once its database answers is read by every sweep as that
+    // the switch is read by every sweep, once that carry has landed, as that
     // process's own note is; a landed check-in is the owner's later word.
     const lastCheckInAt = '2026-01-01T00:00:00.000Z';
     assert.equal(
