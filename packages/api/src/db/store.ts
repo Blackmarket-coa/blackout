@@ -380,6 +380,21 @@ type SwitchStatementWait<T> =
     | { kind: 'failed' }
     | { kind: 'timeout' };
 
+/**
+ * A late statement's settle (`settleSwitchStatement`): the switch, the
+ * mirror's entry for it when the settle began, whether its copies are read
+ * too (the arm), the switch's entry in `carriesBehindSettle`, and, once its
+ * read back has failed and it waits to be read again (`retrySettleReads`),
+ * what ends it.
+ */
+type PendingSettle = {
+    id: string;
+    seen: Record<string, unknown> | undefined;
+    withCopies: boolean;
+    reading: { reading: number; notes: Array<{ at: string; lastCheckInAt: string }> };
+    done?: () => void;
+};
+
 /** Coalition demo seed rows, or none when demo seeding is off (default in production). */
 const demoSeedRows = <T>(rows: T[]): T[] => (shouldSeedCoalitionDemoData() ? rows : []);
 
@@ -9704,7 +9719,7 @@ export class PostgresBackedDb extends InMemoryDb {
      * this process's earlier writes to the same switch, so a backlog of
      * writes to other tables no longer sets it. It stands until the
      * statement answers or fails and, where it landed, until the switch's
-     * read back has ended (`settleSwitchStatement`), which nothing here
+     * read back has been taken (`settleSwitchStatement`), which nothing here
      * bounds: the shared pool sets no connection or statement timeout and no
      * TCP keepalive, so a statement whose bytes the database's host
      * acknowledged before it went silent is never given up on here (the
@@ -9712,20 +9727,28 @@ export class PostgresBackedDb extends InMemoryDb {
      * and stands until the process restarts where that host is gone or the
      * silence outlasts the host's own retransmission of its answer (about 15
      * minutes at Linux's defaults; a fault that heals sooner lets the answer
-     * through), and one sent into the silence fails, while it lasts, once
+     * through), and until the database answers or the process restarts
+     * where the database process stops answering on a host that stays up (a
+     * hung server or storage, a paused container: the connection is healthy
+     * at TCP level, so neither retransmission nor keepalive ends it), and
+     * one sent into the silence fails, while it lasts, once
      * the operating system gives up: about 15 minutes at Linux's defaults on
      * a connection already open, about 2 minutes where the call opens a new
      * one, which fails at connect (no `connectionTimeoutMillis`); what the
      * process does with that connection's error is a matter of the shared
      * pool's error handling, which a separate change addresses. The read
-     * back has the same lack of bound, and until it ends this mirror holds
-     * the switch as before the statement, but for a carried column, which is
-     * read back on its own (`confirmCarriedColumns`, round 18 of part 2's
-     * review). The carry of a refused owner write is not held back by it
+     * back in the switch's lane has the same lack of bound while it is out,
+     * and until it ends this mirror holds the switch as before the
+     * statement, but for a carried column, which is read back on its own
+     * (`confirmCarriedColumns`, round 18 of part 2's review); one that fails
+     * is read again on a connection of its own until one answers
+     * (`retrySettleReads`, round 19), and the stall stands until then. The
+     * carry of a refused owner write is not held back by it
      * (round 16), and holds a switch that falls due meanwhile back for one
      * backlog window only (round 17: the documents put a bound of minutes on
      * the stall; round 18: they named a network fault as standing until
-     * restart without the condition).
+     * restart without the condition; round 19: they left out a database
+     * that stops answering on a live host).
      */
     private stalledSwitchStatement: Promise<unknown> | null = null;
 
@@ -9769,9 +9792,12 @@ export class PostgresBackedDb extends InMemoryDb {
      * black-holed, held its note as on its way for as long as that
      * connection stood, which for a statement the database's host had
      * acknowledged is until the process restarts where that host is gone or
-     * the silence outlasts its own retransmission, and nothing tried it
-     * again). The read back of a carried column (`confirmCarriedColumns`)
-     * has the same bound. A field, so a test can shorten it.
+     * the silence outlasts its own retransmission, or until the database
+     * answers where its process stops answering on a host that stays up,
+     * and nothing tried it again). The read back of a carried column (`confirmCarriedColumns`)
+     * and the read again of a settle whose read back failed
+     * (`retrySettleReads`) have the same bound. A field, so a test can
+     * shorten it.
      */
     carryTimeoutMs = 5_000;
 
@@ -9785,13 +9811,19 @@ export class PostgresBackedDb extends InMemoryDb {
     private carryAgain = false;
 
     /**
-     * The switches a settle is reading back (`settleSwitchStatement`), each
-     * with the notes whose carry landed meanwhile: a settle that took its
-     * row takes their column after it; otherwise they are left to
+     * The switches a settle is reading back (`settleSwitchStatement`), or
+     * waiting to read back again after a read that failed
+     * (`retrySettleReads`), each with the notes whose carry landed
+     * meanwhile: each settle that takes its row takes their column after it,
+     * at once (`takeSettledRow`); until one does they are left to
      * `confirmCarriedColumns` (round 17 of part 2's review; round 18: they
      * were taken whatever the settle did, so after a failed read back the
      * column went onto the earlier row this mirror still held, which
-     * Postgres had cancelled without one).
+     * Postgres had cancelled without one; round 19: they were taken only
+     * after the last settle of the switch, and only where that one took its
+     * row, so with two settles overlapping, the first taking a row read
+     * before the carry landed and the second keeping its row out, a column
+     * already read back was dropped from this mirror for good).
      */
     private readonly carriesBehindSettle = new Map<
         string,
@@ -9819,6 +9851,24 @@ export class PostgresBackedDb extends InMemoryDb {
 
     /** The timer of the next read of carried columns, after one that failed. */
     private columnConfirmTimer: ReturnType<typeof setTimeout> | null = null;
+
+    /**
+     * Settles whose read back of the switch failed, in the order they
+     * failed, each waiting to be read again on a connection of its own
+     * (`retrySettleReads`); the stall the statement opened stands until it
+     * is (round 19 of part 2's review: a failed read back took nothing,
+     * announced nothing and blanked nothing, so a cancel that landed after
+     * its bound left this process, its export and the worker holding the
+     * switch armed, and every sealed copy held in Postgres, until the owner
+     * cancelled again, a process restarted or the switch's deadline passed).
+     */
+    private readonly settleReadsToRetry: PendingSettle[] = [];
+
+    /** The read again of failed settles under way (`runSettleRetryPass`), if one is. */
+    private settleRetryPass: Promise<void> | null = null;
+
+    /** The timer of the next read again of failed settles, after one that failed. */
+    private settleRetryTimer: ReturnType<typeof setTimeout> | null = null;
 
     /**
      * Each mirror entry `takeCarriedColumn` made, mapped to the entry it
@@ -10011,11 +10061,12 @@ export class PostgresBackedDb extends InMemoryDb {
      * is this mirror's to take), it ends; a landed carry's row goes into the
      * mirror where the mirror's entry is the one the carry read, no
      * conditional write of the switch is in flight and no settle of the
-     * switch is reading it back (`settleSwitchStatement`), otherwise the
-     * column alone (`takeCarriedColumn`): at once, or, while such a settle
-     * is reading, once Postgres is read to hold it (`confirmCarriedColumns`,
-     * on a connection of its own, whatever that read is doing) and again
-     * after the settle's row where the settle took one; and the switch is
+     * switch is reading it back or waiting to read it again
+     * (`settleSwitchStatement`), otherwise the column alone
+     * (`takeCarriedColumn`): at once, or, while such a settle is out, once
+     * Postgres is read to hold it (`confirmCarriedColumns`, on a connection
+     * of its own, whatever that read is doing) and again after the row of
+     * each settle that takes one (`takeSettledRow`); and the switch is
      * announced.
      *
      * Round 17 of part 2's review: the carry runs outside the switch's lane,
@@ -10127,7 +10178,9 @@ export class PostgresBackedDb extends InMemoryDb {
      * where it does not (a later statement cleared it, or a later attempt
      * replaced it, which reaches this mirror on its own). The rest of what
      * Postgres holds for the switch, the statement's own change included,
-     * reaches the mirror only with the settle's row.
+     * reaches the mirror only with the settle's row; a settle that takes its
+     * row takes each such column again after it (`takeSettledRow`), since
+     * that row may have been read before the carry landed.
      */
     private confirmCarriedColumns(): void {
         const plan = this.plans.get('deadmanSwitches');
@@ -10139,6 +10192,9 @@ export class PostgresBackedDb extends InMemoryDb {
         }
         if (this.carriedColumnsToConfirm.size === 0) return;
         this.columnConfirmAgain = false;
+        // This read is the one a retry timer set after a failed read was
+        // waiting to make.
+        this.clearColumnConfirmTimer();
         const pass: Promise<void> = this.runColumnConfirmPass(pool, plan).then((wholePass) => {
             if (this.columnConfirmPass === pass) this.columnConfirmPass = null;
             if (!wholePass) {
@@ -10237,6 +10293,13 @@ export class PostgresBackedDb extends InMemoryDb {
         this.columnConfirmTimer.unref?.();
     }
 
+    /** The timer of the next read of carried columns, if one is set, goes. */
+    private clearColumnConfirmTimer(): void {
+        if (!this.columnConfirmTimer) return;
+        clearTimeout(this.columnConfirmTimer);
+        this.columnConfirmTimer = null;
+    }
+
     /**
      * Try the carry again in `carryRetryMs` while any note is waiting and no
      * try is under way: on its own timer, so a note is carried once the
@@ -10295,7 +10358,10 @@ export class PostgresBackedDb extends InMemoryDb {
      * landed left the mirror armed, every copy held, and told no process).
      * The stall stands until that re-read has put the row in the mirror, not
      * only until the statement answered (round 12: between the two an arm
-     * read the bounds without the landed switch and passed them).
+     * read the bounds without the landed switch and passed them), and where
+     * the re-read fails, until a read again on a connection of its own has
+     * (round 19: the stall ended with the failure, and nothing read the
+     * switch again).
      */
     private async awaitSwitchStatement<T>(
         id: string,
@@ -10363,22 +10429,18 @@ export class PostgresBackedDb extends InMemoryDb {
     /**
      * A statement that answered after its bound and landed: the switch is
      * read again from Postgres, in the row's lane, so after any write of it
-     * this process queued meanwhile; the row goes into the mirror unless the
-     * mirror's entry changed while it was read other than by a carried
-     * column (a write of this process's or a refresh, each at least as new;
-     * a carry's answer, whose row can be older, does not change it while the
-     * read is out but for its column once Postgres is read to hold it, and a
-     * settle that took its row takes the column again after it: rounds 17
-     * and 18 of part 2's review) or a conditional
-     * write of the switch is in flight (its own merge takes the row); with `withCopies` (the
-     * arm), the switch's copies the mirror lacks go in too; the switch and
-     * each such copy are announced to the other processes; and a switch
-     * found cancelled has its held copies blanked (a cancel landing this way
-     * blanks nothing itself: the route does that, after an answer it did
-     * not get). Nothing of a statement that was not run, or that found the
-     * id taken, is here to take. Resolves once the re-read has been applied
-     * (or has failed, logged): the stall the statement opened stands until
-     * then.
+     * this process queued meanwhile, and the row taken (`takeSettledRow`);
+     * where that read fails, the switch is read again on a connection of its
+     * own (`retrySettleReads`), each try within `carryTimeoutMs` and, after
+     * one that failed or passed its bound, another `carryRetryMs` later,
+     * until one answers, and that row is taken the same way (round 19 of
+     * part 2's review: a failed read took nothing, announced nothing and
+     * blanked nothing). Nothing of a statement that was not run, or that
+     * found the id taken, is here to take. Resolves once a read back has
+     * been taken: the stall the statement opened stands until then, so
+     * after a failed read until the database answers a new connection from
+     * this process with the row, and while the lane's read is out, which
+     * nothing bounds, for as long as it is.
      */
     private settleSwitchStatement(id: string, landed: unknown, withCopies: boolean): Promise<void> {
         if (
@@ -10390,52 +10452,212 @@ export class PostgresBackedDb extends InMemoryDb {
         ) {
             return Promise.resolve();
         }
-        const map = this.mapByName('deadmanSwitches');
-        const seen = map.get(id);
-        // While the read is out, a carry's answer for the switch leaves the
-        // mirror alone but for its column once Postgres is read to hold it
-        // (`takeCarryAnswer`, `confirmCarriedColumns`).
-        let behind = this.carriesBehindSettle.get(id);
-        if (!behind) {
-            behind = { reading: 0, notes: [] };
-            this.carriesBehindSettle.set(id, behind);
+        // While the read is out, and until a read again has answered, a
+        // carry's answer for the switch leaves the mirror alone but for its
+        // column once Postgres is read to hold it (`takeCarryAnswer`,
+        // `confirmCarriedColumns`).
+        let reading = this.carriesBehindSettle.get(id);
+        if (!reading) {
+            reading = { reading: 0, notes: [] };
+            this.carriesBehindSettle.set(id, reading);
         }
-        behind.reading += 1;
-        const reading = behind;
-        let tookRow = false;
+        reading.reading += 1;
+        const settle: PendingSettle = {
+            id,
+            seen: this.mapByName('deadmanSwitches').get(id),
+            withCopies,
+            reading,
+        };
         return this.readSwitchAndCopiesInLane(id, withCopies)
-            .then((found) => {
-                if (!found) return;
-                tookRow =
-                    this.unchangedButCarriedColumn(map.get(id), seen) &&
-                    !this.switchWritesInFlight.has(id);
-                this.takeSwitchFromPostgres(id, found, tookRow);
-                const current = this.getDeadmanSwitch(id);
-                log.info('deadman_switch_write_landed', { status: current?.status });
-                if (current?.status === 'cancelled') this.blankHeldCopiesOf(id);
-            })
+            .then((found) => this.takeSettledRow(settle, found))
             .catch((err) => {
                 log.warn('deadman_switch_settle_read_failed', {
                     error: err instanceof Error ? err.message : String(err),
                 });
+                return this.retrySettleRead(settle);
             })
             .finally(() => {
                 reading.reading -= 1;
-                if (reading.reading > 0) return;
-                this.carriesBehindSettle.delete(id);
-                // Only a row taken from Postgres is one the column can go
-                // onto (round 18 of part 2's review: after a failed read, or
-                // a row kept out, the mirror still held the earlier entry,
-                // and a column taken onto it was one Postgres could have
-                // cleared); otherwise the notes are left to their read back.
-                if (!tookRow) return;
-                const waiting = this.carriedColumnsToConfirm.get(id);
-                for (const note of reading.notes) {
-                    this.takeCarriedColumn(id, note);
-                    if (waiting?.includes(note)) waiting.splice(waiting.indexOf(note), 1);
+                if (reading.reading === 0 && this.carriesBehindSettle.get(id) === reading) {
+                    this.carriesBehindSettle.delete(id);
                 }
-                if (waiting?.length === 0) this.carriedColumnsToConfirm.delete(id);
             });
+    }
+
+    /**
+     * A settle's read back of its switch, as Postgres holds it: the row goes
+     * into the mirror unless the mirror's entry changed since the settle
+     * began other than by a carried column (a write of this process's or a
+     * refresh, each at least as new; a carry's answer, whose row can be
+     * older, does not change it while the settle is out but for its column
+     * once Postgres is read to hold it: rounds 17 and 18 of part 2's review)
+     * or a conditional write of the switch is in flight (its own merge takes
+     * the row); with `withCopies` (the arm), the switch's copies the mirror
+     * lacks go in too; the switch and each such copy are announced to the
+     * other processes; and a switch found cancelled has its held copies
+     * blanked (a cancel landing this way blanks nothing itself: the route
+     * does that, after an answer it did not get). Where the row went in, the
+     * column of each carry whose answer came while the switch was being
+     * settled goes on after it, with `takeCarriedColumn`'s conditions: the
+     * row may have been read before that carry landed, and Postgres holds
+     * the column unless a later statement cleared it, which those conditions
+     * see in the row (round 19: this was done only after the last settle of
+     * the switch, and only where that one took its row, so a column read
+     * back from Postgres and then replaced by an earlier settle's row was
+     * lost).
+     */
+    private takeSettledRow(
+        settle: PendingSettle,
+        found: { row: Record<string, unknown>; copies: Array<Record<string, unknown>> } | undefined
+    ): void {
+        if (!found) return;
+        const id = settle.id;
+        const tookRow =
+            this.unchangedButCarriedColumn(
+                this.mapByName('deadmanSwitches').get(id),
+                settle.seen
+            ) && !this.switchWritesInFlight.has(id);
+        this.takeSwitchFromPostgres(id, found, tookRow);
+        const current = this.getDeadmanSwitch(id);
+        log.info('deadman_switch_write_landed', { status: current?.status });
+        if (current?.status === 'cancelled') this.blankHeldCopiesOf(id);
+        if (!tookRow) return;
+        const waiting = this.carriedColumnsToConfirm.get(id);
+        for (const note of settle.reading.notes) {
+            this.takeCarriedColumn(id, note);
+            if (waiting?.includes(note)) waiting.splice(waiting.indexOf(note), 1);
+        }
+        if (waiting?.length === 0) this.carriedColumnsToConfirm.delete(id);
+        if (this.carriedColumnsToConfirm.size === 0) this.clearColumnConfirmTimer();
+    }
+
+    /**
+     * A settle whose read back failed: it waits to be read again
+     * (`retrySettleReads`), and the promise resolves once a read has been
+     * taken.
+     */
+    private retrySettleRead(settle: PendingSettle): Promise<void> {
+        return new Promise<void>((resolve) => {
+            settle.done = resolve;
+            this.settleReadsToRetry.push(settle);
+            this.retrySettleReads();
+        });
+    }
+
+    /**
+     * Read again each settle whose read back failed (`settleReadsToRetry`):
+     * one try at once, and after a try that failed or passed its bound
+     * another `carryRetryMs` later, on a timer that does not keep the
+     * process alive and is not set after `shutdown`, until one answers. Each
+     * try is a connection of its own from the pool, outside the write-behind
+     * queue, as the carry's is (`runSettleRetryPass`), so it does not wait
+     * behind a read in the switch's lane that does not answer, and it is
+     * made whatever else the process asks the database meanwhile; but it
+     * needs a connection the pool hands over within the bound. Outside the
+     * lane it is ordered after nothing this process queued since the
+     * settle's own read ran; the mirror's entry tells: a write of the switch
+     * this process made since, or a refresh, changed it, and the row read is
+     * then kept out (`takeSettledRow`). While a settle waits here the stall
+     * stands, so no conditional write of a switch is sent by this process.
+     */
+    private retrySettleReads(): void {
+        const plan = this.plans.get('deadmanSwitches');
+        const wrapPlan = this.plans.get('deadmanReleaseWraps');
+        const pool = this.pool;
+        if (!plan || !wrapPlan || !pool) return;
+        if (this.settleRetryPass) return;
+        if (this.settleReadsToRetry.length === 0) return;
+        if (this.settleRetryTimer) {
+            clearTimeout(this.settleRetryTimer);
+            this.settleRetryTimer = null;
+        }
+        const pass: Promise<void> = this.runSettleRetryPass(pool, plan, wrapPlan).then(
+            (wholePass) => {
+                if (this.settleRetryPass === pass) this.settleRetryPass = null;
+                // A settle that failed after the try's last read and before
+                // it ended is read now; after a try that failed, on the timer.
+                if (wholePass) this.retrySettleReads();
+                else this.scheduleSettleRetry();
+            }
+        );
+        this.settleRetryPass = pass;
+    }
+
+    /**
+     * One try of reading failed settles again, as `runCarryPass` makes one
+     * try of the carry: a connection of its own, each step within
+     * `carryTimeoutMs`, false where any step failed or passed its bound,
+     * logged (`deadman_switch_settle_read_failed`, with `retry`), with the
+     * settles not read left waiting; the connection is given back with the
+     * error, so the pool drops it. A settle read is taken
+     * (`takeSettledRow`) and ended, which ends its stall.
+     */
+    private async runSettleRetryPass(
+        pool: PgPool,
+        plan: TablePlan,
+        wrapPlan: TablePlan
+    ): Promise<boolean> {
+        const acquiring = pool.connect();
+        let client: PgClient;
+        try {
+            client = await this.withinCarryBound(acquiring);
+        } catch (err) {
+            void acquiring.then(
+                (late) => late.release?.(),
+                () => undefined
+            );
+            log.warn('deadman_switch_settle_read_failed', {
+                retry: true,
+                error: err instanceof Error ? err.message : String(err),
+            });
+            return false;
+        }
+        let failure: Error | undefined;
+        try {
+            // Oldest first; a settle that fails while this try is under way
+            // joins the list and is read by it.
+            while (this.settleReadsToRetry.length > 0) {
+                const settle = this.settleReadsToRetry[0];
+                let found:
+                    | { row: Record<string, unknown>; copies: Array<Record<string, unknown>> }
+                    | undefined;
+                try {
+                    found = await this.withinCarryBound(
+                        readSwitchAndCopies(client, plan, wrapPlan, settle.id, settle.withCopies)
+                    );
+                } catch (err) {
+                    failure = err instanceof Error ? err : new Error(String(err));
+                    log.warn('deadman_switch_settle_read_failed', {
+                        retry: true,
+                        error: failure.message,
+                    });
+                    return false;
+                }
+                this.settleReadsToRetry.shift();
+                try {
+                    this.takeSettledRow(settle, found);
+                } catch (err) {
+                    log.warn('deadman_switch_settle_take_failed', {
+                        error: err instanceof Error ? err.message : String(err),
+                    });
+                }
+                settle.done?.();
+            }
+            return true;
+        } finally {
+            client.release?.(failure);
+        }
+    }
+
+    /** Read failed settles again in `carryRetryMs`, unless after `shutdown` or none waits. */
+    private scheduleSettleRetry(): void {
+        if (this.settleRetryTimer || this.carryStopped) return;
+        if (this.settleReadsToRetry.length === 0) return;
+        this.settleRetryTimer = setTimeout(() => {
+            this.settleRetryTimer = null;
+            this.retrySettleReads();
+        }, this.carryRetryMs);
+        this.settleRetryTimer.unref?.();
     }
 
     /**
@@ -11523,12 +11745,20 @@ export class PostgresBackedDb extends InMemoryDb {
         // 16), and one it started again on its way out; each is bounded.
         while (this.carryPass) await this.carryPass;
         while (this.columnConfirmPass) await this.columnConfirmPass;
+        // A read again of a failed settle under way (round 19), each try
+        // bounded, and the writes its take queued (a cancelled switch's
+        // copies blanked).
+        if (this.settleRetryPass) {
+            while (this.settleRetryPass) await this.settleRetryPass;
+            await this.queue?.drain();
+        }
     }
 
     /**
      * Flush queued writes and tear down the change subscription — graceful
-     * shutdown only. Refused owner writes not yet carried get one last try,
-     * waited for; no retry timer is set after it.
+     * shutdown only. Refused owner writes not yet carried, and settles whose
+     * read back failed, get one last try, waited for; no retry timer is set
+     * after it.
      */
     async shutdown(): Promise<void> {
         this.carryStopped = true;
@@ -11537,6 +11767,9 @@ export class PostgresBackedDb extends InMemoryDb {
         if (this.columnConfirmTimer) clearTimeout(this.columnConfirmTimer);
         this.columnConfirmTimer = null;
         this.carryRefusedOwnerWrites();
+        // A settle waiting to be read again is (a timer of its is set only
+        // while one waits and no try is under way, and the try ends it).
+        this.retrySettleReads();
         await this.drain();
         await this.transport?.close();
     }
