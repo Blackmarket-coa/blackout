@@ -62,7 +62,8 @@ The following config options are available:
 - `ssh_priv_key_path` - The path to a private SSH key, the manhole's host key:
   an RSA, Ed25519 or ECDSA (P-256, P-384 or P-521) key, unencrypted, in the
   format `ssh-keygen` writes. Synapse refuses to start if the file holds a
-  public key.
+  public key, or an EC key on any other curve (one `openssl` wrote, say),
+  which the SSH server has no key type for.
 - `ssh_pub_key_path` - The path to the matching public SSH key. Optional: when
   it is unset, the public half is derived from the private key. When it is set,
   it must be the public half of the key at `ssh_priv_key_path`; a public key of

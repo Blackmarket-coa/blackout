@@ -688,8 +688,9 @@ on the manhole [here](../../manhole.md). Manhole sub-options include:
   each connection, not from this pair. An RSA, Ed25519 or ECDSA key works, in
   the format `ssh-keygen` writes and without a passphrase.
   `ssh_priv_key_path` alone is enough: the public half is derived from the
-  private key. A public key at `ssh_priv_key_path`, or an `ssh_pub_key_path`
-  that is not the public half of that private key, stops startup with a
+  private key. A public key at `ssh_priv_key_path`, an `ssh_pub_key_path`
+  that is not the public half of that private key, or an EC key on a curve
+  other than P-256, P-384 or P-521 at either path, stops startup with a
   configuration error. `ssh_pub_key_path` without `ssh_priv_key_path` cannot be
   used, since a host key must be able to sign, and is ignored with a warning.
   Upstream Synapse falls back to a keypair hardcoded in its source when these

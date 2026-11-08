@@ -1321,24 +1321,39 @@ Error during startup`), under either Twisted; a configured key pair never
   the server offers; a second factory leaves the first one's key alone; and
   loopback SSH sessions on an Ed25519 key, an ECDSA P-256 pair, P-384 and
   P-521 keys and an RSA key, each read from key files through the homeserver
-  config. The Ed25519 and ECDSA P-256 sessions and the two factory tests fail
-  against the file before this change, under 26.4.0 and 26.10.0.
-- `synapse/config/server.py` (`_check_manhole_host_key`, called from
-  `ServerConfig.read_config`), with the previous bullet: a `ConfigError` at
-  startup for a public key at `ssh_priv_key_path` (at
-  `manhole_settings.ssh_priv_key_path`), and for an `ssh_pub_key_path` whose
-  key type differs from the private key's or which is not the private key's
-  public half (at `manhole_settings.ssh_pub_key_path`); each message names
-  the file and what it holds. Upstream loads both files without comparing
-  them. Each refused config starts a manhole on which no SSH session
-  completes. Keep it through a reconciliation. Tests in
-  `tests/blackout_runtime/test_manhole.py`, through `HomeServerConfig`: a
-  public key at `ssh_priv_key_path` and another key of the same type at
-  `ssh_pub_key_path`, each for RSA, Ed25519 and ECDSA P-256, P-384 and P-521,
-  and a public key of another type for three pairs (Ed25519 with RSA, RSA
-  with ECDSA P-256, ECDSA P-256 with P-384), the three tests failing against
-  the file before this change; and matching pairs and private keys alone
-  still loading.
+  config. The Ed25519, ECDSA P-256 and P-384/P-521 sessions (the last stops
+  at P-384) and the two factory tests, five tests, fail against the file
+  before this change, under 26.4.0 and 26.10.0.
+- `synapse/config/server.py` (`_check_manhole_host_key` and
+  `_manhole_key_type`, called from `ServerConfig.read_config`), with the
+  previous bullet: a `ConfigError` at startup for a public key at
+  `ssh_priv_key_path` (at `manhole_settings.ssh_priv_key_path`), for an
+  `ssh_pub_key_path` whose key type differs from the private key's or which
+  is not the private key's public half (at `manhole_settings.ssh_pub_key_path`),
+  and, from the seventh round (found by the review of the sixth), for a key
+  at either path on a curve Twisted has no SSH key type for: `Key.fromFile`
+  loads a PEM `EC PRIVATE KEY` on any curve cryptography knows, and
+  `Key.sshType()` raises `KeyError` for every curve but P-256, P-384 and P-521
+  (`_secToNist`, `twisted/conch/ssh/keys.py`, 26.4.0 and 26.10.0). Until
+  then such a key (secp256k1 from `openssl`; `ssh-keygen` cannot write one)
+  passed the config and the homeserver stopped in `start_listening` with
+  that bare `KeyError`, or, at `ssh_pub_key_path`, in this check's own type
+  comparison. Each message names the file and what it holds. Upstream loads
+  both files without comparing them. Each refused config would start a
+  manhole on which no SSH session completes, or not start. Keep it through a
+  reconciliation. Tests in `tests/blackout_runtime/test_manhole.py`, through
+  `HomeServerConfig`: a public key at `ssh_priv_key_path` and another key of
+  the same type at `ssh_pub_key_path`, each for RSA, Ed25519 and ECDSA
+  P-256, P-384 and P-521; a public key of another type for three pairs
+  (Ed25519 with RSA, RSA with ECDSA P-256, ECDSA P-256 with P-384); a
+  secp256k1 PEM key at `ssh_priv_key_path` (the test also pins that the key
+  loads and that `manhole()` itself raises `KeyError` on it) and at
+  `ssh_pub_key_path` beside a P-256 key; the five tests failing against the
+  file before the sixth round's change ("the config loaded"), and the two
+  curve tests against the sixth round's file too (the private-key one with
+  "the config loaded", the public-key one with the bare `KeyError:
+b'secp256k1'` from the type comparison); and matching pairs and private
+  keys alone still loading.
 - `docs/manhole.md`: its option list and example named `ssh_priv_key` and
   `ssh_pub_key`. `synapse/config/server.py` reads only `ssh_priv_key_path`
   and `ssh_pub_key_path`, and `_MANHOLE_SETTINGS_SCHEMA` accepts unknown

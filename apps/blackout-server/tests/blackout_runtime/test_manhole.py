@@ -27,10 +27,11 @@ filed every key under ``b"ssh-rsa"``, as upstream does, while Twisted offers the
 signature algorithms of the key it holds and then looks the negotiated one up
 by key type, so an Ed25519 or ECDSA key at ``ssh_priv_key_path`` started without
 a word and every connection failed. ``synapse/config/server.py`` now also
-refuses, at config load, a public key at ``ssh_priv_key_path`` and a configured
-public key that is not the private key's public half. The session tests for
-those key types load the key files through the homeserver config, as a
-deployment does.
+refuses, at config load, a public key at ``ssh_priv_key_path``, a configured
+public key that is not the private key's public half, and an EC key on a curve
+Twisted has no SSH key type for (which loads, and which ``manhole()`` would
+otherwise fail on with a bare KeyError). The session tests for those key types
+load the key files through the homeserver config, as a deployment does.
 
 Records: docs/security/dependency-advisories-twisted-2026-11-02.md (repository
 root) and PATCHES.md, 2026-11-02.
@@ -137,6 +138,25 @@ def _write_key_files(directory: str, name: str, key: Key) -> Tuple[str, str]:
             + b" manhole-test\n"
         )
     return priv_path, pub_path
+
+
+def _write_pem_private_key(directory: str, name: str, key: Key) -> str:
+    """Write `key` as `openssl ecparam -genkey` does: a PEM `EC PRIVATE KEY`.
+
+    ssh-keygen cannot write a key on a curve OpenSSH has no name for
+    (cryptography refuses the OpenSSH serialization of secp256k1), so only a
+    PEM file can put one at `ssh_priv_key_path` or `ssh_pub_key_path`.
+    """
+    path = os.path.join(directory, name)
+    with open(path, "wb") as f:
+        f.write(
+            key._keyObject.private_bytes(
+                serialization.Encoding.PEM,
+                serialization.PrivateFormat.TraditionalOpenSSL,
+                serialization.NoEncryption(),
+            )
+        )
+    return path
 
 
 def _load_manhole_settings(
@@ -346,6 +366,47 @@ class ManholeKeyConfigTestCase(TestCase):
                 e.msg,
                 kind,
             )
+
+    def test_a_key_on_a_curve_without_an_ssh_name_is_refused(self) -> None:
+        # Twisted loads a PEM EC key on any curve cryptography knows, but has
+        # an SSH key type for P-256, P-384 and P-521 only. Before this check
+        # the config loaded such a key, and the manhole stopped startup with
+        # the bare KeyError pinned below, naming no setting.
+        directory = _key_dir(self)
+        k1_path = _write_pem_private_key(
+            directory, "secp256k1.pem", _ecdsa_key(ec.SECP256K1())
+        )
+        e = self._refusal("secp256k1 at ssh_priv_key_path", k1_path)
+        self.assertEqual(e.path, ("manhole_settings", "ssh_priv_key_path"))
+        self.assertIn(k1_path, e.msg)
+        self.assertIn("curve secp256k1", e.msg)
+        self.assertIn("P-256, P-384 or P-521", e.msg)
+
+        # What the check stands in for: the key loads, Twisted has no SSH type
+        # for it, and `manhole()` itself raises the KeyError.
+        loaded = Key.fromFile(k1_path)
+        self.assertEqual(loaded.type(), "EC")
+        self.assertFalse(loaded.isPublic())
+        self.assertRaises(KeyError, loaded.sshType)
+        self.assertRaises(KeyError, manhole, _settings(loaded), {})
+
+    def test_a_key_on_a_curve_without_an_ssh_name_at_the_public_key_path_is_refused(
+        self,
+    ) -> None:
+        # The same file at ssh_pub_key_path, beside a P-256 key that would
+        # otherwise load: refused at that setting. Before this check the
+        # comparison of the two key types raised the KeyError itself.
+        directory = _key_dir(self)
+        k1_path = _write_pem_private_key(
+            directory, "secp256k1.pem", _ecdsa_key(ec.SECP256K1())
+        )
+        p256_path, _ = _write_key_files(
+            directory, "id_ecdsa", _ecdsa_key(ec.SECP256R1())
+        )
+        e = self._refusal("secp256k1 at ssh_pub_key_path", p256_path, k1_path)
+        self.assertEqual(e.path, ("manhole_settings", "ssh_pub_key_path"))
+        self.assertIn(k1_path, e.msg)
+        self.assertIn("curve secp256k1", e.msg)
 
     def test_matching_pairs_and_private_keys_alone_load(self) -> None:
         directory = _key_dir(self)

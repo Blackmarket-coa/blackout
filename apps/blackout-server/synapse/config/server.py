@@ -1097,8 +1097,11 @@ def _check_manhole_host_key(
     both files without comparing them. The manhole files the host key under the
     private key's own type and serves `pub_key` as its public half
     (`synapse/util/manhole.py`), so each of these would start a manhole on which
-    no SSH session completes:
+    no SSH session completes, or stop startup with a bare KeyError:
 
+    - a key on a curve Twisted has no SSH key type for (an EC key other than
+      P-256, P-384 or P-521, which only a PEM file can hold: ssh-keygen cannot
+      write one), at either path;
     - a public key at `ssh_priv_key_path`: a host key must be able to sign;
     - a public key of another type than the private key;
     - a public key of the same type that is not the private key's public half.
@@ -1106,20 +1109,23 @@ def _check_manhole_host_key(
     Raises:
         ConfigError: naming the setting at fault.
     """
-    if priv_key is not None and priv_key.isPublic():
+    if priv_key is None:
+        return
+
+    priv_type = _manhole_key_type(priv_key, priv_key_path, "ssh_priv_key_path")
+    if priv_key.isPublic():
         raise ConfigError(
             f"The manhole private key file {priv_key_path} holds a public key"
-            f" ({priv_key.sshType().decode('ascii')}), not a private one."
+            f" ({priv_type}), not a private one."
             " ssh_priv_key_path must name the private half of the host key, the"
             " file ssh-keygen writes without the .pub suffix.",
             ("manhole_settings", "ssh_priv_key_path"),
         )
 
-    if priv_key is None or pub_key is None:
+    if pub_key is None:
         return
 
-    priv_type = priv_key.sshType().decode("ascii")
-    pub_type = pub_key.sshType().decode("ascii")
+    pub_type = _manhole_key_type(pub_key, pub_key_path, "ssh_pub_key_path")
     if pub_type != priv_type:
         raise ConfigError(
             f"The manhole public key file {pub_key_path} holds a {pub_type} key,"
@@ -1139,6 +1145,29 @@ def _check_manhole_host_key(
             " derived from the private key.",
             ("manhole_settings", "ssh_pub_key_path"),
         )
+
+
+def _manhole_key_type(key: Key, path: Optional[str], setting: str) -> str:
+    """The SSH key type of a manhole key file, or a ConfigError at `setting`.
+
+    Twisted names an EC key's type from a table of three curves (`_secToNist`
+    in `twisted/conch/ssh/keys.py`: P-256, P-384 and P-521) and `sshType()`
+    raises KeyError for any other, while `Key.fromFile` loads a PEM
+    `EC PRIVATE KEY` on any curve cryptography knows. Without this, such a key
+    passed the config and the manhole raised that KeyError in
+    `start_listening`, stopping the homeserver without naming the setting.
+    """
+    try:
+        return key.sshType().decode("ascii")
+    except KeyError as e:
+        curve = getattr(getattr(key, "_keyObject", None), "curve", None)
+        what = f"an EC key on the curve {curve.name}" if curve is not None else "a key"
+        raise ConfigError(
+            f"The manhole key file {path} holds {what}, which the SSH server has"
+            " no key type for. The manhole host key must be an RSA, Ed25519 or"
+            " ECDSA P-256, P-384 or P-521 key.",
+            ("manhole_settings", setting),
+        ) from e
 
 
 _MANHOLE_SETTINGS_SCHEMA = {
