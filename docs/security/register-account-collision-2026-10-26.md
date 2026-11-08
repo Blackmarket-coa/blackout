@@ -28,12 +28,17 @@ the Matrix account before it consumed the invitation, so a token that was not
 usable left the Matrix account behind even though the request was refused.
 
 Severity is critical. The first gap let anyone, with no session, act on an
-account that was not theirs: the accounts with no Blackout row include ones
-created directly on the homeserver, such as its admin accounts and the bot
-account the API itself uses, which must be a server admin. A registration
-naming one of those set its password to the one the caller sent and signed out
-its sessions. The second gap broke the invite gate, which is meant to be a hard
-precondition for any account coming into being.
+account that was not theirs: any homeserver account with no Blackout `users`
+row of that username. That covers the accounts created directly on the
+homeserver, among them its admin accounts and the bot account the API itself
+uses, which must be a server admin; burner accounts (`@burn-…`), which never
+get a `users` row; and accounts registered on the homeserver itself (the web
+client's Register tab, where the homeserver allows registration) or through
+account-number sign-up, until `/matrix/exchange` provisions a row for them,
+which it does only with `BLACKOUT_MATRIX_EXCHANGE_TRUSTED_HS` set (off by
+default). A registration naming one of those set its password to the one the
+caller sent and signed out its sessions. The second gap broke the invite gate,
+which is meant to be a hard precondition for any account coming into being.
 
 ## The fix
 
@@ -45,7 +50,8 @@ answer fails closed. The `PUT` is accepted only when it returns `201`
 too. `provisionBurner` carries the same guard. The burner and account-number
 paths choose server-derived names, so only `/register` ever fed a
 caller-chosen name to this endpoint; the guard is applied to all of them for
-consistency.
+consistency. Their accounts were still among the ones `/register` could name
+(above).
 
 **The route.** `/v1/auth/register` maps the refusal to `409 user_exists` — the
 same answer a local username clash already gives, so the response does not tell
@@ -83,43 +89,73 @@ exist and is listed last.
     account. The check finds; it does not clear: the row is absent when the
     invite check then refused the request (the route rolled it back) or the
     account was later deleted, and an account the API itself created that was
-    later made a server admin has such a row legitimately.
+    later made a server admin has such a row legitimately. For a burner's or
+    an account-number account's localpart a row is not a sign by itself:
+    `/matrix/exchange`, where provisioning is trusted, creates one with that
+    username legitimately. The access log covers every kind of account.
 
 ## After upgrading
 
-1. Deploy the API at or after the merge of this fix, and keep the interim
-   proxy block on `POST /v1/auth/register` (see "Disclosure" below) in force
-   until the image that carries the fix is the one serving the route. The
-   block lives in the server's copy of `deploy/docker/production/Caddyfile`,
-   which the `canary` and `full-rollout` jobs of
-   `.github/workflows/deploy-compose-prod.yml` replace from the repository
-   (the `promote` job runs no sync). The two modes differ in when the running
-   proxy drops it:
+1. **Deploy an image that carries the fix.** The default `image_tag` of
+   `.github/workflows/deploy-compose-prod.yml`, `stable`, is pushed only by
+   `.github/workflows/release.yml` on a `v*` tag push, and the repository has
+   no tags, so that default does not carry the fix. Build the API image with
+   `.github/workflows/docker.yml`, dispatched by hand on `develop` once this
+   fix has merged; it tags the image `main-` followed by the commit's first
+   seven characters (and `latest`). Deploy that tag.
 
-    - `canary` (the dispatch default) syncs the directory, brings up
-      `app_canary` beside the stable `app` and reloads Caddy at once. The
-      repository's Caddyfile names `app:3000` as its only upstream, so from
-      that reload until the separate `promote` job has replaced `app`, the
-      previous image serves the route with no block in front of it. If you
-      deploy this way, put the block back into the server's Caddyfile and
-      reload the proxy right after the canary job has synced, keep it until
-      `promote` has replaced `app`, and only then take it off.
-    - `full` syncs the directory too but reloads nothing, so the running
-      proxy keeps the block until it is reloaded or its container is
-      recreated or restarted. Once the new `app` is healthy, reload the
-      proxy; that takes the block off.
+    Since 2026-11-08 production has run as a single API process through a
+    `docker-compose.override.yml` on the server, the operator's interim
+    measure for a separate fix (see "Disclosure"). While that override is in
+    place, deploy by hand in the stack directory: set `APP_IMAGE_TAG` to the
+    tag in the server's `.env`, which compose reads for the
+    `${APP_IMAGE_TAG:-stable}` in `docker-compose.yml`, so later compose
+    commands keep it; then run `docker compose pull app` and
+    `docker compose up -d --no-deps app`, with no `-f`, so the override is
+    read. Or deploy this fix together with that one, by that fix's steps. Do
+    not use `.github/workflows/deploy-compose-prod.yml` meanwhile: its
+    `canary` and `full-rollout` jobs sync `deploy/docker/production/` to the
+    server with `rsync --delete`, which deletes the override (the repository
+    has none); its `promote` and `full-rollout` jobs run compose with
+    `-f docker-compose.yml`, which reads no override file, so they recreate
+    `app` with the background loops off and start the `worker` again; and its
+    `canary` job starts `app_canary`, a second API process, beside `app`.
 
-    Afterwards check that the route answers with anything other than `503`.
-    The same sync replaces every other tracked file in that directory, so any
+    Keep the proxy block on `POST /v1/auth/register` (see "Disclosure") in
+    force until that image is the one serving the route, then take it off.
+    The block is in the server's copy of `deploy/docker/production/Caddyfile`,
+    which the proxy container mounts as a single file
+    (`./Caddyfile:/etc/caddy/Caddyfile:ro`). Such a mount stays on the file
+    that was there when the container started. The workflow's sync writes a
+    new file in its place rather than writing into it, as does any edit that
+    replaces the file, so neither reaches the running proxy, and a
+    `caddy reload` (the `canary` and `promote` jobs run one) re-reads the file
+    as the container still sees it. The block therefore stays in force through
+    a deploy until the proxy container is restarted or recreated. Any restart
+    or recreation after a sync (a host reboot, `docker compose restart`, or a
+    compose `up` that recreates the proxy) drops it, because the synced file
+    has no block. A deploy that does not carry the fix takes the block out of
+    the file on disk in the same way, so put it back into the file after one,
+    or the proxy's next restart drops it.
+
+    To take the block off once the fixed image serves the route: make sure the
+    server's Caddyfile no longer has it (a sync has already removed it; after
+    a hand deploy, delete the two lines), recreate the proxy with
+    `docker compose up -d --force-recreate --no-deps reverse-proxy` so that it
+    reads the file now on disk, and check that the route answers with anything
+    other than `503`. A sync replaces every other tracked file in that
+    directory too and deletes the untracked ones it does not exclude, so any
     other hand edit made there has to be re-applied as well.
 
-2. Read Synapse's access log, as described above, for the whole period before
-   the block was in place and for any interval in which the block was off
-   while the previous image still served the route (the canary-to-promote
-   interval, for instance): a `PUT /_synapse/admin/v2/users/…` made with the
-   bot's token that answered `200` modified an existing account. After the
-   upgrade, the error log `matrix.account_create_updated_existing` marks the
-   residual race described under "What the fix does not close".
+2. Read Synapse's access log, as described above, for every period in which
+   an affected image served the route with no block in front of it: from the
+   first deploy of a build from `9713cfd181` or later until the block was in
+   place, and any later interval in which the block was off (after a proxy
+   restart that followed a sync, for instance). A
+   `PUT /_synapse/admin/v2/users/…` made with the bot's token that answered
+   `200` modified an existing account. After the upgrade, the error log
+   `matrix.account_create_updated_existing` marks the residual race described
+   under "What the fix does not close".
 3. For each account found: its password is the one the request carried, so
    set a new one (the admin `PUT /_synapse/admin/v2/users/{mxid}` with
    `password` signs out its devices by default) and treat the account as having
@@ -142,6 +178,14 @@ exist and is listed last.
     (`POST /_synapse/admin/v1/users/{mxid}/login`), and resetting the bot's
     password does not end such tokens on other accounts.
 
+4. **End the interim measures.** The proxy block is this fix's own and comes
+   off in step 1, once the fixed image serves the route. The operator's other
+   two, `BLACKOUT_AUTH_ROWS_PRUNE=0` in the server's `.env.production`
+   (2026-11-02) and the single-process override (2026-11-08), belong to the
+   separate fix named in "Disclosure": they come off once that fix is
+   deployed, by its steps, which remove both and restore the `worker`. Leave
+   them in place until then, whichever fix is deployed first.
+
 ## What the fix does not close
 
 Two windows remain. Both are narrow, and both are named here rather than left
@@ -153,20 +197,25 @@ implicit.
    answers `200`. The API detects this, refuses the caller (`matrix_user_exists`)
    and logs `matrix.account_create_updated_existing` at error level — but the
    `PUT` has already run, so **the refusal does not undo the password reset**
-   that write applied to the pre-existing account. The error log is the operator
-   signal. Closing this fully needs an atomic create-if-absent, which the admin
-   API does not offer; the nonce-based `POST /_synapse/admin/v1/register` is
-   create-only and is the candidate if this is ever load-bearing.
+   that write applied to the pre-existing account: its password is now the one
+   the caller sent. The error log is the operator signal. Closing this fully
+   needs an atomic create-if-absent, which the admin API does not offer; the
+   nonce-based `POST /_synapse/admin/v1/register` is create-only and is the
+   candidate if this is ever load-bearing.
 
 2. **An invitation used up between preview and redeem.** On `/register` the
    token is previewed before anything is created and consumed after. If its
    last use goes elsewhere in that gap, the redeem fails and the route rolls
    back — but only the local row; the Matrix account was already created, with
    the caller's chosen password, and stays. The request is still refused
-   (`400 invite_token_invalid`) and no Blackout session is issued, so nothing
-   signs in through the API, but the homeserver account exists. The invitation
-   was genuinely usable at preview, so this is a race on its final use, not a
-   bypass of the gate.
+   (`400 invite_token_invalid`) and issues no Blackout session, but the
+   homeserver account exists and the caller knows its password: they can sign
+   in to the homeserver directly and, where exchange provisioning is trusted
+   (`BLACKOUT_MATRIX_EXCHANGE_TRUSTED_HS`, which account-number sign-up also
+   needs), obtain a Blackout session through `/matrix/exchange`, which
+   provisions a row for that localpart and checks no invitation. The
+   invitation was genuinely usable at preview, so this is a race on its final
+   use, not a bypass of the gate.
 
 ## Verification
 
@@ -191,24 +240,24 @@ only; nothing was exercised against a real Synapse.
 ## Disclosure
 
 -   **2026-10-26.** Found and fixed in this change set, against `develop` at
-    `3c3c05c`. The fix was kept out of the public repository until the interim
-    measure below was in place and the operator had decided how to publish it
-    (2026-11-08, below).
+    `3c3c05c`.
 -   **2026-11-02.** The operator confirmed the interim measure in production:
     the reverse proxy (Caddy) answers `503` to `POST /v1/auth/register`, so the
     affected route cannot be reached while the block is in place. That is the
     only path that served the route: its `/api` alias has been off since
     2026-08-31 (`API_ALIAS_REMOVAL_DATE` in `packages/api/src/index.ts`). The
-    block is in the server's copy of `deploy/docker/production/Caddyfile`,
-    which the `canary` and `full-rollout` jobs of
-    `.github/workflows/deploy-compose-prod.yml` replace from the repository
-    (`promote` reloads what is on disk), so a deploy that does not carry this
-    fix removes the block and it has to be put back; "After upgrading" above
-    says how to keep it in force through the deploy that does carry it. The
-    shipped web client does not call `/v1/auth/register` (its sign-up
-    is `/v1/auth/account-number`), and burner and account-number sign-up choose
-    server-derived names, so the block takes nothing away from them.
--   **2026-11-08.** The operator decided the fix is published as an ordinary
-    pull request to `develop`, with CI, and the GitHub security advisory for it
-    is published when the pull request merges. The proxy block stays until the
-    fix is deployed.
+    block is in the server's copy of `deploy/docker/production/Caddyfile`;
+    "After upgrading" step 1 says how it behaves across a deploy, what removes
+    it, and how to take it off. The shipped web client does not call
+    `/v1/auth/register` (its sign-up is `/v1/auth/account-number`), and burner
+    and account-number sign-up choose server-derived names, so the block takes
+    nothing away from them.
+-   **2026-11-08.** Production moved to a single API process: a
+    `docker-compose.override.yml` on the server has the app run the background
+    loops and scales the `worker` to 0. That is the operator's interim measure
+    for a separate fix, to the API store's writes across processes, which has
+    its own record and advisory; it does not bear on this route, only on how
+    this fix is deployed ("After upgrading" step 1). The same day the operator
+    decided that this fix is published with its pull request to `develop`,
+    with CI, and that the GitHub security advisory for it is published when
+    that pull request merges. The proxy block stays until the fix is deployed.
