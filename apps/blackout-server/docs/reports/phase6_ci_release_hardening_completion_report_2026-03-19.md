@@ -1,5 +1,15 @@
 # Phase 6 completion report (CI/release hardening) — 2026-03-19
 
+> **2026-11-02.** Items 1 to 3 below, `synapse/util/hosting_smoke.py`,
+> `scripts-dev/blackout/ci_hosting_smoke.py` and
+> `tests/util/test_hosting_smoke.py`, were removed on 2026-11-02 in `9493f41`,
+> with the profile and managed-hosting helpers they checked, and so was the
+> step item 4 added to `.github/workflows/release-train-gate.yml` to run them;
+> the operator chose removal ("remove both"). That workflow is under
+> `apps/blackout-server/.github/workflows/`, which GitHub does not read, so it
+> has never run in this repository. The report is kept as written, as the
+> record of that pass.
+
 ## Phase targeted
 
 **Phase 6: CI/release hardening** from `docs/development/product_fork_execution_plan.md`.
