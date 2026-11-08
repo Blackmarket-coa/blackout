@@ -947,7 +947,10 @@ and then end the interim measures dated under "Disclosure".
    `/token/refresh` takes only the refresh token (`routes/auth.ts`), so a
    signed-in client gets a new access token at its next refresh without signing
    in again; a client whose refresh token a resync deleted signs in again. The
-   rotation does not touch the read-side gaps (O4): a process that misses a
+   new value takes effect when step 3 starts the processes on the new code: do
+   not restart processes still on the old code with it before then, since a
+   token signed and revoked in between could still have its revocation undone
+   by a resync. The rotation does not touch the read-side gaps (O4): a process that misses a
    later sign-out still accepts that token until it expires. An operator who
    instead accepts that a revived token expires on its own within 24 hours of
    the deploy (decision 3) skips steps 1 and 2.
@@ -1268,6 +1271,25 @@ untrue: the paragraph after the mutation tables said that `a8edded8ab` and
 | 3   | "After upgrading" called steps 1 and 2 "the rotation that decision 3 recommends", and step 2 said "(recommended; decision 3)". Decision 3 recommends nothing: it gives both options, says that "After upgrading" gives the rotation as the recommended step, and that no decision is recorded. The recommendation is this record's                                                                                                                                                                                                  | "Steps 1 and 2 are the rotation this record recommends (decision 3, still open)"; step 2 says "(recommended here; decision 3 is open)". The pull request text said "recommended (decision 3)" twice, and says now that the record recommends it and decision 3 is open                                                                                                                                                                                                                                                                                             |
 | 4   | `writeBehindQueue.ts`'s header, rewritten on this branch, kept `develop`'s sentence "durability is therefore eventual, bounded by drain() on graceful shutdown". It is not true: a write that fails twice is dropped and counted, and a crash loses what is still queued, as `store.ts`'s header (corrected on this branch) says                                                                                                                                                                                                    | The header says so, with the counter (`db_write_behind_failures_total`), and that graceful shutdown awaits `drain()`, which waits for every queued write, until the shutdown's forced exit. Checked first: `withRetry` retries once, and the upsert and targeted failure paths both count `dbWriteBehindFailuresTotal`; the API's shutdown (`src/index.ts`) and the worker's (`src/backgroundWorker.ts`) await `drainRuntimeStore()` under a timer that exits the process (`SHUTDOWN_TIMEOUT_MS`, 10 s by default, in the API). Listed under "Documents corrected" |
 | 5   | The header listed review rounds 1 to 3 and the publication reviews, but not review round 4, which has its own section                                                                                                                                                                                                                                                                                                                                                                                                               | The header says that a fourth review found two low findings, both fixed (under "Changed after review round 4")                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+
+## Changed in the sixth publication review
+
+A sixth review of the publication text (2026-11-08), at `0cb5b96fb6`, found
+two points, both low, both about the advisory text and the pull request text;
+the second also touched "After upgrading" here. No code changed, and every
+gate had run on `a46006acb0` (Gates, "P5").
+
+1. The advisory's single-process workaround, and the pull request's interim
+   measures, said that running one process removes the defect's
+   precondition. It removes the precondition of the row loss only; the four
+   writes with no Postgres write of their own (S2) can still lose their change
+   at a restart in a one-process deployment until the fix is deployed. Both
+   now say so.
+2. "After upgrading" step 2, the rotation, did not say when the new secret
+   must take effect. It takes effect when step 3 starts the processes on the
+   new code; a process still on the old code restarted with it earlier could
+   sign a token whose revocation a resync then undoes before the deploy. Step
+   2 here, in the advisory and in the pull request text now says so.
 
 ## Commits
 
