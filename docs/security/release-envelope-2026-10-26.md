@@ -8293,7 +8293,21 @@ store).
     would have the trigger refused over it, which is decision 31 working);
     30 fails a carry without a stall and has the next answered statement
     try it again; 39's second refusal is answered at once during the stall
-    rather than behind a carry in the lane. R01 to R07, R13.
+    rather than behind a carry in the lane. R01 to R07, R13. The
+    verifiers' probes, run again against this round's code
+    (`fix/r16/rerun-*.log`): `p1b-standing-stall.mts` now ends with the
+    switch armed and served to nobody; `p1-hung-carry.mts` with its
+    `carryRetryMs` of 100 ms still fires, since its 3 s wait is shorter
+    than the default 5 s bound it leaves in place, and holds the switch
+    with the bound shortened alike (`fix/r16/p1-hung-carry-r16.mts`);
+    `stall-carry.mts`, at the defaults, makes the try after the hung one
+    about 15 s after the database answers new connections, and its sweeps
+    at 12.5 s (C1, held all the same, since its second check-in's carry
+    lands first) and 12 s (C2, fired) come inside that window; and the
+    attack replay's S12, pointed at this worktree
+    (`fix/r16/d31-r15-s12-r16.mts`), fires at its worker pass about 1 s
+    after the database answers, also inside it. Those are the window the
+    documents now name; it was unbounded.
 -   **The legacy trigger's condition was unpinned (Low, fix quality;
     pinned).** The condition keys on `patch.status === 'triggered'`, so it
     covered the legacy trigger as round 15 said, but only release switches
