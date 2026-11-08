@@ -695,8 +695,14 @@ on the manhole [here](../../manhole.md). Manhole sub-options include:
   that is not the public half of that private key, or a DSA key or an EC key
   on a curve other than P-256, P-384 or P-521 at `ssh_priv_key_path`, or at
   `ssh_pub_key_path` beside a private key, stops startup with a configuration
-  error. `ssh_pub_key_path` without `ssh_priv_key_path` cannot be used, since
-  a host key must be able to sign, and is ignored with a warning.
+  error. Those checks run only for a process that starts a manhole listener
+  (in the main process a `type: manhole` entry in `listeners` or the `manhole`
+  option, in a worker one in `worker_listeners` or the `worker_manhole`
+  option), so a `manhole_settings` block left over on a homeserver that runs
+  no manhole does not stop it; a key file that cannot be read stops startup
+  either way. `ssh_pub_key_path` without
+  `ssh_priv_key_path` cannot be used, since a host key must be able to sign,
+  and is ignored with a warning.
   Upstream Synapse falls back to a keypair hardcoded in its source when these
   are unset — published, therefore not secret, and identical on every install.
   **This build has removed that key** and generates a fresh one per process

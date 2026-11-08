@@ -27,14 +27,17 @@ filed every key under ``b"ssh-rsa"``, as upstream does, while Twisted offers the
 signature algorithms of the key it holds and then looks the negotiated one up
 by key type, so an Ed25519 or ECDSA key at ``ssh_priv_key_path`` started without
 a word and every connection failed. ``synapse/config/server.py`` now also
-refuses, at config load, a public key at ``ssh_priv_key_path``, a configured
-public key that is not the private key's public half, an EC key on a curve
+refuses, at config load and for a process that starts a manhole listener, a
+public key at ``ssh_priv_key_path``, a configured public key that is not the
+private key's public half, an EC key on a curve
 Twisted has no SSH key type for (which loads, and which ``manhole()`` would
 otherwise fail on with a bare KeyError), and a DSA key (every ssh-dss
 signature uses SHA-1, and one whose subgroup order is 224 or 256 bits, as in
 every standard DSA key larger than 1024 bits, loads from a PEM file and then
-fails, in practice, every key exchange). The session tests for those key types
-load the key files through the homeserver config, as a deployment does.
+fails, in practice, every key exchange). Without a manhole listener the keys
+load unchecked, as upstream loads them (``ManholeListenerTestCase``). The
+session tests for those key types load the key files through the homeserver
+config, as a deployment does.
 
 Records: docs/security/dependency-advisories-twisted-2026-11-02.md (repository
 root) and PATCHES.md, 2026-11-02.
@@ -42,6 +45,7 @@ root) and PATCHES.md, 2026-11-02.
 
 from __future__ import annotations
 
+import copy
 import os
 import shutil
 import struct
@@ -226,16 +230,70 @@ def _write_openssh_dsa_key(directory: str, name: str, key: Key) -> Tuple[str, st
     return priv_path, pub_path
 
 
+# The main process starts the manhole listeners in `listeners` (with the one
+# the `manhole` option adds), a worker those in `worker_listeners` (with the
+# one `worker_manhole` adds): synapse/app/homeserver.py and
+# synapse/app/generic_worker.py. The host-key check runs only for a process
+# that starts one.
+_HTTP_LISTENER: Dict[str, Any] = {"port": 0, "type": "http"}
+_MANHOLE_LISTENER: Dict[str, Any] = {
+    "port": 9000,
+    "bind_addresses": ["127.0.0.1"],
+    "type": "manhole",
+}
+_WORKER: Dict[str, Any] = {
+    "worker_app": "synapse.app.generic_worker",
+    "worker_name": "worker1",
+    "instance_map": {"main": {"host": "127.0.0.1", "port": 9093}},
+}
+_MAIN_MANHOLE: Dict[str, Any] = {"listeners": [_HTTP_LISTENER, _MANHOLE_LISTENER]}
+_PROCESSES_WITH_A_MANHOLE: Dict[str, Dict[str, Any]] = {
+    "main process, a listeners entry": _MAIN_MANHOLE,
+    "main process named synapse.app.homeserver, a listeners entry": {
+        "worker_app": "synapse.app.homeserver",
+        **_MAIN_MANHOLE,
+    },
+    "main process, the manhole option": {"manhole": 9000},
+    "worker, a worker_listeners entry": {
+        **_WORKER,
+        "worker_listeners": [_MANHOLE_LISTENER],
+    },
+    "worker, the worker_manhole option": {**_WORKER, "worker_manhole": 9000},
+}
+_PROCESSES_WITHOUT_A_MANHOLE: Dict[str, Dict[str, Any]] = {
+    "main process, an http listener only": {},
+    "main process, no listener": {"listeners": []},
+    "main process, a manhole in worker_listeners only": {
+        "worker_listeners": [_MANHOLE_LISTENER],
+    },
+    "worker, an http worker listener only": {
+        **_WORKER,
+        "worker_listeners": [_HTTP_LISTENER],
+    },
+    "worker, a manhole in the shared listeners only": {
+        **_WORKER,
+        **_MAIN_MANHOLE,
+    },
+}
+
+
 def _load_manhole_settings(
-    priv_path: Optional[str] = None, pub_path: Optional[str] = None
+    priv_path: Optional[str] = None,
+    pub_path: Optional[str] = None,
+    process: Optional[Dict[str, Any]] = None,
 ) -> ManholeConfig:
-    """Parse a homeserver config whose manhole_settings name these files."""
+    """Parse a homeserver config whose manhole_settings name these files.
+
+    `process` is merged into the config; by default it gives the main process
+    a manhole listener, so the host-key check runs.
+    """
     settings: Dict[str, str] = {"username": USERNAME, "password": PASSWORD}
     if priv_path is not None:
         settings["ssh_priv_key_path"] = priv_path
     if pub_path is not None:
         settings["ssh_pub_key_path"] = pub_path
     config_dict = default_config("test")
+    config_dict.update(copy.deepcopy(_MAIN_MANHOLE if process is None else process))
     config_dict["manhole_settings"] = settings
     config = HomeServerConfig()
     config.parse_config_dict(config_dict, "", "")
@@ -570,6 +628,83 @@ class ManholeKeyConfigTestCase(TestCase):
             assert alone.priv_key is not None
             self.assertIsNone(alone.pub_key, kind)
             self.assertEqual(alone.priv_key.public().blob(), priv.public().blob(), kind)
+
+
+class ManholeListenerTestCase(TestCase):
+    """The host-key check runs only for a process that starts a manhole.
+
+    Upstream loads `manhole_settings` whatever the listeners, and the fork's
+    check ran at config load from 2026-11-02 until its tenth review, so a
+    homeserver with no manhole listener and a stale `manhole_settings` block,
+    which loaded on `develop`, stopped at startup. The check now runs only when
+    the process the config is loaded for starts a manhole listener.
+    """
+
+    def _bad_configs(self) -> List[Tuple[str, str, Optional[str], str]]:
+        """Each refused shape: label, private and public key paths, setting."""
+        directory = _key_dir(self)
+        rsa_path, rsa_pub_path = _write_key_files(directory, "id_rsa", _rsa_key())
+        _, other_rsa_pub_path = _write_key_files(directory, "other_rsa", _rsa_key())
+        ed_path, _ = _write_key_files(directory, "id_ed25519", _ed25519_key())
+        dsa_path = _write_pem_private_key(directory, "dsa2048.pem", _dsa_key(2048))
+        k1_path = _write_pem_private_key(
+            directory, "secp256k1.pem", _ecdsa_key(ec.SECP256K1())
+        )
+        return [
+            ("a public key as the private key", rsa_pub_path, None, "priv"),
+            ("another RSA key's public key", rsa_path, other_rsa_pub_path, "pub"),
+            ("an RSA public key beside an Ed25519 key", ed_path, rsa_pub_path, "pub"),
+            ("a 2048-bit DSA key", dsa_path, None, "priv"),
+            ("an EC key on secp256k1", k1_path, None, "priv"),
+        ]
+
+    def test_without_a_manhole_listener_a_bad_key_does_not_stop_startup(
+        self,
+    ) -> None:
+        for label, priv_path, pub_path, _ in self._bad_configs():
+            for process, extra in _PROCESSES_WITHOUT_A_MANHOLE.items():
+                what = f"{label}, {process}"
+                settings = _load_manhole_settings(priv_path, pub_path, extra)
+                # Loaded as upstream loads them, unchecked and unused.
+                assert settings.priv_key is not None, what
+                self.assertEqual(settings.pub_key is None, pub_path is None, what)
+
+    def test_with_a_manhole_listener_a_bad_key_is_refused(self) -> None:
+        for label, priv_path, pub_path, setting in self._bad_configs():
+            for process, extra in _PROCESSES_WITH_A_MANHOLE.items():
+                what = f"{label}, {process}"
+                try:
+                    _load_manhole_settings(priv_path, pub_path, extra)
+                except ConfigError as e:
+                    self.assertEqual(
+                        e.path, ("manhole_settings", f"ssh_{setting}_key_path"), what
+                    )
+                else:
+                    raise self.failureException(f"{what}: loaded, no ConfigError")
+
+    def test_a_matching_key_pair_loads_with_or_without_a_manhole_listener(
+        self,
+    ) -> None:
+        directory = _key_dir(self)
+        key = _ed25519_key()
+        priv_path, pub_path = _write_key_files(directory, "id_ed25519", key)
+        processes = {**_PROCESSES_WITH_A_MANHOLE, **_PROCESSES_WITHOUT_A_MANHOLE}
+        for process, extra in processes.items():
+            settings = _load_manhole_settings(priv_path, pub_path, extra)
+            assert settings.pub_key is not None, process
+            self.assertEqual(settings.pub_key.blob(), key.public().blob(), process)
+
+    def test_an_unreadable_key_file_stops_startup_with_or_without_a_listener(
+        self,
+    ) -> None:
+        # Upstream's own refusal, unchanged by the fork: `Key.fromFile` runs
+        # whatever the listeners, and a file it cannot read is a ConfigError.
+        missing = os.path.join(_key_dir(self), "absent")
+        processes = {**_PROCESSES_WITH_A_MANHOLE, **_PROCESSES_WITHOUT_A_MANHOLE}
+        for process, extra in processes.items():
+            with self.assertRaises(ConfigError, msg=process) as cm:
+                _load_manhole_settings(missing, None, extra)
+            self.assertIn("Failed to read manhole private key file", cm.exception.msg)
 
 
 class _Probe:

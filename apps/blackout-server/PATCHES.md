@@ -1541,7 +1541,8 @@ Error during startup`), under either Twisted; a configured key pair never
   at P-384) and the two factory tests, five tests, fail against the file
   before this change, under 26.4.0 and 26.10.0.
 - `synapse/config/server.py` (`_check_manhole_host_key`, called from
-  `ServerConfig.read_config`, and its helper `_manhole_key_type`), with the
+  `ServerConfig.read_config` when `_starts_manhole_listener` finds a manhole
+  listener for the process, and its helper `_manhole_key_type`), with the
   previous bullet: a `ConfigError` at startup for a public key at
   `ssh_priv_key_path` (at `manhole_settings.ssh_priv_key_path`), for an
   `ssh_pub_key_path` whose key type differs from the private key's or which
@@ -1581,10 +1582,27 @@ Error during startup`), under either Twisted; a configured key pair never
   and 256-bit orders of the standard keys, with which the server in practice
   cannot sign. Each message names the file and what it holds, and the curve
   and DSA messages name the types that work. Upstream loads both files
-  without comparing them. Each refused config but a DSA key with a 160-bit
-  subgroup order (or a non-standard one just over it, on the key exchanges
-  whose signature fits) would start a manhole on which no SSH session
-  completes, or not start. Keep it through a
+  without comparing them. From the eleventh round (found by the review of
+  the tenth), the check runs only when the process the config is loaded for
+  starts a manhole listener: in the main process a `type: manhole` entry of
+  `listeners` or the `manhole` option, in a worker an entry of
+  `worker_listeners` or the `worker_manhole` option, the listeners
+  `synapse/app/homeserver.py` and `synapse/app/generic_worker.py` start.
+  Until then it ran whatever the listeners, so a homeserver with no manhole
+  listener and a stale `manhole_settings` block (a DSA key, a mismatched
+  `.pub`, a public key as the private one, a curve Twisted has no SSH key
+  type for), which `develop` loads and runs, stopped at config load. A key
+  file that cannot be read still stops startup with or without a manhole
+  listener, as upstream's `Key.fromFile` call always has. For a process
+  that starts a manhole, each refused config but a DSA key with a 160-bit
+  subgroup order would start a manhole on which no SSH session completes,
+  or not start. That includes a non-standard DSA key whose subgroup order
+  is just over 160 bits: the server signs some key exchanges with it, but
+  Twisted's client refuses its host key (cryptography: "q must be exactly
+  160, 224, or 256 bits long"), and OpenSSL's DSA verification rejected
+  every one of its signatures that was tried. Until the eleventh round this
+  sentence said such a key served a session on the key exchanges whose
+  signature fits. Keep it through a
   reconciliation. Tests in `tests/blackout_runtime/test_manhole.py`, through
   `HomeServerConfig`: a public key at `ssh_priv_key_path` and another key of
   the same type at `ssh_pub_key_path`, each for RSA, Ed25519 and ECDSA
@@ -1614,7 +1632,19 @@ Error during startup`), under either Twisted; a configured key pair never
   two DSA session tests pass against both, since neither goes through the
   config), and, from the tenth round, the 2048-bit DSA refusal test
   against the ninth round's file, on the limit the message states
-  ("'subgroup order is 224 or 256 bits' not in" it); and
+  ("'subgroup order is 224 or 256 bits' not in" it); from the eleventh
+  round, five refused shapes (a public key as the private one, another RSA
+  key's public key, an RSA public key beside an Ed25519 key, a 2048-bit DSA
+  key, a secp256k1 key) loading for five processes that start no manhole
+  (an http listener only, no listener, a manhole only in the main process's
+  `worker_listeners`, a worker with an http listener only, a worker beside
+  a manhole only in the shared `listeners`) and refused at their setting for
+  five that start one (a `listeners` entry, the same under
+  `worker_app: synapse.app.homeserver`, the `manhole` option, a worker's
+  `worker_listeners` entry, `worker_manhole`), a matching pair loading for
+  all ten and an unreadable key file refused for all ten, the no-manhole
+  test failing against the tenth round's file (`ConfigError` on its first
+  shape) and the other three passing against it; and
   matching pairs and private keys alone still loading.
 - `docs/manhole.md`: its option list and example named `ssh_priv_key` and
   `ssh_pub_key`. `synapse/config/server.py` reads only `ssh_priv_key_path`

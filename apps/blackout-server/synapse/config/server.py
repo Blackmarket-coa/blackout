@@ -731,12 +731,13 @@ class ServerConfig(Config):
                     f"Failed to read manhole public key file {manhole_pub_key_path}"
                 ) from e
 
-        _check_manhole_host_key(
-            manhole_priv_key_path,
-            manhole_priv_key,
-            manhole_pub_key_path,
-            manhole_pub_key,
-        )
+        if _starts_manhole_listener(config, self.listeners):
+            _check_manhole_host_key(
+                manhole_priv_key_path,
+                manhole_priv_key,
+                manhole_pub_key_path,
+                manhole_pub_key,
+            )
 
         self.manhole_settings = ManholeConfig(
             username=manhole_username,
@@ -1085,6 +1086,35 @@ def parse_listener_def(num: int, listener: Any) -> ListenerConfig:
         return TCPListenerConfig(port, bind_addresses, listener_type, tls, http_config)
 
 
+def _starts_manhole_listener(
+    config: JsonDict, listeners: Iterable[ListenerConfig]
+) -> bool:
+    """Whether the process this config is loaded for starts a manhole listener.
+
+    A Blackout addition (PATCHES.md, 2026-11-02 Twisted entry), which decides
+    whether `_check_manhole_host_key` runs: a homeserver that starts no manhole
+    never uses `manhole_settings`, and upstream loads that block without
+    checking it, so a stale one must not stop startup. The main process starts
+    the `type: manhole` entries of `listeners`, with the one the `manhole`
+    option adds (`synapse/app/homeserver.py`); a worker those of
+    `worker_listeners`, with the one `worker_manhole` adds
+    (`synapse/app/generic_worker.py`). `WorkerConfig` parses the worker's
+    listeners after this class, so they are read from the raw config here, and
+    a `worker_app` of `synapse.app.homeserver` names the main process, as
+    `WorkerConfig` canonicalises it.
+    """
+    worker_app = config.get("worker_app")
+    if worker_app is None or worker_app == "synapse.app.homeserver":
+        return any(listener.type == "manhole" for listener in listeners)
+    if config.get("worker_manhole"):
+        return True
+    worker_listeners = config.get("worker_listeners") or []
+    return any(
+        isinstance(listener, dict) and listener.get("type") == "manhole"
+        for listener in worker_listeners
+    )
+
+
 def _check_manhole_host_key(
     priv_key_path: Optional[str],
     priv_key: Optional[Key],
@@ -1094,10 +1124,11 @@ def _check_manhole_host_key(
     """Refuse a manhole host key the SSH server cannot use or should not offer.
 
     A Blackout addition (PATCHES.md, 2026-11-02 Twisted entry). Upstream loads
-    both files without comparing them. The manhole files the host key under the
-    private key's own type and serves `pub_key` as its public half
-    (`synapse/util/manhole.py`), so each of these would start a manhole on which
-    no SSH session completes, or stop startup with a bare KeyError:
+    both files without comparing them. Called only when the process starts a
+    manhole listener (`_starts_manhole_listener`). The manhole files the host
+    key under the private key's own type and serves `pub_key` as its public
+    half (`synapse/util/manhole.py`), so each of these would start a manhole
+    on which no SSH session completes, or stop startup with a bare KeyError:
 
     - a key on a curve Twisted has no SSH key type for (an EC key other than
       P-256, P-384 or P-521, which only a PEM file can hold: ssh-keygen cannot
