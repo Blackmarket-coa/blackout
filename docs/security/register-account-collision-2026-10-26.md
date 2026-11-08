@@ -28,9 +28,9 @@ Severity is critical. The first gap let anyone, with no session, act on an
 account that was not theirs: the accounts with no Blackout row include ones
 created directly on the homeserver, such as its admin accounts and the bot
 account the API itself uses, which must be a server admin. A registration
-naming one of those reset its password and signed out its sessions. The second
-gap broke the invite gate, which is meant to be a hard precondition for any
-account coming into being.
+naming one of those set its password to the one the caller sent and signed out
+its sessions. The second gap broke the invite gate, which is meant to be a hard
+precondition for any account coming into being.
 
 ## The fix
 
@@ -59,7 +59,8 @@ the API, and takes no caller-chosen name.
 ## What an operator should check
 
 Whether the first gap was used before the fix is deployed can be read from the
-homeserver, not from the API, which kept no record of it:
+homeserver, not from the API, which recorded nothing that tells such a request
+apart from an ordinary registration:
 
 -   **Synapse's access log.** Every account the API created is a
     `PUT /_synapse/admin/v2/users/…` made with the bot's token. A new account
@@ -67,7 +68,32 @@ homeserver, not from the API, which kept no record of it:
     admin accounts (`users.admin = 1` in Synapse's database) and the bot
     account first.
 -   **The account's own trail.** An account written to this way was signed out
-    of all its devices, and its display name was set to its localpart.
+    of all its devices (Synapse keeps the token that made the request, so for
+    the bot account: all but the API's own token), its display name was set to
+    its localpart, and its password became the one the request carried.
+
+## After upgrading
+
+1. Deploy the API at or after the merge of this fix. Then take the interim
+   proxy block off `POST /v1/auth/register` (see "Disclosure" below; a deploy
+   from the repository replaces the server's Caddyfile, so reload the proxy)
+   and check that the route answers again, with anything other than `503`.
+2. Read Synapse's access log for the whole period before the block was in
+   place, as described above: a `PUT /_synapse/admin/v2/users/…` made with the
+   bot's token that answered `200` modified an existing account. After the
+   upgrade, the error log `matrix.account_create_updated_existing` marks the
+   residual race described under "What the fix does not close".
+3. For each account found: its password is the one the request carried, so
+   set a new one (the admin `PUT /_synapse/admin/v2/users/{mxid}` with
+   `password` signs out its devices by default) and treat the account as having
+   been in the caller's hands from the time of the write. If the bot account
+   itself was written to, the API's own token was kept (Synapse spares the
+   token that made the request), so the API went on working and nothing
+   failed; the caller could sign in as the bot, a server admin, with the
+   password they sent, so also review what an admin could have done since.
+   Unless the request was then refused by the invite check, it also created a
+   Blackout `users` row with that username and issued the caller a session;
+   that row and its sessions belong to the caller and should be removed.
 
 ## What the fix does not close
 
@@ -109,3 +135,24 @@ registration still works with one lookup and one create; and `registerUser` /
 fail-closed paths. Each assertion was also run against the pre-fix code to
 confirm it fails there. The run used a stub homeserver only; nothing was
 exercised against a real Synapse.
+
+## Disclosure
+
+-   **2026-10-26.** Found and fixed in this change set, against `develop` at
+    `3c3c05c`. The fix was kept out of the public repository until the interim
+    measure below was in place.
+-   **2026-11-02.** The operator confirmed the interim measure in production:
+    the reverse proxy (Caddy) answers `503` to `POST /v1/auth/register`, so the
+    affected route cannot be reached until the fix is deployed. That is the only
+    path that served the route: its `/api` alias has been off since 2026-08-31
+    (`API_ALIAS_REMOVAL_DATE` in `packages/api/src/index.ts`). The block is in
+    the server's copy of `deploy/docker/production/Caddyfile`, which
+    `deploy-compose-prod.yml` replaces from the repository on every deploy, so a
+    deploy that does not carry this fix removes the block and it has to be put
+    back. The shipped web client does not call `/v1/auth/register` (its sign-up
+    is `/v1/auth/account-number`), and burner and account-number sign-up choose
+    server-derived names, so the block takes nothing away from them.
+-   **2026-11-08.** The operator decided the fix is published as an ordinary
+    pull request to `develop`, with CI, and the GitHub security advisory for it
+    is published when the pull request merges. The proxy block stays until the
+    fix is deployed.
