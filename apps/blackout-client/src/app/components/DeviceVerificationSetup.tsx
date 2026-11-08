@@ -16,16 +16,20 @@ import {
 import FileSaver from 'file-saver';
 import to from 'await-to-js';
 import { AuthDict, IAuthData, MatrixError, UIAuthCallback } from 'matrix-js-sdk';
+import type { GeneratedSecretStorageKey } from 'matrix-js-sdk/lib/crypto-api';
 import { PasswordInput } from './password-input';
 import { ContainerColor } from '../styles/ContainerColor.css';
 import { copyToClipboard } from '../utils/dom';
 import { AsyncStatus, useAsyncCallback } from '../hooks/useAsyncCallback';
 import { clearSecretStorageKeys } from '../../client/secretStorageKeys';
 import {
-    SETUP_STOPPED_PARTWAY_TEXT,
+    SETUP_CONFIRM_CANCELLED_TEXT,
+    SETUP_PARTWAY_TEXT,
     checkAccountKeyState,
+    checkBackupState,
     setupRefusal,
     type SetupMode,
+    type SetupPartwayStage,
 } from '../../client/keyBackupCheck';
 import { ActionUIA, ActionUIAFlowsLoader } from './ActionUIA';
 import { useMatrixClient } from '../hooks/useMatrixClient';
@@ -41,7 +45,7 @@ type PerformAction<T> = (authDict: AuthDict | null) => Promise<T>;
 type UIAAction<T> = {
     authData: IAuthData;
     callback: UIACallback<T>;
-    cancelCallback: () => void;
+    cancelCallback: (error?: unknown) => void;
 };
 
 function makeUIAAction<T>(
@@ -80,8 +84,33 @@ function makeUIAAction<T>(
  */
 type OwnCrossSigning = { masterKey: string; complete: boolean };
 
-/** A step failed after this form's cross-signing was on the homeserver. */
-class SetupStoppedPartway extends Error {}
+/**
+ * An attempt failed, or its account confirmation was cancelled, after it had
+ * started writing the account's secret storage. `stage` says where.
+ */
+class SetupStoppedPartway extends Error {
+    constructor(message: string, readonly stage: SetupPartwayStage) {
+        super(message);
+    }
+}
+
+/** The person closed the account confirmation the cross-signing upload asked for. */
+class SetupConfirmCancelled extends Error {
+    constructor() {
+        super(SETUP_CONFIRM_CANCELLED_TEXT);
+    }
+}
+
+/** The line to show for a failure: its message, or a fixed line when it has none. */
+const failureText = (error: unknown): string =>
+    error instanceof Error && error.message ? error.message : 'Unexpected Error!';
+
+/**
+ * The recovery key of an attempt that stopped partway (`SetupStoppedPartway`),
+ * kept on screen and used again by the next Continue, and where that attempt
+ * stopped.
+ */
+type HeldRecoveryKey = { key: GeneratedSecretStorageKey; stage: SetupPartwayStage };
 
 type SetupVerificationProps = {
     onComplete: (recoveryKey: string) => void;
@@ -100,6 +129,7 @@ export function SetupVerification({ onComplete, mode = 'setup' }: SetupVerificat
     const [uiaAction, setUIAAction] = useState<UIAAction<void>>();
     const [nextAuthData, setNextAuthData] = useState<IAuthData | null>(); // null means no next action.
     const [ownCrossSigning, setOwnCrossSigning] = useState<OwnCrossSigning | null>(null);
+    const [heldKey, setHeldKey] = useState<HeldRecoveryKey | null>(null);
 
     const handleAction = useCallback(
         async (authDict: AuthDict) => {
@@ -192,13 +222,19 @@ export function SetupVerification({ onComplete, mode = 'setup' }: SetupVerificat
                     state.crossSigning === 'yes' &&
                     state.masterKey === ownCrossSigning.masterKey;
 
-                const recoveryKeyData = await crypto.createRecoveryKeyFromPassphrase(passphrase);
-                if (!recoveryKeyData.encodedPrivateKey) {
+                // After an attempt that stopped partway, the account's secret
+                // storage may open only with that attempt's recovery key, which
+                // the form shows; the next attempt uses the same key, so the
+                // key on screen stays the one that opens it.
+                const recoveryKeyData =
+                    heldKey?.key ?? (await crypto.createRecoveryKeyFromPassphrase(passphrase));
+                const { encodedPrivateKey } = recoveryKeyData;
+                if (!encodedPrivateKey) {
                     throw new Error('Unexpected Error! Failed to create recovery key.');
                 }
                 clearSecretStorageKeys();
 
-                let crossSigningOn = keepOwnCrossSigning;
+                let step: 'secret_storage' | 'cross_signing' | 'backup' = 'secret_storage';
                 try {
                     // With the form's own cross-signing kept, this also
                     // stores those keys under the new recovery key: this
@@ -208,6 +244,7 @@ export function SetupVerification({ onComplete, mode = 'setup' }: SetupVerificat
                         setupNewSecretStorage: true,
                     });
 
+                    step = 'cross_signing';
                     if (!keepOwnCrossSigning) {
                         let complete = false;
                         try {
@@ -225,28 +262,49 @@ export function SetupVerification({ onComplete, mode = 'setup' }: SetupVerificat
                                 setOwnCrossSigning(masterKey ? { masterKey, complete } : null);
                             }
                         }
-                        crossSigningOn = true;
                     }
 
+                    step = 'backup';
                     await crypto.resetKeyBackup();
                 } catch (error) {
-                    if (!crossSigningOn) throw error;
-                    throw new SetupStoppedPartway(
-                        error instanceof Error ? error.message : String(error)
-                    );
+                    // From the first write on, the account's secret storage may
+                    // open only with this attempt's recovery key (S9, sixth
+                    // review): show it, say how far the attempt got, and offer
+                    // Continue only where the next attempt can finish.
+                    let stage: SetupPartwayStage;
+                    if (step === 'backup') {
+                        // `resetKeyBackup` creates the backup before it stores
+                        // the backup's key, so ask whether one exists now. Only
+                        // a 404 M_NOT_FOUND means none.
+                        const { backup } = await checkBackupState(mx);
+                        stage = backup === 'none' ? 'backup_none' : 'backup_unclear';
+                    } else {
+                        stage = step;
+                    }
+                    if (alive()) setHeldKey({ key: recoveryKeyData, stage });
+                    throw new SetupStoppedPartway(failureText(error), stage);
                 }
 
-                onComplete(recoveryKeyData.encodedPrivateKey);
+                onComplete(encodedPrivateKey);
             },
-            [mx, mode, onComplete, authUploadDeviceSigningKeys, ownCrossSigning, alive]
+            [mx, mode, onComplete, authUploadDeviceSigningKeys, ownCrossSigning, heldKey, alive]
         )
     );
 
     const loading = setupState.status === AsyncStatus.Loading;
+    const latestError = setupState.status === AsyncStatus.Error ? setupState.error : undefined;
+    const partwayNext =
+        latestError instanceof SetupStoppedPartway
+            ? SETUP_PARTWAY_TEXT[latestError.stage].next
+            : undefined;
+    const offerContinue = !heldKey || SETUP_PARTWAY_TEXT[heldKey.stage].next !== undefined;
 
     const handleSubmit: FormEventHandler<HTMLFormElement> = (evt) => {
         evt.preventDefault();
-        if (loading) return;
+        // No Continue is offered after a backup this attempt may have created
+        // (`SETUP_PARTWAY_TEXT.backup_unclear`); a submit by other means does
+        // nothing either.
+        if (loading || !offerContinue) return;
 
         const target = evt.target as HTMLFormElement | undefined;
         const passphraseInput = target?.passphraseInput as HTMLInputElement | undefined;
@@ -262,58 +320,76 @@ export function SetupVerification({ onComplete, mode = 'setup' }: SetupVerificat
     };
 
     return (
-        <Box as="form" onSubmit={handleSubmit} direction="Column" gap="400">
-            <Text size="T300">
-                Generate a <b>Recovery Key</b> for verifying identity if you do not have access to
-                other devices. Additionally, setup a passphrase as a memorable alternative.
-            </Text>
-            <Box direction="Column" gap="100">
-                <Text size="L400">Passphrase (Optional)</Text>
-                <PasswordInput name="passphraseInput" size="400" readOnly={loading} />
-            </Box>
-            <Button
-                type="submit"
-                disabled={loading}
-                before={loading && <Spinner size="200" variant="Primary" fill="Solid" />}
-            >
-                <Text size="B400">Continue</Text>
-            </Button>
-            {setupState.status === AsyncStatus.Error && (
-                <Text size="T200" style={{ color: color.Critical.Main }}>
-                    <b>{setupState.error ? setupState.error.message : 'Unexpected Error!'}</b>
-                </Text>
+        <Box direction="Column" gap="400">
+            {/* Outside the form: its buttons are not submit buttons. */}
+            {heldKey?.key.encodedPrivateKey && (
+                <RecoveryKeyDisplay
+                    recoveryKey={heldKey.key.encodedPrivateKey}
+                    lead={SETUP_PARTWAY_TEXT[heldKey.stage].what}
+                />
             )}
-            {setupState.status === AsyncStatus.Error &&
-                setupState.error instanceof SetupStoppedPartway && (
-                    <Text size="T200">{SETUP_STOPPED_PARTWAY_TEXT}</Text>
-                )}
-            {nextAuthData !== null && uiaAction && (
-                <ActionUIAFlowsLoader
-                    authData={nextAuthData ?? uiaAction.authData}
-                    unsupported={() => (
-                        <Text size="T200">
-                            Authentication steps to perform this action are not supported by client.
+            <Box as="form" onSubmit={handleSubmit} direction="Column" gap="400">
+                {!heldKey && (
+                    <>
+                        <Text size="T300">
+                            Generate a <b>Recovery Key</b> for verifying identity if you do not have
+                            access to other devices. Additionally, setup a passphrase as a memorable
+                            alternative.
                         </Text>
-                    )}
-                >
-                    {(ongoingFlow) => (
-                        <ActionUIA
-                            authData={nextAuthData ?? uiaAction.authData}
-                            ongoingFlow={ongoingFlow}
-                            action={handleAction}
-                            onCancel={uiaAction.cancelCallback}
-                        />
-                    )}
-                </ActionUIAFlowsLoader>
-            )}
+                        <Box direction="Column" gap="100">
+                            <Text size="L400">Passphrase (Optional)</Text>
+                            <PasswordInput name="passphraseInput" size="400" readOnly={loading} />
+                        </Box>
+                    </>
+                )}
+                {offerContinue && (
+                    <Button
+                        type="submit"
+                        disabled={loading}
+                        before={loading && <Spinner size="200" variant="Primary" fill="Solid" />}
+                    >
+                        <Text size="B400">Continue</Text>
+                    </Button>
+                )}
+                {latestError !== undefined && (
+                    <Text size="T200" style={{ color: color.Critical.Main }}>
+                        <b>{failureText(latestError)}</b>
+                    </Text>
+                )}
+                {partwayNext && <Text size="T200">{partwayNext}</Text>}
+                {nextAuthData !== null && uiaAction && (
+                    <ActionUIAFlowsLoader
+                        authData={nextAuthData ?? uiaAction.authData}
+                        unsupported={() => (
+                            <Text size="T200">
+                                Authentication steps to perform this action are not supported by
+                                client.
+                            </Text>
+                        )}
+                    >
+                        {(ongoingFlow) => (
+                            <ActionUIA
+                                authData={nextAuthData ?? uiaAction.authData}
+                                ongoingFlow={ongoingFlow}
+                                action={handleAction}
+                                onCancel={() =>
+                                    uiaAction.cancelCallback(new SetupConfirmCancelled())
+                                }
+                            />
+                        )}
+                    </ActionUIAFlowsLoader>
+                )}
+            </Box>
         </Box>
     );
 }
 
 type RecoveryKeyDisplayProps = {
     recoveryKey: string;
+    /** The sentence above the key; the setup form passes its partway text. */
+    lead?: string;
 };
-export function RecoveryKeyDisplay({ recoveryKey }: RecoveryKeyDisplayProps) {
+export function RecoveryKeyDisplay({ recoveryKey, lead }: RecoveryKeyDisplayProps) {
     const [show, setShow] = useState(false);
 
     const handleCopy = () => {
@@ -332,8 +408,8 @@ export function RecoveryKeyDisplay({ recoveryKey }: RecoveryKeyDisplayProps) {
     return (
         <Box direction="Column" gap="400">
             <Text size="T300">
-                Store the Recovery Key in a safe place for future use, as you will need it to verify
-                your identity if you do not have access to other devices.
+                {lead ??
+                    'Store the Recovery Key in a safe place for future use, as you will need it to verify your identity if you do not have access to other devices.'}
             </Text>
             <Box direction="Column" gap="100">
                 <Text size="L400">Recovery Key</Text>
@@ -350,16 +426,21 @@ export function RecoveryKeyDisplay({ recoveryKey }: RecoveryKeyDisplayProps) {
                     <Text style={{ fontFamily: 'monospace' }} size="T200" priority="300">
                         {safeToDisplayKey}
                     </Text>
-                    <Chip onClick={() => setShow(!show)} variant="Secondary" radii="Pill">
+                    <Chip
+                        type="button"
+                        onClick={() => setShow(!show)}
+                        variant="Secondary"
+                        radii="Pill"
+                    >
                         <Text size="B300">{show ? 'Hide' : 'Show'}</Text>
                     </Chip>
                 </Box>
             </Box>
             <Box direction="Column" gap="200">
-                <Button onClick={handleCopy}>
+                <Button type="button" onClick={handleCopy}>
                     <Text size="B400">Copy</Text>
                 </Button>
-                <Button onClick={handleDownload} fill="Soft">
+                <Button type="button" onClick={handleDownload} fill="Soft">
                     <Text size="B400">Download</Text>
                 </Button>
             </Box>
@@ -454,13 +535,22 @@ export const DeviceVerificationReset = forwardRef<HTMLDivElement, DeviceVerifica
                                 storage and creates a new backup. A backup
                                 another app creates while the password prompt
                                 is open would still be deleted (the record's
-                                "What remains"). */}
+                                "What remains"). Secret storage is replaced
+                                before that prompt, and the new cross-signing
+                                keys are stored in it before they are
+                                uploaded, so a cancel at the prompt leaves the
+                                account's secret storage opening only with the
+                                new recovery key, holding keys the homeserver
+                                never received; the form then shows that key
+                                (sixth review, `SETUP_PARTWAY_TEXT`). */}
                             <Text size="T300">
                                 Anyone you have verified with will see security alerts, and you will
                                 get a new recovery key and a new key backup. If your account already
                                 has a key backup, or Blackout can’t check, Blackout stops before
-                                changing anything. You almost certainly do not want to do this,
-                                unless you have lost <b>Recovery Key</b> or{' '}
+                                changing anything. Blackout changes your secret storage before it
+                                asks you to confirm your account, so if you stop at that step, save
+                                the recovery key it then shows. You almost certainly do not want to
+                                do this, unless you have lost <b>Recovery Key</b> or{' '}
                                 <b>Recovery Passphrase</b> and every device you can verify from.
                             </Text>
                         </Box>

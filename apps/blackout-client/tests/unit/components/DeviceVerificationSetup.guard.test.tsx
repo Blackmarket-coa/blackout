@@ -195,6 +195,11 @@ describe('DeviceVerificationReset: the warning says what the guarded flow does',
         expect(bodyText()).toContain(
             'Anyone you have verified with will see security alerts, and you will get a new recovery key and a new key backup. If your account already has a key backup, or Blackout can’t check, Blackout stops before changing anything.'
         );
+        // Round 6: secret storage changes before the account confirmation,
+        // so a person who stops there keeps the key the form then shows.
+        expect(bodyText()).toContain(
+            'Blackout changes your secret storage before it asks you to confirm your account, so if you stop at that step, save the recovery key it then shows.'
+        );
     });
 });
 

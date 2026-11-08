@@ -199,13 +199,72 @@ export const SETUP_REFUSED_TEXT = {
 } as const;
 
 /**
- * Shown under the error when a step failed after this form's own
- * cross-signing reached the homeserver (the backup's creation, say). The
- * next Continue in the same form keeps that cross-signing (`setupRefusal`'s
- * `ownMasterKey`, and `SetupVerification` skips the cross-signing step).
+ * Where an attempt of the setup form stopped, once it had started writing the
+ * account's secret storage (S9's sixth review). The form then keeps this
+ * attempt's recovery key on screen and uses it again on the next Continue,
+ * because from that point the account's secret storage may open only with it:
+ *
+ * - `'secret_storage'`: `bootstrapSecretStorage` itself failed. It writes the
+ *   new key's description, then the default key, then the cross-signing
+ *   secrets this device holds (`rust-crypto.js` `bootstrapSecretStorage`),
+ *   and its error doesn't say how far it got, so the default key may or may
+ *   not be the new one.
+ * - `'cross_signing'`: secret storage was replaced; then the cross-signing
+ *   step failed or its account confirmation (the password) was cancelled.
+ *   `resetCrossSigning` makes new keys on this device and stores them in the
+ *   new secret storage before it uploads them
+ *   (`CrossSigningIdentity.js` `resetCrossSigning`), so after a cancel the
+ *   secret storage holds keys the homeserver never received.
+ * - `'backup_none'`: cross-signing is on; the backup step failed, and the
+ *   homeserver then answered 404 `M_NOT_FOUND`: no backup exists.
+ * - `'backup_unclear'`: cross-signing is on; the backup step failed, and the
+ *   homeserver then answered that a backup exists, or didn't answer. The
+ *   backup may be the one this attempt created: `resetKeyBackup` creates it
+ *   (`POST /room_keys/version`) and only then stores its key in secret
+ *   storage (`rust-crypto.js` `resetKeyBackup`), so its key may be on this
+ *   device alone, or nowhere if the creation's answer was lost.
  */
-export const SETUP_STOPPED_PARTWAY_TEXT =
-    'Cross-signing is now on for your account, but the rest of the setup didn’t finish. Press Continue to try the rest again: this window keeps that cross-signing rather than replacing it.';
+export type SetupPartwayStage =
+    | 'secret_storage'
+    | 'cross_signing'
+    | 'backup_none'
+    | 'backup_unclear';
+
+/**
+ * What the form says after an attempt stopped partway. `what` stays above the
+ * recovery key for as long as the form holds that key; `next` is shown under
+ * the error only while that attempt's failure is the latest, and only where
+ * the next Continue can finish: `'backup_unclear'` has none, and the form
+ * offers no Continue there, because the next check would find the backup and
+ * refuse with `SETUP_REFUSED_TEXT.backup`, whose "may be able to restore"
+ * isn't true of a backup whose key never reached secret storage.
+ */
+export const SETUP_PARTWAY_TEXT: Record<SetupPartwayStage, { what: string; next?: string }> = {
+    secret_storage: {
+        what: 'The setup stopped while Blackout was setting up new secret storage for your account, and it may already have done so. If it did, your secret storage now opens only with the recovery key below, so save it. Cross-signing wasn’t changed, and no key backup was created.',
+        next: 'Press Continue to try again with this same recovery key.',
+    },
+    cross_signing: {
+        what: 'The setup stopped before it finished, but Blackout had already set up new secret storage for your account, which now opens only with the recovery key below, so save it. Cross-signing wasn’t finished, and no key backup was created.',
+        next: 'Press Continue to try the rest again with this same recovery key.',
+    },
+    backup_none: {
+        what: 'Your account’s new cross-signing is on, and its new secret storage opens only with the recovery key below, so save it. Creating the key backup didn’t finish, and your homeserver answered that it has no key backup.',
+        next: 'Press Continue to create the backup with this same recovery key: this window keeps that cross-signing rather than replacing it.',
+    },
+    backup_unclear: {
+        what: 'Your account’s new cross-signing is on, and its new secret storage opens only with the recovery key below, so save it. The key backup step didn’t finish, and your homeserver may now have a key backup that this attempt created before it stopped. That backup’s key may not be in your secret storage, so this recovery key may not restore from it. Blackout won’t set up another backup here, because that would delete it.',
+    },
+};
+
+/**
+ * The error line when the person closes the account confirmation (the
+ * password, or single sign-on) that the cross-signing upload asks for. The
+ * cancel used to reject with the click event, which has no message, so the
+ * error line was empty.
+ */
+export const SETUP_CONFIRM_CANCELLED_TEXT =
+    'The account confirmation step was cancelled, so the setup stopped there.';
 
 /**
  * The last check before the setup writes anything. Every entry re-checks at
