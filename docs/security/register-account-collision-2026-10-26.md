@@ -20,25 +20,36 @@ account. A Matrix account can exist without a Blackout row — the two id spaces
 are separate — so a registration naming such an account would write to it
 instead of being refused. The `PUT` with no lookup has been in `registerUser`
 since `registerUser`'s first commit on `develop` (`9713cfd181`, 2026-03-23 UTC),
-and `/register` has called it since that same commit, so every build of the API
-from that commit to the merge of this fix is affected.
+and `/register` has called it since that same commit. Until `bcdbb5c7db`
+(2026-05-21 UTC), though, `registerUser` wrote every account id with the
+domain `blackout.local`, and Synapse's admin `PUT` refuses an id that is not
+local to the homeserver (`400`, "This endpoint can only be used with local
+users"), so those builds wrote nothing on a homeserver of any other name.
+`bcdbb5c7db` takes the domain from `MATRIX_HOMESERVER_DOMAIN` (default
+`blackout.local`). The builds affected are therefore: on a homeserver whose
+`server_name` is `blackout.local` (the API's development default), every build
+from `9713cfd181` to the merge of this fix; on any other homeserver (the
+repository's homeserver template names `theblackout.app`), every build from
+`bcdbb5c7db` to the merge of this fix, wherever `MATRIX_HOMESERVER_DOMAIN` is
+set to that homeserver's name, which account creation there needs.
 
 A second gap sat next to it: under `REQUIRE_INVITE_TOKEN=1` the route created
 the Matrix account before it consumed the invitation, so a token that was not
 usable left the Matrix account behind even though the request was refused.
 
 Severity is critical. The first gap let anyone, with no session, act on an
-account that was not theirs: any homeserver account with no Blackout `users`
-row of that username. That covers the accounts created directly on the
-homeserver, among them its admin accounts and the bot account the API itself
-uses, which must be a server admin; burner accounts (`@burn-…`), which never
-get a `users` row; and accounts registered on the homeserver itself (the web
-client's Register tab, where the homeserver allows registration) or through
-account-number sign-up, until `/matrix/exchange` provisions a row for them,
-which it does only with `BLACKOUT_MATRIX_EXCHANGE_TRUSTED_HS` set (off by
-default). A registration naming one of those set its password to the one the
-caller sent and signed out its sessions. The second gap broke the invite gate,
-which is meant to be a hard precondition for any account coming into being.
+account that was not theirs: any homeserver account with no Blackout `users` row
+of that username. That covers the accounts created directly on the homeserver,
+among them its admin accounts and the bot account the API itself uses, which
+must be a server admin; and burner accounts (`@burn-…`) and accounts registered
+on the homeserver itself (the web client's Register tab, where the homeserver
+allows registration) or through account-number sign-up, until `/matrix/exchange`
+provisions a row for them, which it does only with
+`BLACKOUT_MATRIX_EXCHANGE_TRUSTED_HS` set (off by default). Burner sign-up
+itself creates no `users` row, only the burner record. A registration naming one
+of those set its password to the one the caller sent and signed out its
+sessions. The second gap broke the invite gate, which is meant to be a hard
+precondition for any account coming into being.
 
 ## The fix
 
@@ -53,12 +64,17 @@ caller-chosen name to this endpoint; the guard is applied to all of them for
 consistency. Their accounts were still among the ones `/register` could name
 (above).
 
-**The route.** `/v1/auth/register` maps the refusal to `409 user_exists` — the
-same answer a local username clash already gives, so the response does not tell
-a caller which Matrix accounts exist — and rolls the local row back. A
-presented invite token is checked (`previewInvitation`) before the local row or
-the Matrix account is created, and consumed after; with the gate on, an
-unusable or absent token now creates nothing.
+**The route.** `/v1/auth/register` maps the refusal to `409 user_exists` and
+rolls the local row back. That is the same answer a local username clash already
+gives, so the response does not tell a caller whether the name belongs to a
+Blackout account or only to a homeserver account. It does say that the name is
+taken, as the homeserver's own availability check
+(`GET /_matrix/client/v3/register/available`) does where the homeserver allows
+registration; with the invite gate on, a `409` does not consume the token, which
+is previewed but not redeemed, so one usable token can be presented with any
+number of taken names. A presented invite token is checked (`previewInvitation`)
+before the local row or the Matrix account is created, and consumed after; with
+the gate on, an unusable or absent token now creates nothing.
 
 The only other admin endpoint that can create an account,
 `POST /_synapse/admin/v1/register` (the shared-secret nonce flow), is used only
@@ -70,12 +86,13 @@ takes no caller-chosen name.
 
 Whether the first gap was used before the fix is deployed can be read from the
 homeserver's access log only for the period that log still covers, and the
-affected code has been on `develop` since March 2026 (above). For any earlier
-period nothing answers the question for certain: what remains are two traces in
-room timelines and one cross-check on the API side, each of which can find an
-account written to but none of which can clear one. The API recorded nothing
-that marks such a request on its own: each registration row is ordinary by
-itself.
+affected code has been on `develop` since March 2026, and able to write to an
+account on a homeserver not named `blackout.local` since May 2026 (above). For
+any earlier period nothing answers the question for certain: what remains are
+two traces in room timelines and one cross-check on the API side, each of which
+can find an account written to but none of which can clear one. The API recorded
+nothing that marks such a request on its own: each registration row is ordinary
+by itself.
 
 -   **Synapse's access log.** Every account the API created is a
     `PUT /_synapse/admin/v2/users/…` made with the bot's token. A new account
@@ -92,24 +109,24 @@ itself.
     `infra/single-server-baseline/docker-compose.yml` keeps the last 50 MB of
     each container's console output (`max-size: '10m'`, `max-file: '5'`). So
     unless the server was set to keep more, or the log is shipped elsewhere,
-    expect it to reach back days or weeks, not to March 2026.
+    expect it to reach back days or weeks, not to May 2026.
 -   **The account's own trail.** An account written to this way was signed out
     of all its devices (Synapse keeps the token that made the request, so for
     the bot account: all but the API's own token), its display name was set to
     its localpart, and its password became the one the request carried. Two
     parts of that trail are events in rooms, timestamped, and last as long as
     those rooms' history rather than the log. Where the display name changed,
-    Synapse re-sent the account's membership in every room it was joined to,
-    so each of those rooms holds a membership event of the account carrying
-    its localpart as display name. And a registration that went through then
-    joined the account to the welcome room through the admin join API
-    (`autoJoinWelcomeRoom` in `packages/api/src/routes/auth.ts`, in builds
-    from `992b55295f`, 2026-05-24 UTC, wherever `WELCOME_MATRIX_ROOM_ID` was
-    set or the alias `#welcome:<domain>` resolved). Where that join succeeded
-    for an account that was not already a member, it left a join in that
-    room's timeline. Either can have an ordinary cause: an account's owner may
-    set its display name to its localpart, and an account may join the welcome
-    room by itself.
+    Synapse re-sent the account's membership in every room it was joined to, so
+    each of those rooms holds a membership event of the account carrying its
+    localpart as display name. And a registration that went through then joined
+    the account to the welcome room through the admin join API
+    (`autoJoinWelcomeRoom` in `packages/api/src/routes/auth.ts`, in builds from
+    `992b55295f`, 2026-05-24 UTC, wherever `WELCOME_MATRIX_ROOM_ID` was set or
+    the alias `WELCOME_MATRIX_ROOM_ALIAS`, by default `#welcome:<domain>`,
+    resolved). Where that join succeeded for an account that was not already a
+    member, it left a join in that room's timeline. Either can have an ordinary
+    cause: an account's owner may set its display name to its localpart, and an
+    account may join the welcome room by itself.
 -   **The API's `users` table.** The API creates the Blackout `users` row and
     the Matrix account together, with the row's `username` as the account's
     localpart. So a `users` row whose username is the localpart of an account
@@ -177,21 +194,24 @@ itself.
     directory too and deletes the untracked ones it does not exclude, so any
     other hand edit made there has to be re-applied as well.
 
-2. Read Synapse's access log, as described above, for every period in which
-   an affected image served the route with no block in front of it: from the
-   first deploy of a build from `9713cfd181` or later until the block was in
-   place, any later interval in which the block was off (after a proxy restart
-   that followed a sync, for instance), and any period in which an API process
-   started before 2026-08-31 (UTC) served `/api/auth/register`, which the block
-   does not cover (see "Disclosure"). A `PUT /_synapse/admin/v2/users/…` made
-   with the bot's token that answered `200` modified an existing account. For
-   the part of those periods that the log no longer covers, look for the room
-   traces and the `users` rows described above, and treat the homeserver's
-   admin accounts and the bot account as possibly written to: reset their
-   passwords as a precaution (for the bot, the way step 3 says) and rotate
-   `MATRIX_BOT_TOKEN`. After the upgrade, the error log
-   `matrix.account_create_updated_existing` marks the residual race described
-   under "What the fix does not close".
+2. Read Synapse's access log, as described above, for every period in which an
+   affected image served the route with no block in front of it: from the first
+   deploy of an affected build until the block was in place (on a homeserver not
+   named `blackout.local`, a build from `bcdbb5c7db` or later; on one named
+   `blackout.local`, from `9713cfd181` or later; see "The finding"; if you
+   cannot tell which build first served the route, start at the earlier, which
+   only widens the search), any later interval in which the block was off (after
+   a proxy restart that followed a sync, for instance), and any period in which
+   an API process started before 2026-08-31 (UTC) served `/api/auth/register`,
+   which the block does not cover (see "Disclosure"). A
+   `PUT /_synapse/admin/v2/users/…` made with the bot's token that answered
+   `200` modified an existing account. For the part of those periods that the
+   log no longer covers, look for the room traces and the `users` rows described
+   above, and treat the homeserver's admin accounts and the bot account as
+   possibly written to: reset their passwords as a precaution (for the bot, the
+   way step 3 says) and rotate `MATRIX_BOT_TOKEN`. After the upgrade, the error
+   log `matrix.account_create_updated_existing` marks the residual race
+   described under "What the fix does not close".
 3. For each account found: its password is the one the request carried, so
    set a new one (the admin `PUT /_synapse/admin/v2/users/{mxid}` with
    `password` signs out its devices by default) and treat the account as having
@@ -279,6 +299,13 @@ fixed tree passes all 11 (re-run 2026-11-08). The run used a stub homeserver
 only; nothing was exercised against a real Synapse.
 
 ## Disclosure
+
+This record and the fix are published with the fix's pull request to `develop`,
+and the GitHub security advisory for the defect is published when that pull
+request merges. The operator's interim measures in production, dated below, are
+the proxy block on `POST /v1/auth/register` (2026-11-02), which stays until this
+fix is deployed, and production running as a single API process (2026-11-08), a
+measure for a separate fix that bears on how this one is deployed.
 
 -   **2026-10-26.** Found and fixed in this change set, against `develop` at
     `3c3c05c`.
