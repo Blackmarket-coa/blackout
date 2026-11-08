@@ -43,6 +43,12 @@ sweep's trigger reached the mirror before Postgres accepted it, so a notice
 could be sent and a copy listed for a trigger Postgres refused), four medium
 and one low in the conditional move, and six untrue or incomplete sentences
 are each fixed or explained under the same heading, with decision 30 new.
+**2026-11-02 to 2026-11-08:** rounds 11 to 14 read each other's fixes; the
+operator confirmed decision 27 as built, kept decision 29's names, chose
+decision 30's conditional erase (built in round 12) and decision 31's
+Postgres write (built in round 14), and confirmed the GitGuardian incidents on
+#991 and #993 resolved as the synthetic vectors they are; each round is
+recorded under the same heading, with decisions 32 and 33 new.
 
 **State read:** the PR 2 branch at `6ae33bc2e2` (#991), on `develop` at
 `8a20ad6a0b`; PR 2 then merged as `e1d4cec964`, which this branch merged. **Read** means a claim rests on the code or a standard; **Run**
@@ -961,7 +967,9 @@ check, which scans every commit and does not read `.gitguardian.yaml`
 all derived as the table and paragraph above say, from byte ranges, and none
 was renamed, split or weakened for a scanner, so an incident on any of them
 is the operator's to ignore in the GitGuardian dashboard as a test
-credential. gitleaks, which reads `.gitleaksignore`, flagged six vector
+credential (the operator confirmed on 2026-11-02 that the incidents on #991
+and #993 were resolved as the synthetic vectors they are). gitleaks, which
+reads `.gitleaksignore`, flagged six vector
 lines, each copy's two shared secrets and its wrap key; they are listed as
 entry 7 of `.gitleaksignore`, with a comment saying why, and a scan of the
 branch then finds nothing.
@@ -1471,7 +1479,15 @@ message, and nothing here makes a release happen on time (§10, R12).
     fired, through plain writes no condition guarded, so the release stood
     fired with its content and nobody could read it; the removal pass's
     blanking of a cancelled switch's copies is now conditional in Postgres
-    on the stored switch being cancelled, `blankCopiesOfCancelledSwitch`).
+    on the stored switch being cancelled, `blankCopiesOfCancelledSwitch`,
+    which is not sent while a switch statement stands unanswered on the
+    process and, where it blanks nothing, reads the switch and its copies in
+    the same call and takes Postgres's copies into the mirror, so a view
+    whose copies were behind stops asking at the next pass; round 14: it was
+    sent during a stall, one bound per such switch and one call queued
+    against the database a tick, and where Postgres already had the copies
+    blank nothing set the mirror's right, so the same statement went out on
+    every pass, for ever).
     The store's drain waits for the queued call and its retry, so the
     route's wait for the process's queued writes (decision 27) covers it and
     the deletion is answered once it has run (round 12's check: the fallback
@@ -1491,18 +1507,42 @@ message, and nothing here makes a release happen on time (§10, R12).
     notices' statement, decision 27), erases in Postgres every switch the
     database holds for the owner by the same `CASE`, and blanks every held
     copy of an unfired one and every held copy sealed to the account on
-    anyone's switch (`eraseDeadmanSwitchesOfDeletedOwner`; two statements,
-    one connection), so a switch the deleting process's mirror did not have
+    anyone's switch (`eraseDeadmanSwitchesOfDeletedOwner`; four statements
+    on one connection since round 14: the erase, a read of the owner's rows,
+    the copies' blanking, a read of their copies), so a switch the deleting
+    process's mirror did not have
     is erased too: one whose arm was answered 503 and whose insert landed,
     one whose failed statement committed before it, one another process
     armed before it heard of the deletion (round 13: each was left armed
     with its content and every copy, and fired at its deadline for an
-    account that was gone). An unfired switch is left armed in Postgres
+    account that was gone). The last statement also reads every switch of
+    the owner's and every copy of theirs into the deleting process's mirror
+    (the rows it erased with their copies as Postgres now has them,
+    announced; a row and copies nothing changed only where the mirror lacks
+    them, announced to nobody), so a release that fired elsewhere and which
+    that mirror never had is served there from then on (round 14: the fired
+    row went in with the owner's blanked copy alone, never the recipients'
+    held ones, and `GET /v1/deadman/releases` on the deleting process listed
+    nothing until it restarted); its first statement rewrites only a row
+    with something left to erase, so a long-cancelled switch, kept as
+    decision 24 has it, costs a deletion nothing (round 14: every row of the
+    owner's was rewritten, taken and announced). From before the deletion's
+    first `await` until every switch it listed has had its statement, the
+    owner is marked on the deleting process and its own sweep moves none of
+    the owner's switches (`beginOwnerDeletion`, through
+    `deadmanSwitchErasePending`; round 14: a switch whose deadline fell
+    while the deletion awaited an earlier switch's statement, or the owner's
+    arms in flight, was fired by that sweep with the owner's row already
+    gone from its mirror, then erased as fired and served, a case none of
+    the documents named). An unfired switch is left armed in Postgres
     behind the deletion only where all of those fail (its label kept), where
     an arm statement the database was still running after it lost its client
-    commits after the last statement, or where another API process that has
+    commits after the last statement, where another API process that has
     not yet heard of the deletion takes an arm from the account's other
-    session after it (Still open). Where Postgres has no row for the switch, this process's own write
+    session after it, or where the deleting process stops after the
+    account's row has gone and before that switch's statement or the last
+    statement ran (Still open; round 14: `KNOWN_LIMITATIONS.md` alone named
+    the fourth). Where Postgres has no row for the switch, this process's own write
     of it was dropped (`db_write_behind_failed`; nothing deletes a switch
     row), and the move writes the record whole, insert-only, and applies,
     logged `deadman_switch_row_restored` (round 10: such a switch matched no
@@ -1539,17 +1579,40 @@ message, and nothing here makes a release happen on time (§10, R12).
     of the switch applies, when a check-in landed anywhere, or when the
     switch is terminal; round 11: a stall an hour before a deadline refused
     the owner's check-in at once, and the first pass after it, within the
-    tolerance, fired the switch). Only the process that runs the sweep knows
-    its own stalls and refusals: in the deployed layout a check-in the API
-    process refused during a database outage never holds the switch back by
-    itself; the worker's sweep gives the window only to a switch whose
-    deadline falls inside one of the worker's own recorded stalls, or whose
-    check-in the worker itself refused, so a check-in refused on the API
-    process during an outage that ends before the deadline, whether or not
-    the worker's own statements met that outage, leaves the switch to fire
-    at its deadline unless the owner checks in again (decision 31; round 12
-    of the review: this said the gap needed an outage the worker's
-    statements did not meet, which is not a condition the code has).
+    tolerance, fired the switch). A note is the refusing process's own until
+    the database answers it again; then that process carries the attempt
+    into the switch's row (`carryRefusedOwnerWrites`; decision 31, the
+    operator's choice of 2026-11-02, built in round 14): one conditional
+    statement in the switch's lane, `UPDATE deadman_switches SET
+owner_attempt_refused_at = <the attempt's moment> WHERE id = ... AND
+status <> 'triggered' AND status <> 'cancelled' AND last_check_in_at =
+<the one the attempt read> AND (owner_attempt_refused_at IS NULL OR
+older) RETURNING *` (migration 107), sent when the note is made unless a
+    stall stands, when a stall settles, and when any switch statement
+    answers, so a note made during an outage is carried once the database
+    answers again. One that lands ends the note (the row, with the column,
+    is in the mirror and announced); one Postgres refuses ends it too (the
+    switch moved on, or a check-in landed since: the owner's later word);
+    one that fails keeps the note and is tried again at the next answer.
+    The sweep in every process reads the column as it reads its own note
+    (`ownerAttemptRefusedSinceCheckIn`: a moment after the switch's last
+    check-in holds, one at or before it holds nothing), and a landed
+    check-in, a cancel, the trigger, the release's removal and the owner's
+    deletion clear it (the window itself keeps it, as the record of the
+    attempt; a switch that had its window is judged afresh at its end, as
+    after any outage). So in the deployed layout a check-in the API process
+    refused during a database outage holds the switch back on the worker
+    too, unless the owner checked in since. What stays one process's own: a
+    stall itself (the worker's sweep gives the window for a stall of its own
+    statements only), and a note whose process stops before its database
+    answers again (round 12 of the review: this said the gap needed an
+    outage the worker's statements did not meet, which was not a condition
+    the code had; until round 14 the note never left the refusing process,
+    so a check-in refused on the API process during an outage that ended
+    before the deadline left the switch to fire at its deadline unless the
+    owner checked in again). The memory and file stores carry the field
+    like any other and refuse nothing unanswered; the export lists it as the
+    owner's data, and the deletion erases it with the switch.
     The owner's check-in and cancel are conditional the same way
     (`updateDeadmanSwitchIf`), on the status and the last check-in the route
     read, and the switch as each refusal read it is looked at before every
@@ -1727,17 +1790,20 @@ message, and nothing here makes a release happen on time (§10, R12).
     (its write failed twice and was dropped) ends the notice `failed` with
     `copy_unavailable`, unsent (round 7: round 6's read ended it
     `recipient_gone` for a person who still exists; decision 28). And the
-    deletion finishes with one statement in Postgres (`finishAccountDeletion`,
-    which the route awaits after `confirmAccountDeletion` and after it revokes
-    the deleting session's token; it first waits, with no bound, until the
-    deletion's queued writes have been attempted, a write that fails twice
-    being dropped and logged, as everywhere in Postgres mode, and then waits
-    for the statement at most 10 s, decision 27; round 8: the bound covered
-    the first wait too, so past it the route answered before any of the
-    deletion's writes were in Postgres, and the worker then made the person a
-    room, invited them and sent the notice) that ends every notice row still
-    pending to the account and forgets the room of every one of theirs, rows
-    the API process never saw included. So a deletion the API
+    deletion finishes with its last statements in Postgres
+    (`finishAccountDeletion`, which the route awaits after
+    `confirmAccountDeletion` and after it revokes the deleting session's
+    token; it first waits, with no bound, until the deletion's queued writes
+    have been attempted, a write that fails twice being dropped and logged,
+    as everywhere in Postgres mode, and then waits for the statements at
+    most 10 s together, decision 27; round 8: the bound covered the first
+    wait too, so past it the route answered before any of the deletion's
+    writes were in Postgres, and the worker then made the person a room,
+    invited them and sent the notice): the owner's switches erased by owner
+    (`eraseDeadmanSwitchesOfDeletedOwner`, above), then one statement that
+    ends every notice row still pending to the account and forgets the room
+    of every one of theirs, rows the API process never saw included (round
+    14: this said "one statement"). So a deletion the API
     process committed stands in the database whenever its change notification
     reaches the worker; until it does, the worker's mirror and its tick's
     count can say sent. What it leaves: a create, a re-invite or a send that
@@ -1832,13 +1898,23 @@ message, and nothing here makes a release happen on time (§10, R12).
     fired for the account and was served to the person named; round 12 had
     said the identities going first was enough). Then the owner's arms this
     process is still writing, already past their checks, are waited for
-    (`armsInFlightSettledFor`); one that lands for an owner deleted
-    meanwhile erases its own switch and is refused `no_account`; and only
-    then are the owner's switches listed (round 13: an arm whose insert was
-    being written when the deletion listed them landed after the list, was
-    answered 201, and stayed armed). What can still leave an unfired switch
-    armed behind the deletion is in the paragraph on the conditional writes
-    above and in Still open. As a recipient:
+    (`armsInFlightSettledFor`), for at most 30 s
+    (`ACCOUNT_DELETION_ARMS_WAIT_MS`, the switch statements' bound; decision
+    33, built in round 14: the wait had no bound, so an arm whose failed
+    statement's read-back waited on a pool that never answered held the
+    deletion's answer for good, the account gone and the token revoked); one
+    that lands for an owner deleted meanwhile erases its own switch and is
+    refused `no_account`, after the bound too, the deletion's last statement
+    reaches one that landed before it, and the wait's end is logged
+    (`account_deletion_arms_wait_timeout`). Only then are the owner's
+    switches listed (round 13: an arm whose insert was being written when
+    the deletion listed them landed after the list, was answered 201, and
+    stayed armed); and from before the first `await` until each listed
+    switch has had its statement the owner is marked here, so this
+    process's sweep moves none of the owner's switches meanwhile (round 14).
+    What can still leave an unfired switch armed behind the deletion is in
+    the paragraph on the conditional writes above and in Still open. As a
+    recipient:
     the account's copies on others' switches go, fired or not, and on one API
     process none is written after it, since an arm or a re-seal that was
     verifying meanwhile reads the identities again before it writes (round 3
@@ -2059,7 +2135,9 @@ message, and nothing here makes a release happen on time (§10, R12).
     import PR 2's vectors by path and make every other key in the test
     process. gitleaks over the branch's commits finds nothing, so
     `.gitleaksignore` gains no entry; GitGuardian's pull-request check is
-    not run here (§12).
+    not run here (§12); the operator confirmed on 2026-11-02 that the
+    incidents it raised on #991 and #993 were resolved as the synthetic
+    vectors they are.
 
 **Read, not run, in part 2:** how Synapse treats `is_direct` on a
 `createRoom` invite list (`handlers/room.py` copies it onto each invite
@@ -2343,7 +2421,10 @@ records what the API sends.
     statement fails; one still pending the worker ends itself at its next
     read, since the copy is blank there by the answer, unless that write was
     dropped, in which case the worker can still make a room, invite and send
-    until the last statement has run. Confirm the two waits,
+    until the last statement has run. _(Round 14: the route's third wait,
+    for the owner's arms this process is still writing before it lists the
+    switches, which round 13 added with no bound, is bounded at 30 s:
+    decision 33.)_ Confirm the two waits,
     choose another bound for the last statement, bound the first wait too
     (round 7's behaviour, with the cost above), or give the pool a
     connection timeout and a statement timeout so that a stalled first wait
@@ -2408,59 +2489,99 @@ records what the API sends.
     covers the connection. The deletion now writes everything but the
     switches before its first `await`, waits for the owner's arms in flight,
     and ends with a statement over every switch Postgres holds for the
-    owner.)_ Where the queued call fails twice, a refused connection
+    owner.)_ _(Round 14: that last statement reads every switch and copy of
+    the owner's into the deleting process, so a release fired elsewhere that
+    it never had is served there; it rewrites only rows with something left
+    to erase; and the deleting process's own sweep moves none of the
+    owner's switches while the deletion is on its way.)_ Where the queued
+    call fails twice, a refused connection
     included, it is dropped, logged and counted, and the deletion's last
     statement, which erases every switch the database holds for the owner,
     is one more attempt; only where that fails too does the switch stay as
     Postgres had it, with its label, as any dropped write does (Still open).
     §15, `KNOWN_LIMITATIONS.md`, the deletion screen, the changelog and the
     threat model's row say so.
-31. (Part 2, after its review's round 11.) A database that does not answer a
+31. (Part 2, after its review's round 11. **Decided by the operator on
+    2026-11-02: the second option, the refused attempt carried into
+    Postgres; built in round 14.**) A database that does not answer a
     process's switch statements is treated by the sweep in that process as
     an outage of its own: a switch due while they stood, or whose owner's
     check-in or cancel that process refused unanswered meanwhile, gets the
-    backlog window instead of firing (§15). The stall and the refusal are
-    known to that process alone. In `deploy/docker/production` the API
-    process refuses the check-ins and the worker runs the sweep, so a
-    check-in refused on the API process never holds the switch back by
-    itself: the worker gives the window only to a switch whose deadline
-    falls inside one of the worker's own recorded stalls, or whose check-in
-    the worker itself refused, so a check-in refused on the API process
-    during a database outage that ends before the deadline (the common
-    shape: a short blip hours before it) leaves the switch to fire at its
-    deadline unless the owner checks in again, whether or not the worker's
-    own statements met that outage. _(Round 12 of the review: as written in
-    round 11 this confined the gap to an outage the worker's statements did
-    not meet, which is not a condition the code has.)_ Confirm it (the owner
-    can check in again once the database answers, and the API's 503 tells
-    them the check-in was not recorded), or have the API process carry the
-    refused attempt into Postgres once the database answers (a column on the
-    switch, written then, which the sweep reads), at the cost of a write per
-    refusal and a migration.
+    backlog window instead of firing (§15). Until round 14 the stall and the
+    refusal were known to that process alone, so in `deploy/docker/production`,
+    where the API process refuses the check-ins and the worker runs the
+    sweep, a check-in refused on the API process during a database outage
+    that ended before the deadline (the common shape: a short blip hours
+    before it) never held the switch back, and it fired at its deadline
+    unless the owner checked in again. _(Round 12 of the review: as written
+    in round 11 this confined the gap to an outage the worker's statements
+    did not meet, which was not a condition the code had.)_ Now the refusing
+    process carries the attempt into the switch's own row once the database
+    answers it again (`owner_attempt_refused_at`, migration 107: one
+    conditional statement in the switch's lane, onto a switch not fired or
+    cancelled whose last check-in is still the one the attempt read and
+    whose column is null or older), and the sweep in every process gives a
+    switch whose owner made a refused attempt after its last landed
+    check-in the backlog window at its deadline, exactly as the refusing
+    process's own note does; a landed check-in, a cancel, the trigger, the
+    release's removal and the owner's deletion clear it, the memory and
+    file stores carry the field like any other, the export lists it as the
+    owner's data, and the deletion erases it with the switch. What remains:
+    a note is lost with its process if it stops before the database answers
+    it again (the 503 still tells the owner the check-in was not recorded,
+    and checking in again is the sure way), a carry that fails is tried
+    again only at the next answer, and a stall itself is still known to the
+    process whose statements stood (§15, `KNOWN_LIMITATIONS.md`, the threat
+    model's row and the changelog say so). The cost chosen: one statement
+    per refused attempt, and a migration.
 32. (Part 2, after its review's round 13.) An account deletion can still
     leave an unfired switch armed in Postgres, which a process that reads it
-    so fires at its deadline for an account that is gone, in three cases
+    so fires at its deadline for an account that is gone, in four cases
     (§15, Still open): every attempt to erase it failing, the deletion's
     last statement included; an arm statement the database was still
     running after it lost its client, committing after that last statement;
-    and an arm another API process takes from the account's other session
+    an arm another API process takes from the account's other session
     after that statement and before it hears of the deletion (the change
-    notification's lag, not measured). A check at the trigger, in the
-    sweep's conditional statement, that the owner's account row still
-    exists in Postgres would close all three. Its cost is a second table on
+    notification's lag, not measured); and the deleting process stopping
+    after the account's row has gone and before that switch's statement or
+    the last statement ran (round 14: `KNOWN_LIMITATIONS.md` alone named
+    it; round 14 also closed a fifth, the deleting process's own sweep
+    firing a switch due during the deletion's awaits, with the owner's row
+    already gone from its mirror). A check at the trigger, in the sweep's
+    conditional statement, that the owner's account row still exists in
+    Postgres would close all four, the last where the account's row did go.
+    Its cost is a second table on
     the path that fires a release, so that an account row missing there for
     any other reason keeps that release from firing, which for a switch
     whose owner is alive and relies on it is the worse failure. Confirm that
-    the three cases stay documented as they are, or have the check built
+    the four cases stay documented as they are, or have the check built
     together with whatever makes an account row reliably absent only for a
     deleted account.
+33. (Part 2, after its review's round 14. Built as the default; confirm or
+    veto.) The deletion route's third wait, for the owner's arms this
+    process is still writing before it lists the owner's switches (round 13
+    added it, with no bound), is bounded at 30 s
+    (`ACCOUNT_DELETION_ARMS_WAIT_MS`, the switch statements' own bound;
+    `account_deletion_arms_wait_timeout` is logged when it ends). Round 13's
+    verifiers found that the unbounded wait held the deletion's answer for
+    good where an arm's failed statement had its read-back waiting on a pool
+    that never handed out a connection, the account already gone from the
+    mirror and the token revoked: the shape decision 27 bounds for the last
+    statement. What the bound costs: an arm still unanswered when it ends is
+    not in the list the deletion erases; one that then answers armed erases
+    its own switch (the account is gone), one that lands before the last
+    statement is erased by it, and one that lands after it is the case
+    decisions 30 and 32 already name (an arm the database was still running
+    after it lost its client). Confirm the bound, choose another, or have
+    the wait unbounded as round 13 built it.
 
 ## Not verified here
 
 -   That GitGuardian's check on this branch's pull request flags only the
     synthetic values §12 lists, and that ignoring those incidents turns it
     green: the check runs only on a pull request, which this work does not
-    open.
+    open. For #991 and #993 the operator confirmed on 2026-11-02 that the
+    incidents were resolved as the synthetic vectors they are.
 -   Everything about the homeserver is read in the fork's code, not run:
     `is_direct` on a `createRoom` invite (`synapse/handlers/room.py`) and on
     a membership set through the state endpoint
@@ -6018,10 +6139,11 @@ Medium (the deletion window, from the documents' side; "only if the
 database fails it twice", when a refused connection dropped the queued
 erase with no retry) and five Low (the re-seal ordering; "one statement";
 the changelog's arming sentence; the same docstring; "no await between").
-Each is fixed or made true here. `origin/develop` is still `f6da7b7d16`, so
-nothing was merged. The verifiers' probes were run again on this round's
-code (`fix/round13/`): every attack they describe now fails, as noted per
-finding.
+Each is fixed or made true here. `origin/develop` moved to `0367abdd69`
+during the round and was merged in (`eeb91be2ce`); the gates paragraph below
+says so (round 14: this said nothing was merged). The verifiers' probes were
+run again on this round's code (`fix/round13/`): every attack they describe
+now fails, as noted per finding.
 
 -   **A queued erase's own view of the switch blanked a fired release's
     copies (Medium, attack replay; fixed in code).** While the deletion's
@@ -6159,16 +6281,18 @@ finding.
     `deadman_switch_erase_landed`, and the switch is cancelled. The
     sentences name what can still leave a switch armed: every attempt
     failing, the last statement included; an arm committed after the last
-    statement; an arm on a process not yet told; a process that stops
-    before the deletion is answered (the deletion is then lost, which
-    `KNOWN_LIMITATIONS.md` already said). Test 24 (the statement fails, the
+    statement; an arm on a process not yet told; and, in
+    `KNOWN_LIMITATIONS.md` alone until round 14 (the deletion screen, the
+    changelog, the threat model's row, §15 and decision 32 named three), a
+    process that stops before the deletion is answered. Test 24 (the statement fails, the
     queued call's connection is refused once: retried, landed, not
     dropped, cancelled with its copies blank). S05, S06.
 -   **A failed arm answered 201 for the same owner's cancelled switch (Low,
     fix quality; fixed in code).** The look after a failed statement
     compared the owner alone. Now only this arm's own insert is answered as
-    armed: the owner's, created at this call's moment, still armed;
-    anything else with the id is `id_taken`. The verifiers' P6 now reads 409,
+    armed: the owner's, created at this call's moment (and, until round 14
+    dropped a condition no test could reach, still armed); anything else
+    with the id is `id_taken`. The verifiers' P6 now reads 409,
     as its control does. Test 26 (the same owner's switch armed and
     cancelled on another process; the arm's first read thrown: 409
     `release_id_taken`, Postgres still cancelled; the same request without
@@ -7159,7 +7283,7 @@ mirror is the database and the deletion has erased it), and the reader,
 notifier and removal-pass skips of a marked switch, which were built and
 removed in this round (the second commit) because none changed an outcome.
 
-The second commit also reformatted 46 other files under
+The second commit also reformatted 48 other files under
 `packages/api/src/services/` with the root Prettier configuration (a
 `prettier --write` given the whole directory); the change is formatting
 only, and the API's lint, typecheck and suites pass on it. They are left as
@@ -7180,11 +7304,309 @@ suite 3,643 passed and 3 skipped in 519 files (develop's two pull requests
 add no client test); the protocol and SDK typechecks; dead-drop parity 2 of
 2; the migration guard and the ephemeral migration run; the trust page; room
 encryption; the feature registry; auth secrets; prettier over the 90 files
-the branch changes (the 46 reformatted ones among them); and gitleaks over
+the branch changes (the 48 reformatted ones among them; round 14: this and
+the paragraph above said 46); and gitleaks over
 the branch and over the brief's range. A first run on `f1522a8386` was
 stopped after the API's lint and typecheck, once it showed that develop had
 moved. The commit that adds this paragraph changes this record alone;
 prettier and gitleaks were run again on it.
+
+### Round 14: the operator's decision 31, and what the verifiers found in round 13's fixes
+
+A fourteenth pass read round 13's head (`e96d850c72`) with three verifiers,
+and the operator decided decision 31 on 2026-11-02: the second option, the
+refused attempt carried into Postgres. The attack replay found one Medium
+(the deletion's last statement took a fired switch the deleting process
+never had into its mirror without the recipients' held copies, so the
+release was served to nobody on that process until it restarted) and two
+Low (the deleting process's own sweep fired an unfired switch of the owner's
+whose deadline fell inside the deletion's awaits, with the owner's row
+already gone from its mirror, a case none of the documents named; the
+removal pass's conditional blanking repeated one statement per stale
+cancelled view on every pass, for ever). The fix quality verifier found one
+Medium (its own verification cut short by the harness: four mutants, the
+three typechecks and the final worktree check still pending) and six Low (a
+failed arm's two look-up conditions each untested alone; the deletion's wait
+for an arm in flight unbounded behind a pool that does not answer; the same
+last-statement finding; the same removal-pass finding, with the statement
+still sent during a stall; the last statement rewriting every row of the
+owner's and draining twice; the record's count of reformatted files). The
+claims verifier found five Low (the deletion screen's "cancels every
+switch"; the "only where" and "three cases" lists omitting the server-stop
+case that `KNOWN_LIMITATIONS.md` names; "finishes with one statement" in
+§15's notices paragraph and the notifier's header; the round-13 section's
+"nothing was merged"; the commit trailers' model names). Each is built,
+fixed or made true here. `origin/develop` moved to `7bda9eb72a` during the
+round (ten commits of planning documents under `docs/`, `README.md` and
+`ROADMAP.md`) and was merged in first (`58d64a0264`, no conflict: none of its
+nine files is one this branch touches). The operator also confirmed on
+2026-11-02 that the GitGuardian incidents on #991 and #993 were resolved as
+the synthetic vectors they are, recorded at §12, §13 and "Not verified
+here".
+
+-   **Decision 31 (the operator, 2026-11-02: the refused attempt carried
+    into Postgres; built).** A check-in or cancel the API process refuses
+    `unanswered` is still noted in that process (round 11), and now, once the
+    database answers it again, carried into the switch's own row: migration
+    `107_deadman_owner_attempt_refused` adds `owner_attempt_refused_at`, and
+    `carryRefusedOwnerWrites` writes it with one conditional statement in
+    the switch's lane, onto a switch not fired or cancelled whose last
+    check-in is still the one the attempt read and whose column is null or
+    older, with the attempt's moment (taken before the wait, not the
+    refusal's); it is sent when the note is made unless a stall stands, when
+    a stall settles and when any switch statement answers. A carry that
+    lands ends the note and puts the row in the mirror, announced; one
+    Postgres refuses ends the note (the switch moved on, or a check-in
+    landed since); one that fails keeps the note for the next answer. The
+    sweep in every process reads the column as its own note
+    (`ownerAttemptRefusedSinceCheckIn`: a moment after the switch's last
+    check-in holds, at or before it nothing), and a landed check-in
+    (`applyCheckIn`), a cancel, the trigger (release and legacy), the
+    365-day removal and the owner's deletion (the per-switch erase, the last
+    statement and `erasedSwitchRecord`) clear it; the memory and file stores
+    carry the field like any other, `AccountExport.deadmanSwitches` lists it,
+    and the wire types are unchanged (the owner's view carries no
+    `backlogGraceStartedAt` either). So in `deploy/docker/production` a
+    check-in refused on the API process during a database outage holds the
+    switch back on the worker too, unless the owner checked in since; what
+    remains is a note lost with a process that stops before the database
+    answers it again, a failed carry waiting for the next answer, and a stall
+    itself, known to the process whose statements stood. Tests: switch-writes
+    test 28 (the stall; the check-in 503 and noted, nothing in Postgres; the
+    stall settles and the carry lands, logged once, the column set to the
+    attempt's moment, the note gone, announced, hydrated by a fresh store; a
+    sweep at the deadline with the note gone and no stall in the window gives
+    the window from the column alone; the landed check-in clears column and
+    mirror, and the export), test 29 (a column older than the last check-in
+    holds nothing: the trigger fires and clears it), test 30 (the carry's
+    statement thrown once: the note kept, the column null, logged; another
+    owner's applied check-in is the next answer, and the carry lands), test
+    31 (the carry refused for a switch the worker fired meanwhile and one
+    whose owner checked in elsewhere meanwhile, both notes ended; a column
+    set on a fired switch moves nothing; the cancel clears a column set),
+    scheduler tests 19 and 20 (the comparison at, before and after the
+    check-in; `applyCheckIn` forgets it), the backlog-postgres file's test 2
+    (the column written, and erased by the deletion for a fired and an
+    unfired switch), the file store's test 3 (the field survives a restart;
+    the conditional check-in clears it) and the memory-mode releases file's
+    test 28 (the window from the field, the trigger, the check-in and the
+    cancel forgetting it, the export). R01–R08, R16–R18 below. §15,
+    decision 31, `KNOWN_LIMITATIONS.md` (the Durability item's
+    deployed-layout sentences, and the backlog item), the threat model's row,
+    the changelog and the sweep's and scheduler's docstrings say what the
+    code does; Still open's entry says what remains.
+-   **The deletion's last statement took a fired switch without the
+    recipients' copies (Medium, attack replay; Low, fix quality; fixed in
+    code).** `eraseDeadmanSwitchesOfDeletedOwner` put each returned switch
+    row into the mirror with the copies its second statement had blanked,
+    so a release fired on another process which the deleting process never
+    had (the arm's announcements lost, or its refresh failed) went in with
+    the owner's blanked copy alone, and `releasedCopiesFor` on that process,
+    which walks the mirror's copies, listed nothing until a restart; a
+    switch 'u' from elsewhere refreshed the row and never the copies. Now
+    the call reads every row of the owner's and every copy of theirs (four
+    statements on one connection): the rows it erased go in with their
+    copies as Postgres has them and are announced, a row and copies nothing
+    changed go in only where the mirror lacks them, announced to nobody. The
+    verifiers' `d30-r13c.mts` I2' and I7 now read served on the deleting
+    process. Test 33 (a release fired on the worker that this process never
+    had, and a fired switch with no label it never had either: both
+    triggered in the mirror with the recipient's held copy, served here,
+    listed by the route; the second not announced, since nothing changed).
+    R10, R11b.
+-   **The deleting process's own sweep fired an unfired switch during the
+    deletion (Low, attack replay; fixed in code).** The sweep skipped a
+    switch whose erase was queued, not one listed and not yet reached; a
+    pass at its deadline, while the deletion awaited an earlier switch's
+    erase statement or the owner's arms in flight, fired it with the
+    owner's row already gone from the mirror, and the deletion then erased
+    it as fired and served it. Now `confirmAccountDeletion` marks the owner
+    on this process before its first `await` (`beginOwnerDeletion`) and
+    unmarks after every listed switch has had its statement, and
+    `deadmanSwitchErasePending`, which the sweep already asks, answers for a
+    marked owner's switches in every store (in the Postgres store beside the
+    queued erases; a lookup in memory, no second table, so decision 32's
+    concern does not apply). Another process's sweep is not held: a switch it
+    fires in the window is erased as fired, as decision 30 has it. The
+    verifiers' `d30-r13b.mts` E and E2 now read S2 armed when the sweep ran,
+    then cancelled. Test 32 (S1's erase statement held; the owner's row gone;
+    S2 marked, a sweep pass at its deadline leaves it armed in Postgres and
+    the mirror; the mark ends with the deletion; S2 cancelled by it, copies
+    blank, served to nobody, no notice). R09, R09b.
+-   **The removal pass's stale cancelled view (Low, attack replay; Low, fix
+    quality; fixed in code).** Where the mirror had a cancelled switch's
+    copies held and Postgres already had them blank (their notifications
+    lost), the conditional blanking blanked nothing, the switch read back
+    cancelled, nothing refreshed the mirror's copies, and the same
+    statement went out on every pass, for ever; and during a stall the
+    statement was still sent, one bound per such switch and one queued call
+    a tick. Now `blankCopiesOfCancelledSwitch` returns at once while a switch
+    statement stands unanswered, and where it blanks nothing reads the
+    switch and its copies in the same call and takes Postgres's copies into
+    the mirror (`deadman_cancelled_copies_view_refreshed`), so the next pass
+    asks nothing. The verifiers' K now reads one statement per switch on the
+    first pass and none after. Test 34 (three stale views: three statements
+    and three refreshes on the first pass, none on the second, Postgres
+    unchanged; a fourth during a stall: no statement, the pass over in
+    milliseconds, set right by one statement once the database answers).
+    R12, R13.
+-   **A failed arm's look-up conditions (Low, fix quality; one tested, one
+    dropped).** Of the three conditions under which a failed arm's look
+    answers armed (the owner, the moment, still armed), the owner's was
+    pinned alone and the other two only together. The moment's is now
+    pinned alone: test 35 (the same owner's switch armed on another process,
+    this arm's first read thrown: 409 `release_id_taken`, the row untouched
+    in Postgres, known here, the control 409). The status condition could be
+    reached by no test (this arm's own row, created at this call's
+    millisecond, cancelled within its read-back) and was dropped: the answer
+    carries the row as Postgres has it, and the service's own check after
+    the store answers refuses an owner whose account is gone. R14.
+-   **The deletion's wait for arms in flight had no bound (Low, fix quality;
+    fixed in code; decision 33).** `confirmAccountDeletion` awaited
+    `armsInFlightSettledFor` with no bound, and an arm's `done` settles only
+    when `armDeadmanSwitch` returns, whose failed path reads the switch back
+    through the pool with no timeout (`config/postgres.ts` gives the pool
+    none), so a pool that never answered held the deletion's answer for good
+    with the account already gone from the mirror and the token revoked, the
+    shape decision 27 bounds for the last statement. Now the wait is bounded
+    at `ACCOUNT_DELETION_ARMS_WAIT_MS`, 30 s, the switch statements' own
+    bound, and its end is logged (`account_deletion_arms_wait_timeout`); an
+    arm still unanswered after it erases its own switch when it answers
+    armed, one that lands before the last statement is erased by it, and one
+    after it is the case decisions 30 and 32 name. Test 36 (the verifiers'
+    R4: the arm's read-back waiting on a pool that does not answer, the
+    deletion answered after the bound and logged once, the arm still in
+    flight; the pool answers, the arm `write_failed`, nothing in Postgres).
+    Decision 33 records it for the operator to confirm or veto; decision 27,
+    §15, the deletion screen, `KNOWN_LIMITATIONS.md`, the changelog and the
+    threat model's row name the bound. R15.
+-   **The last statement's cost (Low, fix quality; fixed in code).** Its
+    first `UPDATE` filtered on `owner_id` alone, so every long-cancelled row
+    of the owner's (kept as decision 24 has it) was rewritten, taken into the
+    mirror and announced per deletion. Now it rewrites only a row with
+    something left to erase (a label, a refused attempt, an unfired status,
+    content or a backlog window), the owner's rows are read separately, and
+    test 33 pins that a cancelled, emptied, unlabelled switch is neither
+    rewritten nor announced (R11). The inner `drain()` stays, documented: the
+    caller drains too, and the method is kept able to stand on its own.
+-   **The record's count of reformatted files (Low, fix quality; done).**
+    The round-13 section said the second commit reformatted 46 other files
+    under `packages/api/src/services/`; `cea830b476` reformatted 48, as the
+    verifiers counted (`git show --stat`, semantic diff none). Both places
+    now say 48.
+-   **Verification cut short (Medium, fix quality; done).** The verifiers'
+    mutant runner finished after their report was forced: Y8 (the removal
+    pass's view refresh), Y9 (its plain blanking), Y11 (the erase blanking a
+    fired switch's copies) and Y13 (the last statement's recipient clause)
+    all `KILLED`, and `git status --porcelain` was empty after it
+    (`fix/r13v-fixquality/mut-y-run.out`); the worktree was clean at
+    `e96d850c72` when this round began. The three typechecks (api, protocol,
+    sdk) are run in this round's gates below.
+-   **"A last step then cancels, in the database, every switch it holds for
+    you" (Low, claims; done).** The deletion screen said the last step
+    "cancels" every switch, inside the paragraph that promises a fired one
+    stays released, and conditioned it on the database not answering in
+    time, while it runs on every deletion. It now says the last step erases
+    every switch the same way (one that has not fired cancelled and emptied,
+    one that has fired kept released), unconditionally, as
+    `KNOWN_LIMITATIONS.md` and the changelog already did.
+-   **The lists of what can leave a switch armed omitted the server-stop
+    case (Low, claims; done).** §15, decision 32, Still open, the threat
+    model's row, the changelog and the deletion screen named three cases
+    ("only where", "three cases") while `KNOWN_LIMITATIONS.md` named a
+    fourth, a server that stops before the deletion is confirmed; the
+    round-13 entry said the sentences named it. Each now names the fourth
+    (the deleting process stopping after the account's row has gone and
+    before that switch's statement or the last statement ran), decision 32
+    says the trigger-time check would close all four where the account's row
+    did go, and the round-13 entry says which document named the stop.
+-   **"The deletion finishes with one statement" (Low, claims; done).**
+    §15's notices paragraph and the notifier's header still said so after
+    round 13 made the end two statements; both now say the last statements,
+    the owner's switches erased by owner and then the notices' statement,
+    waited for together at most 10 s.
+-   **"Nothing was merged" (Low, claims; done).** The round-13 section's
+    opening said `origin/develop` was still `f6da7b7d16` while its own gates
+    paragraph recorded the merge of `0367abdd69`; the opening now says what
+    was merged.
+-   **Model names in the history (Low).** No action, as in rounds 5 to 13:
+    the trailers are the session's harness's and stay; `grep` over the tree
+    finds none.
+
+Claims that were not true, and what they say now (this round's): §15's,
+decision 31's, `KNOWN_LIMITATIONS.md`'s, the threat model's and the
+changelog's "only the process that runs the sweep knows its own stalls and
+refusals" and "a check-in refused on the API process never holds the switch
+back by itself" (now: the refused attempt is carried into the switch's row
+once the database answers the refusing process, and every sweep reads it;
+what remains is a note lost with its process, a failed carry waiting for the
+next answer, and the stall itself); the round-13 entry's, the store's
+docstring's and the deletion screen's "taking the rows into the mirror and
+announcing them", "the rows go into the mirror and are announced" and "stays
+released even if the process handling your deletion had not yet been told"
+(now: the rows and every copy of theirs go in, so the release is served on
+the deleting process; the screen says so); the deletion screen's "cancels,
+in the database, every switch it holds for you" (now: erases every switch
+the same way); "only where all of those fail ... or where ..." and "in three
+cases" in §15, decision 32, Still open, the threat model's row, the changelog
+and the deletion screen (now: four cases, the deleting process stopping part
+way named); the round-13 entry's "the sentences name ... a process that
+stops before the deletion is answered" (now: `KNOWN_LIMITATIONS.md` alone
+did); "finishes with one statement" in §15's notices paragraph and the
+notifier's header (now: its last statements); the round-13 section's
+"`origin/develop` is still `f6da7b7d16`, so nothing was merged" (now: moved
+to `0367abdd69` and merged); "46 other files" twice (now: 48); the store's
+"a pass costs no statement for a switch with nothing left" and "where
+nothing was blanked ... Postgres's row is taken" (true now that the copies
+are taken too and nothing is sent during a stall); and the deletion screen's
+and `KNOWN_LIMITATIONS.md`'s "waits for a switch of yours it was already
+arming" (now: up to 30 seconds, and what happens to one still unanswered).
+
+Raised and refuted: nothing this round; every finding stood.
+
+Not done this round, unchanged: the recipient-side refusal (decision 19),
+the legacy retention decision (20), the rows of cancelled switches (24) and
+the alias's key (25, 26) are the operator's, as written; decision 32 stays
+open as written, with four cases; decision 33 is new, the bound built as the
+default; the "aside found while probing round 6" stays as it is in Still
+open. PR 4 is not built here, and `BLACKOUT_DEADMAN_RELEASES` stays off
+everywhere.
+
+Round 14's mutants (`fix/mut/spec-round14.json`, run with the round-7 runner
+`fix/mut/run.py` against this worktree at the round's final code, each file
+restored from memory after its run and the restored sources compared with a
+snapshot afterwards, one test command at a time; the switch-writes file has
+36 tests now, each mutant run against the test named through
+`--test-name-pattern`). Twenty-two mutants, all caught at the first run.
+
+| Check removed                                                                          | Test file                                            | What failed                                                                    |
+| -------------------------------------------------------------------------------------- | ---------------------------------------------------- | ------------------------------------------------------------------------------ |
+| R01: the sweep does not read the carried column                                        | `deadman-switch-writes-postgres.integration.test.ts` | test 28: `triggered` where `grace`, the window from the column alone           |
+| R02: the note is never carried into Postgres                                           | `deadman-switch-writes-postgres.integration.test.ts` | test 28: the note never ended, the carry not logged                            |
+| R03: the carry does not require the last check-in the attempt read                     | `deadman-switch-writes-postgres.integration.test.ts` | test 31: one carry landed over a check-in landed elsewhere, where both refused |
+| R04: the carry lands on a fired or cancelled switch                                    | `deadman-switch-writes-postgres.integration.test.ts` | test 31: the fired switch took the column, where both refused                  |
+| R05: a carry that fails ends the note instead of keeping it                            | `deadman-switch-writes-postgres.integration.test.ts` | test 30: the note gone after the failed carry                                  |
+| R06: the check-in route does not clear the column                                      | `deadman-switch-writes-postgres.integration.test.ts` | test 28: the column kept by the landed check-in                                |
+| R06b: `applyCheckIn` does not forget the refused attempt                               | `deadman-scheduler.integration.test.ts`              | test 20: the property kept                                                     |
+| R07: the release trigger does not clear the column                                     | `deadman-switch-writes-postgres.integration.test.ts` | test 29: the column kept by the trigger                                        |
+| R07b: the legacy trigger does not clear the field                                      | `deadman-releases.integration.test.ts`               | test 28: the field kept by the trigger                                         |
+| R08: the cancel route does not clear the column                                        | `deadman-switch-writes-postgres.integration.test.ts` | test 31: the column kept by the cancel                                         |
+| R09: the deletion does not mark the owner for the sweep                                | `deadman-switch-writes-postgres.integration.test.ts` | test 32: S2 unmarked while S1's statement was held, and moved by the pass      |
+| R09b: `deadmanSwitchErasePending` ignores the mark                                     | `deadman-switch-writes-postgres.integration.test.ts` | test 32: the same                                                              |
+| R10: the last statement does not read the owner's copies                               | `deadman-switch-writes-postgres.integration.test.ts` | test 33: the recipient's copy absent from the mirror                           |
+| R11: the first `UPDATE` rewrites every row of the owner's                              | `deadman-switch-writes-postgres.integration.test.ts` | test 33: the spent switch announced again                                      |
+| R11b: a row nothing changed is not taken into the mirror                               | `deadman-switch-writes-postgres.integration.test.ts` | test 33: the unlabelled fired switch absent from the mirror                    |
+| R12: the removal pass does not take Postgres's copies where nothing was blanked        | `deadman-switch-writes-postgres.integration.test.ts` | test 34: no view set right on the first pass                                   |
+| R13: the removal pass sends its statement during a stall                               | `deadman-switch-writes-postgres.integration.test.ts` | test 34: the pass took a bound, a statement sent to the stalled database       |
+| R14: a failed arm's look answers armed for the same owner's switch whatever its moment | `deadman-switch-writes-postgres.integration.test.ts` | test 35: 201 where 409                                                         |
+| R15: the deletion waits for arms in flight with no bound                               | `deadman-switch-writes-postgres.integration.test.ts` | test 36: the deletion never answered (the test's promise left pending)         |
+| R16: the deletion's erase keeps the owner's refused attempt                            | `deadman-backlog-postgres.integration.test.ts`       | test 2: the column kept on the erased switches                                 |
+| R17: an attempt at the same moment as the check-in holds the switch                    | `deadman-scheduler.integration.test.ts`              | test 19: `true` where `false` for the same moment                              |
+| R18: the export omits the refused attempt                                              | `deadman-releases.integration.test.ts`               | test 28: `undefined` in the owner's export                                     |
+
+Not counted as checks: the docstrings, the sweep scheduler's and the
+notifier's comments, and the memory store's `beginOwnerDeletion` and
+`endOwnerDeletion` bodies, which R09 and R09b cover through the mark.
 
 ### Still open
 
@@ -7237,7 +7659,15 @@ prettier and gitleaks were run again on it.
     (round 12's check: this entry said the deletion fell back to writing the
     switch from its own mirror, which could cancel a release fired
     elsewhere; it no longer does); and the deletion ends with a statement
-    over every switch Postgres holds for the owner. Three cases still leave
+    over every switch Postgres holds for the owner, which since round 14
+    also reads every switch and copy of the owner's into the deleting
+    process (a release fired elsewhere that it never had was served to
+    nobody there until it restarted), rewrites only rows with something left
+    to erase, and is preceded by a wait of at most 30 s for the owner's arms
+    in flight (decision 33) during which, and until every listed switch has
+    had its statement, the deleting process's own sweep moves none of the
+    owner's switches (round 14: it fired one due in that window, the owner's
+    row already gone from its mirror). Four cases still leave
     an unfired switch armed in Postgres for an account that is gone, which a
     process that reads it so fires at its deadline: every one of those
     attempts failing (the label then stays too; the deleting process, where
@@ -7245,12 +7675,16 @@ prettier and gitleaks were run again on it.
     could not, its sweep leaves it unmoved until it restarts); an arm
     statement the database was still running after it lost its client,
     committing after the last statement (how long such a statement can run
-    on was not measured); and an arm another API process takes from the
+    on was not measured); an arm another API process takes from the
     account's other session after the last statement and before that
     process hears of the deletion (the change notification's lag, not
     measured), which can also leave a release identity published there in
-    that moment. A check at the trigger that the owner's account still
-    exists in Postgres would close all three; it is not built here, because
+    that moment; and the deleting process stopping after the account's row
+    has gone and before that switch's statement or the last statement ran
+    (round 14: named in `KNOWN_LIMITATIONS.md` alone until then). A check at
+    the trigger that the owner's account still
+    exists in Postgres would close all four where the account's row did go;
+    it is not built here, because
     it puts a second table on the path that fires a release, and a row
     missing there for any other reason would then keep a release from
     firing. Stated in §15, `KNOWN_LIMITATIONS.md`, the deletion screen and
@@ -7261,17 +7695,20 @@ prettier and gitleaks were run again on it.
     a later pass happened to refresh the row, and nothing was announced),
     and its notice rows are written by the notifier's catch-up; its domain
     event is still not emitted.
--   **The sweep knows only its own process's stalls** (decision 31): a
-    database stall is recorded, and a check-in or cancel refused unanswered
-    noted, in the process where they happened, and the sweep there gives
-    such a switch the backlog window; in the deployed layout the worker's
-    sweep never learns of a check-in the API process refused, so a switch
-    whose deadline falls outside the worker's own recorded stalls fires at
-    its deadline however the owner's check-in was refused during an outage
-    before it, unless the owner checks in again (round 12 of the review: as
+-   **A refused check-in's note is its process's own until the database
+    answers it again** (decision 31, built in round 14): a check-in or cancel
+    refused unanswered is noted in the refusing process and carried into the
+    switch's row once the database answers that process, where the sweep in
+    every process reads it; what remains is the note lost with a process
+    that stops before that answer, a carry that fails waiting for the next
+    answer, and a stall itself known to the process whose statements stood,
+    so a switch due during an outage that only the API process's statements
+    met is not held back for that alone (until round 14 the note never left
+    the refusing process, so in the deployed layout a check-in the API
+    process refused never held the switch back; round 12 of the review: as
     stated in round 11 the gap needed an outage the worker's statements did
-    not meet, which the code does not ask). Carrying the refused attempt
-    into Postgres once it answers was not built here.
+    not meet, which the code did not ask). Stated in §15 and
+    `KNOWN_LIMITATIONS.md`.
 -   **A plain write of a switch queued while that switch's conditional
     statement is in flight** waits for the statement (the row's lane), and so
     does everything queued after it; the other order, the statement waiting

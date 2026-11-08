@@ -333,7 +333,10 @@ For the source-of-truth triage with tier/owner detail see
     From the moment you confirm, the server process handling your deletion
     has removed your account and your release keys, so your other sessions
     can no longer arm a switch, re-seal one or publish a release key through
-    it; it then waits for any arm of yours it was already writing, and
+    it; it then waits, for at most 30 seconds, for any arm of yours it was
+    already writing (one still unanswered after that cancels its own switch
+    when its write answers, or the last step below does), fires none of your
+    switches itself while it works, and
     cancels your dead-man switches that have not fired and removes what you
     put in them, a release switch's sealed copies included (not the copies
     an arm that failed left behind, which no switch names: see Durability
@@ -342,7 +345,9 @@ For the source-of-truth triage with tier/owner detail see
     process handling your deletion knew: where the server runs as more than
     one process, a switch that fired on another process moments before your
     deletion reached one that had not yet been told stays fired, and is
-    erased as a fired switch is (below). Where the database does not answer
+    erased as a fired switch is (below), and the process handling your
+    deletion takes it into its memory with the copies for the people it
+    named, so it shows them the release from then on. Where the database does not answer
     that question in time, or fails it, the question is asked again, queued
     (and once more if that fails too, a refused connection included), and
     the deletion is not answered until it has been. Then, as its last step,
@@ -360,8 +365,10 @@ For the source-of-truth triage with tier/owner detail see
     that last step; an arm another of your sessions makes on another server
     process that has not yet heard of your deletion, after that last step
     and before that process hears of it (the delay of the server's change
-    notifications, not measured); and a server that stops before your
-    deletion is confirmed, which can leave any part of it undone (below). A release switch
+    notifications, not measured); and a server process that stops after your
+    account's row has gone and before that switch's step or the last step
+    ran, which leaves that switch as it was, and can leave any other part of
+    the deletion undone (below). A release switch
     that has already fired stays readable to the people it named, with the
     public release key it was signed with, until at least 365 days after it
     fired (it is removed at the server's first sweep after that); a switch
@@ -669,18 +676,23 @@ For the source-of-truth triage with tier/owner detail see
     one stands unconfirmed no switch moves on that process. A database that
     does not answer is treated as an outage of the sweep: a switch due while
     its statements stood unanswered, or whose check-in or cancel was refused
-    that way on the process that runs the sweep, gets the backlog window
-    (below) at the first pass after it rather than firing, within the 15
-    minutes or not. Where the API and the sweep are separate processes
-    (`deploy/docker/production`), the sweep knows only its own process's
-    stalls and refusals: a check-in refused on an API process never holds
-    the switch back by itself. The worker gives the window only to a switch
-    whose deadline falls inside one of the worker's own stalls, or whose
-    check-in the worker itself refused, so a check-in refused on the API
-    process during a database outage that ends before the deadline leaves
-    the switch to fire at its deadline unless you check in again once the
-    database answers (the 503 tells you the check-in was not recorded),
-    whether or not the worker met that outage.
+    that way, gets the backlog window (below) at the first pass after it
+    rather than firing, within the 15 minutes or not. A check-in or cancel
+    refused that way is noted by the server process that refused it and,
+    once the database answers that process again, written onto the switch
+    itself (`owner_attempt_refused_at`, migration 107), where the sweep
+    reads it in whichever process runs it: so where the API and the sweep
+    are separate processes (`deploy/docker/production`), a check-in refused
+    on the API process during a database outage holds the switch back on
+    the worker too, as long as you have not checked in since (the 503 still
+    tells you the check-in was not recorded; checking in again once the
+    database answers is the sure way). What is left: the process that
+    refused your check-in loses its note if it stops before the database
+    answers it again, and keeps retrying the write at each later answer if
+    it fails (logged), so until it lands the switch is held back on that
+    process alone; and a stall itself is known only to the process whose
+    statements stood, so a switch due during an outage that only the API
+    process's statements met is not held back for that alone.
 -   The switches that exist were armed through the API before this. Their
     payload is whatever was sent: the server never decrypts it and cannot
     tell whether it is ciphertext. Recipients named by Blackout account id
@@ -707,7 +719,9 @@ For the source-of-truth triage with tier/owner detail see
     that moment, once per missed check-in, and a check-in ends that as usual;
     the same window is given, within the 15 minutes or not, when the
     database did not answer the sweep's own process at some moment since the
-    switch was due (above). So an outage of the server's background work or
+    switch was due, or when your check-in or cancel was refused for want of
+    an answer on any server process and you have not checked in since
+    (above). So an outage of the server's background work or
     of its database can delay a release by its own length plus up to 72
     hours.
     The grace and triggered events the sweep records stay in the memory of

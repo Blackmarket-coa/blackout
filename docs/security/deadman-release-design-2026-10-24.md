@@ -819,6 +819,11 @@ _2026-10-29:_ PR 2 merged as `104_release_identities`, and #987 took 105
 (`105_invitation_admissions`), so PR 3 is `106_deadman_releases`; PR 5 takes
 the next free number when it merges.
 
+_2026-11-08:_ PR 3's review added `107_deadman_owner_attempt_refused` on the
+same branch (decision 31 of `release-envelope-2026-10-26.md`, the operator's
+choice of 2026-11-02), so PR 5 takes 108, or the next free number when it
+merges.
+
 ### Existing switches
 
 They stay as they are (Q4). The server never had their plaintext, so it cannot

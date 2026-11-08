@@ -251,33 +251,39 @@ export const DataRetentionSection: React.FC = () => {
                     Dead-man switches you own that have not fired are cancelled, and what you put in
                     them is removed from Blackout&apos;s database. From the moment you confirm, the
                     server handling your deletion accepts no new switch, re-seal or release key from
-                    your other sessions, and it waits for a switch of yours it was already arming.
-                    Whether a switch has fired is decided on the database&apos;s own record of it,
-                    so one that fired on another server process moments before your deletion stays
-                    released even if the process handling your deletion had not yet been told. If
-                    the database does not answer in time the question is asked again before your
-                    deletion is confirmed, and a last step then cancels, in the database, every
-                    switch it holds for you, including one the process handling your deletion never
+                    your other sessions, fires none of your switches itself while it works, and
+                    waits up to 30 seconds for a switch of yours it was already arming (one still
+                    unanswered after that is cancelled when its write answers, or by the last step
+                    below). Whether a switch has fired is decided on the database&apos;s own record
+                    of it, so one that fired on another server process moments before your deletion
+                    stays released even if the process handling your deletion had not yet been told,
+                    and that process then shows it to the people it named too. If the database does
+                    not answer in time the question is asked again before your deletion is
+                    confirmed. A last step then erases, in the database, every switch it holds for
+                    you the same way (one that has not fired is cancelled and emptied; one that has
+                    fired stays released), including one the process handling your deletion never
                     had. A switch can still be left as it was there, so one that had not fired could
                     still fire: if the database fails every one of those attempts; if an arm of
                     yours that the database was still finishing after the server lost its connection
-                    to it is recorded after that last step; or, where the server runs as several
+                    to it is recorded after that last step; where the server runs as several
                     processes, if another of your sessions arms one, in the moment after that last
-                    step, on a process that has not yet heard of your deletion. A release switch
-                    that has already fired stays readable to the people it named until at least 365
-                    days after it fired (it is removed at the server&apos;s first sweep after that);
-                    a switch armed before Blackout could release messages (every switch that exists
-                    today) keeps what you put in it for the people it named, with no removal date.
-                    Copies of other people&apos;s releases sealed to you are removed (where the
-                    server runs as several replicas, one sealed to you on a replica that has not yet
-                    heard of your deletion, after its last step, can stay until that release is
-                    cancelled or removed), and a notice still owed to you is dropped once your
-                    deletion is confirmed (one the bot was already sending can still arrive, and so
-                    can the invitation to your notices room it was already making; where the server
-                    keeps its data in a database, the confirmation waits until the server has tried
-                    to write the deletion there, and where it also runs its background work
-                    separately the bot can still send you a notice until then, and after it too if
-                    the server&apos;s write removing your copy fails, which it logs, before the
+                    step, on a process that has not yet heard of your deletion; or if the server
+                    process handling your deletion stops after your account has gone and before that
+                    switch&apos;s step or the last step ran. A release switch that has already fired
+                    stays readable to the people it named until at least 365 days after it fired (it
+                    is removed at the server&apos;s first sweep after that); a switch armed before
+                    Blackout could release messages (every switch that exists today) keeps what you
+                    put in it for the people it named, with no removal date. Copies of other
+                    people&apos;s releases sealed to you are removed (where the server runs as
+                    several replicas, one sealed to you on a replica that has not yet heard of your
+                    deletion, after its last step, can stay until that release is cancelled or
+                    removed), and a notice still owed to you is dropped once your deletion is
+                    confirmed (one the bot was already sending can still arrive, and so can the
+                    invitation to your notices room it was already making; where the server keeps
+                    its data in a database, the confirmation waits until the server has tried to
+                    write the deletion there, and where it also runs its background work separately
+                    the bot can still send you a notice until then, and after it too if the
+                    server&apos;s write removing your copy fails, which it logs, before the
                     deletion&apos;s last step has run). The public half of your release keys is
                     removed from Blackout&apos;s database, except the copy kept with a release
                     switch of yours that has already fired, which goes with that release, and, where

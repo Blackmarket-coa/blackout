@@ -136,8 +136,13 @@ each correction.
     that sent it is still running. While the database
     does not answer, check-ins are refused, and the server treats that time
     as an outage of its own for the switches it kept from moving: one due
-    then gets the 72-hour grace window instead of firing, in the process that
-    runs the sweep
+    then gets the 72-hour grace window instead of firing. A check-in or
+    cancel refused that way is written onto the switch once the database
+    answers the server process that refused it, so the switch gets the
+    window at its deadline in whichever process runs the sweep, unless you
+    check in again first; that note is lost if the process stops before the
+    database answers it, and is retried at each later answer if the write
+    fails (logged)
     ([`KNOWN_LIMITATIONS.md`](../../KNOWN_LIMITATIONS.md)).
 -   **Deleting an account** removes the sealed copies of its unfired release
     switches with their content (whether a switch has fired is decided on
@@ -145,16 +150,22 @@ each correction.
     even where the process handling the deletion had not yet been told of
     it; from the moment the deletion is confirmed the process handling it
     accepts no arm, re-seal or release key from the account's other
-    sessions, and waits for an arm of theirs it was already writing; where
-    the database does not answer that question in time it is asked again,
-    queued, before the deletion is answered, and a last step then erases in
-    the database every switch it holds for the account, including one that
-    process never had; a switch is left as the database had it, so one that
-    had not fired could still fire, only where all of those fail, where an
-    arm the database was still finishing after the server lost its
-    connection to it is recorded after that last step, or where another of
-    the account's sessions arms one, after that step, on an API process
-    that had not yet heard of the deletion); a fired one keeps its
+    sessions, waits at most 30 seconds for an arm of theirs it was already
+    writing (one still unanswered after that is cancelled when its write
+    answers, or by the last step) and fires none of the account's switches
+    itself meanwhile; where the database does not answer that question in
+    time it is asked again, queued, before the deletion is answered, and a
+    last step then erases in the database every switch it holds for the
+    account, including one that process never had, and reads every switch
+    and copy of the account's into the deleting process, so a release that
+    fired elsewhere is shown to the people it named there too; a switch is
+    left as the database had it, so one that had not fired could still
+    fire, only where all of those fail, where an arm the database was still
+    finishing after the server lost its connection to it is recorded after
+    that last step, where another of the account's sessions arms one, after
+    that step, on an API process that had not yet heard of the deletion, or
+    where the process handling the deletion stops after the account has
+    gone and before that switch's step or the last step ran); a fired one keeps its
     content, the copies for
     the people it named and the public key it was signed with, until they are
     removed at the first sweep 365 days or more after it fired, and only the
