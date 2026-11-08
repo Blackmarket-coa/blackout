@@ -1560,22 +1560,31 @@ Error during startup`), under either Twisted; a configured key pair never
   review of the seventh), a DSA (`ssh-dss`) key is refused at the same two
   places, because every ssh-dss signature uses SHA-1
   (`Key._getHashAlgorithm`). Twisted's `Key.sign` also packs an ssh-dss
-  signature's r and s into 20 bytes each, so a DSA key whose subgroup order
-  is longer than 160 bits, as in every standard DSA key larger than 1024
-  bits, which Twisted loads from a PEM `DSA PRIVATE KEY` file, passed the
-  config, and the server raised `OverflowError` on every key exchange while
-  the homeserver ran and logged nothing about it at startup; a key with a
-  160-bit subgroup order (a 1024-bit key, the kind `ssh-keygen` wrote, or a
-  non-standard larger one) does serve a session. Until the ninth round
-  (found by the review of the eighth) the message said the server cannot
-  sign with any DSA key larger than 1024 bits; a 2048-bit key with a 160-bit
-  subgroup order signs, and the message now gives SHA-1 as the reason for
-  every DSA key and the subgroup order as the reason the server cannot sign.
-  Each message names the file and what it holds, and the curve and DSA
-  messages name the types that work. Upstream loads both files without
-  comparing them. Each refused config but a DSA key with a 160-bit subgroup
-  order would start a manhole on which no SSH session completes, or not
-  start. Keep it through a
+  signature's r and s into 20 bytes each and raises `OverflowError` when
+  either is 2^160 or more. Both are reduced modulo the subgroup order, so a
+  DSA key whose subgroup order is 224 or 256 bits, as in every standard DSA
+  key larger than 1024 bits, which Twisted loads from a PEM
+  `DSA PRIVATE KEY` file, passed the config, and the server raised
+  `OverflowError` on every key exchange in practice (both halves fit with a
+  chance of at most about 2^-126) while the homeserver ran and logged
+  nothing about it at startup; a key with a 160-bit subgroup order (a
+  1024-bit key, the kind `ssh-keygen` wrote, or a non-standard larger one)
+  signs every time and serves a session, and one with a non-standard order
+  just over 160 bits signs on some key exchanges and raises on others. Until
+  the ninth round (found by the review of the eighth) the message said the
+  server cannot sign with any DSA key larger than 1024 bits; a 2048-bit key
+  with a 160-bit subgroup order signs, and the message now gives SHA-1 as
+  the reason for every DSA key and the subgroup order as the reason the
+  server cannot sign. Until the tenth round (found by the review of the
+  ninth) it put that limit at a subgroup order "longer than 160 bits", which
+  a non-standard order just over 160 bits contradicts; it now names the 224-
+  and 256-bit orders of the standard keys, with which the server in practice
+  cannot sign. Each message names the file and what it holds, and the curve
+  and DSA messages name the types that work. Upstream loads both files
+  without comparing them. Each refused config but a DSA key with a 160-bit
+  subgroup order (or a non-standard one just over it, on the key exchanges
+  whose signature fits) would start a manhole on which no SSH session
+  completes, or not start. Keep it through a
   reconciliation. Tests in `tests/blackout_runtime/test_manhole.py`, through
   `HomeServerConfig`: a public key at `ssh_priv_key_path` and another key of
   the same type at `ssh_pub_key_path`, each for RSA, Ed25519 and ECDSA
@@ -1585,7 +1594,7 @@ Error during startup`), under either Twisted; a configured key pair never
   loads and that `manhole()` itself raises `KeyError` on it) and at
   `ssh_pub_key_path` beside a P-256 key; a 2048-bit DSA PEM key at
   `ssh_priv_key_path` (the test also pins that the key loads, that its
-  subgroup order is longer than 160 bits and that signing with it raises
+  subgroup order is 224 or 256 bits and that signing with it raises
   `OverflowError`, and a loopback session test pins that the manhole, given
   that key directly, drops the connection before authentication with the
   `OverflowError` logged); a 1024-bit DSA key in the OpenSSH format at
@@ -1603,7 +1612,9 @@ Error during startup`), under either Twisted; a configured key pair never
   seventh round's file ("the config loaded"), and the ninth round's refusal
   test against the eighth round's file too, on the message's reason (the
   two DSA session tests pass against both, since neither goes through the
-  config); and
+  config), and, from the tenth round, the 2048-bit DSA refusal test
+  against the ninth round's file, on the limit the message states
+  ("'subgroup order is 224 or 256 bits' not in" it); and
   matching pairs and private keys alone still loading.
 - `docs/manhole.md`: its option list and example named `ssh_priv_key` and
   `ssh_pub_key`. `synapse/config/server.py` reads only `ssh_priv_key_path`

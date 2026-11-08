@@ -64,8 +64,8 @@ The following config options are available:
   format `ssh-keygen` writes. Synapse refuses to start if the file holds a
   public key, an EC key on any other curve (one `openssl` wrote, say), which
   the SSH server has no key type for, or a DSA (`ssh-dss`) key: every ssh-dss
-  signature uses SHA-1, and the SSH server cannot sign at all with a DSA key
-  whose subgroup order is longer than 160 bits, as every standard DSA key
+  signature uses SHA-1, and the SSH server cannot in practice sign with a DSA
+  key whose subgroup order is 224 or 256 bits, as every standard DSA key
   larger than 1024 bits has.
 - `ssh_pub_key_path` - The path to the matching public SSH key. Optional: when
   it is unset, the public half is derived from the private key. When it is set,

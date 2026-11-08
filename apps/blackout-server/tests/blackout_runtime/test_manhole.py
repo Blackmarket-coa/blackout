@@ -31,10 +31,10 @@ refuses, at config load, a public key at ``ssh_priv_key_path``, a configured
 public key that is not the private key's public half, an EC key on a curve
 Twisted has no SSH key type for (which loads, and which ``manhole()`` would
 otherwise fail on with a bare KeyError), and a DSA key (every ssh-dss
-signature uses SHA-1, and one whose subgroup order is longer than 160 bits, as
-in every standard DSA key larger than 1024 bits, loads from a PEM file and then
-fails every key exchange). The session tests for those key types load the key
-files through the homeserver config, as a deployment does.
+signature uses SHA-1, and one whose subgroup order is 224 or 256 bits, as in
+every standard DSA key larger than 1024 bits, loads from a PEM file and then
+fails, in practice, every key exchange). The session tests for those key types
+load the key files through the homeserver config, as a deployment does.
 
 Records: docs/security/dependency-advisories-twisted-2026-11-02.md (repository
 root) and PATCHES.md, 2026-11-02.
@@ -133,7 +133,8 @@ _DSA_2048_Q160_Q = int("e851942c2aadd8ae754f42d08abccb4ececb6949", 16)
 def _dsa_2048_q160_key() -> Key:
     """A 2048-bit DSA key with a 160-bit subgroup order, which Twisted can sign with.
 
-    g is 2^((p-1)/q) mod p, as FIPS 186-2's generator procedure starts.
+    g is 2^((p-1)/q) mod p, the generator openssl derived for these p and q
+    (h = 2; FIPS 186-2 lets h be any integer with 1 < h < p - 1).
     """
     p, q = _DSA_2048_Q160_P, _DSA_2048_Q160_Q
     g = pow(2, (p - 1) // q, p)
@@ -476,17 +477,19 @@ class ManholeKeyConfigTestCase(TestCase):
 
     def test_a_dsa_key_is_refused(self) -> None:
         # A 2048-bit DSA key in a PEM file loads, and Twisted calls it ssh-dss,
-        # but its subgroup order is longer than 160 bits (cryptography gives a
-        # 2048-bit key a 256-bit one), so its signature does not fit the
-        # 20-byte halves Twisted's ssh-dss format packs. Before this check the
-        # config loaded it and the server raised OverflowError on every key
-        # exchange; `ManholeSessionTestCase` pins that session.
+        # but its subgroup order is 224 or 256 bits (cryptography gives a
+        # 2048-bit key a 256-bit one), so its signature's r and s, reduced
+        # modulo that order, in practice never both fit the 20-byte halves
+        # Twisted's ssh-dss format packs. Before this check the config loaded
+        # it and the server raised OverflowError on its key exchanges;
+        # `ManholeSessionTestCase` pins that session.
         directory = _key_dir(self)
         path = _write_pem_private_key(directory, "dsa2048.pem", _dsa_key(2048))
         e = self._refusal("DSA-2048 at ssh_priv_key_path", path)
         self.assertEqual(e.path, ("manhole_settings", "ssh_priv_key_path"))
         self.assertIn(path, e.msg)
         self.assertIn("holds a DSA key (ssh-dss)", e.msg)
+        self.assertIn("subgroup order is 224 or 256 bits", e.msg)
         self.assertIn("RSA, Ed25519 or ECDSA P-256, P-384 or P-521", e.msg)
 
         # What the check stands in for: the key loads as a private ssh-dss
@@ -495,7 +498,7 @@ class ManholeKeyConfigTestCase(TestCase):
         loaded = Key.fromFile(path)
         self.assertEqual(loaded.type(), "DSA")
         self.assertEqual(loaded.size(), 2048)
-        self.assertGreater(_dsa_q_bits(loaded), 160)
+        self.assertIn(_dsa_q_bits(loaded), (224, 256))
         self.assertEqual(loaded.sshType(), b"ssh-dss")
         self.assertFalse(loaded.isPublic())
         self.assertRaises(OverflowError, loaded.sign, b"exchange hash")
@@ -858,8 +861,8 @@ class ManholeSessionTestCase(TestCase):
     def test_a_160_bit_q_dsa_key_serves_a_session_without_the_config_check(
         self,
     ) -> "defer.Deferred[None]":
-        # The other side of the 160-bit line: a 2048-bit DSA key whose
-        # subgroup order fits the 20-byte halves, handed to the manhole
+        # The other side: a 2048-bit DSA key with a 160-bit subgroup order,
+        # whose r and s always fit the 20-byte halves, handed to the manhole
         # directly, serves a full session. The config refuses it for SHA-1,
         # not because the server could not sign with it.
         priv = _dsa_2048_q160_key()
