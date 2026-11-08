@@ -55,14 +55,15 @@ rather than newly discovered defects.
 Filed by the 2026-08-10 encryption audit
 ([`docs/audits/2026-08-10-encryption-audit.md`](docs/audits/2026-08-10-encryption-audit.md)).
 
-2026-11-02: the earlier workaround here pointed to a "Settings → Encryption"
-that never existed, and to the "Set up backup" action, which on a new device
-of an account that already had a backup replaced the account's secret storage
-and cross-signing and deleted that backup (finding S9,
-[`docs/security/key-backup-nudge-2026-11-02.md`](docs/security/key-backup-nudge-2026-11-02.md)).
+2026-11-08 (finding S9 of 2026-11-02): the earlier workaround here pointed to
+a "Settings → Encryption" that never existed, and to the "Set up backup"
+action, which on a new device of an account that already had a backup replaced
+the account's secret storage and cross-signing and deleted that backup
+([`docs/security/key-backup-nudge-2026-11-02.md`](docs/security/key-backup-nudge-2026-11-02.md)).
 The nudge and the undecryptable-message chip now ask the homeserver what the
-account has and offer the from-scratch setup only when it answered that there
-is neither a backup nor cross-signing; otherwise they say what is true and
+account has, again at every click, and offer the from-scratch setup only when
+it answered that there is neither a backup nor cross-signing; the setup form
+checks once more before its first write. Otherwise they say what is true and
 offer nothing. The restore path itself is still missing.
 
 What BO-1 gates is anything that routes trust through Blackout
