@@ -157,11 +157,15 @@ each correction.
     that the database no longer answers) and for as long as the database
     answers the sweep's process but not that one. While a write of that
     process's stands unanswered, check-ins and cancels there are refused at
-    once, and nothing bounds how long: the server's database pool sets no
-    statement timeout or keepalive, so a write the database had received
-    before it went silent stands until that server process is restarted;
-    a switch that falls due meanwhile gets its 72-hour grace window and
-    then fires while they are still refused
+    once, and nothing on the server bounds how long: the server's database
+    pool sets no statement timeout or keepalive, so a write the database
+    had received before it went silent stands until that server process is
+    restarted where the database's host is gone or the silence outlasts
+    that host's own retransmission of its answer (about 15 minutes); a
+    switch that falls due meanwhile gets its 72-hour grace window where a
+    refused check-in or cancel has been written onto it, or where the sweep
+    runs in that same process, and then fires while they are still
+    refused
     ([`KNOWN_LIMITATIONS.md`](../../KNOWN_LIMITATIONS.md)).
 -   **Deleting an account** removes the sealed copies of its unfired release
     switches with their content (whether a switch has fired is decided on

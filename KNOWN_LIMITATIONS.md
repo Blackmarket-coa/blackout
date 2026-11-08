@@ -706,20 +706,32 @@ For the source-of-truth triage with tier/owner detail see
     have been recorded, and doing it again is safe. While such a write stands
     unconfirmed, every further check-in and cancel on that process is
     answered 503 at once, without being sent, so those were certainly not
-    recorded, until that write is answered (its row is then in that
-    server's memory) or fails. Nothing bounds how long that takes. The
-    server's database pool sets no connection or statement timeout and no
-    TCP keepalive, so a write the database's host had received and
-    acknowledged before it went silent (a failover that fenced or powered off
-    that host mid-write, or a network fault that drops its traffic) is never
-    given up on: it stands until that server process is restarted. A write sent after the database went silent fails once the
-    operating system gives up retransmitting it (about 15 minutes at Linux's
-    defaults); what the server process does with that connection's error
-    then is a matter of the database pool's handling of connection errors,
-    which a separate change addresses. Each check-in refused meanwhile is still
-    written onto the switch, as below, but that holds a switch that falls
-    due back for one backlog window only (72 hours by default, once per
-    missed check-in): when the window ends the switch fires while that
+    recorded, until that write is answered and the switch read back into
+    that server's memory, or the write or that read fails. Nothing on the
+    server bounds how long that takes. The server's database pool sets no
+    connection or statement timeout and no TCP keepalive, so a write the
+    database's host had received and acknowledged before it went silent is
+    never given up on by the server: where that host is gone (a failover
+    that fenced, powered off or restarted it mid-write), or a network fault
+    outlasts the host's own retransmission of its answer (about 15 minutes
+    at Linux's defaults), the write stands until that server process is
+    restarted; a fault that heals sooner lets the answer through. A write
+    sent after the database went silent fails, if the silence lasts that
+    long, once the operating system gives up: about 15 minutes at Linux's
+    defaults on a database connection already open, and about 2 minutes
+    where the write has to open a new one (the pool sets no connection
+    timeout, so the connection itself fails); what the server process does
+    with that connection's error then is a matter of the database pool's
+    handling of connection errors, which a separate change addresses. The
+    switch's read back has the same lack of bound. Until it ends, that
+    server's view of the switch, and so your data export from it, is the
+    one before the write, except that a check-in or cancel refused and
+    written onto the switch meanwhile (below) is shown once the database
+    answers a new connection from that process (not while every connection
+    of its pool is held). Each check-in refused
+    meanwhile is still written onto the switch, as below, but that holds a
+    switch that falls due back for one backlog window only (72 hours, once
+    per missed check-in): when the window ends the switch fires while that
     process still refuses every check-in and cancel, unless it has been
     restarted by then. A cancel the database confirms late takes effect then
     (the switch shows cancelled and its copies are removed), and a check-in

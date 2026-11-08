@@ -297,10 +297,12 @@ const ownedSwitch = (id: string, subject: string): DeadmanSwitchRecord | undefin
  * (round 15). So in the deployed layout a check-in the API process refused
  * gives the switch the backlog window on the worker too, once the carry has
  * landed: one window per missed check-in, so where that process's own
- * statement stands unanswered for longer (nothing bounds it: a statement
- * the database's host acknowledged before it went silent stands until that
- * process restarts) the switch fires when the window ends with the owner
- * still refused there (round 17). What stays one process's own is its
+ * statement stands unanswered for longer (nothing on the server bounds it:
+ * a statement the database's host acknowledged before it went silent
+ * stands until that process restarts where that host is gone or the
+ * silence outlasts the host's own retransmission of its answer, about 15
+ * minutes) the switch fires when the window ends with the owner still
+ * refused there (rounds 17 and 18). What stays one process's own is its
  * stalls themselves, and a note whose process stopped before its carry
  * landed; and a deadline that falls before the carry lands finds the note
  * uncarried: one in the time before the refusing process's next try once
