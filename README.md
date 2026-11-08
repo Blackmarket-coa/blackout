@@ -20,6 +20,14 @@ baseline stack), and a sandboxed plugin ecosystem — see the
 repository is a pnpm/turborepo monorepo containing web, Tauri desktop,
 Capacitor mobile, a Synapse-derived homeserver, and a Node/Hono API server.
 
+## Product direction: meaningful participation
+
+Blackout's longer-term product direction extends its secure communication and cooperative governance foundation into a daily-use social experience that helps people **discover, express, connect, compete, learn, organize, and earn**. Passive participants should gain meaningful personal or community value; active creators and organizers should have clearer paths to collaboration, distribution, and economic returns.
+
+Planned experience areas include The Void (anonymous conversation starters with voluntary identity reveal), expanded Coliseum debates and faction play, creator workflows linked to FBM, cooperative games and missions, and opt-in real-world discovery. These are **strategic priorities, not a claim that every feature is shipped**. Community autonomy must coexist with privacy, moderation appeals, and safeguards against threats, doxxing, and targeted harassment.
+
+See [Blackout Habit & Participation Strategy](docs/BLACKOUT_HABIT_AND_PARTICIPATION_STRATEGY.md) for the problem map, participation modes, sequencing, ecosystem responsibilities, and success measures.
+
 ## For testers (no setup required)
 
 -   Hosted instance: **[`https://chat.theblackout.app`](https://chat.theblackout.app)**

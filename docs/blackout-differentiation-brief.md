@@ -38,3 +38,19 @@ Blackout is the cooperative governance + secure communication layer for organiza
 1. Start with a governance workflow pilot (high-clarity decision rooms).
 2. Add trust-hardening (attestation verification + audit export).
 3. Expand to coalition federation with onboarding runbook.
+
+## Expanded consumer participation direction (planned)
+
+The organization-focused positioning above describes the current governance and secure-communications differentiation. The broader product vision is a daily-use network that combines social discovery, expression, structured competition, learning, community organizing, and economic participation.
+
+- **Passive participants:** find information, entertainment, friends, challenges, and useful opportunities without needing to create content.
+- **Active participants:** publish, organize, collaborate, distribute, sell, and monetize with less fragmented work.
+- **The Void:** anonymous conversation starters with optional later identity reveal and abuse safeguards.
+- **Coliseum:** structured debates, challenges, and faction play with strong boundaries against targeting individuals.
+- **Creator Hub + FBM:** future integrated creator distribution and commerce journeys.
+- **Local experiences:** optional games, events, business discovery, and real-world missions.
+
+This is a **strategy and discovery direction**, not a shipped-feature checklist. Protect user agency, moderation accountability, location privacy, and safety. Avoid designing solely for compulsive screen time.
+
+For the full rationale, stages, metrics, and ecosystem interfaces, see [Blackout Habit & Participation Strategy](BLACKOUT_HABIT_AND_PARTICIPATION_STRATEGY.md).
+
