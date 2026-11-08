@@ -270,11 +270,35 @@ export const SETUP_PARTWAY_TEXT: Record<SetupPartwayStage, { what: string; next?
 
 /**
  * Shown while an attempt is writing, when the dialog's close button is
- * disabled (seventh review): the dialog refuses to close from the attempt's
- * first write until its recovery key is on screen.
+ * disabled (seventh review). It claims no more than holds (eighth review):
+ * the ✕, Escape, a click outside and Android's back press don't take the
+ * window away, but a browser's Back or another way off the screen can, and
+ * then the attempt's key is shown in a window of its own
+ * (`SETUP_KEY_ELSEWHERE_TEXT`); a reload or a quit loses it, since the key
+ * exists only in this page's memory until it is shown.
  */
 export const SETUP_WRITING_TEXT =
-    'Blackout is changing your account’s keys now. This window can’t be closed until it shows the recovery key.';
+    'Blackout is changing your account’s keys now. Wait here until it shows the recovery key: reloading or quitting Blackout before then would lose that key.';
+
+/**
+ * Above the recovery key of an attempt whose window went away after its first
+ * write, before the attempt settled (eighth review): a browser's Back, the
+ * pinned-messages popout or the search panel closing around the chip, the
+ * chip's message becoming readable. The attempt runs to its end, and its key
+ * (finished, or partway with that stage's text) is shown here, from a host
+ * mounted outside the app's routes, so that no write is left whose recovery
+ * key nobody was shown.
+ */
+export const SETUP_KEY_ELSEWHERE_TEXT =
+    'The window where Blackout was changing your account’s keys went away before it showed the recovery key, so the key is shown here.';
+
+/**
+ * The error line when Continue is pressed while another setup or reset of the
+ * same account is still writing (its window went away and it runs on, eighth
+ * review): two attempts at once would each replace what the other wrote.
+ */
+export const SETUP_BUSY_TEXT =
+    'Another key backup setup is still changing your account’s keys. Wait until Blackout shows its recovery key, then try again.';
 
 /**
  * The error line when the person closes the account confirmation (the

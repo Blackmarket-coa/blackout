@@ -53,6 +53,18 @@ export const MessageFailedContent = as<'div', { children?: never }>(({ ...props 
  * a backup won't make this message readable, then what the backup does (the
  * nudge's text for the row), with a "Set up backup" button that asks the
  * homeserver again before it opens the flow (`texts.offer`).
+ *
+ * Where the chip is mounted (eighth review): the shipped app renders it only
+ * in the pinned-messages popout and in message-search results, through
+ * `RenderMessageContent` and `Reply`; the room timeline renders an
+ * undecryptable message as plain text and has no chip. Inside a reply preview
+ * the chip sits in `Reply`'s button, whose click opens the replied message
+ * and closes the popout or the search panel, so the chip's click and every
+ * click in its overlay stop there (`stopClick` in `KeyBackupSetupGuard`).
+ * Its overlay lives as long as the chip does: the popout or the search panel
+ * closing, or the message becoming readable, takes it away. Nothing is lost
+ * before the setup's first write; after it, the attempt runs on and
+ * `RecoveryKeyHandoffHost` shows its key.
  */
 export const CHIP_TEXT = 'Can’t decrypt this message on this device.';
 export const CHIP_LABEL = 'Why?';
@@ -131,7 +143,11 @@ export const MessageBadEncryptedContent = as<'div', { children?: never }>(({ ...
                     size="400"
                     variant="Warning"
                     radii="Pill"
-                    onClick={() => void open()}
+                    onClick={(event) => {
+                        // Not the reply preview's open around it (eighth review).
+                        event.stopPropagation();
+                        void open();
+                    }}
                 >
                     <Text as="span" size="B300">
                         {CHIP_LABEL}

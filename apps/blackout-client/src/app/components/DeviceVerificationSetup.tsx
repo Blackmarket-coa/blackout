@@ -1,4 +1,11 @@
-import React, { FormEventHandler, forwardRef, useCallback, useRef, useState } from 'react';
+import React, {
+    FormEventHandler,
+    forwardRef,
+    useCallback,
+    useEffect,
+    useRef,
+    useState,
+} from 'react';
 import {
     Dialog,
     Header,
@@ -16,6 +23,7 @@ import {
 import FileSaver from 'file-saver';
 import to from 'await-to-js';
 import { AuthDict, IAuthData, MatrixError, UIAuthCallback } from 'matrix-js-sdk';
+import type { MatrixClient } from 'matrix-js-sdk';
 import type { GeneratedSecretStorageKey } from 'matrix-js-sdk/lib/crypto-api';
 import { PasswordInput } from './password-input';
 import { ContainerColor } from '../styles/ContainerColor.css';
@@ -23,6 +31,7 @@ import { copyToClipboard } from '../utils/dom';
 import { AsyncStatus, useAsyncCallback } from '../hooks/useAsyncCallback';
 import { clearSecretStorageKeys } from '../../client/secretStorageKeys';
 import {
+    SETUP_BUSY_TEXT,
     SETUP_CONFIRM_CANCELLED_TEXT,
     SETUP_CONFIRM_UNSUPPORTED_NEXT,
     SETUP_PARTWAY_TEXT,
@@ -40,6 +49,8 @@ import { ActionUIA, ActionUIAFlowsLoader, SUPPORTED_IN_APP_UIA_STAGES } from './
 import { useMatrixClient } from '../hooks/useMatrixClient';
 import { useAlive } from '../hooks/useAlive';
 import { UseStateProvider } from './UseStateProvider';
+import { useBackIntent } from '../hooks/useBackIntent';
+import { handOffRecoveryKey } from './recoveryKeyHandoff';
 
 type UIACallback<T> = (
     authDict: AuthDict | null
@@ -127,6 +138,47 @@ class SetupAbandoned extends Error {
     }
 }
 
+/**
+ * The form went away while its account confirmation was open. Nothing can
+ * answer that prompt any more, so the upload is cancelled with this, and the
+ * attempt settles at stage `'cross_signing'` (eighth review). Never shown: the
+ * attempt's key goes to `RecoveryKeyHandoffHost` with that stage's text.
+ */
+class SetupWindowGone extends Error {
+    constructor() {
+        super('The window went away while the account confirmation was open.');
+    }
+}
+
+/**
+ * How many attempts of each account (its `MatrixClient`) are between their
+ * first write and settling. One whose window went away runs on, so a second
+ * form could otherwise start writing over it (eighth review).
+ */
+const writingAttempts = new WeakMap<MatrixClient, number>();
+
+const ignoreBackPress = () => undefined;
+
+/**
+ * Holds an attempt from its first write until the returned release runs: it
+ * counts in `writingAttempts`, and the page asks the browser to confirm an
+ * unload (`beforeunload`), since a reload or a quit loses the recovery key,
+ * which exists only in this page's memory until it is shown. Whether a
+ * confirmation appears is the browser's choice. Tied to the attempt, not to
+ * the form, so it lasts while an attempt whose window went away runs on.
+ */
+const holdWhileWriting = (mx: MatrixClient): (() => void) => {
+    writingAttempts.set(mx, (writingAttempts.get(mx) ?? 0) + 1);
+    const onBeforeUnload = (event: BeforeUnloadEvent) => {
+        event.preventDefault();
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => {
+        window.removeEventListener('beforeunload', onBeforeUnload);
+        writingAttempts.set(mx, Math.max(0, (writingAttempts.get(mx) ?? 1) - 1));
+    };
+};
+
 /** Whether the app can do one of the flows a UIA answer offers (`ActionUIAFlowsLoader`'s test). */
 const confirmationSupported = (authData: IAuthData): boolean =>
     getSupportedUIAFlows(authData.flows ?? [], SUPPORTED_IN_APP_UIA_STAGES).length > 0;
@@ -172,6 +224,8 @@ export function SetupVerification({
     const alive = useAlive();
 
     const [uiaAction, setUIAAction] = useState<UIAAction<void>>();
+    // The open account confirmation, for the unmount below: state is gone by then.
+    const uiaActionRef = useRef<UIAAction<void>>();
     const [nextAuthData, setNextAuthData] = useState<IAuthData | null>(); // null means no next action.
     const [ownCrossSigning, setOwnCrossSigning] = useState<OwnCrossSigning | null>(null);
     const [heldKey, setHeldKey] = useState<HeldRecoveryKey | null>(null);
@@ -211,10 +265,22 @@ export function SetupVerification({
     );
 
     const resetUIA = useCallback(() => {
+        uiaActionRef.current = undefined;
         if (!alive()) return;
         setUIAAction(undefined);
         setNextAuthData(undefined);
     }, [alive]);
+
+    // A form that goes away with its account confirmation open (a browser's
+    // Back, the chip's popout closing) leaves a prompt nobody can answer, and
+    // the attempt waited on it forever with its key unseen. Cancel it, so the
+    // attempt settles and hands its key off (eighth review).
+    useEffect(
+        () => () => {
+            uiaActionRef.current?.cancelCallback(new SetupWindowGone());
+        },
+        []
+    );
 
     const authUploadDeviceSigningKeys: UIAuthCallback<void> = useCallback(
         (makeRequest) =>
@@ -247,6 +313,7 @@ export function SetupVerification({
                                 }
                             );
                             if (alive()) {
+                                uiaActionRef.current = action;
                                 setUIAAction(action);
                             } else {
                                 reject(
@@ -316,13 +383,25 @@ export function SetupVerification({
                 // key is on screen. Nothing runs between this test and that
                 // call, so no click lands in between.
                 if (!alive()) throw new SetupAbandoned();
+                // Another attempt of this account whose window went away is
+                // still writing: this one would write over it.
+                if ((writingAttempts.get(mx) ?? 0) > 0) throw new Error(SETUP_BUSY_TEXT);
                 markWriting(true);
-                // Another way out of the form while it writes (the chip's
-                // message becoming readable unmounts the chip and its
-                // overlay) is not a close: the next write does not start.
-                const stillOpen = () => {
-                    if (!alive()) throw new SetupAbandoned();
-                };
+                const releaseHold = holdWhileWriting(mx);
+                // The form can still go away by another route while the
+                // attempt writes (a browser's Back, the chip's popout or the
+                // search panel closing, the chip's message becoming
+                // readable). The attempt then runs to its end, and its key,
+                // finished or partway, goes to `RecoveryKeyHandoffHost`
+                // rather than to a form that is gone (eighth review; round 7
+                // stopped before the next write instead, and the key of what
+                // was already written was never shown).
+                const handOff = (lead?: string) =>
+                    handOffRecoveryKey({
+                        userId: mx.getUserId(),
+                        recoveryKey: encodedPrivateKey,
+                        lead,
+                    });
 
                 try {
                     clearSecretStorageKeys();
@@ -337,7 +416,6 @@ export function SetupVerification({
                             setupNewSecretStorage: true,
                         });
 
-                        stillOpen();
                         step = 'cross_signing';
                         if (!keepOwnCrossSigning) {
                             let complete = false;
@@ -360,11 +438,9 @@ export function SetupVerification({
                             }
                         }
 
-                        stillOpen();
                         step = 'backup';
                         await crypto.resetKeyBackup();
                     } catch (error) {
-                        if (error instanceof SetupAbandoned) throw error;
                         // From the first write on, the account's secret storage may
                         // open only with this attempt's recovery key (S9, sixth
                         // review): show it, say how far the attempt got, and offer
@@ -393,11 +469,14 @@ export function SetupVerification({
                                 ? SETUP_CONFIRM_UNSUPPORTED_NEXT
                                 : undefined;
                         if (alive()) setHeldKey({ key: recoveryKeyData, stage });
+                        else handOff(SETUP_PARTWAY_TEXT[stage].what);
                         throw new SetupStoppedPartway(failureText(error), stage, next);
                     }
 
-                    onComplete(encodedPrivateKey);
+                    if (alive()) onComplete(encodedPrivateKey);
+                    else handOff();
                 } finally {
+                    releaseHold();
                     markWriting(false);
                 }
             },
@@ -577,16 +656,23 @@ export function RecoveryKeyDisplay({ recoveryKey, lead }: RecoveryKeyDisplayProp
 
 /**
  * The setup and reset dialogs' close: refused while their form is writing
- * (`SetupVerification`'s `onWritingChange`), so an attempt that has started
- * changing the account always reaches the screen that shows its recovery key
- * (seventh review). The button is disabled, and the ref refuses a click that
- * comes before React has re-rendered it. Escape and a click outside never
- * close these dialogs: every overlay that holds them sets the focus trap's
- * `escapeDeactivates` and `clickOutsideDeactivates` to false.
+ * (`SetupVerification`'s `onWritingChange`), so a close can't take away the
+ * window of an attempt that has started changing the account before it shows
+ * its recovery key (seventh review). The button is disabled, and the
+ * ref refuses a click that comes before React has re-rendered it. Escape and
+ * a click outside never close these dialogs: every overlay that holds them
+ * sets the focus trap's `escapeDeactivates` and `clickOutsideDeactivates` to
+ * false. Android's back press, which the app otherwise turns into
+ * `history.back()` and so into a route change that unmounts the window, is
+ * claimed and ignored meanwhile (eighth review). The window can still go
+ * away by another route (a browser's Back, the chip's host closing); the
+ * attempt's key is then shown by `RecoveryKeyHandoffHost`, and a reload or a
+ * quit loses it (the record's "What remains").
  */
 const useCloseUnlessWriting = (onCancel: () => void) => {
     const writingRef = useRef(false);
     const [writing, setWriting] = useState(false);
+    useBackIntent(writing, ignoreBackPress);
     const onWritingChange = useCallback((value: boolean) => {
         writingRef.current = value;
         setWriting(value);

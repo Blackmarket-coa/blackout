@@ -72,6 +72,7 @@ import { isEmbedPath } from './app/features/black-mask-embed/embedPaths';
 // ("s is not iterable" in the emoji table) for every page, not just the panel.
 import { EmbedApp } from './app/features/black-mask-embed/EmbedApp';
 import { trimTrailingSlash } from './app/utils/common';
+import { RecoveryKeyHandoffHost } from './app/components/RecoveryKeyHandoffHost';
 
 // HomeFeed is gated behind two flags and a small Matrix-tied data path
 // (`joinedRoomsAtom`); keeping it lazy avoids dragging the
@@ -375,6 +376,11 @@ const BootstrapStatus = () => {
                 <CircleMigrationHydrator />
                 <PendingInviteRedeemer />
                 <RouterProvider router={router} />
+                {/* Beside the router, not under it: a route change or a
+                    rebuilt router must not take away the recovery key of a
+                    key-backup setup whose window went away mid-write (S9,
+                    eighth review). */}
+                <RecoveryKeyHandoffHost />
             </SpecVersionsBootstrap>
         );
     }

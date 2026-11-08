@@ -12,8 +12,12 @@
 //
 // - a close before the first write stops the attempt, and it writes nothing;
 // - from the first write until the attempt settles, the dialog's ✕ is
-//   disabled and refuses to close it, so the attempt always ends on a screen
-//   that shows its recovery key (the finished one, or the partway one).
+//   disabled and refuses to close it, so a close can't take the window away
+//   before it shows the attempt's recovery key (the finished one, or the
+//   partway one). The window can still go by another route (a browser's
+//   Back, the chip's host closing): DeviceVerificationSetup.windowGone.test.tsx
+//   covers that, where the key is then shown by `RecoveryKeyHandoffHost`, and
+//   the record's "What remains" lists what still loses it (eighth review).
 //
 // Every case goes through a real entry (the nudge's banner, the chip's
 // overlay, the legacy Devices page's Reset) and a real `MatrixClient` that

@@ -266,11 +266,26 @@ export const KeyBackupExplanation = forwardRef<HTMLDivElement, KeyBackupExplanat
 );
 
 /**
+ * Ends a click inside the overlay there. Folds' `Overlay` portals its content
+ * out of the caller's DOM, but React still bubbles the portal's events up the
+ * component tree, through whatever renders the overlay. The chip renders it
+ * inside a reply preview (`Reply`), which is a button whose click opens the
+ * replied message and closes the pinned-messages popout or the search panel;
+ * without this, every click in the overlay reached that handler too (eighth
+ * review).
+ */
+const stopClick = (event: React.MouseEvent) => {
+    event.stopPropagation();
+};
+
+/**
  * The overlay for `useKeyBackupSetupGuard`: the setup, the reset, an offer
  * (the row's text and "Set up backup"), or the caller's text for the row.
  * Rendered whenever `panel` is set, independent of whatever else the caller
  * shows, so a setup that is under way (the recovery key on screen) stays up
- * when the caller's own banner goes away.
+ * when the caller's own banner goes away. It goes away with the component
+ * that renders it (the chip's host closing, say); an attempt that is writing
+ * then runs on and its key is shown by `RecoveryKeyHandoffHost`.
  */
 export function KeyBackupGuardOverlay({ guard }: { guard: KeyBackupSetupGuard }) {
     const { panel, texts, close, proceed } = guard;
@@ -308,7 +323,7 @@ export function KeyBackupGuardOverlay({ guard }: { guard: KeyBackupSetupGuard })
     const trapKey = panel === 'setup' || panel === 'reset' ? panel : 'explanation';
 
     return (
-        <Overlay open backdrop={<OverlayBackdrop />}>
+        <Overlay open backdrop={<OverlayBackdrop />} onClick={stopClick}>
             <OverlayCenter>
                 <FocusTrap
                     key={trapKey}
