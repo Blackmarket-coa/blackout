@@ -1,5 +1,13 @@
 # Railway Deployment Hardening Guide
 
+> **2026-11-02.** The fork's Railway template (`railway.toml` and
+> `services/blackout-server/`) was removed in `42f68f2`; the operator chose removal
+> over fixing the template. The fork's separate Nixpacks files for Railway,
+> `nixpacks.toml` and `scripts-dev/railway/start.sh` (`docs/railway_deploy.md`),
+> are not the template and stay. Nothing in the tree runs them, and they start
+> a single homeserver process, so nothing here builds the deployment this guide
+> describes. It is kept as guidance.
+
 ## Worker split
 Run dedicated Railway services for:
 - main client reader

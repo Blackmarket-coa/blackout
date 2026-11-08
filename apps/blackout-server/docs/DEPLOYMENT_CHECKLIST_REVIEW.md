@@ -1,5 +1,18 @@
 # Blackout Core — Railway Deployment Checklist Review
 
+> **2026-11-02.** The Railway template this review checks was removed in
+> `42f68f2`: `railway.toml` and `services/blackout-server/` (`Dockerfile`,
+> `entrypoint.sh`, `homeserver.yaml.template`, `.env.example`). The operator
+> chose removal over fixing the template. As rendered, its image could not
+> start: `envsubst` left every `${VAR:-default}`, the listener port among
+> them, as text. The rows "JWT_SECRET: NOW CONFIGURED" (section 1) and "JWT
+> configuration wired into template" (Blockers Fixed, item 3) are the
+> configuration that
+> `docs/security/dependency-advisories-server-desktop-2026-10-30.md`
+> (repository root) found turning JWT login on, with a secret anyone could
+> read in the template; `48ab32d` turned it off. The review is kept as
+> written, as the record of what was checked then.
+
 Review of the `Blackout_server` codebase against the deployment checklist for getting
 Blackout Core running on Railway. This repo is a **Synapse (Matrix homeserver) fork** —
 it is the backend engine. Many checklist items reference separate services (frontend, API

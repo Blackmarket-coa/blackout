@@ -52,6 +52,14 @@ Profile selection must be deterministic and observable in startup logs.
 
 ### Week 3: Packaging and image lifecycle
 
+> **2026-11-02.** The image this week was to publish, `blackout-server`, its
+> workflow and its Dockerfile (`services/blackout-server/Dockerfile`) were
+> removed with the Railway template in `42f68f2`, and so was that image's
+> `entrypoint.sh`, which carried the `BLACKOUT_PROFILE` selector of the
+> backlog's item 1 below; the operator chose removal over fixing the template.
+> No image in the tree selects a profile at startup now. The plan is kept as
+> written.
+
 1. Publish fork-owned image tags:
    - `blackout-server:<version>`,
    - `blackout-server:stable`,
