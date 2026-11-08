@@ -78,9 +78,9 @@ The following config options are available:
 Synapse checks these keys only when the process starts a manhole: in the main
 process, a `type: manhole` entry in `listeners` or the `manhole` option; in a
 worker, a manhole entry in `worker_listeners` or the `worker_manhole` option.
-Without one,
-`manhole_settings` is not used, and a key there that would be refused does not
-stop the homeserver. A key file that cannot be read stops startup either way.
+Without one, `manhole_settings` is not used, and a key there that would be
+refused does not stop the homeserver. A key file that cannot be read stops
+startup either way.
 
 Until the change that locked Twisted 26.10.0 in this build, this page named
 these `ssh_priv_key` and `ssh_pub_key`. The configuration parser reads only the

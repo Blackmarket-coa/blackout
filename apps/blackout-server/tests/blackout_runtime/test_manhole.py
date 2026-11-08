@@ -633,11 +633,12 @@ class ManholeKeyConfigTestCase(TestCase):
 class ManholeListenerTestCase(TestCase):
     """The host-key check runs only for a process that starts a manhole.
 
-    Upstream loads `manhole_settings` whatever the listeners, and the fork's
-    check ran at config load from 2026-11-02 until its tenth review, so a
-    homeserver with no manhole listener and a stale `manhole_settings` block,
-    which loaded on `develop`, stopped at startup. The check now runs only when
-    the process the config is loaded for starts a manhole listener.
+    Upstream loads `manhole_settings` whatever the listeners. The fork's check
+    did the same from the round that added it (2026-11-02) until the change's
+    eleventh round, so a homeserver with no manhole listener and a stale
+    `manhole_settings` block, which loaded on `develop`, stopped at startup.
+    The check now runs only when the process the config is loaded for starts a
+    manhole listener.
     """
 
     def _bad_configs(self) -> List[Tuple[str, str, Optional[str], str]]:
