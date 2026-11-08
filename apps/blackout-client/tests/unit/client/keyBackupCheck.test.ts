@@ -356,12 +356,13 @@ describe('partwayStageAfter: the stage never moves back (seventh review)', () =>
         ['secret_storage', 'backup_none', false, 'cross_signing'],
         ['cross_signing', 'backup_none', false, 'cross_signing'],
     ];
-    it.each(cases)(
-        'attempt %s after %s (own cross-signing on: %s) → %s',
-        (attempt, held, on, want) => {
+    // A loop rather than `it.each`: the test files' type-check
+    // (`src/vitest.d.ts`) types `it` without `each`.
+    for (const [attempt, held, on, want] of cases) {
+        it(`attempt ${attempt} after ${held} (own cross-signing on: ${on}) → ${want}`, () => {
             expect(partwayStageAfter(attempt, held, on)).toBe(want);
-        }
-    );
+        });
+    }
 
     it('the secret_storage text, which says cross-signing was not changed, never follows a later stage', () => {
         for (const held of ['cross_signing', 'backup_none', 'backup_unclear'] as const) {
