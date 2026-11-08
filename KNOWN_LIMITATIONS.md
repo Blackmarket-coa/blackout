@@ -732,8 +732,9 @@ For the source-of-truth triage with tier/owner detail see
     the same window is given, within the 15 minutes or not, when the
     database did not answer the sweep's own process at some moment since the
     switch was due, or when your check-in or cancel was refused for want of
-    an answer on any server process and you have not checked in since
-    (above). So an outage of the server's background work or
+    an answer on that process, or on another once it has written the refusal
+    onto the switch, and you have not checked in since (above). So an outage
+    of the server's background work or
     of its database can delay a release by its own length plus up to 72
     hours.
     The grace and triggered events the sweep records stay in the memory of
