@@ -7,6 +7,11 @@
 > are not the template and stay. Nothing in the tree runs them, and they start
 > a single homeserver process, so nothing here builds the deployment this guide
 > describes. It is kept as guidance.
+>
+> **2026-11-02.** Those Nixpacks files, `nixpacks.toml`,
+> `scripts-dev/railway/start.sh` and `docs/railway_deploy.md`, were removed on
+> 2026-11-02 in `d88e884`; the operator chose removal ("remove both"). No file in
+> the tree configures Railway to build or start the Synapse homeserver now.
 
 ## Worker split
 Run dedicated Railway services for:

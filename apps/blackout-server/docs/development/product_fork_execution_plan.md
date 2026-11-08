@@ -42,6 +42,13 @@ Keep protocol compatibility and upstream interoperability by default.
 
 ### Week 2: Runtime default profiles
 
+> **2026-11-02.** The profiles this week introduced lived in
+> `synapse/util/blackout_profiles.py`, which was removed on 2026-11-02 in
+> `9493f41`, with its tests; the operator chose removal ("remove both"). Its
+> only runtime caller, the Railway template's `entrypoint.sh`, was removed in
+> `42f68f2`. Nothing on the server selects or reads a profile now. The plan is
+> kept as written.
+
 Introduce explicit runtime profiles and document expected behavior:
 
 - `managed` (postgres+redis expected),
@@ -94,6 +101,14 @@ Document prohibited divergence categories for this phase:
 
 ### Week 6: CI/release hardening
 
+> **2026-11-02.** The managed and standalone profile smoke checks
+> (`synapse/util/hosting_smoke.py`, `scripts-dev/blackout/ci_hosting_smoke.py`
+> and `scripts-dev/blackout/managed_readiness_integration_smoke.py`) were
+> removed on 2026-11-02 in `9493f41`, with the helpers they checked, and so were
+> the two steps written to run them in the fork's `release-train-gate.yml`, a
+> workflow GitHub has never registered in this repository; the operator chose
+> removal ("remove both"). The plan is kept as written.
+
 Add/standardize CI gates for fork releases:
 
 - lint + unit tests,
@@ -114,6 +129,11 @@ Add/standardize CI gates for fork releases:
    - **rollback path**.
 
 ## Initial backlog (high-priority)
+
+> **2026-11-02.** Item 1's selector ran in the Railway template's
+> `entrypoint.sh`, removed in `42f68f2`. The profile helpers it called and
+> item 3's smoke checks were removed on 2026-11-02 in `9493f41`; the operator
+> chose removal ("remove both"). The backlog is kept as written.
 
 1. Add explicit `BLACKOUT_PROFILE` runtime selector in container entrypoint.
 2. Add release checklist markdown and fork changelog section template.

@@ -44,6 +44,9 @@ Deliverables:
 > Railway template in `42f68f2`; the operator chose removal over fixing the
 > template. The `synapse.util.blackout_profiles` helpers and their tests
 > remain. The prompt is kept as written.
+>
+> **2026-11-02.** Those helpers and their tests were removed on 2026-11-02 in
+> `9493f41`; the operator chose removal ("remove both").
 
 ```text
 Implement explicit BLACKOUT_PROFILE handling in blackout-server startup.
@@ -94,6 +97,14 @@ Include:
 ```
 
 ## Phase 4: Managed hosting readiness
+
+> **2026-11-02.** The readiness checks, hooks and smoke scripts this prompt
+> asked for (`synapse/util/managed_hosting.py`,
+> `scripts-dev/blackout/managed_hosting_smoke.sh` and their tests) were
+> removed on 2026-11-02 in `9493f41`; the operator chose removal ("remove
+> both"). The only runtime caller of the readiness checks and hooks, the
+> Railway template's `entrypoint.sh`, was removed in `42f68f2`; the smoke
+> script had none. The prompt is kept as written.
 
 ```text
 Implement managed-hosting readiness checks and operator controls.

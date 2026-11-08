@@ -44,6 +44,9 @@ Last updated: 2026-04-09
     are a separate Nixpacks path, not the template, and stay. Nothing in the
     tree runs that path, so whether this reclassification still stands on it
     is the operator's call.
+  - 2026-11-02: those two were removed on 2026-11-02 in `d88e884`, with
+    `nixpacks.toml`; the operator chose removal ("remove both"). None of the
+    four evidence targets is in the tree now.
 
 - [ ] FR-003 Reclassify `Data Retention Policies` from `Not Started` to `Partial`
       (capability present, rollout may be pending).
