@@ -31,9 +31,9 @@ Set the following on your homeserver's
 
 When `force_disable` is true:
 
-- all rooms will be created with encryption disabled, and it will not be possible to enable
-  encryption from room settings.
-- any `io.element.e2ee.default` value will be disregarded.
+-   all rooms will be created with encryption disabled, and it will not be possible to enable
+    encryption from room settings.
+-   any `io.element.e2ee.default` value will be disregarded.
 
 Note: If the server is configured to forcibly enable encryption for some or all rooms,
 this behaviour will be overridden.
@@ -43,14 +43,22 @@ this behaviour will be overridden.
 By default, Element strongly encourages (but does not require) users to set up
 recovery so that you can access history on your new devices as well as retain access to your message history and cryptographic identity when you lose all of your devices.
 
-## Blackout policy override
+## Blackout: no setup gate is enforced
 
-Blackout can enforce recovery setup as a hard onboarding gate via the
-policy in
-`apps/blackout-client/src/app/features/settings/security/encryptionPosture.ts`.
-Pass a custom `OnboardingPolicy` to `onboardingBlocked()` to relax the
-default. The default policy requires both cross-signing and recovery
-to align with the Element April-2026 verified-device-only norm.
+`apps/blackout-client/src/app/features/settings/security/encryptionPosture.ts`
+defines an onboarding gate, `onboardingBlocked(posture, policy)`. Its default
+policy, `DEFAULT_ONBOARDING_POLICY`, is `{ requireCrossSigning: true }`, and
+the gate checks only whether this device's cross-signing is ready
+(`crossSigningReady`), not recovery or a key backup. Nothing in the client
+calls it, so Blackout does not require recovery, a key backup or
+cross-signing before anyone sends a message.
+
+What Blackout does show is the key-backup nudge. It offers the from-scratch
+setup only when the homeserver answers that the account has neither a key
+backup nor cross-signing, and the warned reset only when this device trusts
+the account's cross-signing and the account has no backup; otherwise it
+explains what it found. Blackout has no screen that restores keys from a
+backup. See `docs/security/key-backup-nudge-2026-11-02.md`.
 
 ## Removal of old settings
 
@@ -61,6 +69,9 @@ Setting up recovery is now always recommended to all users by showing a one-off 
 permanent red dot on the _Encryption_ tab in the _Settings_ dialog. When creating a new
 recovery key, the UI only supports auto-generated keys. Using an existing (custom) passphrase
 still works, but is not exposed in the UI when setting up recovery.
+
+That paragraph describes Element. Blackout has no _Encryption_ tab, toast or red dot; its
+prompt is the key-backup nudge described above.
 
 # Compatibility
 
