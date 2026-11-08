@@ -9702,11 +9702,19 @@ export class PostgresBackedDb extends InMemoryDb {
      * process-wide on purpose, and since round 11 a statement waits only for
      * this process's earlier writes to the same switch, so a backlog of
      * writes to other tables no longer sets it. It stands until the
-     * statement settles, which nothing here bounds: the shared pool sets no
-     * connection or statement timeout, so a statement on a connection the
-     * database never answers settles only when the operating system gives up
-     * on its socket (minutes). The carry of a refused owner write is not
-     * held back by it (round 16 of part 2's review).
+     * statement answers or fails, which nothing here bounds: the shared pool
+     * sets no connection or statement timeout and no TCP keepalive, so a
+     * statement whose bytes the database's host acknowledged before it went
+     * silent is never given up on and stands until the process restarts (the
+     * operating system runs no timer on a connection waiting for an answer),
+     * and one sent into the silence fails only once the operating system
+     * gives up retransmitting it (about 15 minutes at Linux's defaults; what
+     * the process does with that connection's error is a matter of the
+     * shared pool's error handling, which a separate change fixes). The
+     * carry of a refused
+     * owner write is not held back by it (round 16 of part 2's review), and
+     * holds a switch that falls due meanwhile back for one backlog window
+     * only (round 17: the documents put a bound of minutes on the stall).
      */
     private stalledSwitchStatement: Promise<unknown> | null = null;
 
@@ -9747,9 +9755,10 @@ export class PostgresBackedDb extends InMemoryDb {
      * 2's review: the carry had no bound of its own, and the shared pool
      * sets no connection or statement timeout, so a carry sent on a
      * connection the database never answered, a socket a failover left
-     * black-holed, held its note as on its way until the operating system
-     * gave up on the socket, minutes later, and nothing tried it again). A
-     * field, so a test can shorten it.
+     * black-holed, held its note as on its way for as long as that
+     * connection stood, which for a statement the database's host had
+     * acknowledged is until the process restarts, and nothing tried it
+     * again). A field, so a test can shorten it.
      */
     carryTimeoutMs = 5_000;
 
@@ -9761,6 +9770,16 @@ export class PostgresBackedDb extends InMemoryDb {
 
     /** Asked to carry while a try was under way: try again when it ends well. */
     private carryAgain = false;
+
+    /**
+     * The switches a settle is reading back (`settleSwitchStatement`), each
+     * with the notes whose carry landed meanwhile, whose column is taken once
+     * the settle has taken its row (round 17 of part 2's review).
+     */
+    private readonly carriesBehindSettle = new Map<
+        string,
+        { reading: number; notes: Array<{ at: string; lastCheckInAt: string }> }
+    >();
 
     /** Set by `shutdown`: no retry timer is set from then on. */
     private carryStopped = false;
@@ -9818,10 +9837,12 @@ export class PostgresBackedDb extends InMemoryDb {
      * while no switch statement stood unanswered here, in the switch's lane
      * behind them, and only a carry that failed armed the timer, so while
      * this process's own stalled statement waited, which the shared pool
-     * bounds by nothing short of the operating system's TCP timeouts, or
-     * while a carry hung on a black-holed connection, no carry was sent at
-     * all, with the database answering every other connection, and the
-     * worker fired the switch at its deadline). Outside the queue it is
+     * bounds by nothing (`stalledSwitchStatement`), or while a carry hung on
+     * a black-holed connection, no carry was sent at all, with the database
+     * answering every other connection, and the worker fired the switch at
+     * its deadline). Each try needs a connection the pool hands over within
+     * the bound, so while every connection of the pool is held by
+     * statements the database never answered, no try lands. Outside the queue it is
      * ordered after nothing this process queued; its condition is what
      * keeps it right in any order: a check-in or a move of the switch that
      * lands after it clears or outranks the column as it would have
@@ -9941,10 +9962,20 @@ export class PostgresBackedDb extends InMemoryDb {
      * A carry's answer: where the note is still the one carried (a newer
      * refusal, or a write that applied meanwhile, means nothing of this one
      * is this mirror's to take), it ends; a landed carry's row goes into the
-     * mirror where the mirror's entry is the one the carry read and no
-     * conditional write of the switch is in flight, otherwise the column
-     * alone where the mirror's last check-in is still the refused attempt's,
-     * and the switch is announced.
+     * mirror where the mirror's entry is the one the carry read, no
+     * conditional write of the switch is in flight and no settle of the
+     * switch is reading it back (`settleSwitchStatement`), otherwise the
+     * column alone (`takeCarriedColumn`), at once or, while such a settle is
+     * reading, once it has taken its row; and the switch is announced.
+     *
+     * Round 17 of part 2's review: the carry runs outside the switch's lane,
+     * so its row is what Postgres held when it ran, which can be older than
+     * a statement that landed after it. Taken while a settle's read was out,
+     * it replaced the entry the settle had seen, so the settle left the row
+     * it read (newer) out of the mirror: a cancel that landed late after the
+     * carry left this process holding the switch armed, its content and
+     * copies held here and the copies held in Postgres, though Postgres had
+     * it cancelled.
      */
     private takeCarryAnswer(
         plan: TablePlan,
@@ -9961,10 +9992,13 @@ export class PostgresBackedDb extends InMemoryDb {
         }
         const map = this.mapByName('deadmanSwitches');
         const current = map.get(id);
-        if (current === seen && !this.switchWritesInFlight.has(id)) {
+        const behindSettle = this.carriesBehindSettle.get(id);
+        if (behindSettle) {
+            behindSettle.notes.push(note);
+        } else if (current === seen && !this.switchWritesInFlight.has(id)) {
             map.set(id, rowToRecord(plan, row));
-        } else if (current && current.lastCheckInAt === note.lastCheckInAt) {
-            map.set(id, { ...current, ownerAttemptRefusedAt: note.at });
+        } else {
+            this.takeCarriedColumn(id, note);
         }
         this.transport?.publish({
             src: this.instanceId,
@@ -9973,6 +10007,33 @@ export class PostgresBackedDb extends InMemoryDb {
             kv: [id],
         });
         log.info('deadman_owner_attempt_carried', {});
+    }
+
+    /**
+     * A landed carry's column, into a mirror entry that is not the one the
+     * carry read: only where the switch there has not fired or been
+     * cancelled (a trigger or a cancel that the mirror has can only have
+     * landed after the carry, since the carry is refused over either, and
+     * clears the column in Postgres: round 17 of part 2's review, the column
+     * went onto a cancelled row, so this process's export listed a refused
+     * attempt Postgres no longer held), its last check-in is still the
+     * refused attempt's (a later check-in clears it) and it holds no later
+     * attempt.
+     */
+    private takeCarriedColumn(id: string, note: { at: string; lastCheckInAt: string }): void {
+        const map = this.mapByName('deadmanSwitches');
+        const current = map.get(id);
+        if (
+            !current ||
+            current.status === 'triggered' ||
+            current.status === 'cancelled' ||
+            current.lastCheckInAt !== note.lastCheckInAt
+        ) {
+            return;
+        }
+        const held = current.ownerAttemptRefusedAt;
+        if (typeof held === 'string' && held > note.at) return;
+        map.set(id, { ...current, ownerAttemptRefusedAt: note.at });
     }
 
     /**
@@ -10103,8 +10164,10 @@ export class PostgresBackedDb extends InMemoryDb {
      * read again from Postgres, in the row's lane, so after any write of it
      * this process queued meanwhile; the row goes into the mirror unless the
      * mirror's entry changed while it was read (a write of this process's or
-     * a refresh, each at least as new) or a conditional write of the switch
-     * is in flight (its own merge takes the row); with `withCopies` (the
+     * a refresh, each at least as new; a carry's answer, whose row can be
+     * older, does not change it while the read is out, and its column is
+     * taken after the row: round 17 of part 2's review) or a conditional
+     * write of the switch is in flight (its own merge takes the row); with `withCopies` (the
      * arm), the switch's copies the mirror lacks go in too; the switch and
      * each such copy are announced to the other processes; and a switch
      * found cancelled has its held copies blanked (a cancel landing this way
@@ -10126,6 +10189,15 @@ export class PostgresBackedDb extends InMemoryDb {
         }
         const map = this.mapByName('deadmanSwitches');
         const seen = map.get(id);
+        // While the read is out, a carry's answer for the switch leaves the
+        // mirror alone and is taken after it (`takeCarryAnswer`).
+        let behind = this.carriesBehindSettle.get(id);
+        if (!behind) {
+            behind = { reading: 0, notes: [] };
+            this.carriesBehindSettle.set(id, behind);
+        }
+        behind.reading += 1;
+        const reading = behind;
         return this.readSwitchAndCopiesInLane(id, withCopies)
             .then((found) => {
                 if (!found) return;
@@ -10142,6 +10214,12 @@ export class PostgresBackedDb extends InMemoryDb {
                 log.warn('deadman_switch_settle_read_failed', {
                     error: err instanceof Error ? err.message : String(err),
                 });
+            })
+            .finally(() => {
+                reading.reading -= 1;
+                if (reading.reading > 0) return;
+                this.carriesBehindSettle.delete(id);
+                for (const note of reading.notes) this.takeCarriedColumn(id, note);
             });
     }
 
