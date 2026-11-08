@@ -232,16 +232,22 @@ describe('MessageBadEncryptedContent chip', () => {
         expect(CHIP_CHECK_FAILED).toMatch(/key backup or cross-signing/);
     });
 
-    it('the not-verified text says what is closed to this device, not that the key can never come', () => {
-        // Round 4 of S9: "so it can’t get this message’s key." was absolute,
-        // but a key the sender's device sends later is used at once
-        // (`rust-crypto.js` `onRoomKeysUpdated` retries the waiting events).
+    it('the not-verified text says what is closed to this device, and promises a late key only what it can do', () => {
+        // Round 4 of S9: "so it can’t get this message’s key." was absolute.
         // What is closed is a backup and the account's other sessions
         // (room-key requests are off).
         expect(CHIP_NOT_VERIFIED).not.toMatch(/can’t get this message’s key\./);
         expect(CHIP_NOT_VERIFIED).toMatch(/from a backup or from your other sessions/);
+        // Round 6: "If the sender’s device sends the key later, the message
+        // becomes readable here." promised a recovery that this row's usual
+        // case rules out. A Megolm session the sender shares later starts at
+        // its current index (`UnknownMessageIndex` for an earlier message),
+        // and a sender that withholds from unverified devices sends nothing.
+        // The SDK retries the event when a key arrives; only a key that was
+        // merely delayed makes it readable.
+        expect(CHIP_NOT_VERIFIED).not.toMatch(/sends the key later/);
         expect(CHIP_NOT_VERIFIED).toMatch(
-            /If the sender’s device sends the key later, the message becomes readable here\./
+            /If this message’s key was only delayed, it becomes readable here when the key arrives; a message sent before this device signed in stays unreadable here\./
         );
         expect(CHIP_NOT_VERIFIED).toMatch(
             /Another of your sessions that has the key can still read it\./
