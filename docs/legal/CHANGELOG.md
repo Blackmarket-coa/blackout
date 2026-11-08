@@ -112,7 +112,9 @@ each correction.
     depends on the homeserver and the person's client; the release does not
     ([`packages/api/src/services/deadmanReleaseNotifier.ts`](../../packages/api/src/services/deadmanReleaseNotifier.ts)).
 -   **The data export lists** a release switch's format, when it fired and its
-    notice counts under `deadmanSwitches`, and the releases given to the person,
+    notice counts, and for any switch the moment of the owner's last check-in
+    or cancel refused for want of a database answer, until it is cleared,
+    under `deadmanSwitches`, and the releases given to the person,
     each with their own sealed copy and the owner's public key at arming, under
     `deadmanReleases` (`account.deadmanReleases` in the self-service export).
     [`TRUST.md`](../../TRUST.md) §2 says so.
@@ -136,13 +138,16 @@ each correction.
     that sent it is still running. While the database
     does not answer, check-ins are refused, and the server treats that time
     as an outage of its own for the switches it kept from moving: one due
-    then gets the 72-hour grace window instead of firing. A check-in or
-    cancel refused that way is written onto the switch once the database
-    answers the server process that refused it, so the switch gets the
-    window at its deadline in whichever process runs the sweep, unless you
-    check in again first; that note is lost if the process stops before the
-    database answers it, and is retried at each later answer if the write
-    fails (logged)
+    then gets the 72-hour grace window instead of firing; such a stall counts
+    only in the server process whose statements stood. A check-in or cancel
+    refused that way is written onto the switch by the server process that
+    refused it, which tries again on its own every 10 seconds until it is
+    written (each failure logged), and the database then refuses to fire the
+    switch before it has had its grace window, so it gets the window at its
+    deadline in whichever process runs the sweep, unless you check in again
+    first; that note is lost if the process stops before it is written, and
+    the sweep's first pass after the database answers again can come before
+    that next try and fire a switch already due
     ([`KNOWN_LIMITATIONS.md`](../../KNOWN_LIMITATIONS.md)).
 -   **Deleting an account** removes the sealed copies of its unfired release
     switches with their content (whether a switch has fired is decided on
@@ -152,8 +157,11 @@ each correction.
     accepts no arm, re-seal or release key from the account's other
     sessions, waits at most 30 seconds for an arm of theirs it was already
     writing (one still unanswered after that is cancelled when its write
-    answers, or by the last step) and fires none of the account's switches
-    itself meanwhile; where the database does not answer that question in
+    answers, or by the last step; the deletion is still not answered until
+    the database has answered that arm), and until its last step has
+    answered starts firing none of the account's switches itself (one its
+    sweep had already sent can still land, and stays released); where the
+    database does not answer that question in
     time it is asked again, queued, before the deletion is answered; every
     deletion's last step then erases in the database every switch it holds
     for the account, including one that process never had, and reads every switch

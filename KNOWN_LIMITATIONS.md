@@ -335,8 +335,12 @@ For the source-of-truth triage with tier/owner detail see
     can no longer arm a switch, re-seal one or publish a release key through
     it; it then waits, for at most 30 seconds, for any arm of yours it was
     already writing (one still unanswered after that cancels its own switch
-    when its write answers, or the last step below does), fires none of your
-    switches itself while it works, and
+    when its write answers, or the last step below does; the deletion is
+    still not answered until the database has answered that arm's write);
+    from the moment you confirm until its last step below has answered, it
+    starts firing none of your switches itself (one its own sweep had
+    already sent to the database to fire before you confirmed can still
+    land, and then stays released); and it
     cancels your dead-man switches that have not fired and removes what you
     put in them, a release switch's sealed copies included (not the copies
     an arm that failed left behind, which no switch names: see Durability
@@ -347,7 +351,9 @@ For the source-of-truth triage with tier/owner detail see
     deletion reached one that had not yet been told stays fired, and is
     erased as a fired switch is (below), and the process handling your
     deletion takes it into its memory with the copies for the people it
-    named, so it shows them the release from then on. Where the database does not answer
+    named, so it shows them the release from then on (also where it held an
+    out-of-date view of that switch it could not refresh earlier in the
+    deletion). Where the database does not answer
     that question in time, or fails it, the question is asked again, queued
     (and once more if that fails too, a refused connection included), and
     the deletion is not answered until it has been. Then, as its last step,
@@ -678,19 +684,25 @@ For the source-of-truth triage with tier/owner detail see
     its statements stood unanswered, or whose check-in or cancel was refused
     that way, gets the backlog window (below) at the first pass after it
     rather than firing, within the 15 minutes or not. A check-in or cancel
-    refused that way is noted by the server process that refused it and,
-    once the database answers that process again, written onto the switch
-    itself (`owner_attempt_refused_at`, migration 107), where the sweep
-    reads it in whichever process runs it: so where the API and the sweep
-    are separate processes (`deploy/docker/production`), a check-in refused
-    on the API process during a database outage holds the switch back on
-    the worker too, as long as you have not checked in since (the 503 still
-    tells you the check-in was not recorded; checking in again once the
-    database answers is the sure way). What is left: the process that
-    refused your check-in loses its note if it stops before the database
-    answers it again, and keeps retrying the write at each later answer if
-    it fails (logged), so until it lands the switch is held back on that
-    process alone; and a stall itself is known only to the process whose
+    refused that way is noted by the server process that refused it and
+    written onto the switch itself (`owner_attempt_refused_at`, migration
+    107): at once where the database answers, and otherwise tried again by
+    that process on its own every 10 seconds (and whenever another switch
+    write of that process is answered) until it is written, each failure
+    logged. The sweep reads the mark in whichever process runs it, and the
+    database itself refuses to fire a switch so marked that has not yet had
+    its backlog window, even for a process that has not heard of the mark,
+    which then reads it; so where the API and the sweep are separate
+    processes (`deploy/docker/production`), a check-in refused on the API
+    process during a database outage holds the switch back on the worker
+    too once the mark is written, as long as you have not checked in since
+    (the 503 says the check-in may not have been recorded; checking in again
+    once the database answers is the sure way). What is left: the process
+    that refused your check-in loses its note if it stops before the mark is
+    written, and until then the switch is held back on that process alone;
+    the worker's first pass after the database answers again can come before
+    that process's next try (at most 10 seconds later) and fire a switch
+    already due; and a stall itself is known only to the process whose
     statements stood, so a switch due during an outage that only the API
     process's statements met is not held back for that alone.
 -   The switches that exist were armed through the API before this. Their

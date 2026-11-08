@@ -251,24 +251,27 @@ export const DataRetentionSection: React.FC = () => {
                     Dead-man switches you own that have not fired are cancelled, and what you put in
                     them is removed from Blackout&apos;s database. From the moment you confirm, the
                     server handling your deletion accepts no new switch, re-seal or release key from
-                    your other sessions, fires none of your switches itself while it works, and
-                    waits up to 30 seconds for a switch of yours it was already arming (one still
-                    unanswered after that is cancelled when its write answers, or by the last step
-                    below). Whether a switch has fired is decided on the database&apos;s own record
-                    of it, so one that fired on another server process moments before your deletion
-                    stays released even if the process handling your deletion had not yet been told,
-                    and that process then shows it to the people it named too. If the database does
-                    not answer in time the question is asked again before your deletion is
-                    confirmed. A last step then erases, in the database, every switch it holds for
-                    you the same way (one that has not fired is cancelled and emptied; one that has
-                    fired stays released), including one the process handling your deletion never
-                    had. A switch can still be left as it was there, so one that had not fired could
-                    still fire: if the database fails every one of those attempts; if an arm of
-                    yours that the database was still finishing after the server lost its connection
-                    to it is recorded after that last step; where the server runs as several
-                    processes, if another of your sessions arms one, in the moment after that last
-                    step, on a process that has not yet heard of your deletion; or if the server
-                    process handling your deletion stops after your account has gone and before that
+                    your other sessions; until its last step below has answered it starts firing
+                    none of your switches itself (one it had already sent to the database to fire
+                    before you confirmed can still land, and then stays released); and it waits up
+                    to 30 seconds for a switch of yours it was already arming (one still unanswered
+                    after that is cancelled when its write answers, or by the last step below; your
+                    deletion is still not confirmed until the database has answered that arm).
+                    Whether a switch has fired is decided on the database&apos;s own record of it,
+                    so one that fired on another server process moments before your deletion stays
+                    released even if the process handling your deletion had not yet been told, and
+                    that process then shows it to the people it named too. If the database does not
+                    answer in time the question is asked again before your deletion is confirmed. A
+                    last step then erases, in the database, every switch it holds for you the same
+                    way (one that has not fired is cancelled and emptied; one that has fired stays
+                    released), including one the process handling your deletion never had. A switch
+                    can still be left as it was there, so one that had not fired could still fire:
+                    if the database fails every one of those attempts; if an arm of yours that the
+                    database was still finishing after the server lost its connection to it is
+                    recorded after that last step; where the server runs as several processes, if
+                    another of your sessions arms one, in the moment after that last step, on a
+                    process that has not yet heard of your deletion; or if the server process
+                    handling your deletion stops after your account has gone and before that
                     switch&apos;s step or the last step ran. A release switch that has already fired
                     stays readable to the people it named until at least 365 days after it fired (it
                     is removed at the server&apos;s first sweep after that); a switch armed before

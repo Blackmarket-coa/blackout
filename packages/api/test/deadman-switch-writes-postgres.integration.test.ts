@@ -3327,7 +3327,7 @@ test('a refused attempt older than the switch’s last landed check-in holds not
     assert.equal(here.getDeadmanSwitch(sw.switchId)?.ownerAttemptRefusedAt, undefined);
 });
 
-test('a carry that fails keeps this process’s note, and the next answer the database gives tries it again', async () => {
+test('a carry that fails keeps this process’s note, and the next switch statement the database answers on this process tries it again, before the retry timer would', async () => {
     await armed(60); // due at the pass: its move is the statement held
     const mine = await armed(3600);
     const other = await armed(3600);
