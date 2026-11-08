@@ -56,8 +56,13 @@ the release workflow one run at a time per tag; a fourth review the same day
 led `fc44d38` to make each build leg stop, right before it builds and
 uploads, unless the release is still a draft (a re-run of failed jobs
 skipped `create-release`'s check), and `340b415` to move the guard's rules
-into a module that runs nothing when imported. No x86_64 macOS leg was
-added: the operator chose not to add one yet.
+into a module that runs nothing when imported; a fifth review the same day
+led `1c1bb5a` to make the guard scan the whole repository from whatever
+directory it is started in, and `6831303` to say, in the release doc,
+`KNOWN_LIMITATIONS.md` and the workflow, that a tag must be on a commit
+that carries this version of the release workflow (an older commit's
+version is set to publish on its own). No x86_64 macOS leg was added: the
+operator chose not to add one yet.
 
 | Package (lock)        | Advisory                              | Severity | Fixed in   | Outcome                                         |
 | --------------------- | ------------------------------------- | -------- | ---------- | ----------------------------------------------- |
@@ -338,7 +343,12 @@ merged in at `27d8c17`, which brought #998 to this branch), `fc44d38` (each
 build leg's draft check, the notification harness's pinned actions and the
 concurrency comments, with the build check, the release doc and
 `KNOWN_LIMITATIONS.md`), `340b415` (the guard's rules in a module of their
-own, and its check-4 comment), then this version of the record. The
+own, and its check-4 comment), then `1dbda8e` (the record). After the fifth
+review: `1c1bb5a` (the guard scans from the repository's top level, and its
+header's Not covered sentence names multi-dot resolver suffixes),
+`6831303` (a tag only on a commit with this version of the release
+workflow, and the `queue` key, in the release doc, `KNOWN_LIMITATIONS.md`
+and both desktop workflows' comments), then this version of the record. The
 versions since `ddd4a41` also correct what this branch's commit messages
 got wrong
 ([Before merge or release](#before-merge-or-release), last bullet).
@@ -1959,8 +1969,10 @@ libayatana-appindicator3-dev librsvg2-dev`):
     ignoring case, fails when it has more than one spelling, and each
     level that differs is its own group. It is a checkout hazard, not a
     build fault: an import that resolves on macOS but not on Linux fails
-    Linux CI first. No such pair is in this tree (1,187 directories), at
-    `f0b6469` (1,188) or in the union with `develop` (1,187); on a scratch
+    Linux CI first. No such pair is in this tree (1,186 directories since
+    #998's removals came in; 1,187 at `3214d80` and `7378e71`), at
+    `f0b6469` (1,188) or in the union with `develop` (1,186; until this
+    version this sentence gave 1,187 for both); on a scratch
     copy with `src/Platform/probe.ts` added beside the client's
     `src/platform/` the script exits 1 and names the two directories. And
     the main guard's `catch` returned false when
@@ -2012,14 +2024,56 @@ libayatana-appindicator3-dev librsvg2-dev`):
     and the rules module with the old fail-closed guard appended), and the
     reviewer's glob command now runs all 21 cases. At this version the
     script exits 0 on 6,589 tracked paths; on a scratch copy of the tree
-    (`git archive`, 6,586 files) with `toolbag.ts` restored from `f0b6469`
-    beside `ToolBag.tsx` it exits 1 and names exactly that pair. `ci.yml`'s
-    two steps, which run the script and the test by path, are unchanged.
+    (`git archive`, 6,589 files, of which the copy's own index tracked
+    6,586 once `git add -A` ran in it, because three tracked `.env*.example`
+    files are gitignored, so that scan covered 6,587 paths with
+    `toolbag.ts`; until this version this sentence credited 6,586 to the
+    archive) with `toolbag.ts` restored from `f0b6469` beside `ToolBag.tsx`
+    it exits 1 and names exactly that pair. `ci.yml`'s two steps, which run
+    the script and the test by path, are unchanged.
+
+    The fifth review (2026-11-08) found that the script, started from a
+    subdirectory, scanned only that subtree: `getTrackedFiles` ran
+    `git ls-files -z` in the working directory, and git lists only the
+    paths under the directory it runs in, so from `b/` a fixture with the
+    tool-bag pair under `a/t/` printed five green lines and exited 0, and
+    the header's "no way of starting it can skip the scan and exit 0" held
+    only in that the scan ran. CI and `pnpm guard:duplicate-paths` run it
+    at the checkout root, so neither was affected. `1c1bb5a` finds the top
+    level with `git rev-parse --show-toplevel` (which fails outside a work
+    tree), lists the tracked paths there and reads each file from there,
+    and the header says so. The test has 23 cases, two more, each in a
+    fresh repository: the script started from `b/` and from `a/t/` fails
+    on the pair under `a/t/` and names it by its paths from the top level,
+    and started from `docs/` it reports one route declared in `src/a/` and
+    in `src/b/`, with no `ENOENT`. Four mutations in scratch copies each
+    turned both new cases red and left the other 21 green (the root
+    replaced by the working directory, files read relative to it,
+    `ls-files` run in it, and the script and rules as `340b415` left
+    them). The review also found that `Foo.d.ts` beside `foo.ts` passes
+    every check (stems `Foo.d` and `foo`, and neither whole name is the
+    other's stem), while TypeScript probes `./Foo` as `Foo.ts`, `Foo.tsx`,
+    then `Foo.d.ts`: tsc 5.9.3's `--traceResolution` on Linux resolves a
+    type-only import to `Foo.d.ts`, and a case-insensitive host would take
+    `foo.ts` at the first probe (inferred, not tried), which only a type
+    check there would show, since the bundler erases the import. The
+    header's Not covered sentence now names such multi-dot suffixes. The
+    tree tracks seven `.d.ts` files, and neither they nor any other name
+    with more than one dot, with two or more extensions removed, equals a
+    sibling's name without its last extension by case alone. At this
+    version the script exits 0 on the tree's 6,589 tracked paths, from the
+    root and from `apps/blackout-client`; on a `git clone` of the branch,
+    which tracks all 6,589, with `toolbag.ts` restored from `f0b6469`
+    beside `ToolBag.tsx`, it exits 1 and names exactly that pair, from the
+    root and from `blackout-desktop/`, where the script as `340b415` left
+    it exits 0.
 
     Not covered: a file against a
     sibling directory (`Foo.ts` beside `foo/`, where `./foo` finds the file
     on macOS and the directory's index on Linux; a prototype finds none in
-    this tree), the `a.TS` case above, Unicode case folding beyond
+    this tree), the `a.TS` case above, a resolver suffix with more than one
+    dot beside a name in another case (`Foo.d.ts` beside `foo.ts`, above;
+    until this version this list left it out), Unicode case folding beyond
     `toLowerCase`, and the NFC/NFD normalization that APFS ignores (no
     tracked path has a non-ASCII character today). `develop` has no
     required checks, so a failure is a red check, not a merge block. A pull
@@ -2176,8 +2230,26 @@ libayatana-appindicator3-dev librsvg2-dev`):
         observed, and git's documented `core.ignoreCase` handling suggests
         it may report nothing. `6c7809c` says "A tag's run is never
         cancelled", and `7378e71` that a tag's second run is "never
-        cancelled": a third push cancels a waiting run; only a running one
-        is never cancelled.
+        cancelled": a third push cancels a waiting run (with no `queue`
+        key, as here); only a running one is never cancelled.
+    -   `340b415` says the script "scans however it is loaded", and its
+        header that "no way of starting it can skip the scan and exit 0":
+        started from a subdirectory it scanned only that subtree and could
+        exit 0 with a collision elsewhere (`1c1bb5a` fixes it; CI runs it
+        at the root). The header's Not covered list, as `3214d80` and
+        `340b415` left it, read as complete and left out a multi-dot
+        resolver suffix beside a name in another case (`Foo.d.ts` beside
+        `foo.ts`), which `1c1bb5a` names and the guard does not catch.
+        `fc44d38` and `6c7809c` give GitHub's one-pending limit as fixed;
+        it is the default of an optional `queue` key (item 6). `1dbda8e`
+        names a `regenerate` job in `visual-regression.yml`, which has
+        none (`update-baselines`), and gives two counts that were wrong at
+        that version (1,187 directories, and 6,586 files in the
+        `git archive` copy); this version corrects them in place.
+        `6831303` cites the `GITHUB_SHA` rows of "Events that trigger
+        workflows" for the rule that a run uses the workflow file at the
+        event's commit or ref; GitHub's "Workflows" concepts page states the
+        rule itself (item 6).
 
 ## The gate
 
@@ -2713,7 +2785,8 @@ The record's own commit changes no file Trivy reads.
     non-draft release named after whatever ref ran it, once its build
     passed (2026-11-02).** (Changed on 2026-11-02 in `9ff8159`, with
     `27be012` for `release.yml`, and on 2026-11-08 in `b70100d`, `826bc48`,
-    `6c7809c` and `fc44d38`; see the end of this item.) When this item
+    `6c7809c` and `fc44d38`, with comments and prose in `6831303`; see the
+    end of this item.) When this item
     was written nothing had been run, dispatched or changed in that
     workflow. `blackout-desktop-tauri.yml`'s `build` job ran
     `tauri-apps/tauri-action@v0` with
@@ -2861,17 +2934,26 @@ The record's own commit changes no file Trivy reads.
         finds the first run's draft, the oldest for the tag, and its legs
         replace each leg's files, as a re-run does. A running run for a tag
         is never cancelled, so no upload is cut off. A waiting one can be:
-        GitHub keeps at most one running and one pending run per group, so
-        a third push while one run is in flight and one waits cancels the
-        waiting run, which shows as cancelled but had not started (no
-        draft, no upload), and the newest run goes ahead once the running
-        one ends. Until `fc44d38` this bullet, the workflow's comment, the
-        release doc and the build check's comment said a tag's run is
-        never cancelled, which holds only for a running one. The harness's
-        pull-request runs are cancelled by a newer push, as the build
-        check's are. That a queued run waits rather than cancels, and that
-        a third push cancels the waiting one, is from GitHub's
-        documentation, not observed.
+        the workflow sets no `queue` key, and with GitHub's default,
+        `single`, a group keeps at most one pending run, so a third push
+        while one run is in flight and one waits cancels the waiting run,
+        which shows as cancelled but had not started (no draft, no upload),
+        and the newest run goes ahead once the running one ends. Until
+        `fc44d38` this bullet, the workflow's comment, the release doc and
+        the build check's comment said a tag's run is never cancelled,
+        which holds only for a running one; until `6831303` they gave the
+        one-pending limit as a fixed rule of GitHub's rather than the
+        default of an optional key. `queue: max` would keep up to 100
+        waiting runs, in order, but GitHub's concurrency page also says
+        `queue: max` with `cancel-in-progress: true` is a validation error,
+        and this group's expression gives pull requests `true`; whether an
+        expression that is false for tags passes was not tried, so adding
+        the key, with the harness moved to a group of its own if need be,
+        is the operator's choice. The harness's pull-request runs are
+        cancelled by a newer push, as the build check's are. That a queued
+        run waits rather than cancels, and that with no `queue` key a third
+        push cancels the waiting one, is from GitHub's documentation
+        (fetched again on 2026-11-08), not observed.
 
     -   **Each leg checks that the release is still a draft (`fc44d38`).**
         The fourth review (2026-11-08) found a way around
@@ -2908,6 +2990,48 @@ The record's own commit changes no file Trivy reads.
         that leg's uploads. The release doc says to wait for all three
         legs, and to rebuild a published release from a new `release-*`
         tag rather than by re-running its jobs.
+    -   **Only at commits that carry this version (`6831303`).** The fifth
+        review (2026-11-08) found that the release doc,
+        `KNOWN_LIMITATIONS.md` and this item described the file, not every
+        ref. "Each workflow run will use the version of the workflow that
+        is present in the associated commit SHA or Git ref of the event"
+        (GitHub's "Workflows" concepts page, fetched 2026-11-08; not
+        tried): the pushed tag's commit, and for a dispatch the dispatched
+        branch. So everything above holds only for a tag on a commit that
+        carries this version. Of the 937 branches on `origin` on
+        2026-11-08, 750 carry an older `blackout-desktop-tauri.yml` (five
+        versions, each with `contents: write`, `tauri-apps/tauri-action@v0`,
+        `releaseDraft: false`, `workflow_dispatch`, and pushes to `main` and
+        to `release-*` tags; 146 of them, `develop`'s among them, also take
+        `v*` tags), 187 have no such file, and none has this version (this
+        branch is not on `origin` yet); there are no tags. So a `release-*`
+        tag on any of those commits, a `v*` tag on one whose version takes
+        `v*`, or a dispatch of one of those branches runs a version set to
+        publish a non-draft release that becomes latest and carries
+        `latest.json`, the behaviour the first bullets of this item
+        describe. What stops it today is the accidental stop above: all 750
+        keep the placeholder pubkey with `createUpdaterArtifacts: true`,
+        which the CLI's updater signing cannot decode (read at tauri-cli
+        2.10.1, `bundle.rs` 254-292), so the build stops before
+        tauri-action creates a release (`src/index.ts` 99-111, then 193),
+        and older commits can stop earlier, at the faults above. A branch
+        that picked up a real pubkey without this workflow would reopen the
+        path. The `v*` half has no such stop: 747 of those branches carry a
+        `release.yml` whose softprops steps have no `draft` input, so a
+        `v*` tag on one of their commits publishes that release, as latest,
+        at tag time (it has no `latest.json`, so the updater endpoint would
+        404 and updates fail closed). Release doc step 2 now says to tag
+        only a commit that carries this version (on `develop`, at or after
+        this branch's merge), how to check it, and what an older tag or
+        dispatch runs; its `v*` paragraph and `KNOWN_LIMITATIONS.md` say the
+        same, and the workflow's comment on its `push` trigger points
+        there. Whether GitHub still accepts a dispatch of an older branch
+        once `develop`'s version has no `workflow_dispatch` was not tried
+        (the documentation requires the file to exist on the default
+        branch, which it will, under the same name). A tag ruleset limiting
+        who may create `release-*` and `v*` tags, or deleting stale
+        branches, would narrow this; both are the operator's call, and
+        nothing here does either.
     -   **`release.yml` on `v*` tags (`27be012`, then `b70100d` and
         `826bc48`; `27be012` and `b70100d` each need the operator's yes).**
         Its `release` job runs `softprops/action-gh-release` twice, with no
@@ -3042,8 +3166,10 @@ The record's own commit changes no file Trivy reads.
         repository's own lint, typecheck, test and build scripts through
         turbo, so every merge to `develop` runs repository and dependency
         code that can reach a draft-publishing token while a desktop draft
-        waits for a person. `visual-regression.yml`'s `regenerate` job (on
-        dispatch) and `upstream-advisories.yml` (daily at 03:30 UTC and on
+        waits for a person. `visual-regression.yml`'s `update-baselines`
+        job ("Regenerate baselines and push to PR branch", on dispatch;
+        until this version this sentence called it `regenerate`, which is no
+        job's id) and `upstream-advisories.yml` (daily at 03:30 UTC and on
         dispatch, with `persist-credentials: true`) hold the same scope,
         and so does `release-drafter.yml`'s job (item 7). All of this
         predates this branch and is not changed here. Of
@@ -3069,8 +3195,10 @@ The record's own commit changes no file Trivy reads.
         ran only against mocked `github`, `context` and `core` objects, in
         six cases (again after `b70100d`). actionlint 1.7.12 with shellcheck
         0.9.0 reports nothing on either workflow, after `b70100d`,
-        `826bc48`, `6c7809c` and `fc44d38` too. `fc44d38`'s draft check ran
-        only as a script: taken from the parsed workflow and run under
+        `826bc48`, `6c7809c`, `fc44d38` and `6831303` too (`6831303`
+        changes comments only: both parse to the same data as before it).
+        `fc44d38`'s draft check ran only as a script: taken from the parsed
+        workflow and run under
         `bash --noprofile --norc -eo pipefail` with a stand-in `gh`, it
         exits 0 for `true` and 1 for `false`, for an empty answer and for a
         failed call; the real `gh` prints a boolean field as a bare
@@ -3155,12 +3283,17 @@ The record's own commit changes no file Trivy reads.
     push or release starts no workflow; that a re-run of all jobs gets
     the same draft from `create-release`; and that a second run for the
     same tag, in a concurrency group whose `cancel-in-progress` is false,
-    waits for the first rather than cancelling it, and a third push
-    cancels the pending one (`6c7809c`); that a re-run of failed jobs
-    hands the re-run legs `create-release`'s output from the earlier
-    attempt, and that the GitHub CLI is on the three runner images, from
-    their published software lists (`fc44d38`). The `latest.json` merge race and
-    the 422 on a concurrent upload were read from the code, as were
+    waits for the first rather than cancelling it, and, with no `queue`
+    key, a third push cancels the pending one (`6c7809c`); that a re-run of
+    failed jobs hands the re-run legs `create-release`'s output from the
+    earlier attempt, and that the GitHub CLI is on the three runner images,
+    from their published software lists (`fc44d38`); and that a tag or a
+    dispatch runs the workflow file as it is at the tagged commit or the
+    dispatched branch, with whether GitHub still accepts a dispatch of an
+    older branch once `develop`'s version has no `workflow_dispatch`
+    (`6831303`; the branch and blob counts there were read from `origin`).
+    The `latest.json` merge race and the 422 on a concurrent upload were
+    read from the code, as were
     tauri-action's one-page reads and what they would have done on a draft
     shared with `release.yml` (the order in which GitHub lists a release's
     assets was not checked; `b70100d` makes it moot for the desktop draft).
