@@ -1540,22 +1540,33 @@ Error during startup`), under either Twisted; a configured key pair never
   config. The Ed25519, ECDSA P-256 and P-384/P-521 sessions (the last stops
   at P-384) and the two factory tests, five tests, fail against the file
   before this change, under 26.4.0 and 26.10.0.
-- `synapse/config/server.py` (`_check_manhole_host_key` and
-  `_manhole_key_type`, called from `ServerConfig.read_config`), with the
+- `synapse/config/server.py` (`_check_manhole_host_key`, called from
+  `ServerConfig.read_config`, and its helper `_manhole_key_type`), with the
   previous bullet: a `ConfigError` at startup for a public key at
   `ssh_priv_key_path` (at `manhole_settings.ssh_priv_key_path`), for an
   `ssh_pub_key_path` whose key type differs from the private key's or which
   is not the private key's public half (at `manhole_settings.ssh_pub_key_path`),
   and, from the seventh round (found by the review of the sixth), for a key
-  at either path on a curve Twisted has no SSH key type for: `Key.fromFile`
-  loads a PEM `EC PRIVATE KEY` on any curve cryptography knows, and
-  `Key.sshType()` raises `KeyError` for every curve but P-256, P-384 and P-521
-  (`_secToNist`, `twisted/conch/ssh/keys.py`, 26.4.0 and 26.10.0). Until
-  then such a key (secp256k1 from `openssl`; `ssh-keygen` cannot write one)
-  passed the config and the homeserver stopped in `start_listening` with
-  that bare `KeyError`, or, at `ssh_pub_key_path`, in this check's own type
-  comparison. Each message names the file and what it holds. Upstream loads
-  both files without comparing them. Each refused config would start a
+  on a curve Twisted has no SSH key type for, at `ssh_priv_key_path` or at
+  `ssh_pub_key_path` beside a private key (a public key with no private key
+  is not checked: `manhole()` ignores it with a warning, as above):
+  `Key.fromFile` loads a PEM `EC PRIVATE KEY` on any curve cryptography
+  knows, and `Key.sshType()` raises `KeyError` for every curve but P-256,
+  P-384 and P-521 (`_secToNist`, `twisted/conch/ssh/keys.py`, 26.4.0 and
+  26.10.0). Until then such a key (secp256k1 from `openssl`; `ssh-keygen`
+  cannot write one) passed the config and the homeserver stopped in
+  `start_listening` with that bare `KeyError`, or, at `ssh_pub_key_path`, in
+  this check's own type comparison. From the eighth round (found by the
+  review of the seventh), a DSA (`ssh-dss`) key is refused at the same two
+  places: Twisted's `Key.sign` packs an ssh-dss signature's r and s into 20
+  bytes each, so a DSA key larger than 1024 bits, which Twisted loads from a
+  PEM `DSA PRIVATE KEY` file, passed the config, and the server raised
+  `OverflowError` on every key exchange while the homeserver ran and logged
+  nothing about it at startup; a 1024-bit key (the kind `ssh-keygen` wrote)
+  does serve a session, and is refused because ssh-dss signs with SHA-1.
+  Each message names the file and what it holds, and the curve and DSA
+  messages name the types that work. Upstream loads both files without
+  comparing them. Each refused config but the 1024-bit DSA key would start a
   manhole on which no SSH session completes, or not start. Keep it through a
   reconciliation. Tests in `tests/blackout_runtime/test_manhole.py`, through
   `HomeServerConfig`: a public key at `ssh_priv_key_path` and another key of
@@ -1564,11 +1575,18 @@ Error during startup`), under either Twisted; a configured key pair never
   (Ed25519 with RSA, RSA with ECDSA P-256, ECDSA P-256 with P-384); a
   secp256k1 PEM key at `ssh_priv_key_path` (the test also pins that the key
   loads and that `manhole()` itself raises `KeyError` on it) and at
-  `ssh_pub_key_path` beside a P-256 key; the five tests failing against the
-  file before the sixth round's change ("the config loaded"), and the two
-  curve tests against the sixth round's file too (the private-key one with
-  "the config loaded", the public-key one with the bare `KeyError:
-b'secp256k1'` from the type comparison); and matching pairs and private
+  `ssh_pub_key_path` beside a P-256 key; a 2048-bit DSA PEM key at
+  `ssh_priv_key_path` (the test also pins that the key loads and that
+  signing with it raises `OverflowError`, and a loopback session test pins
+  that the manhole, given that key directly, drops the connection before
+  authentication with the `OverflowError` logged), and a 1024-bit DSA key in
+  the OpenSSH format at `ssh_priv_key_path` and, as its `.pub`, at
+  `ssh_pub_key_path` beside an RSA key; the five tests failing against the
+  file before the sixth round's change ("the config loaded"), the two curve
+  tests against the sixth round's file too (the private-key one with "the
+  config loaded", the public-key one with the bare `KeyError: b'secp256k1'`
+  from the type comparison), and the two DSA refusal tests against the
+  seventh round's file ("the config loaded"); and matching pairs and private
   keys alone still loading.
 - `docs/manhole.md`: its option list and example named `ssh_priv_key` and
   `ssh_pub_key`. `synapse/config/server.py` reads only `ssh_priv_key_path`
@@ -1585,8 +1603,9 @@ b'secp256k1'` from the type comparison); and matching pairs and private
   longer a confidentiality problem": a host key that changes on every restart
   gives a client nothing to tell a restart from an impersonator. With the
   fixes for the review of the fifth round (above), both pages also name the
-  key types that work (RSA, Ed25519, ECDSA) and the refusals at startup, and
-  `docs/manhole.md`'s example and `ssh-keygen` line use an Ed25519 key.
+  key types that work (RSA, Ed25519, ECDSA) and the refusals at startup,
+  the DSA refusal among them from the eighth round, and `docs/manhole.md`'s
+  example and `ssh-keygen` line use an Ed25519 key.
 - `docs/usage/configuration/config_documentation.md`, an upstream line: the
   `ssh_priv_key_path` and `ssh_pub_key_path` bullet opened with upstream's
   "The private and public SSH key pair used to encrypt the manhole traffic".

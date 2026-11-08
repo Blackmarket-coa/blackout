@@ -62,12 +62,15 @@ The following config options are available:
 - `ssh_priv_key_path` - The path to a private SSH key, the manhole's host key:
   an RSA, Ed25519 or ECDSA (P-256, P-384 or P-521) key, unencrypted, in the
   format `ssh-keygen` writes. Synapse refuses to start if the file holds a
-  public key, or an EC key on any other curve (one `openssl` wrote, say),
-  which the SSH server has no key type for.
+  public key, an EC key on any other curve (one `openssl` wrote, say), which
+  the SSH server has no key type for, or a DSA (`ssh-dss`) key: the SSH server
+  cannot sign with a DSA key larger than 1024 bits, and a 1024-bit one signs
+  with SHA-1.
 - `ssh_pub_key_path` - The path to the matching public SSH key. Optional: when
   it is unset, the public half is derived from the private key. When it is set,
   it must be the public half of the key at `ssh_priv_key_path`; a public key of
-  another type, or of another key, stops startup with a configuration error.
+  another type, or of another key, or a DSA key or an EC key on a curve other
+  than P-256, P-384 or P-521, stops startup with a configuration error.
   Set on its own, without `ssh_priv_key_path`, it is ignored with a warning,
   since a host key must be able to sign.
 
@@ -118,7 +121,7 @@ ssh-keygen -t ed25519 -f /home/synapse/manhole_keys/id_ed25519 -N ""
 ```
 
 An RSA key (`ssh-keygen -t rsa -b 4096`) or an ECDSA key (`-t ecdsa`) works as
-well. The key is a _host_ key: it lets your ssh client check that it is talking
+well; a DSA key (`-t dsa`) is refused at startup. The key is a _host_ key: it lets your ssh client check that it is talking
 to your server. The keys that encrypt the session are agreed afresh by the SSH
 key exchange on each connection.
 

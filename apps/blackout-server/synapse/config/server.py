@@ -1091,7 +1091,7 @@ def _check_manhole_host_key(
     pub_key_path: Optional[str],
     pub_key: Optional[Key],
 ) -> None:
-    """Refuse a manhole host key the SSH server could not use.
+    """Refuse a manhole host key the SSH server cannot use or should not offer.
 
     A Blackout addition (PATCHES.md, 2026-11-02 Twisted entry). Upstream loads
     both files without comparing them. The manhole files the host key under the
@@ -1101,10 +1101,17 @@ def _check_manhole_host_key(
 
     - a key on a curve Twisted has no SSH key type for (an EC key other than
       P-256, P-384 or P-521, which only a PEM file can hold: ssh-keygen cannot
-      write one), at either path;
+      write one), at `ssh_priv_key_path` or at `ssh_pub_key_path` beside it;
     - a public key at `ssh_priv_key_path`: a host key must be able to sign;
     - a public key of another type than the private key;
     - a public key of the same type that is not the private key's public half.
+
+    A DSA key is refused at the same two places (`_manhole_key_type` says why):
+    one larger than 1024 bits serves no session, and a 1024-bit one would sign
+    with SHA-1.
+
+    With no private key configured the public key is not checked here:
+    `manhole()` ignores it, with a warning, and uses a generated key.
 
     Raises:
         ConfigError: naming the setting at fault.
@@ -1156,9 +1163,18 @@ def _manhole_key_type(key: Key, path: Optional[str], setting: str) -> str:
     `EC PRIVATE KEY` on any curve cryptography knows. Without this, such a key
     passed the config and the manhole raised that KeyError in
     `start_listening`, stopping the homeserver without naming the setting.
+
+    A DSA key (`ssh-dss`) is refused too. Twisted's `Key.sign` packs an
+    ssh-dss signature's r and s into 20 bytes each, which fits only a 160-bit
+    subgroup order, as in a 1024-bit key; every standard DSA key larger than
+    that has a longer one. Such a key loads from a PEM `DSA PRIVATE KEY`
+    file, and without this it passed the config and the server raised
+    OverflowError on every key exchange, logging nothing at startup. A
+    1024-bit key does serve a session, but ssh-dss signs with SHA-1
+    (`Key._getHashAlgorithm`), so it is refused as well rather than offered.
     """
     try:
-        return key.sshType().decode("ascii")
+        key_type = key.sshType().decode("ascii")
     except KeyError as e:
         curve = getattr(getattr(key, "_keyObject", None), "curve", None)
         what = f"an EC key on the curve {curve.name}" if curve is not None else "a key"
@@ -1168,6 +1184,16 @@ def _manhole_key_type(key: Key, path: Optional[str], setting: str) -> str:
             " ECDSA P-256, P-384 or P-521 key.",
             ("manhole_settings", setting),
         ) from e
+    if key_type == "ssh-dss":
+        raise ConfigError(
+            f"The manhole key file {path} holds a DSA key (ssh-dss), which the"
+            " manhole does not use: the SSH server cannot sign with a DSA key"
+            " larger than 1024 bits, and a 1024-bit one signs with SHA-1. The"
+            " manhole host key must be an RSA, Ed25519 or ECDSA P-256, P-384 or"
+            " P-521 key.",
+            ("manhole_settings", setting),
+        )
+    return key_type
 
 
 _MANHOLE_SETTINGS_SCHEMA = {

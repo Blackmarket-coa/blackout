@@ -686,13 +686,16 @@ on the manhole [here](../../manhole.md). Manhole sub-options include:
 - `ssh_priv_key_path` and `ssh_pub_key_path`: The private and public halves of the manhole's SSH host key, which lets an SSH client check that it is talking to this server.
   The keys that encrypt the manhole traffic come from the SSH key exchange on
   each connection, not from this pair. An RSA, Ed25519 or ECDSA key works, in
-  the format `ssh-keygen` writes and without a passphrase.
+  the format `ssh-keygen` writes and without a passphrase. A DSA key does not:
+  the SSH server cannot sign with one larger than 1024 bits, and a 1024-bit
+  one signs with SHA-1.
   `ssh_priv_key_path` alone is enough: the public half is derived from the
   private key. A public key at `ssh_priv_key_path`, an `ssh_pub_key_path`
-  that is not the public half of that private key, or an EC key on a curve
-  other than P-256, P-384 or P-521 at either path, stops startup with a
-  configuration error. `ssh_pub_key_path` without `ssh_priv_key_path` cannot be
-  used, since a host key must be able to sign, and is ignored with a warning.
+  that is not the public half of that private key, or a DSA key or an EC key
+  on a curve other than P-256, P-384 or P-521 at `ssh_priv_key_path`, or at
+  `ssh_pub_key_path` beside a private key, stops startup with a configuration
+  error. `ssh_pub_key_path` without `ssh_priv_key_path` cannot be used, since
+  a host key must be able to sign, and is ignored with a warning.
   Upstream Synapse falls back to a keypair hardcoded in its source when these
   are unset — published, therefore not secret, and identical on every install.
   **This build has removed that key** and generates a fresh one per process

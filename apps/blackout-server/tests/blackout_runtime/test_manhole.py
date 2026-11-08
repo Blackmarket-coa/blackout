@@ -28,10 +28,12 @@ signature algorithms of the key it holds and then looks the negotiated one up
 by key type, so an Ed25519 or ECDSA key at ``ssh_priv_key_path`` started without
 a word and every connection failed. ``synapse/config/server.py`` now also
 refuses, at config load, a public key at ``ssh_priv_key_path``, a configured
-public key that is not the private key's public half, and an EC key on a curve
+public key that is not the private key's public half, an EC key on a curve
 Twisted has no SSH key type for (which loads, and which ``manhole()`` would
-otherwise fail on with a bare KeyError). The session tests for those key types
-load the key files through the homeserver config, as a deployment does.
+otherwise fail on with a bare KeyError), and a DSA key (one larger than 1024
+bits loads from a PEM file, and every key exchange then fails; a 1024-bit one
+would sign with SHA-1). The session tests for those key types load the key
+files through the homeserver config, as a deployment does.
 
 Records: docs/security/dependency-advisories-twisted-2026-11-02.md (repository
 root) and PATCHES.md, 2026-11-02.
@@ -46,7 +48,7 @@ import tempfile
 from typing import Any, Dict, List, Optional, Tuple, cast
 
 from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric import ec, ed25519
+from cryptography.hazmat.primitives.asymmetric import dsa, ec, ed25519
 
 from twisted.conch import manhole_ssh
 from twisted.conch.ssh import channel, common, connection, transport, userauth
@@ -103,6 +105,10 @@ def _ecdsa_key(curve: ec.EllipticCurve) -> Key:
     return Key(ec.generate_private_key(curve))
 
 
+def _dsa_key(key_size: int) -> Key:
+    return Key(dsa.generate_private_key(key_size=key_size))
+
+
 def _key_kinds() -> List[Tuple[str, Key]]:
     """One private key of each type the manhole must serve."""
     return [
@@ -141,11 +147,15 @@ def _write_key_files(directory: str, name: str, key: Key) -> Tuple[str, str]:
 
 
 def _write_pem_private_key(directory: str, name: str, key: Key) -> str:
-    """Write `key` as `openssl ecparam -genkey` does: a PEM `EC PRIVATE KEY`.
+    """Write `key` as a traditional PEM private key.
 
-    ssh-keygen cannot write a key on a curve OpenSSH has no name for
+    For an EC key that is the `EC PRIVATE KEY` `openssl ecparam -genkey`
+    writes: ssh-keygen cannot write a key on a curve OpenSSH has no name for
     (cryptography refuses the OpenSSH serialization of secp256k1), so only a
-    PEM file can put one at `ssh_priv_key_path` or `ssh_pub_key_path`.
+    PEM file can put one at `ssh_priv_key_path` or `ssh_pub_key_path`. For a
+    DSA key it is a `DSA PRIVATE KEY`, the one format here that holds a DSA key
+    larger than 1024 bits and that Twisted loads (cryptography refuses the
+    OpenSSH serialization of one, and Twisted does not read PKCS#8 PEM).
     """
     path = os.path.join(directory, name)
     with open(path, "wb") as f:
@@ -157,6 +167,22 @@ def _write_pem_private_key(directory: str, name: str, key: Key) -> str:
             )
         )
     return path
+
+
+def _write_openssh_dsa_key(directory: str, name: str, key: Key) -> Tuple[str, str]:
+    """Write a 1024-bit DSA key in the OpenSSH format ssh-keygen writes, and `.pub`.
+
+    Through Twisted's serializer: cryptography's OpenSSH serialization of a DSA
+    key warns that its SSH DSA support is deprecated. Returns the private and
+    public file paths.
+    """
+    priv_path = os.path.join(directory, name)
+    with open(priv_path, "wb") as f:
+        f.write(key.toString("openssh", subtype="v1"))
+    pub_path = priv_path + ".pub"
+    with open(pub_path, "wb") as f:
+        f.write(key.public().toString("openssh", comment=b"manhole-test") + b"\n")
+    return priv_path, pub_path
 
 
 def _load_manhole_settings(
@@ -408,6 +434,56 @@ class ManholeKeyConfigTestCase(TestCase):
         self.assertIn(k1_path, e.msg)
         self.assertIn("curve secp256k1", e.msg)
 
+    def test_a_dsa_key_is_refused(self) -> None:
+        # A 2048-bit DSA key in a PEM file loads, and Twisted calls it ssh-dss,
+        # but its signature does not fit the 20-byte halves Twisted's ssh-dss
+        # format packs. Before this check the config loaded it and the server
+        # raised OverflowError on every key exchange; `ManholeSessionTestCase`
+        # pins that session.
+        directory = _key_dir(self)
+        path = _write_pem_private_key(directory, "dsa2048.pem", _dsa_key(2048))
+        e = self._refusal("DSA-2048 at ssh_priv_key_path", path)
+        self.assertEqual(e.path, ("manhole_settings", "ssh_priv_key_path"))
+        self.assertIn(path, e.msg)
+        self.assertIn("holds a DSA key (ssh-dss)", e.msg)
+        self.assertIn("RSA, Ed25519 or ECDSA P-256, P-384 or P-521", e.msg)
+
+        # What the check stands in for: the key loads as a private ssh-dss
+        # key, and signing with it, as the server signs the key exchange,
+        # raises.
+        loaded = Key.fromFile(path)
+        self.assertEqual(loaded.type(), "DSA")
+        self.assertEqual(loaded.size(), 2048)
+        self.assertEqual(loaded.sshType(), b"ssh-dss")
+        self.assertFalse(loaded.isPublic())
+        self.assertRaises(OverflowError, loaded.sign, b"exchange hash")
+
+    def test_a_1024_bit_dsa_key_in_ssh_keygen_format_is_refused(self) -> None:
+        # The DSA key ssh-keygen wrote: 1024 bits, in the OpenSSH format. It
+        # signs, with SHA-1, and is refused at ssh_priv_key_path, and its
+        # public half at ssh_pub_key_path beside an RSA private key.
+        directory = _key_dir(self)
+        key = _dsa_key(1024)
+        priv_path, pub_path = _write_openssh_dsa_key(directory, "id_dsa", key)
+        e = self._refusal("DSA-1024 at ssh_priv_key_path", priv_path)
+        self.assertEqual(e.path, ("manhole_settings", "ssh_priv_key_path"))
+        self.assertIn(priv_path, e.msg)
+        self.assertIn("holds a DSA key (ssh-dss)", e.msg)
+        self.assertIn("RSA, Ed25519 or ECDSA P-256, P-384 or P-521", e.msg)
+
+        rsa_path, _ = _write_key_files(directory, "id_rsa", _rsa_key())
+        e = self._refusal("DSA-1024 at ssh_pub_key_path", rsa_path, pub_path)
+        self.assertEqual(e.path, ("manhole_settings", "ssh_pub_key_path"))
+        self.assertIn(pub_path, e.msg)
+        self.assertIn("holds a DSA key (ssh-dss)", e.msg)
+
+        loaded = Key.fromFile(priv_path)
+        self.assertEqual(loaded.size(), 1024)
+        self.assertEqual(loaded.sshType(), b"ssh-dss")
+        self.assertEqual(loaded.public().blob(), key.public().blob())
+        signature = loaded.sign(b"exchange hash")
+        self.assertTrue(loaded.public().verify(signature, b"exchange hash"))
+
     def test_matching_pairs_and_private_keys_alone_load(self) -> None:
         directory = _key_dir(self)
         for kind, priv in _key_kinds():
@@ -538,13 +614,14 @@ class ManholeSessionTestCase(TestCase):
     # fast on loopback; this bounds a hung handshake rather than a slow one.
     timeout = 60
 
-    def _session(
+    def _connect(
         self, settings: ManholeConfig, namespace: Dict[str, Any]
     ) -> "defer.Deferred[Tuple[_Probe, Key]]":
-        """Serve `manhole(settings, namespace)` on loopback and run one session.
+        """Serve `manhole(settings, namespace)` on loopback and connect once.
 
         Fires with what the client saw and the public key the factory serves,
-        once both ends of the connection have closed.
+        once both ends of the connection have closed, however far the session
+        got.
         """
         factory = manhole(settings, namespace)
         _, host_key = _host_keys(factory)
@@ -573,6 +650,17 @@ class ManholeSessionTestCase(TestCase):
         async def run() -> Tuple[_Probe, Key]:
             await probe.closed
             await server_closed
+            return probe, host_key
+
+        return defer.ensureDeferred(run())
+
+    def _session(
+        self, settings: ManholeConfig, namespace: Dict[str, Any]
+    ) -> "defer.Deferred[Tuple[_Probe, Key]]":
+        """`_connect`, and the client got a shell that evaluated `answer + 1`."""
+
+        async def run() -> Tuple[_Probe, Key]:
+            probe, host_key = await self._connect(settings, namespace)
             self.assertTrue(probe.authenticated, "password authentication failed")
             self.assertTrue(probe.shell_opened, "the shell request was refused")
             text = probe.output.decode("utf-8", "replace")
@@ -675,5 +763,27 @@ class ManholeSessionTestCase(TestCase):
             probe, host_key = await self._session(settings, {"answer": 41})
             self.assertEqual(probe.key_alg, b"rsa-sha2-512")
             self.assertEqual(probe.host_key_blob, priv.public().blob())
+
+        return defer.ensureDeferred(run())
+
+    def test_a_2048_bit_dsa_key_serves_no_session_without_the_config_check(
+        self,
+    ) -> "defer.Deferred[None]":
+        # What the config's DSA refusal stands in for: a 2048-bit DSA key read
+        # from its PEM file and handed to the manhole as the config passed it
+        # before the check. The server offers ssh-dss, and signing the key
+        # exchange raises OverflowError, which the reactor logs before it
+        # drops the connection: the client never gets a signed reply, so it
+        # never authenticates.
+        path = _write_pem_private_key(_key_dir(self), "dsa2048.pem", _dsa_key(2048))
+        settings = _settings(Key.fromFile(path))
+
+        async def run() -> None:
+            probe, host_key = await self._connect(settings, {"answer": 41})
+            self.assertEqual(host_key.sshType(), b"ssh-dss")
+            self.assertIsNone(probe.host_key_blob)
+            self.assertFalse(probe.authenticated)
+            self.assertFalse(probe.shell_opened)
+            self.assertEqual(len(self.flushLoggedErrors(OverflowError)), 1)
 
         return defer.ensureDeferred(run())
