@@ -6,6 +6,17 @@
 > over fixing the template. Nothing in the tree runs these checks at startup
 > now. The `python -m synapse.util.managed_hosting` commands and the smoke
 > scripts below remain and can be run by hand.
+>
+> **2026-11-02.** Those commands and the smoke script below,
+> `scripts-dev/blackout/managed_hosting_smoke.sh`, were removed on 2026-11-02
+> in `9493f41`, with `synapse/util/managed_hosting.py` and
+> `synapse/util/blackout_profiles.py`; the operator chose removal ("remove
+> both"). No command on this page exists now. Nothing on the server reads
+> `BLACKOUT_PROFILE` (the web client reads a variable of that name, `true` or
+> `false`, for its own profile feature), and nothing in the tree reads
+> `BLACKOUT_MANAGED_READINESS_CHECKS`, `BLACKOUT_READINESS_*` or the hook
+> variables below, so the profile table is not guidance for any image in the
+> tree. The page is kept as the description of what those helpers did.
 
 This runbook covers readiness checks, verification hooks, and deployment profile guidance
 for managed Blackout/Synapse hosting (Railway and generic containers).

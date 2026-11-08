@@ -6,6 +6,10 @@
 > template. No image in the tree selects a profile at startup now. The
 > `synapse.util.blackout_profiles` helpers and their tests remain. The page is
 > kept as the description of what that entrypoint did.
+>
+> **2026-11-02.** Those helpers and their tests were removed on 2026-11-02 in
+> `9493f41`; the operator chose removal ("remove both"). Nothing on the server
+> reads `BLACKOUT_PROFILE` now.
 
 `BLACKOUT_PROFILE` controls deterministic startup configuration selection for `blackout-server`.
 
