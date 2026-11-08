@@ -7,6 +7,12 @@
 > the template. The workflow never ran in this repository: GitHub does not
 > read `apps/blackout-server/.github/workflows/`, and the file does not parse
 > as YAML. The report is kept as written, as the record of that week.
+>
+> **2026-11-02.** Item 4's `scripts-dev/blackout/managed_readiness_integration_smoke.py`
+> was removed on 2026-11-02 in `9493f41`, with `synapse/util/managed_hosting.py`,
+> which it called, and so were its step and the Postgres and Redis services in
+> the release-train gate workflow; the operator chose removal ("remove both").
+> That workflow, like the lifecycle workflow, never ran in this repository.
 
 ## Completed items
 
