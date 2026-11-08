@@ -52,9 +52,13 @@ review of the
 sixth round found that a key on a curve Twisted has no SSH type for passed
 that check and stopped the homeserver with a bare `KeyError`; fixed in
 commit `2bf76ad`, with tests. The review of the seventh round found that a
-DSA key passed it too, and that one larger than 1024 bits then failed every
+DSA key passed it too, and that one whose subgroup order is longer than 160
+bits, as in every standard DSA key larger than 1024 bits, then failed every
 connection with nothing said at startup; the check refuses DSA keys from
-commit `57d9d26`, with tests.
+commit `57d9d26`, with tests. The review of the eighth round found that the
+refusal's message blamed the key's size, which is false for a 2048-bit key
+with a 160-bit subgroup order; from commit `54043e4` it gives the reason
+that holds for every DSA key, that each ssh-dss signature uses SHA-1.
 If the approved scope is to stay exact, the operator can still split the
 manhole fixes out: return `synapse/util/manhole.py`,
 `synapse/config/server.py`, `docs/manhole.md` and
@@ -66,7 +70,7 @@ sentence and the asyncssh clause of its key-exchange sentence, and remove or
 reword every sentence of this record that relies on the fixes, not only its
 manhole section. `grep -n -i 'manhole\|ssh_p'` on this file finds them in: this
 paragraph; the first and fourth Result bullets; the Method's Tests and Boot
-bullets and its fourth- to eighth-round bullets; the `SSHSession` and
+bullets and its fourth- to ninth-round bullets; the `SSHSession` and
 key-exchange rows of
 [What changed](#what-changed-in-the-modules-the-fork-imports); the closing
 paragraph of [The gate](#the-gate); the targeted, full-suite, Boot, Lint and
@@ -75,12 +79,13 @@ verified"; item 1 of the first correction list, items 15 and 16 of the
 second, items 1, 9, 12 and 13 of the third, the fourth list's opening
 sentence and its items 1, 13, 14 and 20, the fifth list's opening sentence
 and its items 1, 2, 3, 4 and 6, the sixth list's opening sentence and its
-items 1, 2, 4 and 5, and the seventh list's opening sentence and its items
-1, 5, 6 and 11; and the Commit messages note. Twelve more rely on the fixes
+items 1, 2, 4 and 5, the seventh list's opening sentence and its items
+1, 5, 6 and 11, and the eighth list's opening sentence and its item 1; and
+the Commit messages note. Fifteen more rely on the fixes
 though the grep does not find them, since none names the manhole or an
 `ssh_p` setting: items 15 and 22 of the fourth list, items 7, 8 and 9 of the
-fifth, items 3 and 8 of the sixth, and items 2, 3, 4, 9 and 13 of the
-seventh. Its other hits stay true either way: the
+fifth, items 3 and 8 of the sixth, items 2, 3, 4, 9 and 13 of the
+seventh, and items 2, 3 and 8 of the eighth. Its other hits stay true either way: the
 GHSA-cwm5 row, the "Not used" row's `--manhole` help-string clause, the
 import paragraph under that table and Validation's Import bullet (both import
 `synapse.util.manhole`, which `develop` has), Validation's Semgrep bullet (a
@@ -126,8 +131,9 @@ that commit's record corrections
     startup a key file the manhole could not use or should not offer: a
     public key as the private one, a public key that is not the private
     key's, an EC key on a curve Twisted has no SSH key type for, or a DSA
-    key (one larger than 1024 bits fails every connection, and a 1024-bit
-    one would sign with SHA-1). `docs/manhole.md`, which
+    key (every ssh-dss signature uses SHA-1, and one whose subgroup order
+    is longer than 160 bits, as in every standard DSA key larger than 1024
+    bits, fails every connection). `docs/manhole.md`, which
     named the key options wrongly, and the manhole paragraph of
     `config_documentation.md`, whose upstream opening said the key pair
     encrypts the traffic, are corrected with them
@@ -381,8 +387,8 @@ that commit's record corrections
     `7bda9eb` (fifteen documentation commits after #997: the Coalition field
     operations plans, the whole-product MVP, the AI-first audit and release
     plan, the habit and participation strategy, and their links from
-    README.md, ROADMAP.md, `docs/SUMMARY.md`, the differentiation brief and
-    that strategy),
+    README.md, ROADMAP.md, `docs/SUMMARY.md`, the differentiation brief,
+    that strategy and the field operations build plan),
     commit `d972bbd`, with no conflict and nothing under
     `apps/blackout-server` changed. Seven of the nine incoming files are not
     formatted as the root prettier config would have them (lint-staged's
@@ -445,6 +451,27 @@ that commit's record corrections
     scanners on `git archive` exports of `57d9d26` and of `develop`'s `27d8c17`.
     The full suite, the targeted modules as a whole and `blackout_runtime_tests`
     did not run, and Semgrep did not run.
+-   **The ninth round** merged nothing: `origin/develop` was still at
+    `27d8c17`, which the eighth round's merge `e66794c` brought in, and
+    `git merge-tree --write-tree HEAD origin/develop` gives `HEAD`'s own
+    tree. The round changes `synapse/config/server.py` (the DSA message and
+    two docstrings), the test module, `docs/manhole.md`, the manhole
+    paragraph of `config_documentation.md` and PATCHES.md (commit
+    `54043e4`), and this record; no lock file, no ignore file and no
+    `manhole.py` change. Its checks ran as the eighth round's did, with
+    `v52/finish/r4/` under the session's scratch directory as working
+    directory and log directory: the manhole module under both venvs on the
+    worktree before the commit, and against `git archive` copies of
+    `6f9117b` and of `e66794c` with the module copied in, under both;
+    `tests.config` and `tests.blackout_runtime` under both venvs on
+    `54043e4`'s clean tree, each started with the 1-minute load under 3.5;
+    a probe of DSA key formats under both versions
+    (`finish/r4/logs/dsa-format-probe.txt`); mypy evenly on the two changed
+    Python files in `git archive` copies of `6f9117b` without and with the
+    change; `poetry lock --check`; and the scanners on `git archive` exports
+    of `54043e4` and of `develop`'s `27d8c17`. The full suite, the targeted
+    modules as a whole and `blackout_runtime_tests` did not run, Semgrep did
+    not run, and no homeserver was booted.
 -   **npm:** the registry's JSON for `image-size` (dist-tags, versions,
     publish times); metro 0.83.5's `src/Assets.js` and `package.json` from
     the worktree's `node_modules`; image-size 2.0.4's and metro 0.83.8's
@@ -930,16 +957,30 @@ order, as in a 1024-bit key; cryptography 50.0.2 gives a 2048-bit DSA key a
 Such a key loads from a PEM `DSA PRIVATE KEY` file (`openssl` 3 writes
 PKCS#8 by default, which Twisted refuses with `BadKeyError`, so the existing
 "Failed to read" refusal covers that file; `openssl pkey -traditional`
-writes the PEM Twisted reads), and cryptography refuses to write it in the
-OpenSSH format ("SSH supports only 1024 bit DSA keys"). Signing with it
+writes the PEM Twisted reads). cryptography refuses to write it in the
+OpenSSH format ("SSH supports only 1024 bit DSA keys"), but Twisted's own
+serializer writes it there, and `Key.fromString` loads that back as a
+private 2048-bit `ssh-dss` key, under both versions
+(`finish/r4/logs/dsa-format-probe.txt`). Signing with it
 raises `OverflowError: int too big to convert`, under both versions
 (`finish/r3/logs/dsa-probe.txt`). So, from `6c0aab8` until this change, a
-2048-bit DSA key at `ssh_priv_key_path` passed the config, was filed and
-offered as `ssh-dss`, and the server raised that `OverflowError` on every
-key exchange. A 1024-bit key, the one size `ssh-keygen` writes for DSA
-(OpenSSH 9.9p1's `ssh-keygen.c`: "Invalid DSA key length: must be 1024
-bits"), loads in the OpenSSH format and signs; the seventh round's review got
-a session on one with Twisted's client. But ssh-dss signs with SHA-1
+2048-bit DSA key with such a subgroup order at `ssh_priv_key_path` passed
+the config, was filed and offered as `ssh-dss`, and the server raised that
+`OverflowError` on every key exchange. The limit is the subgroup order, not
+the key's size: a 2048-bit key with a 160-bit one, a pair of sizes no
+standard names but which `openssl genpkey -genparam` makes for DSA with
+`dsa_paramgen_q_bits:160` and `type:fips186_2`, loads, signs and verifies, and the manhole, given it
+directly, serves a full session on it (found by the review of the eighth
+round; the ninth round's two tests, below). A 1024-bit key loads in the
+OpenSSH format and signs; the seventh round's review got a session on one
+with Twisted's client. It is the one size `ssh-keygen` writes for DSA where
+it writes DSA at all: OpenSSH 9.9p1's `ssh-keygen.c` has "Invalid DSA key
+length: must be 1024 bits", but 9.9p1 compiles DSA support only when
+`configure` is given `--enable-dsa-keys`, which is off by default
+(`configure.ac`; `sshkey.c` lists the DSA implementation under `WITH_DSA`,
+and `ssh-keygen.1` lists no `dsa` type), so a default 9.9p1 build writes no
+DSA key, and the 1024-bit limit is that of DSA-enabled and older builds.
+Every ssh-dss signature, whatever the key, uses SHA-1
 (`Key._getHashAlgorithm` maps `("DSA", b"ssh-dss")` to `hashes.SHA1()`), and
 cryptography warns, when
 writing one in the OpenSSH format, that "SSH DSA key support is deprecated
@@ -948,18 +989,24 @@ any `ssh-dss` key with a `ConfigError` at the setting whose file holds it,
 at `ssh_priv_key_path` or at `ssh_pub_key_path` beside a private key (a
 DSA public key with no private key is ignored with the usual warning, as
 above): "The manhole key file … holds a DSA key (ssh-dss), which the manhole
-does not use: the SSH server cannot sign with a DSA key larger than 1024
-bits, and a 1024-bit one signs with SHA-1. The manhole host key must be an
-RSA, Ed25519 or ECDSA P-256, P-384 or P-521 key." The check's docstring now
-says it refuses keys the server "cannot use or should not offer", and which
-reason holds for which. Both documentation pages name the refusal, and
+does not use: every ssh-dss signature uses SHA-1, and the SSH server cannot
+sign at all with a DSA key whose subgroup order is longer than 160 bits, as
+every standard DSA key larger than 1024 bits has. The manhole host key must
+be an RSA, Ed25519 or ECDSA P-256, P-384 or P-521 key." (That is the
+ninth round's wording, from `54043e4`; `57d9d26`'s said "the SSH server
+cannot sign with a DSA key larger than 1024 bits, and a 1024-bit one signs
+with SHA-1", which the 160-bit case above makes false.) The check's
+docstring now says it refuses keys the server "cannot use or should not
+offer", and which reason holds for which. Both documentation pages name the refusal, and
 PATCHES.md's `server.py` bullet records it. OpenSSH 9.9's default host-key
 algorithm list (`KEX_DEFAULT_PK_ALG` in its `myproposal.h`) has no
 `ssh-dss`, so a default 9.9 client would find no host-key algorithm in
-common with a manhole serving a DSA key. Both were read in the 9.9p1
-tarball the fourth round's review downloaded from cdn.openbsd.org, whose
-sha256 (`s0P7zb…` in base64) matches the 9.9 release notes; no OpenSSH
-client or `ssh-keygen` was run, and the refusal does not rest on either.
+common with a manhole serving a DSA key. All of these were read in the
+9.9p1 tarball the fourth round's review downloaded from cdn.openbsd.org,
+whose sha256 (`s0P7zb…` in base64) matches the 9.9 release notes (the
+build-option files `configure.ac`, `sshkey.c` and `ssh-keygen.1` in the
+ninth round); no OpenSSH client or `ssh-keygen` was run, and the refusal
+does not rest on any of them.
 
 Three new tests. Through `HomeServerConfig`, a 2048-bit DSA key written as a
 PEM `DSA PRIVATE KEY` at `ssh_priv_key_path` is refused at that setting,
@@ -985,6 +1032,24 @@ error), and the other eighteen erroring with the `fromCryptographyKey`
 `AttributeError`, the DSA session test among them
 (`finish/r3/logs/manhole-develop-t26.4.log`).
 
+The ninth round adds two tests (twenty-five in all), from fixed public
+2048-bit DSA parameters with a 160-bit subgroup order, made by `openssl`
+3.0.13 with `type:fips186_2` and written into the module (each test draws
+its own private key from them). Through `HomeServerConfig`, such a key at
+`ssh_priv_key_path` is refused, with "every ssh-dss signature uses SHA-1"
+in the message; the test also pins that the key is 2048 bits with a 160-bit
+subgroup order, that Twisted hashes ssh-dss with SHA-1, and that the key
+signs and verifies. And a loopback session on it, handed to `manhole()`
+directly: `ssh-dss` is negotiated, the client is shown the configured key,
+and its shell prints `42`. The 2048-bit refusal test now also pins that its
+key's subgroup order is longer than 160 bits. Against `6f9117b`'s files the
+new refusal test fails on the message ("'every ssh-dss signature uses
+SHA-1' not in" it) and the other twenty-four pass, under each version;
+against `e66794c`'s it fails with "the config loaded", as the two earlier
+DSA refusals do, and the other twenty-two pass, both DSA session tests among
+them; with `54043e4` all twenty-five pass under both
+(`finish/r4/logs/manhole-before-*.log`, `finish/r4/logs/manhole-wip2-*.log`).
+
 Live (`finish/r3/bin/boot.sh`: a generated sqlite config with a loopback
 manhole listener and only `ssh_priv_key_path` set, and the fifth review's
 Twisted client probe; logs in `finish/r3/boots/boots.txt`). From the merge
@@ -998,21 +1063,23 @@ the OpenSSH format, the client was shown the configured key, authenticated
 and printed `42` for `6*7`. From this branch's tree with `57d9d26`'s code,
 with either key under each version (four boots), the homeserver exited 1 at
 startup after `Error in configuration at
-'manhole_settings.ssh_priv_key_path':` and the DSA message above.
+'manhole_settings.ssh_priv_key_path':` and the DSA message in `57d9d26`'s
+wording (above).
 
 **Scope.** The operator approved the Twisted lock and the image-size
 correction. These fixes are a third thing, kept to `manhole.py`, the manhole
 check in `synapse/config/server.py`, the tests and the two manhole
 documentation pages, in commits separate from the lock and the ignore changes
 (`20362e4`, which also carries this record's second-round corrections,
-`ce1bca9`, `6c0aab8`, `2bf76ad` and `57d9d26`), so they can be dropped from
+`ce1bca9`, `6c0aab8`, `2bf76ad`, `57d9d26` and `54043e4`), so they can be dropped from
 the PR if the approved
 scope is to stay exact (the Scope paragraph says how); leaving them out would
 leave a known startup crash in a documented security feature with its fix in
 hand, documentation that has operators set keys the code ignores, a manhole
 that serves no session on an Ed25519 or ECDSA key and says nothing, a config
 check that passes a key the manhole then dies on with a bare `KeyError`, or a
-DSA key on which every connection fails, and this
+DSA key with a subgroup order longer than 160 bits, on which every
+connection fails, and this
 record's and PATCHES.md's statements about the generated host key describing
 a code path that cannot run.
 
@@ -1111,8 +1178,8 @@ four are the second round's, with the database of 2026-11-02 01:14 UTC; the
 next four are the third round's and the next four the fourth round's, both
 with the database of 2026-11-02 07:17 UTC; the next eight are the fifth
 round's and the next four the sixth round's, both with the database of
-2026-11-02 13:15 UTC; and the last eight are the seventh round's and the
-eighth round's, four each, both with the database of 2026-11-08 00:37 UTC
+2026-11-02 13:15 UTC; and the last twelve are the seventh, eighth and
+ninth rounds', four each, all with the database of 2026-11-08 00:37 UTC
 ([Method](#method)).
 
 | Run                                                                                                          | High/Critical reported                                                                                                                                                                       | Exit |
@@ -1156,6 +1223,10 @@ eighth round's, four each, both with the database of 2026-11-08 00:37 UTC
 | same, `--show-suppressed` (eighth round)                                                                     | none; suppressed: the four Twisted ids and the two image-size ids                                                                                                                            | 0    |
 | this branch, `git archive` of `57d9d26` (eighth round)                                                       | none                                                                                                                                                                                         | 0    |
 | same, `--show-suppressed` (eighth round)                                                                     | none; suppressed: image-size 1.2.1 under CVE-2025-71329 and CVE-2025-71330 (fixed 2.0.3), and nothing else                                                                                   | 0    |
+| `develop` (`27d8c17`), `git archive`, ninth round (same database)                                            | none                                                                                                                                                                                         | 0    |
+| same, `--show-suppressed` (ninth round)                                                                      | none; suppressed: the four Twisted ids and the two image-size ids                                                                                                                            | 0    |
+| this branch, `git archive` of `54043e4` (ninth round)                                                        | none                                                                                                                                                                                         | 0    |
+| same, `--show-suppressed` (ninth round)                                                                      | none; suppressed: image-size 1.2.1 under CVE-2025-71329 and CVE-2025-71330 (fixed 2.0.3), and nothing else                                                                                   | 0    |
 
 So the gate is green on both sides, and on this branch it is green without any
 Twisted entry: Twisted 26.10.0 matches no advisory in any of the four
@@ -1187,7 +1258,9 @@ between them brings in `develop`'s `pnpm-lock.yaml`, with lodash 4.18.1 for
 4.18.0, a Moderate advisory below the gate's threshold either way. Trivy stays
 green. The OSV gate, which reads `pnpm-lock.yaml` with its own data, was red
 in the seventh round on both sides for lodash 4.18.0, and is green in the
-eighth on both, with lodash 4.18.1 ([Validation](#validation), OSV).
+eighth on both, with lodash 4.18.1 ([Validation](#validation), OSV). The
+ninth round's are on `54043e4`, which changes no file Trivy reads, and on
+`develop` at `27d8c17` again; both gates stay green on both sides.
 
 ## Validation
 
@@ -1195,9 +1268,11 @@ eighth on both, with lodash 4.18.1 ([Validation](#validation), OSV).
     and `scripts-dev/check_locked_deps_have_sdists.py` (151 packages) pass;
     `poetry lock --check` passes again after the comment over `Twisted` was
     rewritten (the `content-hash` does not cover comments), and again in the
-    second to eighth rounds, which changed no lock file (the sixth on
+    second to ninth rounds, which changed no lock file (the sixth on
     `6c0aab8`'s tree, the seventh on `2bf76ad`'s, the eighth on a
-    `git archive` of `57d9d26`, with poetry 1.3.2). Every file
+    `git archive` of `57d9d26`, the ninth on one of `54043e4`'s
+    `pyproject.toml` and `poetry.lock`, with poetry 1.3.2;
+    `finish/r4/scan/poetry-lock-check.log`). Every file
     hash in
     the two new lock entries matches PyPI's JSON (2 of 2 for twisted, 50 of 50 for
     zope-interface). `poetry export --extras all --without-hashes`, with and
@@ -1245,7 +1320,12 @@ eighth on both, with lodash 4.18.1 ([Validation](#validation), OSV).
     each venv on its tree, under the same load rule: `tests.config`, 103
     tests, and `tests.blackout_runtime`, 74 (the manhole module's
     twenty-three among them), all passing under each version
-    (`finish/r3/logs/config-*.log`, `finish/r3/logs/runtime-*.log`). All 40
+    (`finish/r3/logs/config-*.log`, `finish/r3/logs/runtime-*.log`). The
+    ninth round ran the two again under each venv on `54043e4`'s clean tree,
+    under the same load rule: `tests.config`, 103 tests, and
+    `tests.blackout_runtime`, 76 (the manhole module's twenty-five among
+    them), all passing under each version (`finish/r4/logs/config-*.log`,
+    `finish/r4/logs/runtime-*.log`). All 40
     failures and
     errors are in `tests.http`: 18 failures and 1 error in the federation
     agent's module, 13 and 6 in the federation client's, 2 failures in the
@@ -1340,7 +1420,7 @@ eighth on both, with lodash 4.18.1 ([Validation](#validation), OSV).
 -   **`blackout_runtime_tests`:** 85 passed under each venv (`pytest -q`,
     pytest 8.3.5 added with `--no-deps` as before), and 85 again from the
     after venv in the second, third, fourth and fifth rounds (not run in the
-    sixth, seventh or eighth). `tests/blackout_runtime`
+    sixth, seventh, eighth or ninth). `tests/blackout_runtime`
     is in the trial suite above.
 -   **Boot, before and after:** `--generate-config` wrote a sqlite config
     with the 8008 listener on `['::1', '127.0.0.1']`, `tls: false`, `client`
@@ -1422,7 +1502,9 @@ family not supported by protocol`, the same traceback apart from Twisted's
     each answering `/health` and then failing every manhole connection; a
     1024-bit one from that tree under 26.10.0, serving a session; and each
     of the two from this branch's tree under each version, each stopping
-    with its `ConfigError` ([DSA](#dsa-refusal)).
+    with its `ConfigError` ([DSA](#dsa-refusal)). The ninth round booted
+    nothing; its 2048-bit DSA key with a 160-bit subgroup order was served
+    only in the session test.
 -   **Lint:** the first round changed no Python file, so ruff, black, isort
     and mypy did not run then. The second round's two Python files
     (`synapse/util/manhole.py`, `tests/blackout_runtime/test_manhole.py`)
@@ -1447,7 +1529,11 @@ family not supported by protocol`, the same traceback apart from Twisted's
     (`synapse/config/server.py`, the test module) pass ruff, black (after it
     rewrapped one statement of the test) and isort, under both venvs. The
     eighth round's two (the same files) pass ruff, black and isort as
-    written, under both venvs (`finish/r3/logs/lint-wip.txt`).
+    written, under both venvs (`finish/r3/logs/lint-wip.txt`). The ninth
+    round's two (the same files) pass ruff, black and isort as written,
+    under both venvs; mypy first stopped at a comment line of the test that
+    began with `type:`, which it reads as a type comment, and the comment
+    was reflowed (`finish/r4/mypy/after-*-typecomment.txt`).
 -   **mypy, before and after, compared evenly from the third round on.** The
     second round ran mypy on the two manhole files from both venvs in the
     worktree, got the same single `stubs/txredisapi.pyi` error, and
@@ -1510,7 +1596,12 @@ family not supported by protocol`, the same traceback apart from Twisted's
     two files in `git archive` copies of `e66794c` without and with
     `57d9d26`'s versions: again 55 in 27 under 26.4.0 and 53 in 26 under
     26.10.0 on each side, the same error lines before and after (sorted
-    output identical), none in the two files (`finish/r3/mypy/`).
+    output identical), none in the two files (`finish/r3/mypy/`). The ninth
+    round's, on the same two files in `git archive` copies of `6f9117b`
+    without and with `54043e4`'s versions: again 55 in 27 under 26.4.0 and
+    53 in 26 under 26.10.0 on each side, the same error lines before and
+    after (sorted output identical), none in the two files
+    (`finish/r4/mypy/`).
 -   **OSV:** osv-scanner 2.3.3 on `pnpm-lock.yaml` with `TZ=UTC`,
     `TZ=Etc/GMT-3` and `TZ=Pacific/Kiritimati`: exit 0 each time, "Filtered 4
     vulnerabilities" (deepmerge, the two image-size entries with the new
@@ -1535,7 +1626,12 @@ family not supported by protocol`, the same traceback apart from Twisted's
     (deepmerge and the two image-size entries), `GHSA-g3hv-75wg-m249` still
     listed as an unused ignore, and "No issues found". `develop`'s
     `27d8c17`, whose `pnpm-lock.yaml` is byte-identical, gives the same
-    (`finish/r3/scan/osv-*.log`). On
+    under `TZ=UTC`, the one time zone the eighth round ran it in
+    (`finish/r3/scan/osv-*.log`). The ninth round's runs, on a
+    `git archive` of `54043e4` and on one of `develop`'s `27d8c17`, each in
+    all three time zones, give the same six times: exit 0, "Filtered 3
+    vulnerabilities", `GHSA-g3hv-75wg-m249` listed as unused, and "No issues
+    found" (`finish/r4/scan/osv-*.log`). On
     `apps/blackout-server/poetry.lock`, which no gate scans this way:
     `develop`'s lock shows the eight Twisted rows (the seven above and
     GHSA-8pqf, `--` for its fix) plus black 23.10.1, pygments 2.15.1 and
@@ -1543,9 +1639,17 @@ family not supported by protocol`, the same traceback apart from Twisted's
     black, pygments and sentry-sdk rows, 6 in 3 packages
     ([Found outside scope](#found-outside-scope-not-fixed-here)).
 -   **pnpm audit:** `pnpm audit --prod --audit-level high` and
-    `pnpm run guard:audit-clean` exit 0, both reporting "1 low | 1 moderate
-    (1 ignored) | 2 high (2 ignored)", in all five rounds. Unchanged by this
-    PR.
+    `pnpm run guard:audit-clean` (`--audit-level moderate`) exit 0, both
+    reporting "1 low | 1 moderate (1 ignored) | 2 high (2 ignored)", in each
+    of the first five rounds. The sixth round's record names no run of
+    them, and the seventh and eighth did not run them. The ninth round ran
+    both with pnpm 9.15.4 on a `git archive` of `54043e4` and on one of
+    `develop`'s `27d8c17`, whose `package.json` and `pnpm-lock.yaml` are
+    byte-identical: exit 0 and "1 low | 2 high (2 ignored)" from each, the
+    moderate gone because GitHub moved GHSA-g3hv-75wg-m249's range past the
+    locked minimatch, the same change that leaves its OSV ignore unused
+    ([Found outside scope](#found-outside-scope-not-fixed-here), item 6;
+    `finish/r4/scan/pnpm-*.log`). Unchanged by this PR.
 -   **gitleaks 8.21.2** over `origin/develop..HEAD`: after the first two
     commits, 2 commits scanned, no leaks; after the fourth (`20362e4`), 4
     commits scanned, no leaks; after the sixth (`d5fa741`), 6 commits
@@ -1557,7 +1661,9 @@ family not supported by protocol`, the same traceback apart from Twisted's
     scanned of the 19 in the range (two merge commits), no leaks; in the
     eighth, after the third merge and `57d9d26`, 19 commits scanned of the
     22 in the range (three merge commits), no leaks
-    (`finish/r3/scan/gitleaks-*.log`).
+    (`finish/r3/scan/gitleaks-*.log`); in the ninth, after `54043e4`, 21
+    commits scanned of the 24 in the range, no leaks
+    (`finish/r4/scan/gitleaks-after-fix.log`).
 -   **Semgrep 1.95.0**, the version the third review used, from PyPI into a
     scratch venv, with `security.yml`'s rulesets (`p/security-audit`,
     `p/secrets`) over the files the branch changes, each time in a
@@ -1575,7 +1681,7 @@ family not supported by protocol`, the same traceback apart from Twisted's
     own with an empty `.semgrepignore` in the copy, gives 0 findings (115 rules
     on 1 file). Whether the workflow's `semgrep ci` skips it the same way was
     not checked. The fifth round's bullet gave the summary's count and left out
-    the skip. Semgrep did not run in the seventh or eighth round.
+    the skip. Semgrep did not run in the seventh, eighth or ninth round.
 -   **Centralized CI Parity** (`centralized-ci-parity.yml`, which this PR
     triggers through `docs/**`) runs `pnpm lint`, `pnpm test`, `pnpm build`,
     `guard:ops-artifacts` and the smoke-aligned checks. Run here:
@@ -2272,7 +2378,9 @@ Found while making these changes:
     whose range was extended on 2026-11-03, and the minimatch ignore now
     unused after GitHub corrected that advisory's range on 2026-11-04
     ([Found outside scope](#found-outside-scope-not-fixed-here), item 6;
-    [Before merge or release](#before-merge-or-release)).
+    [Before merge or release](#before-merge-or-release)). (It passes again
+    from the eighth round's merge, seventh list, item 12; this item kept the
+    present tense until the ninth round, eighth list, item 5.)
 8.  **The commit messages of `6c0aab8` and `cd6b0a4`** carry test counts
     this round supersedes; see the note below.
 
@@ -2290,12 +2398,16 @@ documentation pages and PATCHES.md) and in this record:
     docstring said it refuses a key "the SSH server could not use", and its
     message that the host key "must be an RSA, Ed25519 or ECDSA P-256,
     P-384 or P-521 key", but `sshType()` calls every DSA key `ssh-dss` and
-    nothing refused one. A 2048-bit DSA key in a PEM file loaded, passed,
-    and failed every key exchange with `OverflowError` while the homeserver
-    started without a word; a 1024-bit one served a session. The check now
+    nothing refused one. A 2048-bit DSA key in a PEM file, from
+    cryptography, whose 2048-bit keys have a 256-bit subgroup order, loaded,
+    passed, and failed every key exchange with `OverflowError` while the
+    homeserver started without a word; a 1024-bit one served a session, and
+    so does a 2048-bit one with a 160-bit subgroup order, which this item
+    did not say until the ninth round (eighth list, item 1). The check now
     refuses any DSA key with a `ConfigError` naming the key type and the
     types that work, and its docstring says which reason holds for which
-    size; three tests, both documentation pages and PATCHES.md cover it,
+    key (it said "size" until the ninth round); three tests, both
+    documentation pages and PATCHES.md cover it,
     and boots of the shape stop with the message ([DSA](#dsa-refusal)).
 2.  **The Scope paragraph's map of what the `grep` finds was incomplete
     again** (medium; the third round running). It named neither the
@@ -2340,7 +2452,9 @@ documentation pages and PATCHES.md) and in this record:
     the habit and participation strategy and two of the places linking to
     the new plans. The Method bullet now names the strategy, the
     differentiation brief and the strategy's own link, as the merge
-    commit's message does.
+    commit's message does. (Both still left out the build plan's link to
+    the MVP, `8e85b45`; the bullet names it from the ninth round, eighth
+    list, item 7.)
 9.  **The opening said reviews found "three fork bugs".** It went on to
     list four defects in host-key handling and a documentation one, and it
     left out the sixth review's finding. It now gives no count and names
@@ -2357,11 +2471,81 @@ Found while making these changes:
 
 12. **The OSV gate passes again, on `develop` and on this branch.** #998
     moved lodash to 4.18.1 (`77e6e68`), and the merge `e66794c` brought it
-    here; osv-scanner exits 0 on both in three time zones and still lists
-    the minimatch ignore as unused, which #999, open when this was written,
+    here; osv-scanner exits 0 on this branch in three time zones and on
+    `develop` in the one it was run in, `TZ=UTC` (the ninth round ran
+    `develop`'s in all three, with the same result: eighth list, item 6),
+    and still lists the minimatch ignore as unused, which #999, open when this was written,
     removes ([Validation](#validation), OSV;
     [Found outside scope](#found-outside-scope-not-fixed-here), item 6).
 13. **The commit messages of `2bf76ad` and `0bd19b9`** carry sentences this
+    round supersedes; see the note below.
+
+## Corrected after the eighth review
+
+The eighth round (commits `e66794c`, `57d9d26`, `6f9117b`) was reviewed
+under three lenses, the manhole's behaviour, the merge and its gates, and
+the record's claims, and its findings reached this round in the task that
+carried them, each marked low. `develop` had not moved since the eighth
+round's merge, so this round merged nothing ([Method](#method)). Each
+finding and what changed, in commit `54043e4` (`synapse/config/server.py`,
+the test module, the two manhole documentation pages and PATCHES.md) and in
+this record:
+
+1.  **The DSA refusal's stated reason was false for a DSA key larger than
+    1024 bits with a 160-bit subgroup order.** Two lenses found it. The
+    message said "the SSH server cannot sign with a DSA key larger than
+    1024 bits", and the check's docstring ("one larger than 1024 bits
+    serves no session"), both documentation pages, PATCHES.md (which also
+    said every refused config "but the 1024-bit DSA key" serves no
+    session), the test module's docstring and this record (the opening, the
+    first Result bullet, the DSA paragraph and its quotation of the message,
+    and item 1 of the seventh list) said the same. Twisted's 20-byte
+    packing fails on the subgroup order, not on the key's size: a 2048-bit
+    key with a 160-bit one, from FIPS 186-2-style parameters, loads, signs
+    and serves a full session. The refusal stands, because every ssh-dss
+    signature uses SHA-1. The message now gives that reason for every DSA
+    key and the subgroup order as the reason the server cannot sign with a
+    standard larger one, every place above says the same, and two tests pin
+    the line from both sides: such a key is refused with SHA-1 named, and
+    handed to `manhole()` directly it gets a session
+    ([DSA](#dsa-refusal)).
+2.  **A test helper's docstring said a PEM `DSA PRIVATE KEY` is the one
+    format that holds a DSA key larger than 1024 bits and that Twisted
+    loads.** Twisted's own OpenSSH serializer, which the module's
+    `_write_openssh_dsa_key` already uses, writes a 2048-bit DSA key, and
+    Twisted loads it back as a private 2048-bit key; only cryptography
+    refuses to write one. The docstring now says so, and that the PEM file
+    stands for a key made with `openssl`; the DSA paragraph says the same.
+3.  **The record cited OpenSSH 9.9p1 for "the one size `ssh-keygen` writes
+    for DSA"**, and a default 9.9p1 build writes no DSA key: its
+    `configure.ac` offers `--enable-dsa-keys`, off by default, and its
+    `sshkey.c` builds the DSA implementation only under `WITH_DSA`. Read
+    again in the same tarball (sha256 `b343fbcd…`). The DSA paragraph now
+    says the 1024-bit limit is that of DSA-enabled and older builds.
+4.  **The pnpm audit bullet quoted counts the step no longer gives**, "1
+    low | 1 moderate (1 ignored) | 2 high (2 ignored)" "in all five
+    rounds", when the record had eight, and did not say the later rounds
+    had not run it. This round ran both commands on `git archive` copies of
+    `54043e4` and of `develop`'s `27d8c17`: exit 0 and "1 low | 2 high (2
+    ignored)" on each. The bullet now gives both readings, says why the
+    moderate went, and says which rounds ran the commands.
+5.  **Item 7 of the sixth list still said the OSV gate "is red"**, after
+    the eighth round's merge had made it pass on both sides and every other
+    present-tense statement of it had been updated. It now carries a note
+    pointing to item 12 of the seventh list.
+6.  **Item 12 of the seventh list said osv-scanner exits 0 on both sides
+    "in three time zones"**; `develop`'s `27d8c17` was scanned under
+    `TZ=UTC` only, and Validation's OSV bullet leaned on the same logs. Both
+    now say so. This round scanned `develop` in all three time zones too,
+    with the same result, and kept the logs.
+7.  **The seventh round's Method bullet still left out one of `develop`'s
+    link commits**: `8e85b45` adds a link to the MVP from the field
+    operations build plan. The bullet now names the build plan, and item 8
+    of the seventh list says it was missing.
+
+Found while making these changes:
+
+8.  **The commit messages of `57d9d26` and `6f9117b`** carry sentences this
     round supersedes; see the note below.
 
 ## Commit messages
@@ -2452,23 +2636,40 @@ each is superseded as follows.
     apart.
 -   `6c0aab8`: "ten new" tests and "all eighteen pass": twelve new and
     twenty from the seventh round's two curve tests, fifteen new and
-    twenty-three from the eighth round's three DSA tests; "the three
-    refusals": five after the seventh round, seven after the eighth
+    twenty-three from the eighth round's three DSA tests, seventeen new and
+    twenty-five from the ninth round's two; "the three refusals": five after
+    the seventh round, seven after the eighth, eight after the ninth
     ([Host keys other than RSA](#host-key-types), [DSA](#dsa-refusal)).
 -   `cd6b0a4`: "the ten new tests with what fails before the change (eight
     of them, the same under Twisted 26.4.0 and 26.10.0)": twelve, ten of
     them, after the seventh round, and the eighth round's three run against
     its own baseline ([DSA](#dsa-refusal)); "the manhole module 18 of 18":
-    true of that tree, twenty after the seventh round and twenty-three after
-    the eighth.
+    true of that tree, twenty after the seventh round, twenty-three after
+    the eighth and twenty-five after the ninth.
 -   `2bf76ad`: "`_manhole_key_type` now turns that KeyError into a
     ConfigError at the setting whose file holds the key": at
     `ssh_priv_key_path`, or at `ssh_pub_key_path` beside a private key; a
     public key with no private key is not checked
     ([the curve paragraph](#curve-refusal)). "two new (twenty in all)":
-    twenty-three since the eighth round.
+    twenty-three since the eighth round, twenty-five since the ninth.
 -   `0bd19b9`: "the security workflow's OSV step fails on every pull request
     until develop moves lodash to 4.18.1": on every push to `develop` and
     every pull request that touches a path the workflow watches, and only
     until #998, which moved lodash to 4.18.1 on `develop` and which the
     eighth round merged ([Before merge or release](#before-merge-or-release)).
+-   `57d9d26`: "which fits only a 160-bit subgroup order, as in a 1024-bit
+    key, so a 2048-bit DSA key in a PEM DSA PRIVATE KEY file loaded, passed
+    the config, and the server raised OverflowError on every key exchange":
+    true of a 2048-bit key with a longer subgroup order, as every standard
+    one and every one cryptography or `openssl`'s defaults make has; a
+    2048-bit key with a 160-bit subgroup order signs and serves a session,
+    and is refused for SHA-1 ([DSA](#dsa-refusal)). "(the size ssh-keygen
+    wrote)": in builds that write DSA at all, which a default OpenSSH 9.9p1
+    build does not. "three new (twenty-three in all)": twenty-five since the
+    ninth round.
+-   `6f9117b`: "a 2048-bit one then failing every key exchange with
+    OverflowError": as for `57d9d26`. "osv-scanner exits 0 again on this
+    branch and on develop, in three time zones": `develop` was scanned under
+    `TZ=UTC` only in that round; the ninth round scanned it in all three.
+    "the manhole module 23 of 23" and "tests.blackout_runtime 74": 25 and 76
+    since the ninth round.
