@@ -1,5 +1,13 @@
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import {
+    existsSync,
+    mkdirSync,
+    readFileSync,
+    readdirSync,
+    renameSync,
+    rmSync,
+    writeFileSync,
+} from 'node:fs';
+import { basename, dirname, join, resolve } from 'node:path';
 import { hashPassword } from '../services/auth';
 import type {
     CanaryTokenRecord,
@@ -172,12 +180,27 @@ import {
     COALITION_FEED_SEED,
     shouldSeedCoalitionDemoData,
 } from './coalitionSeed';
-import { hydrateMap, introspectColumns, rowToRecord, type TablePlan } from './pgWriter';
-import { MUTATOR_SPECS, TABLE_DESCRIPTORS } from './pgDescriptors';
-import { WriteBehindQueue } from './writeBehindQueue';
+import {
+    bindStep,
+    compileStep,
+    hydrateMap,
+    introspectColumns,
+    keyOfTuple,
+    kvOf,
+    prepareCheck,
+    rowToRecord,
+    selectByKeys,
+    type BoundStatement,
+    type CompiledStep,
+    type StepContext,
+    type TablePlan,
+} from './pgWriter';
+import { MUTATOR_SPECS, TABLE_DESCRIPTORS, type MutatorSpec } from './pgDescriptors';
+import { WriteBehindQueue, type KeySet } from './writeBehindQueue';
 import { PgNotifyTransport, type StoreChangePayload, type StoreChangeTransport } from './pgNotify';
-import type { PgPool } from './migrate';
+import type { PgClient, PgPool } from './migrate';
 import { log } from '../telemetry/logger';
+import { dbWriteBehindFailuresTotal } from '../telemetry/metrics';
 import { randomUUID } from 'node:crypto';
 
 const nowIso = () => new Date().toISOString();
@@ -2342,10 +2365,9 @@ class InMemoryDb {
     /**
      * Account deletion: remove a scheduled message's text and every link to its
      * author and room. A pending row is cancelled, so nothing is ever posted
-     * for a deleted account. The row itself stays (status and timestamps only)
-     * because this is a targeted upsert, not a resync: on a multi-replica
-     * Postgres deployment a resync can delete rows another replica just wrote,
-     * or write back stale copies.
+     * for a deleted account. The row itself stays (status and timestamps only):
+     * the write is an upsert of this one row, so it cannot touch any other row;
+     * it can still overwrite a newer version of this one (last writer wins).
      */
     eraseScheduledMessage(id: string): ScheduledMessageRecord | undefined {
         const record = this.scheduledMessages.get(id);
@@ -2516,7 +2538,7 @@ class InMemoryDb {
      * label. A switch that has already fired keeps its status and payload for
      * the people it named, since nothing may take a release back (cancel
      * refuses a triggered switch for the same reason); only its label goes.
-     * The row stays, as a targeted upsert like `eraseScheduledMessage`.
+     * The row stays, as an upsert like `eraseScheduledMessage`.
      */
     eraseDeadmanSwitch(id: string): DeadmanSwitchRecord | undefined {
         const record = this.deadmanSwitches.get(id);
@@ -2584,11 +2606,10 @@ class InMemoryDb {
     /**
      * Account deletion: blank one release identity, current or superseded:
      * its keys, signature, fingerprint and account go, and the row keeps only
-     * its id, format version and times. The row stays because this is a
-     * targeted upsert, as `eraseScheduledMessage` and `eraseDeadmanSwitch`
-     * are: the Postgres writer has no targeted delete, and a resync of the
-     * table can delete rows another replica has just written, or write back
-     * stale copies of them.
+     * its id, format version and times. The row stays, as `eraseScheduledMessage`
+     * and `eraseDeadmanSwitch` keep theirs: the write is an upsert of this one
+     * row, so it cannot touch any other row; it can still overwrite a newer
+     * version of this one (last writer wins).
      */
     eraseReleaseIdentity(id: string): ReleaseIdentityRecord | undefined {
         const record = this.releaseIdentities.get(id);
@@ -5719,6 +5740,48 @@ class InMemoryDb {
     }
 }
 
+const processIsAlive = (pid: number): boolean => {
+    try {
+        process.kill(pid, 0);
+        return true;
+    } catch (err) {
+        // EPERM: it exists, under another user.
+        return (err as NodeJS.ErrnoException).code === 'EPERM';
+    }
+};
+
+/**
+ * Remove the temp snapshots a process that died mid-write left beside the
+ * store file (FileBackedDb.persist names them `<file>.tmp-<pid>`; before that,
+ * `<file>.tmp`). Nothing else ever reads or overwrites one, so each would
+ * otherwise keep a full copy of the store, out of reach of account erasure.
+ * The temp file of a process still running is left alone: it may be writing.
+ */
+function removeStaleTempSnapshots(): void {
+    const dir = dirname(DB_FILE_PATH);
+    const prefix = `${basename(DB_FILE_PATH)}.tmp`;
+    let names: string[];
+    try {
+        names = readdirSync(dir);
+    } catch {
+        return;
+    }
+    for (const name of names) {
+        if (!name.startsWith(prefix)) continue;
+        const rest = name.slice(prefix.length);
+        const pid = /^-([1-9]\d*)$/.exec(rest)?.[1];
+        if (rest !== '' && pid === undefined) continue;
+        if (pid !== undefined && Number(pid) !== process.pid && processIsAlive(Number(pid))) {
+            continue;
+        }
+        try {
+            rmSync(join(dir, name), { force: true });
+        } catch {
+            // Best effort; hydrate() never reads a temp file.
+        }
+    }
+}
+
 export class FileBackedDb extends InMemoryDb {
     // Persistence is suppressed until construction finishes. During `super()` the
     // InMemoryDb constructor seeds a demo user, whose persisting override would
@@ -5730,6 +5793,7 @@ export class FileBackedDb extends InMemoryDb {
 
     constructor() {
         super();
+        removeStaleTempSnapshots();
         const fileExisted = existsSync(DB_FILE_PATH);
         this.hydrate();
         this.ready = true;
@@ -6449,8 +6513,14 @@ export class FileBackedDb extends InMemoryDb {
         // leaves a half-written JSON document that `hydrate()` cannot parse,
         // and the store is unrecoverable on next boot. rename(2) within a
         // directory is atomic, so a reader sees either the previous snapshot
-        // or the new one and never a partial one.
-        const tmpPath = `${DB_FILE_PATH}.tmp`;
+        // or the new one and never a partial one. The temp name carries the
+        // process id: with one fixed name, a second process writing the same
+        // store (two test files run in parallel do) renames the first one's
+        // temp file away, and the first rename fails with ENOENT. That is all
+        // the pid buys: the file store is still single-writer, and two
+        // processes on one file overwrite each other's snapshots. A temp file
+        // left by a crash is removed at the next boot (removeStaleTempSnapshots).
+        const tmpPath = `${DB_FILE_PATH}.tmp-${process.pid}`;
         try {
             writeFileSync(tmpPath, `${JSON.stringify(this.snapshot(), null, 2)}\n`, 'utf8');
             renameSync(tmpPath, DB_FILE_PATH);
@@ -8295,23 +8365,109 @@ export class FileBackedDb extends InMemoryDb {
 }
 
 /**
- * Postgres-backed store (BLACKOUT_DB_MODE=postgres). Write-through: reads are
+ * Postgres-backed store (BLACKOUT_DB_MODE=postgres). Write-behind: reads are
  * inherited from InMemoryDb (served from the in-memory mirror hydrated on
- * boot), and every MUTATOR_SPECS mutator is wrapped to enqueue a durable
- * Postgres write after updating the mirror.
+ * boot), and every MUTATOR_SPECS mutator is wrapped to queue a Postgres write
+ * after updating the mirror. The mutator returns before that write runs, so a
+ * crash, or a write that fails twice (db_write_behind_failures_total), loses
+ * it; flushRuntimeStoreWrites awaits the queue where that matters.
+ *
+ * What is written: an upsert of the record a method returned, or a targeted
+ * op (pgDescriptors) that names the rows the call changed, by key or by a
+ * predicate Postgres evaluates, in one transaction. No write reconciles a
+ * whole table against this mirror, so a row another process wrote is never
+ * deleted because this one has not heard of it. A targeted op writes only the
+ * rows its call changed. An upsert writes the one row the call returned,
+ * whole, even when the call left it unchanged (markUserEmailVerified on a
+ * verified account rewrites the row, password_hash included, from this
+ * mirror's copy), so it can overwrite a newer version of that row (the last
+ * writer wins).
  *
  * Multi-replica consistency: when a change transport is supplied — Postgres
  * LISTEN/NOTIFY, ON BY DEFAULT (BLACKOUT_DB_PG_NOTIFY=1) — each replica
- * subscribes to peers' change notifications and refreshes the affected mirror
- * rows, so a write on one replica becomes visible on the others. This is
- * EVENTUAL consistency with a bounded stale-read window equal to the NOTIFY
- * propagation latency (typically sub-second): a read on replica B issued in the
- * gap between a write committing on replica A and the NOTIFY arriving may still
- * observe the pre-write value. Durability is unaffected (the write is already
- * committed to Postgres). With the transport disabled (BLACKOUT_DB_PG_NOTIFY=0)
- * the store is strictly single-writer and must run at exactly one replica.
+ * subscribes to peers' change notifications and re-reads the keys they name,
+ * so a write on one replica becomes visible on the others once they hear of
+ * it. A read on replica B in the gap between a write committing on replica A
+ * and the notification arriving still sees the old value, and a
+ * check-then-act on B's mirror in that gap (a single-use token, a rotation, a
+ * bounty accept) can succeed once on each replica. Where the write is
+ * targeted, Postgres keeps the first (a consume updates only an unconsumed
+ * row) and the loser's mirror re-reads; where it is an upsert, the last writer
+ * wins. A targeted op's notification is sent inside its transaction; an
+ * upsert's is sent after it, and is lost if that send fails. The gap ends only
+ * when B hears of the change, and some processes never do. One that starts
+ * while others are writing loads its copy before it starts listening, and
+ * nothing re-reads what changed in between. Most writes, a sign-out among
+ * them, send their notification after the write, and a failed send is only
+ * logged. A listening connection that dies without an error is not noticed.
+ * Such a process keeps its old copy of the row until it restarts, or until
+ * something makes it re-read the row (a later change to the same row, or its
+ * listening connection failing and being replaced); see KNOWN_LIMITATIONS.md,
+ * "Several API processes on one database". With the transport disabled
+ * (BLACKOUT_DB_PG_NOTIFY=0) the store is strictly single-writer and must run
+ * at exactly one replica.
  */
 type MutableMap = Map<string, Record<string, unknown>>;
+
+const ABSENT: unique symbol = Symbol('absent');
+type Prior = Record<string, unknown> | typeof ABSENT;
+const activeCaptures = new WeakMap<MutableMap, Set<Map<string, Prior>>>();
+
+/**
+ * Record, for one synchronous mutator call, what each key of `map` held before
+ * the call first wrote it (ABSENT for a key it added). set/delete/clear are
+ * shadowed on the instance for the duration of the call only, and the shadows
+ * call the instance's own methods, so a Map subclass that keeps an index over
+ * its rows still sees every write. A mutator that calls another shares one
+ * shadow between the two captures.
+ */
+function captureWrites(map: MutableMap): { prior: Map<string, Prior>; stop(): void } {
+    const target = map as unknown as Record<string, unknown>;
+    const own = Object.getPrototypeOf(map) as MutableMap;
+    let recorders = activeCaptures.get(map);
+    if (!recorders) {
+        const active = new Set<Map<string, Prior>>();
+        recorders = active;
+        activeCaptures.set(map, active);
+        const note = (k: string) => {
+            for (const r of active) {
+                if (!r.has(k)) {
+                    r.set(
+                        k,
+                        Map.prototype.has.call(map, k) ? Map.prototype.get.call(map, k) : ABSENT
+                    );
+                }
+            }
+        };
+        target.set = function (this: MutableMap, k: string, v: Record<string, unknown>) {
+            note(k);
+            return own.set.call(this, k, v);
+        };
+        target.delete = function (this: MutableMap, k: string) {
+            note(k);
+            return own.delete.call(this, k);
+        };
+        target.clear = function (this: MutableMap) {
+            for (const k of Map.prototype.keys.call(this) as IterableIterator<string>) note(k);
+            return own.clear.call(this);
+        };
+    }
+    const prior = new Map<string, Prior>();
+    const active = recorders;
+    active.add(prior);
+    return {
+        prior,
+        stop() {
+            active.delete(prior);
+            if (active.size === 0 && activeCaptures.get(map) === active) {
+                activeCaptures.delete(map);
+                delete target.set;
+                delete target.delete;
+                delete target.clear;
+            }
+        },
+    };
+}
 
 export class PostgresBackedDb extends InMemoryDb {
     private readonly plans = new Map<string, TablePlan>();
@@ -8320,6 +8476,16 @@ export class PostgresBackedDb extends InMemoryDb {
     private transport: StoreChangeTransport | null = null;
     /** Identifies this replica so it can ignore its own change notifications. */
     private readonly instanceId = randomUUID();
+    /**
+     * Every refresh of the mirror from Postgres (a peer's change, a re-read
+     * of a key whose queued write has landed, a reload) runs on this one FIFO
+     * chain, in the order it was asked for.
+     */
+    private applyTail: Promise<void> = Promise.resolve();
+    /** map -> key -> key column values: refreshes skipped while a local write was queued. */
+    private readonly dirtyKeys = new Map<string, Map<string, unknown[]>>();
+    /** Each targeted mutator's steps, compiled against the live schema at init. */
+    private compiled = new Map<string, CompiledStep[]>();
 
     constructor() {
         super();
@@ -8339,22 +8505,214 @@ export class PostgresBackedDb extends InMemoryDb {
         const self = this as unknown as Record<string, unknown>;
         for (const [method, spec] of Object.entries(MUTATOR_SPECS)) {
             const original = proto[method];
-            if (typeof original !== 'function') continue;
+            if (typeof original !== 'function') {
+                // A spec for a method that does not exist would persist nothing.
+                throw new Error(`MUTATOR_SPECS names ${method}, which InMemoryDb does not define`);
+            }
+            if (spec.kind === 'targeted') {
+                self[method] = this.targetedWriteThrough(method, spec, original);
+                continue;
+            }
             self[method] = (...args: unknown[]): unknown => {
                 const result = original.apply(this, args);
-                const queue = this.queue;
-                if (queue) {
-                    if (spec.kind === 'upsert') {
-                        if (result && typeof result === 'object') {
-                            queue.enqueueUpsert(spec.map, result as Record<string, unknown>);
-                        }
-                    } else {
-                        for (const m of spec.maps) queue.enqueueResync(m);
-                    }
+                if (this.queue && result && typeof result === 'object') {
+                    this.queue.enqueueUpsert(spec.map, result as Record<string, unknown>);
                 }
                 return result;
             };
         }
+    }
+
+    /**
+     * The wrapper for a `targeted` spec. It records which mirror keys the call
+     * changed (and what they held before), binds the spec's statements to the
+     * call's arguments, result and prior values, and queues them as one op.
+     * Nothing is queued when the call changed nothing and no step is
+     * set-based (a set-based step can reach rows the mirror does not hold).
+     */
+    private targetedWriteThrough(
+        method: string,
+        spec: Extract<MutatorSpec, { kind: 'targeted' }>,
+        original: (...a: unknown[]) => unknown
+    ): (...args: unknown[]) => unknown {
+        const maps = [...new Set(spec.steps.map((s) => s.map))];
+        const setBased = spec.steps.some((s) => s.op === 'deleteWhere' || s.op === 'updateWhere');
+        return (...args: unknown[]): unknown => {
+            const queue = this.queue;
+            const compiled = this.compiled.get(method);
+            if (!queue || !compiled) return original.apply(this, args);
+            const captures = maps.map((m) => {
+                const instance = this.mapByName(m);
+                return { map: m, instance, capture: captureWrites(instance) };
+            });
+            let result: unknown;
+            try {
+                result = original.apply(this, args);
+            } finally {
+                for (const c of captures) c.capture.stop();
+            }
+            try {
+                this.queueTargeted(method, setBased, compiled, captures, args, result);
+            } catch (err) {
+                // The mirror has changed and Postgres will not: the same loss
+                // condition as a write that failed after its retry. Never
+                // thrown into the caller, whose mirror change already stands.
+                dbWriteBehindFailuresTotal.inc({ map: maps.join(','), kind: 'targeted' });
+                log.error('db_write_behind_failed', {
+                    map: maps.join(','),
+                    kind: 'targeted',
+                    method,
+                    error: err instanceof Error ? err.message : String(err),
+                });
+            }
+            return result;
+        };
+    }
+
+    /** Diff a targeted call's captures, bind its steps, and queue them (targetedWriteThrough). */
+    private queueTargeted(
+        method: string,
+        setBased: boolean,
+        compiled: CompiledStep[],
+        captures: Array<{
+            map: string;
+            instance: MutableMap;
+            capture: { prior: Map<string, Prior> };
+        }>,
+        args: unknown[],
+        result: unknown
+    ): void {
+        const queue = this.queue!;
+        const touched: KeySet = new Map();
+        const priorOf = new Map<string, (key: string) => Prior>();
+        const changes = new Map<
+            string,
+            Array<{
+                key: string;
+                before?: Record<string, unknown>;
+                after?: Record<string, unknown>;
+            }>
+        >();
+        for (const { map: m, instance, capture } of captures) {
+            const plan = this.plans.get(m);
+            const now = this.mapByName(m);
+            const before = (k: string): Prior =>
+                capture.prior.has(k)
+                    ? capture.prior.get(k)!
+                    : instance.has(k)
+                    ? instance.get(k)!
+                    : ABSENT;
+            priorOf.set(m, before);
+            if (!plan) continue;
+            // A method that replaced the whole map (replaceMeshEnvelopes) is
+            // diffed old instance against new; otherwise only written keys.
+            const keys =
+                now === instance
+                    ? [...capture.prior.keys()]
+                    : new Set([...capture.prior.keys(), ...instance.keys(), ...now.keys()]);
+            const changed = new Map<string, unknown[]>();
+            const list: Array<{
+                key: string;
+                before?: Record<string, unknown>;
+                after?: Record<string, unknown>;
+            }> = [];
+            changes.set(m, list);
+            for (const k of keys) {
+                const was = before(k);
+                const is = now.has(k) ? now.get(k)! : ABSENT;
+                if (was === is) continue;
+                list.push({
+                    key: k,
+                    ...(was !== ABSENT ? { before: was } : {}),
+                    ...(is !== ABSENT ? { after: is } : {}),
+                });
+                changed.set(k, kvOf(plan, (is !== ABSENT ? is : was) as Record<string, unknown>));
+            }
+            if (changed.size > 0) touched.set(m, changed);
+        }
+        if (touched.size === 0 && !setBased) return;
+        const ctx: StepContext = {
+            args,
+            result,
+            at: nowIso(),
+            before: (m, k) => {
+                const prior = priorOf.has(m) ? priorOf.get(m)!(k) : this.mapByName(m).get(k);
+                return prior === ABSENT ? undefined : prior;
+            },
+            changed: (m) => changes.get(m) ?? [],
+        };
+        const statements: BoundStatement[] = compiled.flatMap((c) => bindStep(c, ctx));
+        if (statements.length > 0) queue.enqueueTargeted({ method, statements, touched });
+    }
+
+    /**
+     * Compile every targeted spec against this database's tables and PREPARE
+     * each statement, so a spec naming a column or type the schema lacks fails
+     * the boot instead of every later write.
+     *
+     * A step on a map whose table this database does not have yet (a
+     * migration not applied, which init has already logged as
+     * pg_store_table_missing) is left out, as an upsert to that map is: there
+     * is no row for it to change. A method left with no step writes the
+     * mirror only. A step on a map no descriptor names is a spec error and
+     * fails the boot.
+     */
+    private async compileTargetedSpecs(client: PgClient): Promise<void> {
+        const compiled = new Map<string, CompiledStep[]>();
+        const described = new Set(TABLE_DESCRIPTORS.map((d) => d.mapName));
+        for (const [method, spec] of Object.entries(MUTATOR_SPECS)) {
+            if (spec.kind !== 'targeted') continue;
+            const steps: CompiledStep[] = [];
+            for (const [i, step] of spec.steps.entries()) {
+                const where = `MUTATOR_SPECS.${method} step ${i + 1} (${step.op} on ${step.map})`;
+                const plan = this.plans.get(step.map);
+                if (!plan) {
+                    if (!described.has(step.map)) {
+                        throw new Error(`${where}: no table descriptor names the map`);
+                    }
+                    log.warn('pg_store_targeted_step_skipped', {
+                        method,
+                        step: i + 1,
+                        map: step.map,
+                        reason: 'table_missing',
+                    });
+                    continue;
+                }
+                try {
+                    steps.push(compileStep(plan, step));
+                } catch (err) {
+                    throw new Error(
+                        `${where}: ${err instanceof Error ? err.message : String(err)}`
+                    );
+                }
+            }
+            if (steps.length > 0) compiled.set(method, steps);
+        }
+        // One transaction, so a pooler that hands each statement its own
+        // server connection cannot split a PREPARE from its DEALLOCATE.
+        await client.query('BEGIN');
+        try {
+            for (const [method, steps] of compiled) {
+                for (const [i, c] of steps.entries()) {
+                    try {
+                        await prepareCheck(client, c.checkSql);
+                    } catch (err) {
+                        throw new Error(
+                            `MUTATOR_SPECS.${method} step ${i + 1} (${c.step.op} on ${
+                                c.plan.descriptor.tableName
+                            }) does not fit the schema: ${
+                                err instanceof Error ? err.message : String(err)
+                            }: ${c.checkSql}`
+                        );
+                    }
+                }
+            }
+            await client.query('COMMIT');
+        } catch (err) {
+            await client.query('ROLLBACK').catch(() => undefined);
+            throw err;
+        }
+        this.compiled = compiled;
     }
 
     /**
@@ -8380,6 +8738,7 @@ export class PostgresBackedDb extends InMemoryDb {
                 this.plans.set(descriptor.mapName, plan);
                 await hydrateMap(client, plan, this.mapByName(descriptor.mapName));
             }
+            await this.compileTargetedSpecs(client);
         } finally {
             client.release?.();
         }
@@ -8387,90 +8746,223 @@ export class PostgresBackedDb extends InMemoryDb {
         this.queue = new WriteBehindQueue(
             pool,
             this.plans,
-            (name) => this.mapByName(name),
             transport ?? undefined,
             this.instanceId
         );
+        this.queue.onKeysLanded((mapName, keys) => this.rereadLandedKeys(mapName, keys));
+        // After a targeted op: re-read the keys where Postgres's effect and the
+        // mirror's differ (rows the statements reached that the mirror does not
+        // hold, and mirror changes Postgres refused or never saw).
+        this.queue.onRereadKeys((keys) => {
+            for (const [mapName, kvs] of keys) {
+                const plan = this.plans.get(mapName);
+                if (plan && kvs.size > 0) {
+                    const list = [...kvs.values()];
+                    this.onApplyChain('self', () => this.refreshKeys(plan, list), mapName);
+                }
+            }
+        });
         if (transport) {
             await transport.subscribe((payload) => this.applyPeerChange(payload));
             // After a dropped LISTEN connection we may have missed notifications;
             // re-hydrate everything to recover.
             transport.onReconnect(() => {
-                void this.rehydrateAll();
+                this.onApplyChain('rehydrate', () => this.rehydrateAll());
             });
+        }
+    }
+
+    /** Queue a mirror refresh on the FIFO apply chain; a failure is logged, never thrown. */
+    private onApplyChain(what: string, fn: () => Promise<void>, map?: string): void {
+        this.applyTail = this.applyTail.then(fn).catch((err) => {
+            log.warn(
+                what === 'rehydrate' ? 'pg_store_rehydrate_failed' : 'pg_store_peer_refresh_failed',
+                {
+                    ...(map ? { map } : {}),
+                    what,
+                    error: err instanceof Error ? err.message : String(err),
+                }
+            );
+        });
+    }
+
+    private async withClient<T>(fn: (client: PgClient) => Promise<T>): Promise<T> {
+        const client = await this.pool!.connect();
+        try {
+            return await fn(client);
+        } finally {
+            client.release?.();
+        }
+    }
+
+    private markDirty(mapName: string, key: string, kv: unknown[] | undefined): void {
+        if (!kv) return;
+        let keys = this.dirtyKeys.get(mapName);
+        if (!keys) {
+            keys = new Map();
+            this.dirtyKeys.set(mapName, keys);
+        }
+        keys.set(key, kv);
+    }
+
+    /** The last queued local write to these keys has run: re-read the ones a refresh skipped. */
+    private rereadLandedKeys(mapName: string, keys: string[]): void {
+        const dirty = this.dirtyKeys.get(mapName);
+        const plan = this.plans.get(mapName);
+        if (!dirty || !plan) return;
+        const kvs: unknown[][] = [];
+        for (const k of keys) {
+            const kv = dirty.get(k);
+            if (kv && dirty.delete(k)) kvs.push(kv);
+        }
+        if (dirty.size === 0) this.dirtyKeys.delete(mapName);
+        if (kvs.length > 0) {
+            this.onApplyChain('reread', () => this.refreshKeys(plan, kvs), mapName);
+        }
+    }
+
+    /**
+     * Put Postgres's current row for each key into the mirror, or remove the
+     * key when Postgres has no row. Three kinds of key are left alone:
+     * - a key this process still has a queued write for: Postgres does not hold
+     *   that write yet, so its row is older than the mirror. The key is marked
+     *   and re-read when the write lands (rereadLandedKeys).
+     * - a key that had a queued write when the SELECT was sent, and has none
+     *   now: the write may have committed after the SELECT's snapshot, so the
+     *   row read may predate it. The key is read again.
+     * - a key the mirror changed while the SELECT was in flight: the row read
+     *   may predate that change, so the key is read again.
+     */
+    private async refreshKeys(plan: TablePlan, kvs: unknown[][]): Promise<void> {
+        const mapName = plan.descriptor.mapName;
+        const wanted = new Map<string, unknown[]>();
+        for (const kv of kvs) wanted.set(keyOfTuple(plan, kv), kv);
+        const instance = this.mapByName(mapName);
+        const seen = new Map<string, unknown>();
+        const fencedAtStart = new Set<string>();
+        for (const k of wanted.keys()) {
+            seen.set(k, instance.get(k));
+            if (this.queue?.isFenced(mapName, k)) fencedAtStart.add(k);
+        }
+        const rows = await this.withClient((c) => selectByKeys(c, plan, [...wanted.values()]));
+        const found = new Map<string, Record<string, unknown>>();
+        for (const row of rows) {
+            const record = rowToRecord(plan, row);
+            found.set(plan.descriptor.keyOf(record), record);
+        }
+        const map = this.mapByName(mapName);
+        const again: unknown[][] = [];
+        for (const [k, kv] of wanted) {
+            if (this.queue?.isFenced(mapName, k)) {
+                this.markDirty(mapName, k, kv);
+                continue;
+            }
+            if (fencedAtStart.has(k) || map !== instance || map.get(k) !== seen.get(k)) {
+                again.push(kv);
+                continue;
+            }
+            const record = found.get(k);
+            if (record) map.set(k, record);
+            else map.delete(k);
+        }
+        if (again.length > 0) {
+            this.onApplyChain('reread', () => this.refreshKeys(plan, again), mapName);
+        }
+    }
+
+    /**
+     * Replace a map with Postgres's rows, except for the keys whose local value
+     * Postgres may not hold yet: a key with a queued write keeps the mirror's
+     * value (or absence) and is re-read when the write lands; a key that had a
+     * queued write when the SELECT was sent (the write may have committed after
+     * its snapshot), or that the mirror changed while the SELECT was in flight,
+     * keeps the mirror's value and is read again.
+     */
+    private async reloadTable(plan: TablePlan, client?: PgClient): Promise<void> {
+        const mapName = plan.descriptor.mapName;
+        const instance = this.mapByName(mapName);
+        const before = new Map(instance);
+        const fencedAtStart = new Set(this.queue?.fencedKeys(mapName) ?? []);
+        const select = (c: PgClient) =>
+            c.query<Record<string, unknown>>(`SELECT * FROM ${plan.descriptor.tableName}`);
+        const res = client ? await select(client) : await this.withClient(select);
+        if (this.mapByName(mapName) !== instance) {
+            // The mutator replaced the whole map meanwhile: start over.
+            this.onApplyChain('reload', () => this.reloadTable(plan), mapName);
+            return;
+        }
+        const fresh: MutableMap = new Map();
+        for (const row of res.rows) {
+            const record = rowToRecord(plan, row);
+            fresh.set(plan.descriptor.keyOf(record), record);
+        }
+        const again: unknown[][] = [];
+        const keys = new Set([
+            ...before.keys(),
+            ...instance.keys(),
+            ...fencedAtStart,
+            ...(this.queue?.fencedKeys(mapName) ?? []),
+        ]);
+        for (const k of keys) {
+            const fenced = this.queue?.isFenced(mapName, k) ?? false;
+            const mine = instance.get(k);
+            if (!fenced && !fencedAtStart.has(k) && mine === before.get(k)) continue;
+            const known = mine ?? before.get(k) ?? fresh.get(k);
+            const kv = known ? kvOf(plan, known) : undefined;
+            if (mine) fresh.set(k, mine);
+            else fresh.delete(k);
+            if (fenced) this.markDirty(mapName, k, kv);
+            else if (kv) again.push(kv);
+        }
+        if (Object.getPrototypeOf(instance) === Map.prototype) {
+            (this as unknown as Record<string, MutableMap>)[mapName] = fresh;
+        } else {
+            // A map of its own kind (a Map subclass that keeps an index over
+            // its rows) is updated in place, through its own delete and set,
+            // so it keeps its kind and its index stays current.
+            for (const k of [...instance.keys()]) if (!fresh.has(k)) instance.delete(k);
+            for (const [k, v] of fresh) if (instance.get(k) !== v) instance.set(k, v);
+        }
+        if (again.length > 0) {
+            this.onApplyChain('reread', () => this.refreshKeys(plan, again), mapName);
         }
     }
 
     /** Re-load every table from Postgres into the mirror (used on listener reconnect). */
     private async rehydrateAll(): Promise<void> {
         if (!this.pool) return;
-        const client = await this.pool.connect();
-        try {
-            for (const [mapName, plan] of this.plans) {
-                const fresh: MutableMap = new Map();
-                const res = await client.query<Record<string, unknown>>(
-                    `SELECT * FROM ${plan.descriptor.tableName}`
-                );
-                for (const row of res.rows) {
-                    const record = rowToRecord(plan, row);
-                    fresh.set(plan.descriptor.keyOf(record), record);
-                }
-                (this as unknown as Record<string, MutableMap>)[mapName] = fresh;
-            }
-        } catch (err) {
-            log.warn('pg_store_rehydrate_failed', {
-                error: err instanceof Error ? err.message : String(err),
-            });
-        } finally {
-            client.release?.();
-        }
+        await this.withClient(async (client) => {
+            for (const plan of this.plans.values()) await this.reloadTable(plan, client);
+        });
     }
 
     /**
-     * Apply a peer replica's change to the local mirror. 'u' refreshes the single
-     * changed row; 'r' reloads the whole table. Self-notifications are ignored
-     * (the originating mutator already updated this mirror synchronously).
+     * Apply a peer replica's change to the local mirror, on the FIFO apply
+     * chain. 'u' and 'k' re-read the keys they name (a key whose row is gone
+     * is removed). 'r' reloads the whole table: no process sends it any more,
+     * but one still running the previous release does after a whole-table
+     * write, so it is received for one more release and then dropped.
+     * Self-notifications are ignored (the originating mutator already updated
+     * this mirror synchronously).
      */
     private applyPeerChange(payload: StoreChangePayload): void {
         if (payload.src === this.instanceId) return;
         const plan = this.plans.get(payload.m);
         if (!plan || !this.pool) return;
-        const pool = this.pool;
-        void (async () => {
-            const client = await pool.connect();
-            try {
-                if (payload.op === 'u' && payload.kv) {
-                    const where = plan.descriptor.conflictColumns
-                        .map((c, i) => `${c} = $${i + 1}`)
-                        .join(' AND ');
-                    const res = await client.query<Record<string, unknown>>(
-                        `SELECT * FROM ${plan.descriptor.tableName} WHERE ${where}`,
-                        payload.kv
-                    );
-                    if (res.rows.length > 0) {
-                        const record = rowToRecord(plan, res.rows[0]);
-                        this.mapByName(payload.m).set(plan.descriptor.keyOf(record), record);
-                    }
-                } else if (payload.op === 'r') {
-                    const fresh: MutableMap = new Map();
-                    const res = await client.query<Record<string, unknown>>(
-                        `SELECT * FROM ${plan.descriptor.tableName}`
-                    );
-                    for (const row of res.rows) {
-                        const record = rowToRecord(plan, row);
-                        fresh.set(plan.descriptor.keyOf(record), record);
-                    }
-                    (this as unknown as Record<string, MutableMap>)[payload.m] = fresh;
-                }
-            } catch (err) {
-                log.warn('pg_store_peer_refresh_failed', {
-                    map: payload.m,
-                    error: err instanceof Error ? err.message : String(err),
-                });
-            } finally {
-                client.release?.();
-            }
-        })();
+        const arity = plan.descriptor.conflictColumns.length;
+        const isKv = (kv: unknown): kv is unknown[] => Array.isArray(kv) && kv.length === arity;
+        if (payload.op === 'u' && isKv(payload.kv)) {
+            const kv = payload.kv;
+            this.onApplyChain('u', () => this.refreshKeys(plan, [kv]), payload.m);
+        } else if (payload.op === 'k' && Array.isArray(payload.kvs) && payload.kvs.every(isKv)) {
+            const kvs = payload.kvs;
+            if (kvs.length > 0)
+                this.onApplyChain('k', () => this.refreshKeys(plan, kvs), payload.m);
+        } else if (payload.op === 'r') {
+            this.onApplyChain('r', () => this.reloadTable(plan), payload.m);
+        } else {
+            log.warn('pg_store_peer_payload_ignored', { map: payload.m, op: payload.op });
+        }
     }
 
     /**
@@ -8483,10 +8975,25 @@ export class PostgresBackedDb extends InMemoryDb {
         return this.plans.get('refreshTokens')?.columnNames.has('session_expires_at') ?? false;
     }
 
-    /** Flush queued writes. Does NOT close the change subscription — safe to call
-     * repeatedly (e.g. to await durability) without unsubscribing from peers. */
+    /**
+     * Await the write-behind queue only: every op queued so far has run
+     * (committed, or failed after its retry and been counted). Mirror
+     * refreshes still on the apply chain (a peer's table reload, the
+     * rehydrate after a reconnect) are not waited for; they are reads, not
+     * durability. flushRuntimeStoreWrites uses this.
+     */
+    async drainWrites(): Promise<void> {
+        await this.queue?.drain();
+    }
+
+    /** Flush queued writes, then the mirror refreshes queued so far (including
+     * the re-reads those writes asked for, and any peer reload or rehydrate
+     * already on the apply chain). For shutdown and tests; a request path that
+     * needs durability calls drainWrites. Does NOT close the change
+     * subscription. */
     async drain(): Promise<void> {
         await this.queue?.drain();
+        await this.applyTail;
     }
 
     /** Flush queued writes and tear down the change subscription — graceful shutdown only. */
@@ -8533,7 +9040,7 @@ export async function drainRuntimeStore(): Promise<void> {
  * BLACKOUT_DB_MODE=postgres.
  */
 export async function flushRuntimeStoreWrites(): Promise<void> {
-    if (db instanceof PostgresBackedDb) await db.drain();
+    if (db instanceof PostgresBackedDb) await db.drainWrites();
 }
 
 /** Runtime store mode, for boot wiring. */

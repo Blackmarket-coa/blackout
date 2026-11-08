@@ -420,6 +420,30 @@ pass; client typecheck + affected vitest suites green).
 | L7  | Soft CI jobs pending unset repo variables             | ✅ Documented — the repo variables that promote qa-monorepo / nav-audit to blocking are now documented in `ci.yml`                              |
 | L9  | ~47 `console.*` in shipped client                     | ✅ Assessed — 45 are legitimate error-path diagnostics (kept); the one stray perf `console.log` removed                                         |
 
+**M11, 2026-10-31: reopened, and the write side fixed.** The M11 fix above made
+the documents describe a bounded stale-read window, and that was not the whole
+story. 38 mutators were written through as a whole-table resync: the process
+read every key of the table, deleted each row its own mirror did not hold, and
+rewrote every row from its own copy. So a row another process had written and
+this one had not yet heard of was deleted (a revocation, another person's
+account), a row it held a stale copy of was reverted (a password change, a
+logout-everywhere cutoff), and a row another process had deleted came back.
+The peers then reloaded the table, so every mirror took the loss. The worker's
+hourly auth-rows prune did this to `revoked_sessions` with no user action. It
+was shown on develop `ff7d08bfa0` with PGlite; the regression tests also run on
+PostgreSQL 16. Nothing records which rows were lost. The resync is gone: each
+of those mutators now writes only the rows its call changed, by key or by a
+predicate Postgres evaluates, in one transaction with its notification. The
+read side is not fixed. A process that boots while others write, misses a
+notification (most writes send theirs after commit, and a failed send is only
+logged), or has a listening connection that died without an error keeps its
+stale copy of those rows until it restarts or re-reads them, so it can keep
+accepting a signed-out access token until the token expires (up to 24 hours).
+On PostgreSQL 16 a process booted during 425 sign-outs missed 229 (the
+record's O4). What it closes, what it leaves open and the operator's decisions
+are in
+[`docs/security/store-cross-process-writes-2026-10-31.md`](../security/store-cross-process-writes-2026-10-31.md).
+
 **Still deferred (need a human decision or a live stack):**
 
 -   **react-router 7→8 / React 18→19** (H8 remainder until 2026-10-30): the entire react-router 8 line requires **React ≥19.2.7**; the client is on React 18.2 and the `folds` design system (used in 322 files) still peers React 17 (confirmed unchanged — latest `folds` 2.7.1 still declares `peerDependencies.react: 17.0.0`), so this is a React 18→19 framework migration whose runtime behaviour can't be validated without running the full client — not a router bump. The advisory (GHSA-qwww-vcr4-c8h2) is RSC-mode-only and the client uses library mode, so it does not apply; it is silenced with a time-boxed, documented ignore (`osv-scanner.toml`, `.trivyignore`, `pnpm.auditConfig`) expiring 2026-10-31. Concrete migration plan: **`docs/migrations/react-19-and-react-router-8.md`**. **2026-10-30:** no longer the H8 remainder. react-router 7.18.2 fixes GHSA-qwww-vcr4-c8h2 on the 7.x line and peers `react >=18`. The client moved to it and the three ignores were removed (`docs/security/dependency-advisories-2026-10-30.md`). The React 19 / react-router 8 migration is now optional and not security-driven.

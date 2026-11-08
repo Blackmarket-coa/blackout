@@ -143,14 +143,16 @@ services:
             # internal `app` network. This container has no route to the public
             # LIVEKIT_URL, and the SDK would drop its /livekit/sfu path anyway.
             - LIVEKIT_INTERNAL_URL=http://livekit:7880
-            # Runtime store mode. `postgres` makes the API persist all state to the
-            # Postgres service above via the write-through store: it runs migrations
-            # on boot, hydrates an in-memory read mirror, and write-throughs every
-            # mutation. This baseline runs a SINGLE api container. Multi-replica
-            # deployments (Helm/k8s) are supported too: cross-replica cache
-            # invalidation ships via Postgres LISTEN/NOTIFY (PgNotifyTransport, on
-            # by default; the Helm chart runs multiple replicas), leaving only a
-            # bounded stale-read window equal to NOTIFY latency.
+            # Runtime store mode. `postgres` makes the API persist its state to the
+            # Postgres service above through the write-behind store: it runs
+            # migrations on boot, hydrates an in-memory mirror, and queues each
+            # mutation's Postgres write, which runs just after the mutation returns.
+            # This baseline runs a SINGLE api container. Where several processes share
+            # one database (the Helm chart runs several replicas), Postgres
+            # LISTEN/NOTIFY (PgNotifyTransport, on by default) tells each which rows
+            # changed. A process can still serve a stale row, and one that misses a
+            # notification serves it until it restarts or re-reads it; see
+            # KNOWN_LIMITATIONS.md, "Several API processes on one database".
             - BLACKOUT_DB_MODE=postgres
             # Legacy file-store path. Unused in postgres mode (kept for the named
             # volume + an easy rollback to file mode by removing BLACKOUT_DB_MODE).

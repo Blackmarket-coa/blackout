@@ -118,14 +118,124 @@ jobs:
                       p/security-audit
                       p/secrets
 
+    # Restores the gitleaks release archive from the Actions cache and hands it
+    # to the gitleaks job as an artifact of this run. The restore runs here, in
+    # a job of its own, because a cache entry is not signed and its restore
+    # writes outside the cache path: actions/cache extracts the entry with
+    # `tar -P` relative to the workspace, so whoever saved the entry it finds
+    # decides what lands where the runner user can write, for example
+    # ~/.local/bin (on PATH ahead of /usr/local/bin) or a .gitleaks.toml in a
+    # checkout that allowlists everything. The entry it finds need not be
+    # under the exact key: when that misses, GitHub also restores an entry
+    # whose key begins with it (cache-hit is then false, so the steps below
+    # are skipped). Each job runs on its own runner, and this one has no
+    # checkout and no token permissions. The gitleaks job does not trust what
+    # it is handed: it checks the archive against its own GITLEAKS_SHA256 and
+    # downloads the archive itself when there is no artifact or the check
+    # fails. docs/security/gitleaks-install-2026-11-08.md
+    gitleaks_archive:
+        name: Gitleaks archive from the cache
+        runs-on: ubuntu-24.04
+        timeout-minutes: 10
+        permissions: {}
+        # Must match the gitleaks job's values. If they differ, the gitleaks
+        # job finds no archive it accepts and downloads one: the cache stops
+        # helping and nothing else changes.
+        env:
+            GITLEAKS_VERSION: '8.21.2'
+            GITLEAKS_SHA256: '5bc41815076e6ed6ef8fbecc9d9b75bcae31f39029ceb55da08086315316e3ba'
+        steps:
+            # A cache that cannot be reached, or a restore that fails or takes
+            # longer than 3 minutes, counts as a miss.
+            - name: Restore the gitleaks archive from the cache
+              id: cache
+              continue-on-error: true
+              timeout-minutes: 3
+              uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5
+              with:
+                  path: ${{ runner.temp }}/gitleaks
+                  key: gitleaks-${{ env.GITLEAKS_VERSION }}-linux_x64-${{ env.GITLEAKS_SHA256 }}
+
+            # An entry under the key that is not the pinned archive is corrupt
+            # or was planted. This job then fails, so that it shows, and hands
+            # nothing over; the gitleaks job runs anyway and downloads.
+            # sha256sum is called by absolute path, but the runner looks up
+            # this step's own bash on PATH, so an entry that planted one can
+            # get round the check. It is a diagnostic that names a bad entry,
+            # not a defence: the gitleaks job checks again.
+            - name: Check the restored archive
+              if: steps.cache.outputs.cache-hit == 'true'
+              run: |
+                  set -euo pipefail
+                  archive="${RUNNER_TEMP}/gitleaks/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+                  if ! echo "${GITLEAKS_SHA256}  ${archive}" | /usr/bin/sha256sum --check --strict -; then
+                      echo "::error::The cached gitleaks archive does not match GITLEAKS_SHA256. Delete the entry: gh cache delete gitleaks-${GITLEAKS_VERSION}-linux_x64-${GITLEAKS_SHA256}"
+                      exit 1
+                  fi
+
+            # overwrite, so that a re-run of all jobs replaces the earlier
+            # attempt's artifact instead of failing on the name.
+            - name: Hand the archive to the gitleaks job
+              if: steps.cache.outputs.cache-hit == 'true'
+              continue-on-error: true
+              timeout-minutes: 3
+              uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+              with:
+                  name: gitleaks-archive
+                  path: ${{ runner.temp }}/gitleaks/gitleaks_${{ env.GITLEAKS_VERSION }}_linux_x64.tar.gz
+                  if-no-files-found: error
+                  retention-days: 1
+                  overwrite: true
+
     gitleaks:
         name: Gitleaks secret scan
         runs-on: ubuntu-24.04
+        # Waits for gitleaks_archive and runs whether that job succeeds or
+        # fails, so that a failed archive job cannot skip the scan: GitHub
+        # reports a skipped job as a success, even for a required check. Not
+        # when the run is cancelled. Untested: whether gitleaks_archive hitting
+        # its own timeout-minutes, which GitHub handles by cancelling that job,
+        # counts as cancelled here and skips the scan.
+        needs: gitleaks_archive
+        if: ${{ !cancelled() }}
+        # The archive's sha256 moves with the version: it is the linux_x64
+        # line of the release's gitleaks_<version>_checksums.txt (for 8.21.2,
+        # checked on 2026-11-08; docs/security/gitleaks-install-2026-11-08.md).
+        # Both are set on the job so that the save step can key on them, and
+        # gitleaks_archive repeats them. gitleaks 8.21.2 reads one environment
+        # variable, GITLEAKS_CONFIG, so the scan steps behave as before.
+        env:
+            GITLEAKS_VERSION: '8.21.2'
+            GITLEAKS_SHA256: '5bc41815076e6ed6ef8fbecc9d9b75bcae31f39029ceb55da08086315316e3ba'
         steps:
             - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
               with:
                   fetch-depth: 0
                   persist-credentials: false
+
+            # This job restores no cache. It takes this run's gitleaks-archive
+            # artifact, if there is one, into a directory outside the checkout
+            # and off PATH. gitleaks_archive uploads it after a verified hit,
+            # but any job of the run could upload one, so the install step
+            # trusts only the pin. v8 because its zip extraction turns every
+            # ".." segment of an entry name into "."; v6 and v4.3.0 bundle
+            # unzip-stream 0.3.1, which strips only leading "../", and an entry
+            # named a/../../x lands outside the target. `pattern`, not `name`:
+            # with `name`, a run that has no such artifact (any run after a
+            # cache miss, for one) marks this step failed with an error
+            # annotation; a pattern that matches nothing downloads nothing and
+            # passes.
+            # merge-multiple puts a match straight into `path`, where the
+            # install step looks. No artifact is not an error: the install
+            # step then downloads the archive.
+            - name: Fetch the archive gitleaks_archive restored
+              continue-on-error: true
+              timeout-minutes: 3
+              uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+              with:
+                  pattern: gitleaks-archive
+                  merge-multiple: true
+                  path: ${{ runner.temp }}/gitleaks-artifact
 
             # Use the gitleaks CLI directly instead of `gitleaks/gitleaks-action@v2`
             # because the v2 action's trial period ended for organization
@@ -133,13 +243,76 @@ jobs:
             # regardless of whether actual leaks exist. The CLI binary is
             # MIT-licensed and freely usable. .gitleaksignore at repo root
             # is honored automatically.
+            #
+            # The archive is checked against GITLEAKS_SHA256 before anything is
+            # extracted, whether it came from gitleaks_archive or the download;
+            # until 2026-11-08 the download was piped unchecked into `sudo tar`.
+            # An artifact that is missing or fails the check is not used, and
+            # the archive is downloaded into a separate directory; a download
+            # that fails the check fails the step. sha256sum and tar are called
+            # by absolute path.
+            #
+            # The download is retried. --retry covers timeouts and HTTP 408,
+            # 429, 500, 502, 503 and 504 (with --fail an HTTP error is exit 22),
+            # and --retry-connrefused adds a refused connection. --retry-delay
+            # 15 waits 15 s between attempts instead of doubling from 1 s, so
+            # the attempts stay spread across an outage that comes and goes,
+            # and --retry-max-time 180 starts no retry after 3 minutes. Against
+            # fast 504s that is 13 attempts in about 3 minutes. A Retry-After
+            # header on the error replaces the 15 s wait, shorter or longer,
+            # and one that would carry the retries past 3 minutes ends them;
+            # curl 8.5.0 has no flag to ignore it. --max-time 60 bounds one
+            # attempt (the archive is 3 MB), so the longest case is about
+            # 4 minutes 15 seconds; timeout-minutes bounds the step whatever
+            # the flags say. Not --retry-all-errors: it would also retry a 404,
+            # from a wrong version or asset name, for the full 3 minutes. A
+            # transfer cut off part way is not retried and fails the step.
             - name: Install gitleaks
-              env:
-                  GITLEAKS_VERSION: '8.21.2'
+              id: install
+              timeout-minutes: 10
               run: |
-                  curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
-                      | sudo tar -xz -C /usr/local/bin gitleaks
+                  set -euo pipefail
+                  name="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+                  url="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/${name}"
+                  verify() {
+                      echo "${GITLEAKS_SHA256}  $1" | /usr/bin/sha256sum --check --strict -
+                  }
+                  archive="${RUNNER_TEMP}/gitleaks-artifact/${name}"
+                  if [ -f "$archive" ] && verify "$archive"; then
+                      echo "Using the archive restored from the cache by gitleaks_archive."
+                  else
+                      if [ -e "$archive" ]; then
+                          echo "::warning::The archive from gitleaks_archive does not match GITLEAKS_SHA256; downloading instead."
+                      fi
+                      archive="${RUNNER_TEMP}/gitleaks/${name}"
+                      mkdir -p "${RUNNER_TEMP}/gitleaks"
+                      curl --fail --location --no-progress-meter \
+                          --connect-timeout 10 --max-time 60 \
+                          --retry 12 --retry-connrefused --retry-delay 15 --retry-max-time 180 \
+                          --output "$archive" "$url"
+                      if ! verify "$archive"; then
+                          echo "::error::The downloaded gitleaks archive does not match GITLEAKS_SHA256; not extracting it."
+                          exit 1
+                      fi
+                      echo "downloaded=true" >> "$GITHUB_OUTPUT"
+                  fi
+                  sudo /usr/bin/tar -xzf "$archive" -C /usr/local/bin gitleaks
                   gitleaks version
+
+            # Saving reads files and uploads them; it extracts nothing, so it is
+            # safe in this job. Only an archive this step downloaded and checked
+            # is saved, and before the scan, so that a scan that finds a leak
+            # (and fails the job) still leaves the entry. An existing key is
+            # never overwritten: the save logs that and passes. A cache problem
+            # must not fail the scan, hence continue-on-error.
+            - name: Save the verified gitleaks archive to the cache
+              if: steps.install.outputs.downloaded == 'true'
+              continue-on-error: true
+              timeout-minutes: 3
+              uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25 # v5
+              with:
+                  path: ${{ runner.temp }}/gitleaks
+                  key: gitleaks-${{ env.GITLEAKS_VERSION }}-linux_x64-${{ env.GITLEAKS_SHA256 }}
 
             - name: Run gitleaks (pull request range)
               if: github.event_name == 'pull_request'

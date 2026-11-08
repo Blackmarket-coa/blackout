@@ -185,9 +185,10 @@ export function sweepExternalActivityRetention(now: number = Date.now()): Retent
         }
     }
 
-    // One delete for the whole batch. On the durable backends a delete is a
-    // whole-table reconcile, so purging N rows one at a time would cost N
-    // rewrites of the table; one call costs one.
+    // One delete for the whole batch. The file store rewrites its whole file
+    // on every delete, so purging N rows one at a time would cost N rewrites;
+    // one call costs one. The Postgres store deletes the batch in one
+    // statement, each row only while it still holds the version judged here.
     if (due.size > 0) {
         try {
             for (const id of db.deleteCoalitionExternalActivities([...due.keys()])) {
