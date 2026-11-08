@@ -10,13 +10,17 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
     ACCOUNT_KEY_CHECK_TIMEOUT_MS,
+    SETUP_PARTWAY_TEXT,
     SETUP_REFUSED_TEXT,
     accountKeyVerdict,
     checkAccountKeyState,
     checkBackupState,
     checkCrossSigningState,
+    partwayStageAfter,
+    setupConfirmUnsupportedText,
     setupRefusal,
     type AccountKeyState,
+    type SetupPartwayStage,
 } from '../../../src/client/keyBackupCheck';
 import {
     ME,
@@ -327,5 +331,65 @@ describe('setupRefusal: the form finishing its own earlier attempt (fifth review
         expect(
             setupRefusal({ backup: 'none', crossSigning: 'unknown', masterKey: OWN }, 'setup', OWN)
         ).toBe(SETUP_REFUSED_TEXT.unknown);
+    });
+});
+
+describe('partwayStageAfter: the stage never moves back (seventh review)', () => {
+    const cases: [SetupPartwayStage, SetupPartwayStage | null, boolean, SetupPartwayStage][] = [
+        // A first attempt: its own stage.
+        ['secret_storage', null, false, 'secret_storage'],
+        ['cross_signing', null, false, 'cross_signing'],
+        ['backup_none', null, true, 'backup_none'],
+        ['backup_unclear', null, true, 'backup_unclear'],
+        // A retry that stops at the same or a later step: its own stage.
+        ['secret_storage', 'secret_storage', false, 'secret_storage'],
+        ['cross_signing', 'secret_storage', false, 'cross_signing'],
+        ['backup_none', 'cross_signing', true, 'backup_none'],
+        ['backup_unclear', 'backup_none', true, 'backup_unclear'],
+        // A retry that stops earlier keeps the earlier attempt's stage: the
+        // verifier's case is a retry that failed in secret storage after
+        // backup_none, with the form's own cross-signing kept.
+        ['secret_storage', 'backup_none', true, 'backup_none'],
+        ['secret_storage', 'cross_signing', false, 'cross_signing'],
+        // A backup_* text says the form's new cross-signing is on; when this
+        // attempt neither kept nor made it, the stage is cross_signing.
+        ['secret_storage', 'backup_none', false, 'cross_signing'],
+        ['cross_signing', 'backup_none', false, 'cross_signing'],
+    ];
+    it.each(cases)(
+        'attempt %s after %s (own cross-signing on: %s) → %s',
+        (attempt, held, on, want) => {
+            expect(partwayStageAfter(attempt, held, on)).toBe(want);
+        }
+    );
+
+    it('the secret_storage text, which says cross-signing was not changed, never follows a later stage', () => {
+        for (const held of ['cross_signing', 'backup_none', 'backup_unclear'] as const) {
+            for (const on of [true, false]) {
+                expect(partwayStageAfter('secret_storage', held, on)).not.toBe('secret_storage');
+            }
+        }
+        expect(SETUP_PARTWAY_TEXT.secret_storage.what).toContain('Cross-signing wasn’t changed');
+    });
+});
+
+describe('the partway texts name the passphrase (seventh review)', () => {
+    it('every stage says the passphrase, if one was entered, opens the secret storage too', () => {
+        for (const text of Object.values(SETUP_PARTWAY_TEXT)) {
+            expect(text.what).toContain(
+                'opens only with the recovery key below (or the passphrase, if you entered one)'
+            );
+        }
+    });
+});
+
+describe('setupConfirmUnsupportedText', () => {
+    it('names the stages the homeserver asked for', () => {
+        expect(setupConfirmUnsupportedText(['org.matrix.cross_signing_reset'])).toBe(
+            'Your homeserver asked for a kind of account confirmation that Blackout can’t do (org.matrix.cross_signing_reset), so the setup stopped there.'
+        );
+        expect(setupConfirmUnsupportedText([])).toBe(
+            'Your homeserver asked for a kind of account confirmation that Blackout can’t do, so the setup stopped there.'
+        );
     });
 });

@@ -223,6 +223,17 @@ export const SETUP_REFUSED_TEXT = {
  *   (`POST /room_keys/version`) and only then stores its key in secret
  *   storage (`rust-crypto.js` `resetKeyBackup`), so its key may be on this
  *   device alone, or nowhere if the creation's answer was lost.
+ *
+ * The "When" above is a first attempt's. A later attempt of the same form
+ * that stops at an earlier step undoes nothing an earlier one wrote, so the
+ * form's stage is `partwayStageAfter`'s, which never moves back (seventh
+ * review).
+ *
+ * Every `what` says "or the passphrase, if you entered one": a passphrase
+ * typed on the first attempt is stored with the new key's description
+ * (`createRecoveryKeyFromPassphrase` puts its pbkdf2 salt and iterations in
+ * `keyInfo.passphrase`, `rust-crypto.js:915-934`), so it opens the new secret
+ * storage too, and the next attempt reuses that key with its description.
  */
 export type SetupPartwayStage =
     | 'secret_storage'
@@ -241,21 +252,29 @@ export type SetupPartwayStage =
  */
 export const SETUP_PARTWAY_TEXT: Record<SetupPartwayStage, { what: string; next?: string }> = {
     secret_storage: {
-        what: 'The setup stopped while Blackout was setting up new secret storage for your account, and it may already have done so. If it did, your secret storage now opens only with the recovery key below, so save it. Cross-signing wasn’t changed, and no key backup was created.',
+        what: 'The setup stopped while Blackout was setting up new secret storage for your account, and it may already have done so. If it did, your secret storage now opens only with the recovery key below (or the passphrase, if you entered one), so save it. Cross-signing wasn’t changed, and no key backup was created.',
         next: 'Press Continue to try again with this same recovery key.',
     },
     cross_signing: {
-        what: 'The setup stopped before it finished, but Blackout had already set up new secret storage for your account, which now opens only with the recovery key below, so save it. Cross-signing wasn’t finished, and no key backup was created.',
+        what: 'The setup stopped before it finished, but Blackout had already set up new secret storage for your account, which now opens only with the recovery key below (or the passphrase, if you entered one), so save it. Cross-signing wasn’t finished, and no key backup was created.',
         next: 'Press Continue to try the rest again with this same recovery key.',
     },
     backup_none: {
-        what: 'Your account’s new cross-signing is on, and its new secret storage opens only with the recovery key below, so save it. Creating the key backup didn’t finish, and your homeserver answered that it has no key backup.',
+        what: 'Your account’s new cross-signing is on, and its new secret storage opens only with the recovery key below (or the passphrase, if you entered one), so save it. Creating the key backup didn’t finish, and your homeserver answered that it has no key backup.',
         next: 'Press Continue to create the backup with this same recovery key: this window keeps that cross-signing rather than replacing it.',
     },
     backup_unclear: {
-        what: 'Your account’s new cross-signing is on, and its new secret storage opens only with the recovery key below, so save it. The key backup step didn’t finish, and your homeserver may now have a key backup that this attempt created before it stopped. That backup’s key may not be in your secret storage, so this recovery key may not restore from it. Blackout won’t set up another backup here, because that would delete it.',
+        what: 'Your account’s new cross-signing is on, and its new secret storage opens only with the recovery key below (or the passphrase, if you entered one), so save it. The key backup step didn’t finish, and your homeserver may now have a key backup that this attempt created before it stopped. That backup’s key may not be in your secret storage, so this recovery key may not restore from it. Blackout won’t set up another backup here, because that would delete it.',
     },
 };
+
+/**
+ * Shown while an attempt is writing, when the dialog's close button is
+ * disabled (seventh review): the dialog refuses to close from the attempt's
+ * first write until its recovery key is on screen.
+ */
+export const SETUP_WRITING_TEXT =
+    'Blackout is changing your account’s keys now. This window can’t be closed until it shows the recovery key.';
 
 /**
  * The error line when the person closes the account confirmation (the
@@ -265,6 +284,65 @@ export const SETUP_PARTWAY_TEXT: Record<SetupPartwayStage, { what: string; next?
  */
 export const SETUP_CONFIRM_CANCELLED_TEXT =
     'The account confirmation step was cancelled, so the setup stopped there.';
+
+/**
+ * The error line when the homeserver asks the cross-signing upload for an
+ * account confirmation that Blackout cannot do in the app (anything but the
+ * password or single sign-on, `SUPPORTED_IN_APP_UIA_STAGES`): for example
+ * `org.matrix.cross_signing_reset`, which a Synapse that delegates sign-in to
+ * Matrix Authentication Service asks for when cross-signing already exists.
+ * Before the seventh review the form showed "Authentication steps to perform
+ * this action are not supported by client." with no way to cancel, so the
+ * attempt never settled and its recovery key never appeared, although secret
+ * storage had already been replaced. It now stops there (stage
+ * `'cross_signing'`) and names the stages it was asked for.
+ */
+export const setupConfirmUnsupportedText = (stages: readonly string[]): string =>
+    `Your homeserver asked for a kind of account confirmation that Blackout can’t do${
+        stages.length > 0 ? ` (${stages.join(', ')})` : ''
+    }, so the setup stopped there.`;
+
+/**
+ * Shown under that error in place of the stage's `next`: Continue tries again
+ * with the same key, and the homeserver will answer the same way until it
+ * stops asking for that confirmation.
+ */
+export const SETUP_CONFIRM_UNSUPPORTED_NEXT =
+    'Continue tries the rest again with this same recovery key, and stops at the same step for as long as your homeserver asks for that confirmation.';
+
+const PARTWAY_RANK: Record<SetupPartwayStage, number> = {
+    secret_storage: 0,
+    cross_signing: 1,
+    backup_none: 2,
+    backup_unclear: 3,
+};
+
+/**
+ * The stage the form shows after an attempt stopped at `attempt`, when an
+ * earlier attempt of the same form had stopped at `held` (seventh review).
+ *
+ * A retry that stops at an earlier step than the last attempt did undoes
+ * nothing: after `'backup_none'` the account's cross-signing is still the
+ * one this form uploaded, and its secret storage has opened only with this
+ * key since the first attempt. So the stage never moves back, and a retry
+ * that fails in secret storage after `'backup_none'` keeps that stage's text,
+ * not `'secret_storage'`'s "Cross-signing wasn't changed". One exception: a
+ * `'backup_*'` text says the form's new cross-signing is on, which holds only
+ * when this attempt kept it or made it (`ownCrossSigningOn`). A warned reset
+ * whose next attempt found another device's master key and failed at its own
+ * cross-signing step shows `'cross_signing'`.
+ */
+export const partwayStageAfter = (
+    attempt: SetupPartwayStage,
+    held: SetupPartwayStage | null | undefined,
+    ownCrossSigningOn: boolean
+): SetupPartwayStage => {
+    const later = held && PARTWAY_RANK[held] > PARTWAY_RANK[attempt] ? held : attempt;
+    if ((later === 'backup_none' || later === 'backup_unclear') && !ownCrossSigningOn) {
+        return 'cross_signing';
+    }
+    return later;
+};
 
 /**
  * The last check before the setup writes anything. Every entry re-checks at

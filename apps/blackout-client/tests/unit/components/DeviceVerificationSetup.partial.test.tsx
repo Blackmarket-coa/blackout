@@ -22,6 +22,16 @@
 // Continue, and offers no Continue where the next attempt could not finish (a
 // backup this attempt may have created). Before, the key was never shown and,
 // after a cancel, the error line was empty.
+//
+// Seventh review: a retry that stops at an earlier step than the last attempt
+// keeps the last attempt's stage, whose text is true of what that attempt
+// wrote (before, a retry that failed in secret storage said "Cross-signing
+// wasn't changed" after this form had uploaded cross-signing); a confirmation
+// the homeserver asks for that Blackout can't do (Matrix Authentication
+// Service's `org.matrix.cross_signing_reset`) stops the attempt with its key on
+// screen and says which one (before, the form showed "not supported by
+// client" and the attempt never settled); and a passphrase typed on the first
+// attempt opens the new secret storage, as the partway text now says.
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -33,7 +43,7 @@ vi.mock('focus-trap-react', () => ({
     default: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 import type { MatrixClient } from 'matrix-js-sdk';
-import { decodeRecoveryKey } from 'matrix-js-sdk/lib/crypto-api';
+import { decodeRecoveryKey, deriveRecoveryKeyFromPassphrase } from 'matrix-js-sdk/lib/crypto-api';
 import type { SecretStorageKeyDescription } from 'matrix-js-sdk/lib/secret-storage';
 import {
     DeviceVerificationReset,
@@ -41,8 +51,11 @@ import {
 } from '../../../src/app/components/DeviceVerificationSetup';
 import {
     SETUP_CONFIRM_CANCELLED_TEXT,
+    SETUP_CONFIRM_UNSUPPORTED_NEXT,
     SETUP_PARTWAY_TEXT,
     SETUP_REFUSED_TEXT,
+    SETUP_WRITING_TEXT,
+    setupConfirmUnsupportedText,
 } from '../../../src/client/keyBackupCheck';
 import {
     ME,
@@ -107,11 +120,17 @@ const signingUploads = (hs: FakeKeyHomeserver): number =>
     hs.calls.filter((c) => c.method === 'POST' && c.path.endsWith('/keys/device_signing/upload'))
         .length;
 
-/** Shows the recovery key on screen (its "Show" chip) and reads it. */
+/**
+ * Shows the recovery key on screen (its "Show" chip) and reads it. A key the
+ * test already showed, still on screen across a retry, reads as it is.
+ */
 const shownRecoveryKey = async (): Promise<string> => {
     const [show] = buttonsNamed('Show');
-    expect(show).toBeDefined();
-    await click(show);
+    if (show) {
+        await click(show);
+    } else {
+        expect(buttonsNamed('Hide')).toHaveLength(1);
+    }
     const keyText = document.body.querySelector('[style*="monospace"]')?.textContent ?? '';
     expect(keyText).not.toMatch(/\*/);
     return keyText;
@@ -153,8 +172,31 @@ const cancelPassword = async () => {
     await click(dialog.querySelector('button') as HTMLButtonElement);
 };
 
+/** The ✕ in the header of the dialog titled `heading`. */
+const headerClose = (heading: string): HTMLButtonElement => {
+    const title = Array.from(document.body.querySelectorAll('*')).find(
+        (el) => el.children.length === 0 && el.textContent === heading
+    ) as HTMLElement | undefined;
+    expect(title, `the heading ${heading}`).toBeDefined();
+    let node: HTMLElement | null = title as HTMLElement;
+    while (node && !node.querySelector('button')) node = node.parentElement;
+    return (node as HTMLElement).querySelector('button') as HTMLButtonElement;
+};
+
+/** Types `passphrase` into the setup form's optional passphrase field. */
+const typePassphrase = (passphrase: string) => {
+    const input = document.body.querySelector('input[name="passphraseInput"]') as HTMLInputElement;
+    input.value = passphrase;
+    // `handleSubmit` reads `form.passphraseInput`, the named-property getter
+    // that browsers provide and jsdom does not.
+    Object.defineProperty(input.closest('form') as HTMLFormElement, 'passphraseInput', {
+        value: input,
+        configurable: true,
+    });
+};
+
 /** Renders the setup for a new account and runs a first Continue that fails after cross-signing. */
-const firstAttemptFailsAtTheBackup = async () => {
+const firstAttemptFailsAtTheBackup = async (passphrase?: string) => {
     const hs = createFakeKeyHomeserver({ backupVersion: null, masterKey: false });
     mx = createFakeKeyClient(hs);
     await mx.initRustCrypto({ useIndexedDB: false });
@@ -164,6 +206,7 @@ const firstAttemptFailsAtTheBackup = async () => {
     await waitFor(() => bodyText().includes('Setup Device Verification'), {
         what: 'the setup dialog',
     });
+    if (passphrase !== undefined) typePassphrase(passphrase);
     await submit();
     await waitFor(() => bodyText().includes(SETUP_PARTWAY_TEXT.backup_none.next as string), {
         what: 'the first attempt to stop partway',
@@ -543,4 +586,220 @@ describe('DeviceVerificationReset: cancelled at the account confirmation', () =>
         expect(finalKey).toBe(partwayKey);
         expect(await opensDefaultSecretStorage(hs, finalKey)).toBe(true);
     }, 120_000);
+});
+
+describe('SetupVerification: a retry that stops earlier keeps what the earlier attempt did', () => {
+    it('after backup_none, a retry that fails in secret storage keeps the backup_none text, and the next Continue finishes', async () => {
+        // The verifier's case: the first attempt uploaded cross-signing and
+        // stopped at the backup; the retry fails at the default key's PUT.
+        // Before the fix the screen then said "…Cross-signing wasn't
+        // changed, and no key backup was created", false of the identity
+        // this form had just uploaded.
+        const { hs, ownKey, partwayKey } = await firstAttemptFailsAtTheBackup();
+        hs.failNext('PUT', '/account_data/m.secret_storage.default_key', SERVER_ERROR);
+
+        await submit();
+        await waitFor(() => bodyText().includes('Internal server error'), {
+            what: 'the retry to fail',
+            timeoutMs: 30_000,
+        });
+        await waitFor(() => bodyText().includes(SETUP_PARTWAY_TEXT.backup_none.next as string), {
+            what: 'the retry’s partway screen',
+            timeoutMs: 30_000,
+        });
+        expect(bodyText()).toContain(SETUP_PARTWAY_TEXT.backup_none.what);
+        expect(bodyText()).not.toContain(SETUP_PARTWAY_TEXT.secret_storage.what);
+        expect(bodyText()).not.toContain('Cross-signing wasn’t changed');
+        // What the earlier attempt wrote is still there: its identity, and
+        // a secret storage that this same key opens.
+        expect(hs.masterKey()).toBe(ownKey);
+        expect(hs.backupVersion()).toBeNull();
+        expect(signingUploads(hs)).toBe(1);
+        const keyAfterRetry = await shownRecoveryKey();
+        expect(keyAfterRetry).toBe(partwayKey);
+        expect(await opensDefaultSecretStorage(hs, keyAfterRetry)).toBe(true);
+
+        // The text's "Press Continue to create the backup…: this window
+        // keeps that cross-signing" holds.
+        await submit();
+        await waitFor(() => bodyText().includes(RECOVERY_KEY_SCREEN), {
+            what: 'the recovery key screen',
+            timeoutMs: 30_000,
+        });
+        expect(hs.masterKey()).toBe(ownKey);
+        expect(signingUploads(hs)).toBe(1);
+        expect(hs.backupVersion()).toBe('1');
+        expect(hs.calls.filter((c) => c.method === 'DELETE')).toEqual([]);
+        const finalKey = await shownRecoveryKey();
+        expect(finalKey).toBe(partwayKey);
+        expect(await opensDefaultSecretStorage(hs, finalKey)).toBe(true);
+    }, 120_000);
+
+    it('after a cross-signing stop whose keys were uploaded, a retry that fails in secret storage keeps the cross_signing text', async () => {
+        const hs = createFakeKeyHomeserver({ backupVersion: null, masterKey: false });
+        mx = createFakeKeyClient(hs);
+        await mx.initRustCrypto({ useIndexedDB: false });
+        hs.failNext('POST', '/keys/signatures/upload', REJECTED_SIGNATURE);
+
+        mounted = await renderWithClient(
+            mx,
+            <DeviceVerificationSetup onCancel={() => undefined} />
+        );
+        await waitFor(() => bodyText().includes('Setup Device Verification'), {
+            what: 'the setup dialog',
+        });
+        await submit();
+        await waitFor(() => bodyText().includes(SETUP_PARTWAY_TEXT.cross_signing.what), {
+            what: 'the first attempt to stop at cross-signing',
+            timeoutMs: 30_000,
+        });
+        const uploaded = hs.masterKey();
+        expect(uploaded).not.toBeNull();
+        const partwayKey = await shownRecoveryKey();
+
+        hs.failNext('PUT', '/account_data/m.secret_storage.default_key', SERVER_ERROR);
+        await submit();
+        await waitFor(() => bodyText().includes('Internal server error'), {
+            what: 'the retry to fail',
+            timeoutMs: 30_000,
+        });
+        await waitFor(() => bodyText().includes(SETUP_PARTWAY_TEXT.cross_signing.next as string), {
+            what: 'the retry’s partway screen',
+            timeoutMs: 30_000,
+        });
+        expect(bodyText()).toContain(SETUP_PARTWAY_TEXT.cross_signing.what);
+        expect(bodyText()).not.toContain(SETUP_PARTWAY_TEXT.secret_storage.what);
+        expect(hs.masterKey()).toBe(uploaded);
+        const keyAfterRetry = await shownRecoveryKey();
+        expect(keyAfterRetry).toBe(partwayKey);
+        expect(await opensDefaultSecretStorage(hs, keyAfterRetry)).toBe(true);
+    }, 120_000);
+});
+
+describe('SetupVerification: the passphrase in the partway text', () => {
+    it('a passphrase typed on the first attempt opens the new secret storage, as the text says', async () => {
+        const passphrase = 'correct horse battery staple';
+        const { hs } = await firstAttemptFailsAtTheBackup(passphrase);
+        expect(bodyText()).toContain('(or the passphrase, if you entered one)');
+        const keyId = (hs.accountData.get('m.secret_storage.default_key') as { key: string }).key;
+        const info = hs.accountData.get(`m.secret_storage.key.${keyId}`) as
+            | SecretStorageKeyDescription
+            | undefined;
+        expect(info?.passphrase?.algorithm).toBe('m.pbkdf2');
+        const derived = await deriveRecoveryKeyFromPassphrase(
+            passphrase,
+            info?.passphrase?.salt as string,
+            info?.passphrase?.iterations as number
+        );
+        expect(await mx?.secretStorage.checkKey(derived, info as SecretStorageKeyDescription)).toBe(
+            true
+        );
+    }, 120_000);
+});
+
+/** Upstream Synapse's answer when sign-in is delegated to Matrix Authentication Service and cross-signing exists. */
+const MAS_RESET_ANSWER: FakeAnswer = {
+    kind: 'json',
+    status: 401,
+    body: {
+        session: 'dummy',
+        flows: [{ stages: ['org.matrix.cross_signing_reset'] }],
+        params: {
+            'org.matrix.cross_signing_reset': {
+                url: 'https://auth.example.org/account/?action=org.matrix.cross_signing_reset',
+            },
+        },
+        msg: 'To reset your end-to-end encryption cross-signing identity, you first need to approve it and then try again.',
+    },
+};
+
+/**
+ * A device that set the account up itself (secret storage under an old key,
+ * then cross-signing, trusted here), with no backup: the warned reset's row.
+ */
+const deviceHoldingCrossSigning = async () => {
+    const hs = createFakeKeyHomeserver({ backupVersion: null, masterKey: false });
+    mx = createFakeKeyClient(hs);
+    await mx.initRustCrypto({ useIndexedDB: false });
+    const crypto = mx.getCrypto();
+    if (!crypto) throw new Error('no crypto');
+    const oldKey = await crypto.createRecoveryKeyFromPassphrase();
+    await crypto.bootstrapSecretStorage({
+        createSecretStorageKey: async () => oldKey,
+        setupNewSecretStorage: true,
+    });
+    await crypto.bootstrapCrossSigning({ setupNewCrossSigning: true });
+    await settle(100);
+    expect(await crypto.isCrossSigningReady()).toBe(true);
+    return { hs, masterBefore: hs.masterKey(), defaultBefore: defaultKeyId(hs) };
+};
+
+const NOT_SUPPORTED_BY_CLIENT = 'not supported by client';
+
+describe('DeviceVerificationReset: a confirmation Blackout can’t do', () => {
+    it('org.matrix.cross_signing_reset at the first answer: stops at cross-signing with its key on screen and names it', async () => {
+        const { hs, masterBefore, defaultBefore } = await deviceHoldingCrossSigning();
+        hs.failNext('POST', '/keys/device_signing/upload', MAS_RESET_ANSWER);
+
+        mounted = await renderWithClient(
+            mx as MatrixClient,
+            <DeviceVerificationReset onCancel={() => undefined} />
+        );
+        await click(buttonsNamed('Reset')[0]);
+        await submit();
+        const named = setupConfirmUnsupportedText(['org.matrix.cross_signing_reset']);
+        await waitFor(() => bodyText().includes(named), {
+            what: 'the attempt to stop at the confirmation',
+            timeoutMs: 30_000,
+        });
+        expect(named).toContain('org.matrix.cross_signing_reset');
+        expect(bodyText()).toContain(SETUP_PARTWAY_TEXT.cross_signing.what);
+        expect(bodyText()).toContain(SETUP_CONFIRM_UNSUPPORTED_NEXT);
+        expect(bodyText()).not.toContain(SETUP_PARTWAY_TEXT.cross_signing.next as string);
+        expect(bodyText()).not.toContain(NOT_SUPPORTED_BY_CLIENT);
+        expect(bodyText()).not.toContain(SETUP_WRITING_TEXT);
+        // Secret storage was replaced before the upload, as the reset's
+        // warning says; cross-signing on the homeserver was not.
+        expect(defaultKeyId(hs)).not.toBe(defaultBefore);
+        expect(hs.masterKey()).toBe(masterBefore);
+        const partwayKey = await shownRecoveryKey();
+        expect(await opensDefaultSecretStorage(hs, partwayKey)).toBe(true);
+        // The attempt settled: Continue is live again, and the dialog closes.
+        const [cont] = buttonsNamed('Continue');
+        expect(cont.disabled).toBe(false);
+        expect(headerClose('Reset Device Verification').disabled).toBe(false);
+    }, 90_000);
+
+    it('a later answer the app can’t do (after the password): stops the same way rather than wait', async () => {
+        const { hs, masterBefore } = await deviceHoldingCrossSigning();
+        mounted = await renderWithClient(
+            mx as MatrixClient,
+            <DeviceVerificationReset onCancel={() => undefined} />
+        );
+        await click(buttonsNamed('Reset')[0]);
+        await submit();
+        await waitFor(() => bodyText().includes('Account Password'), {
+            what: 'the password stage',
+            timeoutMs: 30_000,
+        });
+        // While the password prompt is open the attempt is writing: the
+        // reset dialog's ✕ refuses to close it.
+        expect(headerClose('Reset Device Verification').disabled).toBe(true);
+        hs.failNext('POST', '/keys/device_signing/upload', MAS_RESET_ANSWER);
+        await enterPassword();
+        await waitFor(
+            () =>
+                bodyText().includes(
+                    setupConfirmUnsupportedText(['org.matrix.cross_signing_reset'])
+                ),
+            { what: 'the attempt to stop', timeoutMs: 30_000 }
+        );
+        expect(bodyText()).toContain(SETUP_PARTWAY_TEXT.cross_signing.what);
+        expect(bodyText()).not.toContain('Account Password');
+        expect(bodyText()).not.toContain(NOT_SUPPORTED_BY_CLIENT);
+        expect(hs.masterKey()).toBe(masterBefore);
+        const partwayKey = await shownRecoveryKey();
+        expect(await opensDefaultSecretStorage(hs, partwayKey)).toBe(true);
+        expect(headerClose('Reset Device Verification').disabled).toBe(false);
+    }, 90_000);
 });

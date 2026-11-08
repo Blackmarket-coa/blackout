@@ -1,4 +1,4 @@
-import React, { FormEventHandler, forwardRef, useCallback, useState } from 'react';
+import React, { FormEventHandler, forwardRef, useCallback, useRef, useState } from 'react';
 import {
     Dialog,
     Header,
@@ -24,14 +24,19 @@ import { AsyncStatus, useAsyncCallback } from '../hooks/useAsyncCallback';
 import { clearSecretStorageKeys } from '../../client/secretStorageKeys';
 import {
     SETUP_CONFIRM_CANCELLED_TEXT,
+    SETUP_CONFIRM_UNSUPPORTED_NEXT,
     SETUP_PARTWAY_TEXT,
+    SETUP_WRITING_TEXT,
     checkAccountKeyState,
     checkBackupState,
+    partwayStageAfter,
+    setupConfirmUnsupportedText,
     setupRefusal,
     type SetupMode,
     type SetupPartwayStage,
 } from '../../client/keyBackupCheck';
-import { ActionUIA, ActionUIAFlowsLoader } from './ActionUIA';
+import { getSupportedUIAFlows } from '../utils/matrix-uia';
+import { ActionUIA, ActionUIAFlowsLoader, SUPPORTED_IN_APP_UIA_STAGES } from './ActionUIA';
 import { useMatrixClient } from '../hooks/useMatrixClient';
 import { useAlive } from '../hooks/useAlive';
 import { UseStateProvider } from './UseStateProvider';
@@ -86,10 +91,11 @@ type OwnCrossSigning = { masterKey: string; complete: boolean };
 
 /**
  * An attempt failed, or its account confirmation was cancelled, after it had
- * started writing the account's secret storage. `stage` says where.
+ * started writing the account's secret storage. `stage` says where; `next`,
+ * when set, replaces the stage's own next line.
  */
 class SetupStoppedPartway extends Error {
-    constructor(message: string, readonly stage: SetupPartwayStage) {
+    constructor(message: string, readonly stage: SetupPartwayStage, readonly next?: string) {
         super(message);
     }
 }
@@ -100,6 +106,34 @@ class SetupConfirmCancelled extends Error {
         super(SETUP_CONFIRM_CANCELLED_TEXT);
     }
 }
+
+/**
+ * The homeserver asked the cross-signing upload for an account confirmation
+ * the app cannot do (`setupConfirmUnsupportedText`).
+ */
+class SetupConfirmUnsupported extends Error {
+    constructor(stages: readonly string[]) {
+        super(setupConfirmUnsupportedText(stages));
+    }
+}
+
+/**
+ * The form was closed (unmounted) before the attempt's next write: it writes
+ * nothing more. Never shown, since nothing is left to show it in.
+ */
+class SetupAbandoned extends Error {
+    constructor() {
+        super('The window was closed, so the setup stopped before its next change.');
+    }
+}
+
+/** Whether the app can do one of the flows a UIA answer offers (`ActionUIAFlowsLoader`'s test). */
+const confirmationSupported = (authData: IAuthData): boolean =>
+    getSupportedUIAFlows(authData.flows ?? [], SUPPORTED_IN_APP_UIA_STAGES).length > 0;
+
+/** Every stage a UIA answer's flows name, once each. */
+const confirmationStages = (authData: IAuthData): string[] =>
+    Array.from(new Set((authData.flows ?? []).flatMap((flow) => flow.stages ?? [])));
 
 /** The line to show for a failure: its message, or a fixed line when it has none. */
 const failureText = (error: unknown): string =>
@@ -115,6 +149,13 @@ type HeldRecoveryKey = { key: GeneratedSecretStorageKey; stage: SetupPartwayStag
 type SetupVerificationProps = {
     onComplete: (recoveryKey: string) => void;
     /**
+     * Called with `true` right before an attempt's first write and with
+     * `false` once that attempt has settled, its recovery key on screen (the
+     * finished key through `onComplete`, or the partway key). The dialogs
+     * below refuse to close in between (seventh review).
+     */
+    onWritingChange?: (writing: boolean) => void;
+    /**
      * `'setup'` (default): the from-scratch flow, which goes on only when the
      * homeserver answers that the account has neither a backup nor
      * cross-signing. `'reset'`: the warned flow, which replaces cross-signing
@@ -122,7 +163,11 @@ type SetupVerificationProps = {
      */
     mode?: SetupMode;
 };
-export function SetupVerification({ onComplete, mode = 'setup' }: SetupVerificationProps) {
+export function SetupVerification({
+    onComplete,
+    onWritingChange,
+    mode = 'setup',
+}: SetupVerificationProps) {
     const mx = useMatrixClient();
     const alive = useAlive();
 
@@ -130,6 +175,15 @@ export function SetupVerification({ onComplete, mode = 'setup' }: SetupVerificat
     const [nextAuthData, setNextAuthData] = useState<IAuthData | null>(); // null means no next action.
     const [ownCrossSigning, setOwnCrossSigning] = useState<OwnCrossSigning | null>(null);
     const [heldKey, setHeldKey] = useState<HeldRecoveryKey | null>(null);
+    const [writing, setWriting] = useState(false);
+
+    const markWriting = useCallback(
+        (value: boolean) => {
+            if (alive()) setWriting(value);
+            onWritingChange?.(value);
+        },
+        [alive, onWritingChange]
+    );
 
     const handleAction = useCallback(
         async (authDict: AuthDict) => {
@@ -140,6 +194,14 @@ export function SetupVerification({ onComplete, mode = 'setup' }: SetupVerificat
                 setNextAuthData(null);
             }
             const [authData] = await uiaAction.callback(authDict);
+
+            // A later stage the app cannot do stops the attempt here, as at
+            // the first answer (`authUploadDeviceSigningKeys`), rather than
+            // leave it waiting on a prompt nobody can answer.
+            if (authData && !confirmationSupported(authData)) {
+                uiaAction.cancelCallback(new SetupConfirmUnsupported(confirmationStages(authData)));
+                return;
+            }
 
             if (alive() && authData) {
                 setNextAuthData(authData);
@@ -165,6 +227,16 @@ export function SetupVerification({ onComplete, mode = 'setup' }: SetupVerificat
                     .catch((error) => {
                         if (error instanceof MatrixError && error.httpStatus === 401) {
                             const authData = error.data as IAuthData;
+                            // A confirmation the app cannot do (Matrix
+                            // Authentication Service's
+                            // `org.matrix.cross_signing_reset`, say) stops the
+                            // attempt now, so it settles and shows its key;
+                            // before, the form showed "not supported" with no
+                            // way out and the attempt never settled.
+                            if (!confirmationSupported(authData)) {
+                                reject(new SetupConfirmUnsupported(confirmationStages(authData)));
+                                return;
+                            }
                             const action = makeUIAAction(
                                 authData,
                                 makeRequest as PerformAction<void>,
@@ -232,62 +304,113 @@ export function SetupVerification({ onComplete, mode = 'setup' }: SetupVerificat
                 if (!encodedPrivateKey) {
                     throw new Error('Unexpected Error! Failed to create recovery key.');
                 }
-                clearSecretStorageKeys();
 
-                let step: 'secret_storage' | 'cross_signing' | 'backup' = 'secret_storage';
+                // The dialog's close button stays live through the check
+                // above, which can wait up to ACCOUNT_KEY_CHECK_TIMEOUT_MS a
+                // request, and through the key's derivation from a
+                // passphrase. A close there unmounts this form: the attempt
+                // stops and writes nothing (seventh review; before, it went
+                // on writing with nothing on screen, and its recovery key was
+                // never shown). From here on the dialog refuses to close
+                // (`onWritingChange`) until the attempt has settled and its
+                // key is on screen. Nothing runs between this test and that
+                // call, so no click lands in between.
+                if (!alive()) throw new SetupAbandoned();
+                markWriting(true);
+                // Another way out of the form while it writes (the chip's
+                // message becoming readable unmounts the chip and its
+                // overlay) is not a close: the next write does not start.
+                const stillOpen = () => {
+                    if (!alive()) throw new SetupAbandoned();
+                };
+
                 try {
-                    // With the form's own cross-signing kept, this also
-                    // stores those keys under the new recovery key: this
-                    // device holds them, and the storage is new.
-                    await crypto.bootstrapSecretStorage({
-                        createSecretStorageKey: async () => recoveryKeyData,
-                        setupNewSecretStorage: true,
-                    });
+                    clearSecretStorageKeys();
 
-                    step = 'cross_signing';
-                    if (!keepOwnCrossSigning) {
-                        let complete = false;
-                        try {
-                            await crypto.bootstrapCrossSigning({
-                                authUploadDeviceSigningKeys,
-                                setupNewCrossSigning: true,
-                            });
-                            complete = true;
-                        } finally {
-                            // The master key this attempt made, whether or not
-                            // its upload got through: the next attempt goes on
-                            // past the check only if the homeserver holds it.
-                            const masterKey = await crypto.getCrossSigningKeyId().catch(() => null);
-                            if (alive()) {
-                                setOwnCrossSigning(masterKey ? { masterKey, complete } : null);
+                    let step: 'secret_storage' | 'cross_signing' | 'backup' = 'secret_storage';
+                    try {
+                        // With the form's own cross-signing kept, this also
+                        // stores those keys under the new recovery key: this
+                        // device holds them, and the storage is new.
+                        await crypto.bootstrapSecretStorage({
+                            createSecretStorageKey: async () => recoveryKeyData,
+                            setupNewSecretStorage: true,
+                        });
+
+                        stillOpen();
+                        step = 'cross_signing';
+                        if (!keepOwnCrossSigning) {
+                            let complete = false;
+                            try {
+                                await crypto.bootstrapCrossSigning({
+                                    authUploadDeviceSigningKeys,
+                                    setupNewCrossSigning: true,
+                                });
+                                complete = true;
+                            } finally {
+                                // The master key this attempt made, whether or not
+                                // its upload got through: the next attempt goes on
+                                // past the check only if the homeserver holds it.
+                                const masterKey = await crypto
+                                    .getCrossSigningKeyId()
+                                    .catch(() => null);
+                                if (alive()) {
+                                    setOwnCrossSigning(masterKey ? { masterKey, complete } : null);
+                                }
                             }
                         }
+
+                        stillOpen();
+                        step = 'backup';
+                        await crypto.resetKeyBackup();
+                    } catch (error) {
+                        if (error instanceof SetupAbandoned) throw error;
+                        // From the first write on, the account's secret storage may
+                        // open only with this attempt's recovery key (S9, sixth
+                        // review): show it, say how far the attempt got, and offer
+                        // Continue only where the next attempt can finish.
+                        let attempt: SetupPartwayStage;
+                        if (step === 'backup') {
+                            // `resetKeyBackup` creates the backup before it stores
+                            // the backup's key, so ask whether one exists now. Only
+                            // a 404 M_NOT_FOUND means none.
+                            const { backup } = await checkBackupState(mx);
+                            attempt = backup === 'none' ? 'backup_none' : 'backup_unclear';
+                        } else {
+                            attempt = step;
+                        }
+                        // Never back to a less advanced stage than an earlier
+                        // attempt reached (seventh review): this one undid
+                        // nothing that attempt wrote.
+                        const stage = partwayStageAfter(
+                            attempt,
+                            heldKey?.stage,
+                            step === 'backup' || (step === 'secret_storage' && keepOwnCrossSigning)
+                        );
+                        const next =
+                            error instanceof SetupConfirmUnsupported &&
+                            SETUP_PARTWAY_TEXT[stage].next !== undefined
+                                ? SETUP_CONFIRM_UNSUPPORTED_NEXT
+                                : undefined;
+                        if (alive()) setHeldKey({ key: recoveryKeyData, stage });
+                        throw new SetupStoppedPartway(failureText(error), stage, next);
                     }
 
-                    step = 'backup';
-                    await crypto.resetKeyBackup();
-                } catch (error) {
-                    // From the first write on, the account's secret storage may
-                    // open only with this attempt's recovery key (S9, sixth
-                    // review): show it, say how far the attempt got, and offer
-                    // Continue only where the next attempt can finish.
-                    let stage: SetupPartwayStage;
-                    if (step === 'backup') {
-                        // `resetKeyBackup` creates the backup before it stores
-                        // the backup's key, so ask whether one exists now. Only
-                        // a 404 M_NOT_FOUND means none.
-                        const { backup } = await checkBackupState(mx);
-                        stage = backup === 'none' ? 'backup_none' : 'backup_unclear';
-                    } else {
-                        stage = step;
-                    }
-                    if (alive()) setHeldKey({ key: recoveryKeyData, stage });
-                    throw new SetupStoppedPartway(failureText(error), stage);
+                    onComplete(encodedPrivateKey);
+                } finally {
+                    markWriting(false);
                 }
-
-                onComplete(encodedPrivateKey);
             },
-            [mx, mode, onComplete, authUploadDeviceSigningKeys, ownCrossSigning, heldKey, alive]
+            [
+                mx,
+                mode,
+                onComplete,
+                markWriting,
+                authUploadDeviceSigningKeys,
+                ownCrossSigning,
+                heldKey,
+                alive,
+            ]
         )
     );
 
@@ -295,7 +418,7 @@ export function SetupVerification({ onComplete, mode = 'setup' }: SetupVerificat
     const latestError = setupState.status === AsyncStatus.Error ? setupState.error : undefined;
     const partwayNext =
         latestError instanceof SetupStoppedPartway
-            ? SETUP_PARTWAY_TEXT[latestError.stage].next
+            ? latestError.next ?? SETUP_PARTWAY_TEXT[latestError.stage].next
             : undefined;
     const offerContinue = !heldKey || SETUP_PARTWAY_TEXT[heldKey.stage].next !== undefined;
 
@@ -357,7 +480,11 @@ export function SetupVerification({ onComplete, mode = 'setup' }: SetupVerificat
                     </Text>
                 )}
                 {partwayNext && <Text size="T200">{partwayNext}</Text>}
+                {writing && <Text size="T200">{SETUP_WRITING_TEXT}</Text>}
                 {nextAuthData !== null && uiaAction && (
+                    // A UIA answer with no flow the app can do stops the
+                    // attempt before it gets here (`confirmationSupported`);
+                    // `unsupported` is a fallback that stays unreached.
                     <ActionUIAFlowsLoader
                         authData={nextAuthData ?? uiaAction.authData}
                         unsupported={() => (
@@ -448,12 +575,35 @@ export function RecoveryKeyDisplay({ recoveryKey, lead }: RecoveryKeyDisplayProp
     );
 }
 
+/**
+ * The setup and reset dialogs' close: refused while their form is writing
+ * (`SetupVerification`'s `onWritingChange`), so an attempt that has started
+ * changing the account always reaches the screen that shows its recovery key
+ * (seventh review). The button is disabled, and the ref refuses a click that
+ * comes before React has re-rendered it. Escape and a click outside never
+ * close these dialogs: every overlay that holds them sets the focus trap's
+ * `escapeDeactivates` and `clickOutsideDeactivates` to false.
+ */
+const useCloseUnlessWriting = (onCancel: () => void) => {
+    const writingRef = useRef(false);
+    const [writing, setWriting] = useState(false);
+    const onWritingChange = useCallback((value: boolean) => {
+        writingRef.current = value;
+        setWriting(value);
+    }, []);
+    const close = useCallback(() => {
+        if (!writingRef.current) onCancel();
+    }, [onCancel]);
+    return { writing, onWritingChange, close };
+};
+
 type DeviceVerificationSetupProps = {
     onCancel: () => void;
 };
 export const DeviceVerificationSetup = forwardRef<HTMLDivElement, DeviceVerificationSetupProps>(
     ({ onCancel }, ref) => {
         const [recoveryKey, setRecoveryKey] = useState<string>();
+        const { writing, onWritingChange, close } = useCloseUnlessWriting(onCancel);
 
         return (
             <Dialog ref={ref}>
@@ -468,7 +618,13 @@ export const DeviceVerificationSetup = forwardRef<HTMLDivElement, DeviceVerifica
                     <Box grow="Yes">
                         <Text size="H4">Setup Device Verification</Text>
                     </Box>
-                    <IconButton size="300" radii="300" onClick={onCancel}>
+                    <IconButton
+                        size="300"
+                        radii="300"
+                        onClick={close}
+                        disabled={writing}
+                        aria-label="Close"
+                    >
                         <Icon src={Icons.Cross} />
                     </IconButton>
                 </Header>
@@ -476,7 +632,10 @@ export const DeviceVerificationSetup = forwardRef<HTMLDivElement, DeviceVerifica
                     {recoveryKey ? (
                         <RecoveryKeyDisplay recoveryKey={recoveryKey} />
                     ) : (
-                        <SetupVerification onComplete={setRecoveryKey} />
+                        <SetupVerification
+                            onComplete={setRecoveryKey}
+                            onWritingChange={onWritingChange}
+                        />
                     )}
                 </Box>
             </Dialog>
@@ -489,6 +648,7 @@ type DeviceVerificationResetProps = {
 export const DeviceVerificationReset = forwardRef<HTMLDivElement, DeviceVerificationResetProps>(
     ({ onCancel }, ref) => {
         const [reset, setReset] = useState(false);
+        const { writing, onWritingChange, close } = useCloseUnlessWriting(onCancel);
 
         return (
             <Dialog ref={ref}>
@@ -503,7 +663,13 @@ export const DeviceVerificationReset = forwardRef<HTMLDivElement, DeviceVerifica
                     <Box grow="Yes">
                         <Text size="H4">Reset Device Verification</Text>
                     </Box>
-                    <IconButton size="300" radii="300" onClick={onCancel}>
+                    <IconButton
+                        size="300"
+                        radii="300"
+                        onClick={close}
+                        disabled={writing}
+                        aria-label="Close"
+                    >
                         <Icon src={Icons.Cross} />
                     </IconButton>
                 </Header>
@@ -514,7 +680,11 @@ export const DeviceVerificationReset = forwardRef<HTMLDivElement, DeviceVerifica
                                 recoveryKey ? (
                                     <RecoveryKeyDisplay recoveryKey={recoveryKey} />
                                 ) : (
-                                    <SetupVerification onComplete={setRecoveryKey} mode="reset" />
+                                    <SetupVerification
+                                        onComplete={setRecoveryKey}
+                                        onWritingChange={onWritingChange}
+                                        mode="reset"
+                                    />
                                 )
                             }
                         </UseStateProvider>
@@ -542,7 +712,12 @@ export const DeviceVerificationReset = forwardRef<HTMLDivElement, DeviceVerifica
                                 account's secret storage opening only with the
                                 new recovery key, holding keys the homeserver
                                 never received; the form then shows that key
-                                (sixth review, `SETUP_PARTWAY_TEXT`). */}
+                                (sixth review, `SETUP_PARTWAY_TEXT`). From the
+                                first write until the attempt settles, this
+                                dialog refuses to close, and a confirmation
+                                Blackout can't do (anything but the password
+                                or single sign-on) stops the attempt there
+                                with that key shown (seventh review). */}
                             <Text size="T300">
                                 Anyone you have verified with will see security alerts, and you will
                                 get a new recovery key and a new key backup. If your account already
