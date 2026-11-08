@@ -452,6 +452,7 @@ brace-expansion 5.0.12. It returns GHSA-3g3m for glob 11.1.0, 13.0.6 and
        10.14.0 brings `^10.2.6`, which has the flaw and would be hidden by
        this entry.
     3. Re-check by 2026-12-01.
+    4. Done on 2026-11-08: GitHub corrected `introduced` to 7.0.0 on 2026-11-04, the scanner reported this entry as unused, and the entry and its mirror were deleted ([record](dependency-advisories-2026-11-08.md)).
 -   **Source:** OSV and GitHub advisory files; minimatch 3.1.5, 4.2.6, 5.0.0,
     5.1.9, 6.0.0, 6.2.0, 6.2.3, 7.0.0, 7.0.1, 7.1.0, 7.3.0, 7.4.0, 7.4.9,
     9.0.9, 10.2.0 to 10.2.6 and 11.0.0 to 11.0.3 tarballs and source maps;
