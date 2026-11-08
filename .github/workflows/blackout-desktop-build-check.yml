@@ -68,7 +68,8 @@ on:
             # deployment-readiness job runs tools/ci/check-duplicate-paths.mjs
             # (pnpm guard:duplicate-paths), which compares names without the
             # last extension, a name against a sibling's name without its
-            # last extension, and whole paths. Any other break that
+            # last extension, whole paths, and directory paths. Any other
+            # break that
             # shows only on macOS or Windows, in a change to the rest of the
             # client, is still built on Linux only.
             - 'apps/blackout-client/vite.config.*'

@@ -6,7 +6,7 @@
  * first three build there and break only where the filesystem is not: the
  * macOS and Windows runners, and developer machines.
  *
- * Four checks, each reported on its own:
+ * Five checks, each reported on its own:
  *
  *   1. Whole paths that are equal ignoring case (`src/Foo.ts` beside
  *      `src/foo.ts`, or `a.TS` beside `a.ts`). A case-insensitive checkout
@@ -32,7 +32,15 @@
  *      `Foo.css.ts` on Linux and `foo.css` on macOS or Windows, and a named
  *      import then fails there as the tool-bag pair did. `Foo.css` beside
  *      `Foo.css.ts` passes: the exact name wins on every filesystem.
- *   4. Absolute route path literals (`path: '/x'`) declared in more than one
+ *   4. Two directories whose paths are equal ignoring case but not exactly
+ *      (`src/Foo/` beside `src/foo/`), whatever their files are called. A
+ *      case-insensitive checkout writes both directories' files into one and
+ *      git then reports the other spelling's files as deleted, with the
+ *      checkout's as untracked. Checks 1 to 3 see such a pair only when two
+ *      of its files collide (`src/Foo/bar.ts` beside `src/foo/Bar.tsx`). A
+ *      checkout hazard rather than a build fault: an import that resolves on
+ *      macOS but not on Linux fails Linux CI first.
+ *   5. Absolute route path literals (`path: '/x'`) declared in more than one
  *      source file.
  *
  * Not covered: a file against a sibling directory (`Foo.ts` beside `foo/`);
@@ -135,6 +143,27 @@ export function findNameAgainstStemCollisions(files) {
     return pairs.sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
 }
 
+// Check 4 above. Every directory on the way to a tracked file (`a/b/c.ts`
+// gives `a` and `a/b`), grouped ignoring case; each group with more than one
+// spelling is returned, its spellings sorted. `a/B/c/x.ts` beside
+// `a/b/C/y.ts` gives two groups, one per level that differs.
+export function findCaseOnlyDirectoryCollisions(files) {
+    const byLower = new Map();
+    for (const file of files) {
+        for (let dir = posix.dirname(file); dir !== '.'; dir = posix.dirname(dir)) {
+            const key = dir.toLowerCase();
+            const spellings = byLower.get(key) ?? new Set();
+            spellings.add(dir);
+            byLower.set(key, spellings);
+        }
+    }
+
+    return [...byLower.values()]
+        .filter((spellings) => spellings.size > 1)
+        .map((spellings) => [...spellings].sort())
+        .sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
+}
+
 function isTestLikeFile(file) {
     return (
         file.includes('/tests/') ||
@@ -196,6 +225,7 @@ export function runCli() {
     const pathCollisions = checkCaseInsensitivePathCollisions(files);
     const nameCollisions = findCaseOnlyNameCollisions(files);
     const stemCollisions = findNameAgainstStemCollisions(files);
+    const directoryCollisions = findCaseOnlyDirectoryCollisions(files);
     const duplicateRoutePaths = collectRoutePathLiterals(files);
 
     if (pathCollisions.length === 0) {
@@ -233,6 +263,19 @@ export function runCli() {
         console.error('  Rename one file of each pair; there is no allowlist.');
     }
 
+    if (directoryCollisions.length === 0) {
+        printOk('No directory paths that differ only by case found.');
+    } else {
+        printError(
+            'Directory paths that differ only by case ' +
+                '(a case-insensitive checkout writes their files into one directory):'
+        );
+        for (const group of directoryCollisions) {
+            console.error(`  - ${group.map((dir) => `${dir}/`).join('  <->  ')}`);
+        }
+        console.error('  Rename one directory of each group; there is no allowlist.');
+    }
+
     if (duplicateRoutePaths.length === 0) {
         printOk('No duplicate absolute route path literals found.');
     } else {
@@ -249,6 +292,7 @@ export function runCli() {
         pathCollisions.length > 0 ||
         nameCollisions.length > 0 ||
         stemCollisions.length > 0 ||
+        directoryCollisions.length > 0 ||
         duplicateRoutePaths.length > 0
     ) {
         process.exit(1);
@@ -259,14 +303,30 @@ export function runCli() {
 // import the pure functions without triggering it. Both sides are real paths:
 // the ESM loader resolves symlinks in import.meta.url, while process.argv[1]
 // keeps the path as given, so comparing the two as given would skip the scan,
-// and exit 0, whenever the script is called through a symlinked path.
+// and exit 0, whenever the script is called through a symlinked path. When
+// process.argv[1] names nothing that can be resolved (`node --import` of this
+// file ahead of a main module that does not exist), the question has no
+// answer, and the script fails rather than exit 0 with nothing scanned.
+// import.meta.main would answer it, but it exists only since Node 22.18 and
+// package.json's engines allow 22.11, where undefined would read as "not the
+// main module": the same silent pass. With no main script file at all
+// (node -e or -p, which run no file of their own) the file was imported, so
+// the scan does not run; piping this file to node lands here too, and is not
+// a way the guard is run.
 function isInvokedDirectly() {
     if (!process.argv[1]) return false;
+    let invokedPath;
     try {
-        return realpathSync(process.argv[1]) === fileURLToPath(import.meta.url);
-    } catch {
-        return false;
+        invokedPath = realpathSync(process.argv[1]);
+    } catch (error) {
+        printError(
+            `Cannot resolve process.argv[1] (${process.argv[1]}): ${error.message}. ` +
+                'Whether this script was invoked directly is unknown, so nothing was ' +
+                'scanned; this is a failure, not a pass.'
+        );
+        process.exit(1);
     }
+    return invokedPath === fileURLToPath(import.meta.url);
 }
 
 if (isInvokedDirectly()) {

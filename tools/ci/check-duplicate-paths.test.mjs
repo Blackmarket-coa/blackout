@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 
 import {
     checkCaseInsensitivePathCollisions,
+    findCaseOnlyDirectoryCollisions,
     findCaseOnlyNameCollisions,
     findNameAgainstStemCollisions,
     nameWithoutLastExtension,
@@ -119,9 +120,38 @@ test('the whole-path check is kept for what the name rule does not see', () => {
     ]);
 });
 
+test('directories whose paths differ only by case fail, whatever their files are called', () => {
+    // The files collide under no other check (x against y), so without this
+    // one the pair passes while a case-insensitive checkout merges the two
+    // directories.
+    const pair = ['src/Foo/x.ts', 'src/foo/y.ts'];
+    assert.deepEqual(findCaseOnlyDirectoryCollisions(pair), [['src/Foo', 'src/foo']]);
+    assert.deepEqual(checkCaseInsensitivePathCollisions(pair), []);
+    assert.deepEqual(findCaseOnlyNameCollisions(pair), []);
+    assert.deepEqual(findNameAgainstStemCollisions(pair), []);
+    // One spelling, many files: nothing. Root files have no directory.
+    assert.deepEqual(findCaseOnlyDirectoryCollisions(['src/foo/x.ts', 'src/foo/y.ts']), []);
+    assert.deepEqual(findCaseOnlyDirectoryCollisions(['Foo.md', 'foo.txt', 'a/b.ts']), []);
+    // Different names are different directories everywhere.
+    assert.deepEqual(findCaseOnlyDirectoryCollisions(['a/Foo.ts', 'b/foo.ts']), []);
+    // Each level that differs is its own group, spellings sorted.
+    assert.deepEqual(findCaseOnlyDirectoryCollisions(['a/B/c/x.ts', 'a/b/C/y.ts']), [
+        ['a/B', 'a/b'],
+        ['a/B/c', 'a/b/C'],
+    ]);
+    // Three spellings make one group.
+    assert.deepEqual(findCaseOnlyDirectoryCollisions(['Lib/a.ts', 'lib/b.ts', 'LIB/c.ts']), [
+        ['LIB', 'Lib', 'lib'],
+    ]);
+    // Non-ASCII directory names are compared by case too.
+    assert.deepEqual(findCaseOnlyDirectoryCollisions(['Café/a.ts', 'café/b.ts']), [
+        ['Café', 'café'],
+    ]);
+});
+
 // End to end: the script itself, run in a fresh repository. Every file pair
 // below differs in its full name, so it can exist on a case-insensitive
-// filesystem too.
+// filesystem too, except where a test says otherwise and skips itself there.
 
 // Inside a git hook GIT_DIR, GIT_INDEX_FILE and GIT_WORK_TREE point at the
 // outer repository; without this, git in the fixture would read its index.
@@ -205,6 +235,61 @@ test('the script runs when called through a symlinked path', () => {
     }
 });
 
+test('the script fails on src/Foo/ beside src/foo/ and names both directories', (t) => {
+    const { dir, env } = makeRepo({
+        'src/Foo/x.ts': 'export const x = 1;\n',
+        'src/foo/y.ts': 'export const y = 2;\n',
+    });
+    try {
+        // On a case-insensitive filesystem the two directories are one, so
+        // git tracks src/Foo/y.ts and the fixture does not exist as written.
+        if (fs.existsSync(path.join(dir, 'src/Foo/y.ts'))) {
+            t.skip('case-insensitive filesystem: the fixture cannot exist here');
+            return;
+        }
+        const res = spawnSync('node', [scriptPath], { cwd: dir, env, encoding: 'utf8' });
+        assert.equal(res.status, 1, res.stdout + res.stderr);
+        assert.match(res.stderr, /Directory paths that differ only by case/);
+        assert.match(res.stderr, /src\/Foo\/ {2}<-> {2}src\/foo\//);
+        // No other check sees the pair.
+        assert.match(res.stdout, /No case-insensitive file path collisions found/);
+        assert.match(res.stdout, /No case-only file name collisions found/);
+        assert.match(res.stdout, /No file name equals a sibling name without its last extension/);
+    } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+    }
+});
+
+test('the script fails, and says so, when process.argv[1] cannot be resolved', () => {
+    // `node --import <script> <missing>` evaluates the script before node
+    // reports the missing main module, with process.argv[1] naming a file
+    // that does not exist. A main guard that treats the resolution error as
+    // "not invoked directly" would let the preload finish silently; node's
+    // own error then ends the process, but a guard whose error path is a
+    // silent pass is wrong whatever ends it.
+    const { dir, env } = makeRepo({
+        'toolbag/ToolBag.tsx': 'export default function ToolBag() { return null; }\n',
+        'toolbag/toolbag.ts': 'export const entries = [];\n',
+    });
+    try {
+        const missing = path.join(dir, 'does-not-exist.mjs');
+        assert.equal(fs.existsSync(missing), false);
+        const res = spawnSync('node', ['--import', scriptPath, missing], {
+            cwd: dir,
+            env,
+            encoding: 'utf8',
+        });
+        assert.equal(res.status, 1, res.stdout + res.stderr);
+        assert.match(res.stderr, /Cannot resolve process\.argv\[1\] \(.*does-not-exist\.mjs\)/);
+        assert.match(res.stderr, /this is a failure, not a pass/);
+        // The guard ended the process itself: no scan ran, and node did not
+        // get as far as its own missing-module error.
+        assert.doesNotMatch(res.stdout + res.stderr, /collisions found|ERR_MODULE_NOT_FOUND/);
+    } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+    }
+});
+
 test('the script passes on styles beside a component and one stem with two extensions', () => {
     const res = runGuard({
         'toolbag/ToolBag.tsx': 'export default function ToolBag() { return null; }\n',
@@ -216,6 +301,7 @@ test('the script passes on styles beside a component and one stem with two exten
     assert.match(res.stdout, /No case-only file name collisions found/);
     assert.match(res.stdout, /No case-insensitive file path collisions found/);
     assert.match(res.stdout, /No file name equals a sibling name without its last extension/);
+    assert.match(res.stdout, /No directory paths that differ only by case found/);
     assert.match(res.stdout, /No duplicate absolute route path literals found/);
 });
 

@@ -168,10 +168,12 @@ jobs:
             # 41461043012; fixed in 9eab8c9) while Linux CI built it. It also
             # fails on a name that equals a sibling's name without its last
             # extension by case alone (foo.css beside Foo.css.ts: `./Foo.css`
-            # finds the styles module on Linux and the stylesheet elsewhere).
-            # The script also keeps its whole-path and route-literal checks,
-            # and needs only git and node. !cancelled(): a failure in one
-            # step does not hide the others.
+            # finds the styles module on Linux and the stylesheet elsewhere),
+            # and on two directories whose paths differ only by case (src/Foo/
+            # beside src/foo/), which a case-insensitive checkout merges into
+            # one. The script also keeps its whole-path and route-literal
+            # checks, and needs only git and node. !cancelled(): a failure in
+            # one step does not hide the others.
             - name: File names that collide on a case-insensitive filesystem
               if: ${{ !cancelled() }}
               run: node tools/ci/check-duplicate-paths.mjs

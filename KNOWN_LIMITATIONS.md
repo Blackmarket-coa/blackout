@@ -106,8 +106,10 @@ For the source-of-truth triage with tier/owner detail see
     chose not to add an x86_64 leg yet). `ci.yml`'s deployment-readiness
     job now also fails on any pull request whose tree has two such names
     (`tools/ci/check-duplicate-paths.mjs` compares names without the last
-    extension, ignoring case, and a name against a sibling's name without
-    its last extension, as `foo.css` beside `Foo.css.ts`). A pull request
+    extension, ignoring case, a name against a sibling's name without its
+    last extension, as `foo.css` beside `Foo.css.ts`, and two directories
+    whose paths differ only by case, which such a filesystem merges). A
+    pull request
     that changes the client
     anywhere else is still built only on Linux (by `ci.yml`), so any other
     break that shows only in the desktop shell or on a case-insensitive
