@@ -20,34 +20,10 @@
 # minimatch 5.1.9. The lodash prototype-pollution advisory
 # (GHSA-f23m-r3pf-42rh) was resolved on 2026-11-08 by moving the
 # pnpm.overrides pin "lodash@4.17.23" from "^4.18.0" to "^4.18.1". No
-# minimatch entry remains; its history is below.
-
-# image-size infinite-loop DoS, two advisories of the same class: crafted
-# JXL/HEIF box-types (GHSA-5p2g-fcmc-qvqq) and a zero-length ICNS entry
-# (GHSA-w3rx-r6r6-pgpr) each hang the parser and block the event loop.
-#
-# There is nothing to bump to: OSV lists EVERY version through 2.0.2 as
-# affected, including the whole 2.x line, and neither advisory names a fixed
-# version. This is the one case the "bump it instead" rule cannot cover.
-#
-# Does not apply to our usage. image-size is reached only through
-# metro -> @react-native/community-cli-plugin, i.e. React Native's build-time
-# bundler; it never ships in a runtime bundle, on device or on the web. The
-# images it parses are the asset files committed in this repo at bundle time,
-# not remote or user-supplied input, so the "remote attacker supplies a crafted
-# buffer" precondition has no path here.
-#
-# ignoreUntil forces a re-check for an upstream fix (or a metro release that
-# drops the dependency) rather than silencing this indefinitely.
-[[IgnoredVulns]]
-id = "GHSA-5p2g-fcmc-qvqq"
-ignoreUntil = 2026-11-30
-reason = "No fixed version exists (all versions <=2.0.2 affected). Build-time only: metro's asset pipeline parses repo-committed images, never remote input."
-
-[[IgnoredVulns]]
-id = "GHSA-w3rx-r6r6-pgpr"
-ignoreUntil = 2026-11-30
-reason = "No fixed version exists (all versions <=2.0.2 affected). Build-time only: metro's asset pipeline parses repo-committed images, never remote input."
+# minimatch entry remains; its history is below. The two image-size
+# infinite-loop advisories (GHSA-5p2g-fcmc-qvqq, GHSA-w3rx-r6r6-pgpr) were
+# resolved on 2026-11-02 by moving metro to 0.83.8, which measures images
+# with a parser of its own and no longer depends on image-size.
 
 # deepmerge prototype poisoning (GHSA-gcqx-w48m-w2h4 / CVE-2026-93753): when a
 # source object has an own `__proto__` key (as JSON.parse produces) and the
