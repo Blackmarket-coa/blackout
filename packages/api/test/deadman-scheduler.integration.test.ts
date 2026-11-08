@@ -7,6 +7,7 @@ import {
     computeDeadlines,
     evaluateSweepTransition,
     evaluateTransition,
+    ownerAttemptRefusedSinceCheckIn,
     validateArmInput,
 } from '../src/services/deadmanScheduler';
 import type { DeadmanSwitchRecord } from '../src/db/types';
@@ -280,4 +281,49 @@ test('the sweep leaves terminal switches alone however late it is', () => {
         );
         assert.equal(transition.kind, 'none');
     }
+});
+
+test('a refused attempt of the owner’s holds the switch only after its last landed check-in: later counts, the same moment or earlier does not, and none at all does not (decision 31)', () => {
+    // Round 14 of part 2's review: the column the API process carries into
+    // the switch once its database answers is read by every sweep as that
+    // process's own note is; a landed check-in is the owner's later word.
+    const lastCheckInAt = '2026-01-01T00:00:00.000Z';
+    assert.equal(
+        ownerAttemptRefusedSinceCheckIn(
+            baseRecord({ lastCheckInAt, ownerAttemptRefusedAt: '2026-01-01T00:00:00.001Z' })
+        ),
+        true,
+        'a millisecond after the check-in'
+    );
+    assert.equal(
+        ownerAttemptRefusedSinceCheckIn(
+            baseRecord({ lastCheckInAt, ownerAttemptRefusedAt: lastCheckInAt })
+        ),
+        false,
+        'the same moment'
+    );
+    assert.equal(
+        ownerAttemptRefusedSinceCheckIn(
+            baseRecord({ lastCheckInAt, ownerAttemptRefusedAt: '2025-12-31T23:59:59.999Z' })
+        ),
+        false,
+        'before it'
+    );
+    assert.equal(ownerAttemptRefusedSinceCheckIn(baseRecord({ lastCheckInAt })), false, 'none');
+});
+
+test('a check-in forgets the owner’s refused attempt as it ends a backlog window: both properties stay, undefined, so the Postgres write clears both columns', () => {
+    const refreshed = applyCheckIn(
+        baseRecord({
+            status: 'grace',
+            backlogGraceStartedAt: '2026-01-01T02:00:00.000Z',
+            ownerAttemptRefusedAt: '2026-01-01T01:30:00.000Z',
+        }),
+        new Date('2026-01-02T00:00:00.000Z')
+    );
+    assert.equal(refreshed.status, 'armed');
+    assert.ok(Object.prototype.hasOwnProperty.call(refreshed, 'ownerAttemptRefusedAt'));
+    assert.equal(refreshed.ownerAttemptRefusedAt, undefined);
+    assert.ok(Object.prototype.hasOwnProperty.call(refreshed, 'backlogGraceStartedAt'));
+    assert.equal(refreshed.backlogGraceStartedAt, undefined);
 });

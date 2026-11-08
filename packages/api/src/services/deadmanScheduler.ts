@@ -108,12 +108,14 @@ export const sweepDueAtMs = (record: DeadmanSwitchRecord): number =>
  *
  * With `outage.stalled`, the sweep was unable to act on this switch for some
  * of the time since it was due, however short, or the owner's check-in or
- * cancel was refused unanswered on this process (the database's statements
- * stood unanswered: no move was made and every owner's check-in on the
- * process was refused, as in an outage of the sweep's own), and the switch
- * gets the window whatever the tolerance says (round 11 of part 2's review:
- * a database stall an hour before a deadline refused the owner's check-in,
- * and the first pass after it, within the tolerance, fired the switch).
+ * cancel was refused unanswered, on this process (its note) or on any process
+ * that carried the refusal into the switch's own record once its database
+ * answered (`ownerAttemptRefusedSinceCheckIn`, decision 31): the database's
+ * statements stood unanswered, so no move was made and every owner's check-in
+ * on that process was refused, as in an outage of the sweep's own, and the
+ * switch gets the window whatever the tolerance says (round 11 of part 2's
+ * review: a stall an hour before a deadline refused the owner's check-in, and
+ * the first pass after it, within the tolerance, fired the switch).
  */
 export const evaluateSweepTransition = (
     record: DeadmanSwitchRecord,
@@ -142,10 +144,25 @@ export const evaluateSweepTransition = (
 };
 
 /**
+ * Whether the owner's check-in or cancel was refused unanswered, by any
+ * process, after the switch's last landed check-in (decision 31 of the
+ * release envelope record): the refusing process carried the attempt's moment
+ * into the switch (`ownerAttemptRefusedAt`) once its database answered, and a
+ * landed check-in clears it, so the sweep reads it as it reads its own note.
+ * A moment at or before the last check-in (a row written plainly by a process
+ * that had the field, over a check-in that landed since) holds nothing: that
+ * check-in is the owner's later word.
+ */
+export const ownerAttemptRefusedSinceCheckIn = (record: DeadmanSwitchRecord): boolean =>
+    record.ownerAttemptRefusedAt !== undefined &&
+    Date.parse(record.ownerAttemptRefusedAt) > Date.parse(record.lastCheckInAt);
+
+/**
  * Apply a fresh check-in at `now`. Resets the deadlines and returns the
- * switch in `armed` status, with any backlog window ended (the property stays,
- * as undefined, so the Postgres write-through clears the column). Throws if
- * the switch is terminal.
+ * switch in `armed` status, with any backlog window ended and any refused
+ * attempt of the owner's forgotten (each property stays, as undefined, so the
+ * Postgres write-through clears the column). Throws if the switch is
+ * terminal.
  */
 export const applyCheckIn = (record: DeadmanSwitchRecord, now: Date): DeadmanSwitchRecord => {
     if (record.status === 'triggered') {
@@ -167,6 +184,7 @@ export const applyCheckIn = (record: DeadmanSwitchRecord, now: Date): DeadmanSwi
         triggerAt,
         releaseAt,
         backlogGraceStartedAt: undefined,
+        ownerAttemptRefusedAt: undefined,
     };
 };
 

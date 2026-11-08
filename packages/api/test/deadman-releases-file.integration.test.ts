@@ -275,3 +275,35 @@ test('the owner’s check-in and cancel through the conditional write, the secon
     assert.equal(second.kind, 'applied');
     assert.equal(new FileBackedDb().getDeadmanSwitch(id)?.encryptedPayload, '');
 });
+
+test('the owner’s refused attempt (decision 31) survives a restart of the file store, and the check-in’s conditional write clears it', async () => {
+    const owner = randomUUID();
+    const refusedAt = '2026-01-01T00:30:00.000Z';
+    const sw = db.createDeadmanSwitch({
+        id: randomUUID(),
+        ownerId: owner,
+        roomId: '!room:test.local',
+        status: 'armed',
+        checkInIntervalSeconds: 3600,
+        gracePeriodSeconds: 0,
+        lastCheckInAt: '2026-01-01T00:00:00.000Z',
+        triggerAt: '2026-01-01T01:00:00.000Z',
+        releaseAt: '2026-01-01T01:00:00.000Z',
+        recipients: [randomUUID()],
+        encryptedPayload: 'legacy',
+        ownerAttemptRefusedAt: refusedAt,
+    });
+    assert.equal(new FileBackedDb().getDeadmanSwitch(sw.id)?.ownerAttemptRefusedAt, refusedAt);
+    const { applyCheckIn } = await import('../src/services/deadmanScheduler');
+    const refreshed = applyCheckIn(sw, new Date('2026-01-01T00:45:00.000Z'));
+    const outcome = await db.updateDeadmanSwitchIf(sw.id, sw, {
+        status: refreshed.status,
+        lastCheckInAt: refreshed.lastCheckInAt,
+        triggerAt: refreshed.triggerAt,
+        releaseAt: refreshed.releaseAt,
+        backlogGraceStartedAt: refreshed.backlogGraceStartedAt,
+        ownerAttemptRefusedAt: refreshed.ownerAttemptRefusedAt,
+    });
+    assert.equal(outcome.kind, 'applied');
+    assert.equal(new FileBackedDb().getDeadmanSwitch(sw.id)?.ownerAttemptRefusedAt, undefined);
+});

@@ -909,6 +909,18 @@ export interface DeadmanSwitchRecord {
      * migration 102.
      */
     backlogGraceStartedAt?: string;
+    /**
+     * When the owner's check-in or cancel was last refused because the
+     * database did not answer the API process in time, carried into the
+     * database by that process once it answered (decision 31 of the release
+     * envelope record, the operator's choice of 2026-11-02; migration 107).
+     * The sweep in any process gives a switch whose owner made such an
+     * attempt after its last landed check-in the backlog window at its
+     * deadline, as the refusing process's own sweep does from its note.
+     * Cleared by a landed check-in, a cancel, the trigger, the release's
+     * removal and the owner's account deletion.
+     */
+    ownerAttemptRefusedAt?: string;
     /** Absent on a row from before migration 106, which is `legacy`. */
     releaseFormat?: DeadmanSwitchReleaseFormat;
     /** When a release switch fired. A legacy switch never records it. */

@@ -1,0 +1,27 @@
+-- When the owner's check-in or cancel of a dead-man switch was last refused
+-- because the database did not answer the API process in time (decision 31
+-- of docs/security/release-envelope-2026-10-26.md, the operator's choice of
+-- 2026-11-02).
+--
+-- An API process that refuses a check-in or cancel as unanswered (503,
+-- `switch_write_unanswered`) notes the attempt in its own memory and, once
+-- the database answers it again, carries it here with one conditional
+-- statement: only onto a switch that has not fired or been cancelled, whose
+-- last check-in is still the one the refused attempt read, and whose column
+-- is null or older. The sweep, in whichever process runs it, then treats the
+-- switch as one whose owner was alive and tried: a switch whose owner made a
+-- refused attempt after its last landed check-in gets the backlog grace
+-- window at its deadline instead of firing (evaluateSweepTransition in
+-- packages/api/src/services/deadmanScheduler.ts), exactly as the refusing
+-- process's own sweep already did from its note. A landed check-in, a cancel,
+-- the trigger, the release's removal and the owner's account deletion clear
+-- it.
+--
+-- Without this column the note stayed in the refusing process: in a layout
+-- where the API process refuses the check-ins and a separate worker runs the
+-- sweep (deploy/docker/production), a check-in refused during a database
+-- outage that ended before the deadline never held the switch back, and it
+-- fired at its deadline unless the owner checked in again. The Postgres-backed
+-- store writes only columns that exist, so without it the field would be
+-- dropped on write and forgotten at a restart.
+ALTER TABLE deadman_switches ADD COLUMN IF NOT EXISTS owner_attempt_refused_at TIMESTAMPTZ;

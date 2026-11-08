@@ -32,7 +32,12 @@ import { deadmanSweepIntervalMs } from '../services/deadmanSweepScheduler';
 import { log } from '../telemetry/logger';
 import { requireAuthenticatedUser, requireDomainCapability } from './authz';
 import { emitDomainEvent, listDomainEvents } from './domain-events';
-import { applyCheckIn, evaluateSweepTransition, sweepDueAtMs } from '../services/deadmanScheduler';
+import {
+    applyCheckIn,
+    evaluateSweepTransition,
+    ownerAttemptRefusedSinceCheckIn,
+    sweepDueAtMs,
+} from '../services/deadmanScheduler';
 import type { FeatureModule } from './types';
 
 /**
@@ -279,7 +284,14 @@ const ownedSwitch = (id: string, subject: string): DeadmanSwitchRecord | undefin
  * window instead of firing, within the tolerance or not, as after an outage
  * of the sweep's own (round 11 of part 2's review: a stall an hour before a
  * deadline refused the owner's check-in, and the first pass after it fired
- * the switch). The sweep in another process knows only its own stalls.
+ * the switch). A check-in or cancel refused on another process reaches this
+ * one through the switch's own record: the refusing process carries the
+ * attempt into the database once its database answers again
+ * (`ownerAttemptRefusedAt`, decision 31, the operator's choice of
+ * 2026-11-02), and this sweep reads it as it reads its own note, so in the
+ * deployed layout a check-in the API process refused holds the switch back
+ * on the worker too. What stays one process's own is its stalls themselves,
+ * and a note whose process stopped before its database answered.
  */
 export async function sweepOverdueDeadmanSwitches(
     now: Date = new Date(),
@@ -291,10 +303,14 @@ export async function sweepOverdueDeadmanSwitches(
         const record = db.getDeadmanSwitch(listed.id);
         if (!record) continue;
         // Its owner's deletion has queued an erase this process has not seen
-        // land: not moved here meanwhile, so a switch whose erase is lost and
-        // whose row could not be read back is not fired for the deleted
-        // account by this process (round 13 of part 2's review). The erase,
-        // in the switch's lane, decides on Postgres's row when it runs.
+        // land, or has begun on this process and not yet reached the switch:
+        // not moved here meanwhile, so a switch whose erase is lost and whose
+        // row could not be read back is not fired for the deleted account by
+        // this process (round 13 of part 2's review), and nor is one whose
+        // deadline falls while the deletion awaits an earlier switch's
+        // statement or the owner's arms in flight, with the owner's row
+        // already gone from this mirror (round 14). The erase, in the
+        // switch's lane, decides on Postgres's row when it runs.
         if (db.deadmanSwitchErasePending(record.id)) continue;
         if (record.status === 'triggered' || record.status === 'cancelled') {
             db.clearOwnerWriteUnanswered(record.id);
@@ -306,8 +322,13 @@ export async function sweepOverdueDeadmanSwitches(
             db.clearOwnerWriteUnanswered(record.id);
             refused = undefined;
         }
+        // A refused attempt any process carried into the switch's own record
+        // once its database answered (decision 31): read as this process's
+        // note is, so the worker's sweep gives the window for a check-in the
+        // API process refused.
         const stalled =
             refused !== undefined ||
+            ownerAttemptRefusedSinceCheckIn(record) ||
             db.switchStatementsStalledBetween(sweepDueAtMs(record), now.getTime());
         const transition = evaluateSweepTransition(record, now, toleranceMs, { stalled });
         if (transition.kind === 'none') continue;
@@ -324,6 +345,9 @@ export async function sweepOverdueDeadmanSwitches(
         } else {
             updated = await db.advanceDeadmanSwitch(record.id, record, {
                 status: transition.record.status,
+                // The trigger ends a refused attempt's hold (decision 31); a
+                // move into grace keeps it for the release.
+                ...(transition.kind === 'triggered' ? { ownerAttemptRefusedAt: undefined } : {}),
             });
         }
         if (!updated) continue;
@@ -661,6 +685,9 @@ function createDeadmanRouter() {
                 releaseAt: refreshed.releaseAt,
                 // Ends a backlog window, so the next missed check-in can have one.
                 backlogGraceStartedAt: refreshed.backlogGraceStartedAt,
+                // And a refused attempt of the owner's: this check-in is their
+                // later word (decision 31).
+                ownerAttemptRefusedAt: refreshed.ownerAttemptRefusedAt,
             });
             if (outcome.kind === 'applied') {
                 updated = outcome.record;
@@ -740,6 +767,9 @@ function createDeadmanRouter() {
             const outcome = await db.updateDeadmanSwitchIf(id, existing, {
                 status: 'cancelled',
                 encryptedPayload: '',
+                // A cancelled switch never fires: a refused attempt of the
+                // owner's holds nothing any more (decision 31).
+                ownerAttemptRefusedAt: undefined,
             });
             if (outcome.kind === 'applied') {
                 updated = outcome.record;

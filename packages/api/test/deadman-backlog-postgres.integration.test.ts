@@ -140,9 +140,26 @@ test('account deletion’s erasure reaches Postgres: an unfired switch is cancel
                 recipients: ['recipient'],
                 encryptedPayload,
                 headline: 'label',
+                // The owner's data too (decision 31): erased with the switch,
+                // fired or not.
+                ownerAttemptRefusedAt: '2026-01-01T00:00:30.000Z',
             });
         const unfired = seed('armed', 'sealed-unfired');
         const fired = seed('triggered', 'sealed-fired');
+        await store.drain();
+        for (const id of [unfired.id, fired.id]) {
+            assert.ok(
+                (
+                    (
+                        await pg.query(
+                            'SELECT owner_attempt_refused_at FROM deadman_switches WHERE id = $1',
+                            [id]
+                        )
+                    ).rows[0] as { owner_attempt_refused_at: unknown }
+                ).owner_attempt_refused_at instanceof Date,
+                'the column is written (migration 107)'
+            );
+        }
 
         // What confirmAccountDeletion calls for each of the owner's switches:
         // since round 12 of part 2's review one statement each, decided on
@@ -153,7 +170,8 @@ test('account deletion’s erasure reaches Postgres: an unfired switch is cancel
 
         const rowOf = async (id: string) => {
             const res = await pg.query(
-                'SELECT status, encrypted_payload, headline FROM deadman_switches WHERE id = $1',
+                'SELECT status, encrypted_payload, headline, owner_attempt_refused_at ' +
+                    'FROM deadman_switches WHERE id = $1',
                 [id]
             );
             assert.equal(res.rows.length, 1, `switch ${id} exists`);
@@ -163,11 +181,13 @@ test('account deletion’s erasure reaches Postgres: an unfired switch is cancel
             status: 'cancelled',
             encrypted_payload: '',
             headline: null,
+            owner_attempt_refused_at: null,
         });
         assert.deepEqual(await rowOf(fired.id), {
             status: 'triggered',
             encrypted_payload: 'sealed-fired',
             headline: null,
+            owner_attempt_refused_at: null,
         });
 
         const restarted = new PostgresBackedDb();
@@ -177,6 +197,8 @@ test('account deletion’s erasure reaches Postgres: an unfired switch is cancel
         assert.equal(restarted.getDeadmanSwitch(unfired.id)?.headline, undefined);
         assert.equal(restarted.getDeadmanSwitch(fired.id)?.encryptedPayload, 'sealed-fired');
         assert.equal(restarted.getDeadmanSwitch(fired.id)?.headline, undefined);
+        assert.equal(restarted.getDeadmanSwitch(fired.id)?.ownerAttemptRefusedAt, undefined);
+        assert.equal(restarted.getDeadmanSwitch(unfired.id)?.ownerAttemptRefusedAt, undefined);
     } finally {
         await pg.close?.();
     }

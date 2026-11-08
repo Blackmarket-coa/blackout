@@ -2315,3 +2315,58 @@ test('the account deletion route revokes the session, then waits for the deletio
     assert.equal(await pending, 'returned');
     assert.ok(order.includes('end after the drain'));
 });
+
+test('a refused attempt carried into a switch’s record (decision 31) is read in memory mode as the Postgres store reads its own: after the last check-in it gives the window at the deadline, at or before it the switch fires; the check-in, the cancel and the trigger forget it, and the owner’s export lists it', async () => {
+    // Round 14 of part 2's review: the field every sweep reads
+    // (`ownerAttemptRefusedSinceCheckIn`) is one more field of the switch in
+    // the memory and file stores, where nothing is ever refused unanswered.
+    const owner = await freshPerson();
+    const held = seedLegacy(owner.user);
+    const laterAttempt = new Date(Date.parse(held.lastCheckInAt) + 30_000).toISOString();
+    db.updateDeadmanSwitch(held.id, { ownerAttemptRefusedAt: laterAttempt });
+    const moot = seedLegacy(owner.user, {
+        ownerAttemptRefusedAt: new Date(Date.now() - 60_000).toISOString(),
+    });
+    const exported = lifecycle.exportUserData(owner.user.id)!;
+    assert.equal(
+        exported.deadmanSwitches.find((s) => s.id === held.id)?.ownerAttemptRefusedAt,
+        laterAttempt,
+        'the owner’s own data, exported'
+    );
+    assert.ok(exported.deadmanSwitches.find((s) => s.id === moot.id)?.ownerAttemptRefusedAt);
+    // The deadline, five minutes late within a 15-minute tolerance.
+    const late = new Date(Date.parse(held.releaseAt) + 5 * 60_000);
+    await sweepOverdueDeadmanSwitches(late, 15 * 60_000);
+    const windowed = db.getDeadmanSwitch(held.id)!;
+    assert.equal(windowed.status, 'grace', 'the window, not the trigger');
+    assert.equal(windowed.backlogGraceStartedAt, late.toISOString());
+    assert.equal(windowed.ownerAttemptRefusedAt, laterAttempt, 'the window keeps the record');
+    const fired = db.getDeadmanSwitch(moot.id)!;
+    assert.equal(fired.status, 'triggered', 'an attempt before the last check-in holds nothing');
+    assert.equal(fired.ownerAttemptRefusedAt, undefined, 'the trigger forgets it');
+    // The check-in forgets it.
+    const checkIn = await app.request(`/v1/deadman/switches/${held.id}/check-in`, {
+        method: 'POST',
+        headers: headers(owner.user),
+    });
+    assert.equal(checkIn.status, 200);
+    assert.equal(db.getDeadmanSwitch(held.id)?.status, 'armed');
+    assert.equal(db.getDeadmanSwitch(held.id)?.ownerAttemptRefusedAt, undefined);
+    assert.equal(
+        lifecycle.exportUserData(owner.user.id)!.deadmanSwitches.find((s) => s.id === held.id)
+            ?.ownerAttemptRefusedAt,
+        undefined
+    );
+    // And the cancel.
+    const toCancel = seedLegacy(owner.user, {
+        ownerAttemptRefusedAt: new Date(Date.now() + 1_000).toISOString(),
+    });
+    const cancel = await app.request(`/v1/deadman/switches/${toCancel.id}/cancel`, {
+        method: 'POST',
+        headers: headers(owner.user),
+    });
+    assert.equal(cancel.status, 200);
+    assert.equal(db.getDeadmanSwitch(toCancel.id)?.status, 'cancelled');
+    assert.equal(db.getDeadmanSwitch(toCancel.id)?.ownerAttemptRefusedAt, undefined);
+    db.updateDeadmanSwitch(held.id, { status: 'cancelled', encryptedPayload: '' });
+});

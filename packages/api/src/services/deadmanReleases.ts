@@ -918,6 +918,9 @@ export const recordReleaseTrigger = async (
     const updated = await db.advanceDeadmanSwitch(record.id, record, {
         status: 'triggered',
         releasedAt,
+        // A fired switch is past any refused attempt of the owner's
+        // (decision 31).
+        ownerAttemptRefusedAt: undefined,
     });
     if (!updated) return undefined;
     writeReleaseNotices(updated, releasedAt);
@@ -940,12 +943,14 @@ export const blankReleaseWraps = (switchId: string): number => {
  * ago and stands fired (§11, retention). The rows stay: the switch as a
  * record of what it was and when it fired, the copies as a record of whom
  * it was for, the notices as a record that one was sent. The content's
- * removal is a conditional write of that one column
- * (`updateDeadmanSwitchIf`, on the switch as read: fired, with its last
- * check-in), so in Postgres it touches nothing else of the row (round 11 of
- * part 2's review: as a full-row write from the worker's mirror it could put
- * back a label the owner's deletion on the API process had just erased); one
- * the database refuses or does not answer is left for the next pass.
+ * removal is a conditional write of that column and of the owner's refused
+ * attempt, which the trigger has already cleared (decision 31; both written
+ * as values, never from this mirror) (`updateDeadmanSwitchIf`, on the switch
+ * as read: fired, with its last check-in), so in Postgres it touches nothing
+ * else of the row (round 11 of part 2's review: as a full-row write from the
+ * worker's mirror it could put back a label the owner's deletion on the API
+ * process had just erased); one the database refuses or does not answer is
+ * left for the next pass.
  *
  * Each pass also blanks the held copies of any cancelled release switch
  * (round 11: a cancel the database applied after its bound had passed, or a
@@ -975,6 +980,7 @@ export const removeExpiredReleases = async (now: Date): Promise<number> => {
         if (held) {
             const outcome = await db.updateDeadmanSwitchIf(record.id, record, {
                 encryptedPayload: '',
+                ownerAttemptRefusedAt: undefined,
             });
             if (outcome.kind !== 'applied') continue;
         }

@@ -157,9 +157,11 @@
  * Matrix id, or them invited again). A copy this process's mirror holds and
  * the database does not (its write failed twice and was dropped) ends the
  * notice `failed` with `copy_unavailable`, unsent. And the deletion finishes
- * with one statement in the database (`finishAccountDeletion`) that ends
- * every notice row still pending to the account and forgets the room of every
- * one, that row included. Until the other process's change notification
+ * with its last statements in the database (`finishAccountDeletion`: the
+ * owner's switches erased by owner, then one statement that ends every notice
+ * row still pending to the account and forgets the room of every one, that
+ * row included, the two waited for together at most 10 s). Until the other
+ * process's change notification
  * arrives, this process's mirror and its tick's count can say sent where the
  * database says otherwise. What is left: a create, a re-invite or a send
  * already on its way to the homeserver when the deletion committed (after the

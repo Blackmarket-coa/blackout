@@ -27,7 +27,10 @@ import { BACKLOG_TOLERANCE_FLOOR_MS, backlogToleranceMs } from './backlogToleran
  * mirror and its event emitted, and no pass tried it again). The store keeps
  * when its statements stood unanswered, and the sweep gives a switch due in
  * that time the backlog window rather than firing it, as after an outage of
- * its own (round 11).
+ * its own (round 11); a check-in or cancel any process refused for want of
+ * an answer reaches the sweep through the switch's own row once that
+ * process's database answered (`ownerAttemptRefusedAt`, decision 31, round
+ * 14), so the worker's sweep holds such a switch back too.
  *
  * Its backlog tolerance follows its cadence (backlogTolerance.ts): a switch it
  * reaches later than that gets a backlog grace window instead of firing.
