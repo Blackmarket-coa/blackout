@@ -8266,7 +8266,10 @@ store).
     bound back at once, unused, and arms the timer, 10 s; a try is made when
     a note is made, when a switch statement answers, when a stall settles
     and on the timer, whatever stands unanswered; one try at a time, and a
-    note made during one is taken up when it ends well. Outside the lane
+    note made during one is taken up when it ends well; the store's
+    `drain`, which graceful shutdown and the deletion's wait for its own
+    writes use, now also waits for a try under way, each step of which is
+    bounded. Outside the lane
     the carry is ordered after nothing the process queued, and its
     condition is what keeps it right: a check-in or move that lands after
     it clears or outranks the column (the stalled check-in itself, should
@@ -8459,6 +8462,24 @@ which now has 44 tests. Not counted as checks: the comments and the log
 lines. The branch's other changed test file this round, the scheduler's,
 changes a comment only and was run whole (20 of 20), with the backlog
 Postgres file (2 of 2).
+
+The gates on `bd88250157`, the round's head before this paragraph
+(`fix/gates-r16`, against `origin/develop` at `97756ff4ec`, merged in by
+`6582f9f9a1`), all finished and passed: API lint and typecheck; the pr-gate
+suite 2,103 of 2,103 and the post-merge suite 2,223 of 2,223 (round 14's
+2,095 and 2,215, plus round 15's three tests, 37 to 39 of the switch-writes
+file, which round 15's unfinished run never counted, and this round's five,
+40 to 44); launch smoke 14 of 14; the core and design builds; the client's
+typecheck and lint; the client suite 3,643 passed and 3 skipped in 519
+files; the protocol and SDK typechecks; dead-drop parity 2 of 2; the
+migration guard (107 migrations, the latest
+`107_deadman_owner_attempt_refused`) and the ephemeral migration run; the
+trust page; room encryption; the feature registry; auth secrets; prettier
+over the 94 files the branch changes; and gitleaks over the branch (86
+commits, no leaks; the brief's range has the same base this round). The
+runner waited for the machine's load to fall below 3 before each suite,
+from 07:40 to 08:36. The commit that adds this paragraph changes this
+record alone; prettier and gitleaks were run again on it.
 
 ### Still open
 
