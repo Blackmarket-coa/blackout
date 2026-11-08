@@ -77,12 +77,24 @@ before the local row or the Matrix account is created, and consumed after; with
 the gate on, an unusable or absent token now creates nothing.
 
 The only other admin endpoint that can create an account,
-`POST /_synapse/admin/v1/register` (the shared-secret nonce flow), is used only
-by an operations shell script
-(`infra/single-server-baseline/synapse/verify-launch.sh`), not by the API, and
-takes no caller-chosen name.
+`POST /_synapse/admin/v1/register` (the shared-secret nonce flow), is not used
+by the API, which is not given the homeserver's registration shared secret.
+Outside the API, the repository's operations tooling uses it
+(`infra/single-server-baseline/synapse/verify-launch.sh`, and Synapse's own
+`register_new_matrix_user`, which the runbooks have operators run to create
+accounts), as do two optional services in
+`deploy/docker/blackout-backend/docker-compose.yml` that are given the secret:
+`matrix-registration`, a token-gated sign-up page, and maubot, for its bot
+accounts. None of them takes a name from an API caller, and that endpoint only
+creates: it refuses a name the homeserver already has.
 
 ## What an operator should check
+
+Copy the homeserver's log, which holds its access lines, off the server now,
+before the fix is deployed and before rotation discards more of it. It is the
+only evidence that can show an account was not written to, and only for the
+period it still covers; every day it is left in place can take a day of that
+period with it.
 
 Whether the first gap was used before the fix is deployed can be read from the
 homeserver's access log only for the period that log still covers, and the
@@ -98,18 +110,36 @@ by itself.
     `PUT /_synapse/admin/v2/users/…` made with the bot's token. A new account
     answers `201`; a `200` means an existing account was modified. Look at the
     admin accounts (`users.admin = 1` in Synapse's database) and the bot
-    account first. The log reaches back only as far as the server keeps it.
-    The homeserver template
-    (`infra/single-server-baseline/synapse/homeserver.yaml.template`) points
-    `log_config` at a file on the server that the repository does not hold,
-    and each default the repository's files would give keeps a bounded amount.
-    The logging configuration Synapse generates rotates its file at midnight
-    and keeps 3 earlier files. The Synapse Docker image's template keeps 6
-    when it writes a file and otherwise logs to the console only, and
+    account first. A `200` that follows a `201` for the same id can have an
+    ordinary cause: before the fix, a registration that the invite check
+    refused still left the account it had just created, so the same person
+    retrying under the same name got a `200` on that account. The log does not
+    show who sent either request, so it cannot tell such a retry from a second
+    caller.
+
+    The log reaches back only as far as the server keeps it. The homeserver
+    template (`infra/single-server-baseline/synapse/homeserver.yaml.template`)
+    points `log_config` at a file on the server that the repository does not
+    hold. Three defaults keep a bounded amount. The logging configuration
+    Synapse generates rotates its file at midnight and keeps 3 earlier files.
+    The Synapse Docker image's template, which the image's `generate` step
+    writes to `/data/<server name>.log.config`, keeps 6 when it writes a file
+    and otherwise logs to the console only. And
     `infra/single-server-baseline/docker-compose.yml` keeps the last 50 MB of
-    each container's console output (`max-size: '10m'`, `max-file: '5'`). So
-    unless the server was set to keep more, or the log is shipped elsewhere,
-    expect it to reach back days or weeks, not to May 2026.
+    each container's console output (`max-size: '10m'`, `max-file: '5'`).
+    With these, unless the server was set to keep more, or the log is shipped
+    elsewhere, expect it to reach back days or weeks, not to May 2026. A
+    container that logs to the console with no log options can reach back
+    further. `deploy/docker/blackout-backend/docker-compose.yml` runs Synapse
+    that way: it sets no log options, and its homeserver template points
+    `log_config` at `/data/${MATRIX_SERVER_NAME}.log.config`, the name under
+    which the image's `generate` step writes its template, which logs to the
+    console only unless `LOG_FILE_PATH` is set (this compose file sets none).
+    A plain `docker run` sets no log options either. Docker's default
+    `json-file` log driver does not rotate unless the daemon is set to, so
+    such a container keeps all its console output since it was last created,
+    which can be months; recreating the container discards it.
+
 -   **The account's own trail.** An account written to this way was signed out
     of all its devices (Synapse keeps the token that made the request, so for
     the bot account: all but the API's own token), its display name was set to
@@ -142,6 +172,10 @@ by itself.
     the period it reaches.
 
 ## After upgrading
+
+If the homeserver's log has not been copied off the server yet, copy it first
+(see "What an operator should check"): step 2 reads it, and rotation keeps
+discarding it meanwhile.
 
 1. **Deploy an image that carries the fix.** The default `image_tag` of
    `.github/workflows/deploy-compose-prod.yml`, `stable`, is pushed only by
@@ -218,7 +252,10 @@ by itself.
    been in the caller's hands from the time of the write. Unless the request
    was then refused by the invite check, it also created a Blackout `users`
    row with that username and issued the caller a session; that row and its
-   sessions belong to the caller and should be removed.
+   sessions belong to the caller and should be removed. Where the `200`
+   follows a `201` for the same id, the caller may be the person who created
+   the account, retrying (see "What an operator should check"): the new
+   password still applies, but find out whose the row is before removing it.
 
     If the bot account itself was written to, two more things hold. Synapse
     keeps only the token that made a password reset, so the API's own token
@@ -281,22 +318,32 @@ implicit.
 ## Verification
 
 `packages/api/test/register-matrix-collision.integration.test.ts` drives the
-real Hono app and `matrixClient` against a stub homeserver
-(`packages/api/test/_fixtures/matrixStub.ts`, which now answers the single-user
-admin endpoint): registering an existing name — the bot's own localpart among
-them — gets `409` and sends no create; a garbage token with the gate on creates
-nothing and makes no Matrix call; a `PUT` that answers `200` is refused and
-rolled back; a lookup that is neither `200` nor `404` fails closed; ordinary
-registration still works with one lookup and one create; a usable token with
-the gate on registers once and consumes one use; and `registerUser` /
-`provisionBurner` are covered directly for the lookup, create-only and
-fail-closed paths. Each assertion except the usable-token case, which is a
-regression guard, was also run against the pre-fix code to confirm it fails
-there: with `develop`'s `matrix-client.ts` in place, 9 of the 11 cases fail
-(all but the garbage-token and usable-token cases); with `develop`'s `auth.ts`
-in place, 3 fail (the existing-name, garbage-token and `200`-create cases); the
-fixed tree passes all 11 (re-run 2026-11-08). The run used a stub homeserver
-only; nothing was exercised against a real Synapse.
+real Hono app and `matrixClient` against its own inline fetch stub of the
+homeserver (`installMatrix` in that file), which answers the single-user admin
+endpoint and records each lookup and create: registering an existing name — the
+bot's own localpart among them — gets `409` and sends no create; a garbage token
+with the gate on creates nothing and makes no Matrix call; a `PUT` that answers
+`200` is refused and rolled back; a lookup that is neither `200` nor `404` fails
+closed; ordinary registration still works with one lookup and one create; a
+usable token with the gate on registers once and consumes one use; and
+`registerUser` / `provisionBurner` are covered directly for the lookup,
+create-only and fail-closed paths. Each assertion except the usable-token case,
+which is a regression guard, was also run against the pre-fix code to confirm it
+fails there: with `develop`'s `matrix-client.ts` in place, 9 of the 11 cases
+fail (all but the garbage-token and usable-token cases); with `develop`'s
+`auth.ts` in place, 3 fail (the existing-name, garbage-token and `200`-create
+cases); the fixed tree passes all 11 (re-run 2026-11-08). The run used a stub
+homeserver only; nothing was exercised against a real Synapse.
+
+The shared stub, `packages/api/test/_fixtures/matrixStub.ts`, which the
+collision test does not use, now answers the single-user admin endpoint too
+(`404` or `200` to a lookup, `201` or `200` to a create, from its
+`existingUsers`), so that a test built on it that registers an account meets a
+free name rather than the empty `200` its fallback gives, which the fix would
+refuse; no test uses its new fields yet. The three other test files whose own
+stubs would have answered the new lookup with `200` (`invitations`,
+`register-welcome-room` and `follows-personal-link`) now answer it with `404`
+and the create with `201`.
 
 ## Disclosure
 
