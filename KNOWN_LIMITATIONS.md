@@ -87,7 +87,9 @@ For the source-of-truth triage with tier/owner detail see
     release holds hundreds of files, and
     `tauri-action` reads one page of a release's assets, so a draft shared
     with it could lose `latest.json`), upload into a draft release and leave
-    publishing to a person; its notification harness still runs on pull
+    publishing to a person (each build leg stops unless the release is still
+    a draft just before it builds, but a draft published while a leg builds
+    still gets that leg's files); its notification harness still runs on pull
     requests to `main`, a branch that does not exist. It has never run, and
     it does not run on `develop` pull requests. Also since
     2026-11-02 a build-only check,

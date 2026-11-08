@@ -84,17 +84,24 @@ To release:
    commit. Do not create the tag from GitHub's release form: publishing from the
    form creates the tag and a published release together, and `create-release`
    then refuses to upload into it. A `v*` tag does not build the desktop. The
-   workflow runs one run at a time per tag and never cancels one: a tag moved, or
-   deleted and pushed again, while a run is in flight starts a run that waits for
-   the first, then reuses its draft and replaces each leg's files, as a re-run
-   does.
+   workflow runs one run at a time per tag and never cancels a running one: a tag
+   moved, or deleted and pushed again, while a run is in flight starts a run that
+   waits for the first, then reuses its draft and replaces each leg's files, as a
+   re-run does. A third push while one run is in flight and one waits cancels the
+   waiting run, which had not started (no draft, no upload); the newest run goes
+   ahead once the running one ends.
 3. Wait for all three build legs before touching the draft. `create-release`
-   checks once, at the start, that the tag has no published release; the legs then
-   upload by the draft's id without reading its state, so a draft published while
-   they run gets their files, `latest.json` included, as a live release. GitHub
-   shows a draft only to people with write access to the repository (from
-   GitHub's documentation, not tried here); the tag and the run's logs are public,
-   because the repository is.
+   checks once, at the start, that the tag has no published release, and each leg
+   checks again, as its last step before `tauri-action`, that the release is still
+   a draft. `tauri-action` then builds for some minutes and uploads by the draft's
+   id without reading its state, so a draft published while a leg builds gets that
+   leg's files, `latest.json` included, as a live release. Once a release is
+   published, re-running its jobs uploads nothing: a full re-run stops at
+   `create-release`, and "Re-run failed jobs", which does not repeat
+   `create-release`, stops at each re-run leg's draft check. To rebuild, push a new
+   `release-*` tag. GitHub shows a draft only to people with write access to the
+   repository (from GitHub's documentation, not tried here); the tag and the run's
+   logs are public, because the repository is.
 4. Check the draft before publishing:
     - `latest.json` is attached and has `linux-x86_64`, `darwin-aarch64` and
       `windows-x86_64` under `platforms`. There is no Intel macOS

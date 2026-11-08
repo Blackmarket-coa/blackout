@@ -18,8 +18,10 @@ name: blackout-desktop-build-check
 # this one. Keep the setup below in step with that workflow's build job.
 # Where this file's triggers, permissions, concurrency, steps or step
 # settings differ from that job's, a comment says why. That workflow's
-# create-release job, and its build job's first step, which requires the
-# draft's id, have no counterpart here: this check uploads nothing.
+# create-release job, its build job's first step, which requires the
+# draft's id, and the step before its tauri-action, which requires that the
+# release is still a draft, have no counterpart here: this check uploads
+# nothing.
 
 # The release jobs run only on release-* tags, never on a pull request or a
 # dispatch. This check exists to build before a tag, so it runs on pull
@@ -84,11 +86,13 @@ permissions:
     contents: read
 
 # The release workflow also runs one run at a time per ref, but never
-# cancels a tag's run: a second run for the same tag waits, then reuses the
-# first run's draft (it cancels only its pull-request harness). Here a
-# newer push to the same pull request cancels the running build, whose
-# result would be stale, and so does a later dispatch on the same branch;
-# a cancelled leg shows as cancelled, not as passed.
+# cancels a tag's running run: a second run for the same tag waits, then
+# reuses the first run's draft, and a third push while one runs and one
+# waits cancels the waiting run, which had not started (it cancels a
+# running run only for its pull-request harness). Here a newer push to the
+# same pull request cancels the running build, whose result would be
+# stale, and so does a later dispatch on the same branch; a cancelled leg
+# shows as cancelled, not as passed.
 concurrency:
     group: blackout-desktop-build-check-${{ github.ref }}
     cancel-in-progress: true
@@ -132,8 +136,8 @@ jobs:
               with:
                   persist-credentials: false
 
-            # v6.2.0, the commit security.yml, load.yml and the release job's
-            # build job pin (that workflow's notification harness has @v4).
+            # v6.2.0, the commit security.yml, load.yml and the release
+            # workflow's build job and notification harness pin.
             # Node 22 either way, and no cache here: there is no cache input,
             # and v6 caches on its own only when packageManager names npm (it
             # names pnpm).
@@ -143,7 +147,7 @@ jobs:
                   node-version: 22
 
             # The commit v5 (and v5.0.0) names on 2026-11-02, which the
-            # release job's build job pins too; its notification harness and
+            # release workflow's build job and notification harness pin too;
             # the other workflows have @v5, except one use of @v4 in
             # mobile-native-ci.yml. Pinned like checkout and setup-node so
             # that a moved tag cannot change what runs here.

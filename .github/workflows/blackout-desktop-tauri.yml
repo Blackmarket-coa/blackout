@@ -3,8 +3,9 @@ name: blackout-desktop-tauri
 # The signed desktop release. A pushed release-* tag gets one draft GitHub
 # release (create-release), and the three build legs sign their bundles and
 # upload them, with the updater's latest.json, into that draft (build).
-# Nothing here publishes: a person checks the draft and publishes it, and
-# only then can the updater endpoint in tauri.conf.json
+# Each leg stops, right before it builds and uploads, unless the release is
+# still a draft. Nothing here publishes: a person checks the draft and
+# publishes it, and only then can the updater endpoint in tauri.conf.json
 # (releases/latest/download/latest.json) serve it. Operator decision of
 # 2026-11-02; docs/security/dependency-advisories-server-desktop-2026-10-30.md,
 # Found outside scope, item 6, and docs/operations/wrapper-build-and-release.md
@@ -46,17 +47,20 @@ on:
 permissions:
     contents: read
 
-# One run at a time per ref, and a tag's run is never cancelled. A release-*
-# tag that is moved, or deleted and pushed again, while a run is in flight
-# starts a second run for the same ref; without this the two create-release
-# jobs could both list the tag's drafts before either created one and so
-# make two drafts for one tag, or six legs could upload into one draft at
-# once. The second run waits; its create-release then finds the first run's
-# draft (the oldest for the tag) and its legs replace each leg's files, as
-# a re-run does. GitHub keeps one running and one pending run per group, so
-# a third run replaces the pending one. The harness's pull-request runs are
-# the one case where cancelling is right (a newer push makes the running
-# one stale, as in the build check), which the expression selects.
+# One run at a time per ref. A running run for a tag is never cancelled, so
+# no upload is cut off. A release-* tag that is moved, or deleted and pushed
+# again, while a run is in flight starts a second run for the same ref;
+# without this the two create-release jobs could both list the tag's drafts
+# before either created one and so make two drafts for one tag, or six legs
+# could upload into one draft at once. The second run waits; its
+# create-release then finds the first run's draft (the oldest for the tag)
+# and its legs replace each leg's files, as a re-run does. GitHub keeps at
+# most one running and one pending run per group, so a third push while one
+# run is in flight and one waits cancels the waiting run: it shows as
+# cancelled, but it had not started (no draft, no upload), and the newest
+# run goes ahead once the running one ends. The harness's pull-request runs
+# are the one case where cancelling a running run is right (a newer push
+# makes it stale, as in the build check), which the expression selects.
 concurrency:
     group: blackout-desktop-tauri-${{ github.ref }}
     cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -74,13 +78,18 @@ jobs:
             - name: Checkout
               uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
 
+            # Pinned to the commits the build job below and the build check
+            # pin, so that a moved tag cannot change what runs here (it was
+            # @v5 and @v4, as on develop). setup-node v6 still takes
+            # `cache: pnpm` (its action.yml at that commit lists npm, yarn
+            # and pnpm), which needs pnpm set up first, as here.
             - name: Setup pnpm
-              uses: pnpm/action-setup@v5
+              uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v5
               with:
                   version: 9.15.4
 
             - name: Setup Node
-              uses: actions/setup-node@v4
+              uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6
               with:
                   node-version: 22
                   cache: pnpm
@@ -117,11 +126,11 @@ jobs:
                       const tag = context.ref.replace(/^refs\/tags\//, '');
                       // A published release would serve whatever the legs
                       // upload, latest.json included, with no person in
-                      // between, so refuse one. This runs once, before
-                      // builds of some minutes; tauri-action uploads by id
-                      // without reading the draft state, so a draft that is
-                      // published while the legs run gets their uploads.
-                      // The release doc says to wait for all three legs.
+                      // between, so refuse one. This runs once per attempt
+                      // of this job, and "Re-run failed jobs" does not
+                      // repeat it (the re-run legs get its earlier output),
+                      // so each build leg checks again, right before
+                      // tauri-action, that the release is still a draft.
                       try {
                           const { data } = await github.rest.repos.getReleaseByTag({ owner, repo, tag });
                           core.setFailed(
@@ -264,6 +273,37 @@ jobs:
                   WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
               run: |
                   [IO.File]::WriteAllBytes('certificate.pfx', [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE))
+
+            # tauri-action uploads by releaseId without reading the release's
+            # state (src/index.ts 178 and 211-241), and create-release looks
+            # for a published release only when it runs. "Re-run failed jobs"
+            # re-runs only the failed legs and hands them create-release's
+            # output from the earlier attempt, so without this step a leg
+            # re-run after a person had published the release would replace
+            # its files, and merge latest.json, in the live release. So here,
+            # as the last step before tauri-action, the leg reads the release
+            # by id and stops unless it is still a draft. A release published
+            # after this check, while tauri-action builds (minutes), still
+            # gets this leg's uploads: the release doc says to wait for all
+            # three legs, and to rebuild a published release from a new
+            # release-* tag. gh is on all three runner images and reads
+            # GH_TOKEN; the id is a positive integer (the first step), so it
+            # cannot change the API path.
+            - name: Require that the release is still a draft
+              shell: bash
+              env:
+                  GH_TOKEN: ${{ github.token }}
+                  RELEASE_ID: ${{ needs.create-release.outputs.release_id }}
+              run: |
+                  if ! draft=$(gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" --jq .draft); then
+                      echo "::error::could not read release $RELEASE_ID, so nothing is uploaded"
+                      exit 1
+                  fi
+                  if [ "$draft" != true ]; then
+                      echo "::error::release $RELEASE_ID is not a draft (draft: $draft), so nothing is uploaded into it; push a new release-* tag instead of re-running"
+                      exit 1
+                  fi
+                  echo "Release $RELEASE_ID is still a draft."
 
             # Pinned to the commit that was read: this job relies on v0.6.2's
             # src/index.ts 178 (with releaseId set, no release is looked up or
