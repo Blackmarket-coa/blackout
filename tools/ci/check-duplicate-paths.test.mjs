@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import {
     checkCaseInsensitivePathCollisions,
@@ -12,9 +12,12 @@ import {
     findCaseOnlyNameCollisions,
     findNameAgainstStemCollisions,
     nameWithoutLastExtension,
-} from './check-duplicate-paths.mjs';
+} from './duplicate-paths-rules.mjs';
 
+// The script runs the scan whenever it is loaded, so this file imports only
+// the rules module and runs the script as a child process.
 const scriptPath = fileURLToPath(new URL('./check-duplicate-paths.mjs', import.meta.url));
+const rulesPath = fileURLToPath(new URL('./duplicate-paths-rules.mjs', import.meta.url));
 
 const TOOLBAG = 'apps/blackout-client/src/app/features/coalition/toolbag';
 
@@ -214,8 +217,9 @@ test('the script fails on foo.css beside Foo.css.ts and names both', () => {
 
 test('the script runs when called through a symlinked path', () => {
     // import.meta.url has symlinks resolved and process.argv[1] does not, so
-    // a main guard that compares the two as given skips the scan and exits 0
-    // when the script is reached through a symlink (/tmp on macOS is one).
+    // a main-module guard that compares the two as given skips the scan and
+    // exits 0 when the script is reached through a symlink (/tmp on macOS is
+    // one). The script has no such guard; this keeps it that way.
     const { dir, env } = makeRepo({
         'toolbag/ToolBag.tsx': 'export default function ToolBag() { return null; }\n',
         'toolbag/toolbag.ts': 'export const entries = [];\n',
@@ -260,13 +264,11 @@ test('the script fails on src/Foo/ beside src/foo/ and names both directories', 
     }
 });
 
-test('the script fails, and says so, when process.argv[1] cannot be resolved', () => {
+test('the script scans when preloaded with --import, whatever process.argv[1] names', () => {
     // `node --import <script> <missing>` evaluates the script before node
     // reports the missing main module, with process.argv[1] naming a file
-    // that does not exist. A main guard that treats the resolution error as
-    // "not invoked directly" would let the preload finish silently; node's
-    // own error then ends the process, but a guard whose error path is a
-    // silent pass is wrong whatever ends it.
+    // that does not exist. A main-module guard has no right answer there;
+    // the script asks no such question and scans, so the pair fails it.
     const { dir, env } = makeRepo({
         'toolbag/ToolBag.tsx': 'export default function ToolBag() { return null; }\n',
         'toolbag/toolbag.ts': 'export const entries = [];\n',
@@ -280,11 +282,51 @@ test('the script fails, and says so, when process.argv[1] cannot be resolved', (
             encoding: 'utf8',
         });
         assert.equal(res.status, 1, res.stdout + res.stderr);
-        assert.match(res.stderr, /Cannot resolve process\.argv\[1\] \(.*does-not-exist\.mjs\)/);
-        assert.match(res.stderr, /this is a failure, not a pass/);
-        // The guard ended the process itself: no scan ran, and node did not
-        // get as far as its own missing-module error.
-        assert.doesNotMatch(res.stdout + res.stderr, /collisions found|ERR_MODULE_NOT_FOUND/);
+        assert.match(res.stderr, /toolbag\/ToolBag\.tsx {2}<-> {2}toolbag\/toolbag\.ts/);
+        // The scan ended the process before node got to the missing module.
+        assert.doesNotMatch(res.stdout + res.stderr, /ERR_MODULE_NOT_FOUND/);
+    } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+    }
+});
+
+test('importing the rules module runs nothing, whatever process.argv[1] names', () => {
+    // A process that imports the rules (the test runner, with a glob left
+    // unexpanded in process.argv[1], is one) must not be ended by them. The
+    // fixture holds the tool-bag pair, so a scan would fail and say so.
+    const { dir, env } = makeRepo({
+        'toolbag/ToolBag.tsx': 'export default function ToolBag() { return null; }\n',
+        'toolbag/toolbag.ts': 'export const entries = [];\n',
+    });
+    try {
+        // No main script at all.
+        const imported = spawnSync(
+            'node',
+            [
+                '--input-type=module',
+                '-e',
+                `const m = await import(${JSON.stringify(pathToFileURL(rulesPath).href)});` +
+                    "console.log(Object.keys(m).sort().join(','));",
+            ],
+            { cwd: dir, env, encoding: 'utf8' }
+        );
+        assert.equal(imported.status, 0, imported.stdout + imported.stderr);
+        assert.equal(imported.stderr, '');
+        assert.match(
+            imported.stdout,
+            /^checkCaseInsensitivePathCollisions,.*findCaseOnlyNameCollisions/
+        );
+        assert.doesNotMatch(imported.stdout, /collisions found|No case/);
+        // A main module that does not exist: only node's own error.
+        const missing = path.join(dir, 'does-not-exist.mjs');
+        const preloaded = spawnSync('node', ['--import', rulesPath, missing], {
+            cwd: dir,
+            env,
+            encoding: 'utf8',
+        });
+        assert.notEqual(preloaded.status, 0);
+        assert.match(preloaded.stderr, /ERR_MODULE_NOT_FOUND/);
+        assert.doesNotMatch(preloaded.stdout + preloaded.stderr, /❌|✅/);
     } finally {
         fs.rmSync(dir, { recursive: true, force: true });
     }
