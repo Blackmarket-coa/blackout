@@ -64,8 +64,12 @@ names the 224- and 256-bit orders of the standard keys, with which the
 server in practice cannot sign. The review of the tenth round found that the
 check ran whatever the listeners, so a homeserver with no manhole listener
 and a stale `manhole_settings` block, which `develop` runs, stopped at
-startup; from commit `b1b91e8` it runs only for a process that starts a
-manhole listener.
+startup; from commit `b1b91e8` it runs only when the config declares a
+manhole listener for the process it is loaded as. The review of the
+eleventh round found that this record and the documents said "a process
+that starts" one, which `synapse.app.admin_cmd` contradicts: it starts no
+listener and is checked all the same; from commit `23ea07c` they say what
+the check reads.
 If the approved scope is to stay exact, the operator can still split the
 manhole fixes out: return `synapse/util/manhole.py`,
 `synapse/config/server.py`, `docs/manhole.md` and
@@ -77,7 +81,7 @@ sentence and the asyncssh clause of its key-exchange sentence, and remove or
 reword every sentence of this record that relies on the fixes, not only its
 manhole section. `grep -n -i 'manhole\|ssh_p'` on this file finds them in: this
 paragraph; the first and fourth Result bullets; the Method's Tests and Boot
-bullets and its fourth- to eleventh-round bullets; the `SSHSession` and
+bullets and its fourth- to twelfth-round bullets; the `SSHSession` and
 key-exchange rows of
 [What changed](#what-changed-in-the-modules-the-fork-imports); the closing
 paragraph of [The gate](#the-gate); the targeted, full-suite, Boot, Lint and
@@ -88,17 +92,19 @@ sentence and its items 1, 13, 14 and 20, the fifth list's opening sentence
 and its items 1, 2, 3, 4 and 6, the sixth list's opening sentence and its
 items 1, 2, 4 and 5, the seventh list's opening sentence and its items
 1, 5, 6 and 11, the eighth list's opening sentence and its item 1, the
-ninth list's opening sentence and its item 1, and the tenth list's opening
-sentence and its items 1 (its mention of the manhole section) and 5; and the
-Commit messages note.
-Nineteen more rely on the fixes
+ninth list's opening sentence and its item 1, the tenth list's opening
+sentence and its items 1 (its mention of the manhole section) and 5, and the
+eleventh list's opening sentence and its items 3 and 4; and the Commit
+messages note.
+Twenty-one more rely on the fixes
 though the grep does not find them, since none names the manhole or an
 `ssh_p` setting: items 15 and 22 of the fourth list, items 7, 8 and 9 of the
 fifth, items 3 and 8 of the sixth, items 2, 3, 4, 9 and 13 of the
-seventh, items 2, 3 and 8 of the eighth, items 2 and 4 of the ninth, and
-items 4 and 6 of the tenth. Its other hits stay true either way: the
-GHSA-cwm5 row, the "Not used" row's `--manhole` help-string clause, the
-import paragraph under that table and Validation's Import bullet (both import
+seventh, items 2, 3 and 8 of the eighth, items 2 and 4 of the ninth,
+items 4 and 6 of the tenth, and items 1 and 5 of the eleventh. Its other
+hits stay true either way: the GHSA-cwm5 row, the "Not used" row's
+`--manhole` help-string clause, the import paragraph under that table and
+Validation's Import bullet (both import
 `synapse.util.manhole`, which `develop` has), Validation's Semgrep bullet (a
 record of what was scanned), "Found outside scope" item 5, and item 8 of the
 third correction list. A `git revert` of `20362e4` would also take back
@@ -139,8 +145,8 @@ that commit's record corrections
     pair whenever the public key's path was unset; and it filed every host
     key under `ssh-rsa`, so with an Ed25519 or ECDSA key no connection to the
     manhole succeeded. `synapse/config/server.py`, which now refuses at
-    startup, for a process that starts a manhole listener, a key file the
-    manhole could not use or should not offer: a
+    startup, when the config declares a manhole listener for the process it
+    is loaded as, a key file the manhole could not use or should not offer: a
     public key as the private one, a public key that is not the private
     key's, an EC key on a curve Twisted has no SSH key type for, or a DSA
     key (every ssh-dss signature uses SHA-1, and one whose subgroup order
@@ -197,10 +203,11 @@ that commit's record corrections
     `ssh_priv_key_path` also stops startup with a `ConfigError` now, where
     `develop` loads it and, with it alone, crashes as above
     ([the curve paragraph](#curve-refusal), [DSA](#dsa-refusal)). Each of
-    these refusals applies only to a process that starts a manhole
-    listener; without one, `manhole_settings` loads unchecked, as on
-    `develop` ([Only for a process that starts a
-    manhole](#listener-condition)). No tracked config enables the manhole
+    these refusals applies only when the config declares a manhole
+    listener for the process it is loaded as; without one,
+    `manhole_settings` loads unchecked, as on `develop` ([Only when the
+    config declares a manhole listener](#listener-condition)). No tracked
+    config enables the manhole
     ([Host keys other than RSA](#host-key-types)).
 
 ---
@@ -562,14 +569,47 @@ that commit's record corrections
     `tests.config` and `tests.blackout_runtime` under both venvs on
     `b1b91e8`'s tree, each started with the 1-minute load under 3.5; eight
     homeserver boots, four shapes under each version
-    ([Only for a process that starts a manhole](#listener-condition)); a
-    check of the 1024-bit DSA key with a 161-bit q under both versions
-    (`finish/r6/q161-check.log`); mypy evenly on the two changed Python
+    ([Only when the config declares a manhole
+    listener](#listener-condition)); a check of the 1024-bit DSA key with a
+    161-bit q under both versions (`finish/r6/q161-check.log`), which read r
+    and s from the wrong bytes and which the twelfth round's replaces
+    ([DSA](#dsa-refusal)); mypy evenly on the two changed Python
     files in `git archive` copies of `4e759b4` and `b1b91e8`;
     `poetry lock --check`; and the scanners on `git archive` exports of
     `b1b91e8` and of `develop`'s `97756ff`. The scripts are kept in
     `finish/r6/scripts.log`. The full suite, the targeted modules as a whole
     and `blackout_runtime_tests` did not run, Semgrep did not run, and no
+    OpenSSH client was run.
+-   **The twelfth round** merges nothing: `origin/develop` was still at
+    `97756ff` when it started (2026-11-08 07:38 UTC), and
+    `git merge-tree --write-tree HEAD origin/develop` is clean. It changes
+    `docs/manhole.md`, the manhole paragraph of `config_documentation.md`,
+    PATCHES.md and docstrings in `synapse/config/server.py` and the test
+    module (commit `23ea07c`; no code, no lock file, no ignore file), and
+    this record. Its checks ran with each venv's Python and this branch's
+    tree first on `PYTHONPATH` (under both, `synapse` and `tests` import
+    from the worktree), with `v52/finish/r7/` under the session's scratch
+    directory as working directory and log directory: the q161 check again,
+    with r and s read correctly and a 160-bit-q control key, under both
+    venvs (`finish/r7/probe/q161_check2.py`,
+    `finish/r7/logs/q161-check2.log`); the first signature of each key
+    under the system's `openssl` 3.0.13
+    (`finish/r7/logs/q161-openssl-cli.log`); the review's own
+    `q161_recheck.py` and `q161_purepy.py` on the same keys under both
+    (`finish/r7/logs/q161-recheck.log`); OpenSSL's `crypto/dsa/dsa_ossl.c`
+    at the `openssl-3.0.13` and `openssl-4.0.3` tags, read from GitHub
+    (`finish/r7/src/`, with their sha256); `synapse.app.admin_cmd` on four
+    configs under both (`finish/r7/logs/admincmd.log`); the manhole module
+    under both venvs in the worktree with the change, before the commit
+    (`finish/r7/logs/manhole-wip-*.log`); `tests.config` and
+    `tests.blackout_runtime` under both venvs on `23ea07c`'s clean tree,
+    each started with the 1-minute load under 3.5; ruff, black and isort on
+    the two Python files under both venvs; mypy evenly on them in
+    `git archive` copies of `c1a12e9` and `23ea07c`; `poetry lock --check`;
+    and the scanners on `git archive` exports of `23ea07c` and of
+    `develop`'s `97756ff`. The scripts are kept in `finish/r7/probe/`. The
+    full suite, the targeted modules as a whole and `blackout_runtime_tests`
+    did not run, Semgrep did not run, no homeserver was booted, and no
     OpenSSH client was run.
 -   **npm:** the registry's JSON for `image-size` (dist-tags, versions,
     publish times); metro 0.83.5's `src/Assets.js` and `package.json` from
@@ -1091,11 +1131,27 @@ session either. The review of the tenth round served it, past the check,
 over loopback to Twisted's client 30 times under each version and got no
 session: the server raised `OverflowError`, or the client refused the host
 key with cryptography's "q must be exactly 160, 224, or 256 bits long".
-And OpenSSL rejects the signatures the server does make: in the eleventh
-round `Key.sign` returned 46 and 71 of 200 under 26.4.0 and 26.10.0, and
-cryptography 50.0.2's DSA verification (OpenSSL 4.0.3) rejected all of them,
-though the pure-Python check above accepts the review's
-(`finish/r6/q161-check.log`). A 1024-bit key loads in the
+And OpenSSL rejects the signatures the server does make, valid as they are:
+its DSA verification refuses a subgroup order that is not 160, 224 or 256
+bits before it reads the signature (`dsa_do_verify` in
+`crypto/dsa/dsa_ossl.c`, `DSA_R_BAD_Q_VALUE`, lines 371 to 376 at the
+`openssl-4.0.3` tag and 349 to 354 at `openssl-3.0.13`). In the twelfth
+round, with r and s read from the signature's inner string
+(`common.getNS(sig, 2)[1]`), `Key.sign` returned 62 and 61 of 200 under
+26.4.0 and 26.10.0, the pure-Python check found every one valid, and
+cryptography 50.0.2's DSA verification (OpenSSL 4.0.3) rejected every one,
+as it rejected OpenSSL's own signature with the key and 20 made in pure
+Python from its private value; the system's `openssl dgst -verify` (3.0.13)
+refused the first under each version with "dsa_do_verify:bad q value"; and
+a standard 1024-bit control key, with a 160-bit q, verified 200 of 200
+under each version (`finish/r7/logs/q161-check2.log`,
+`finish/r7/logs/q161-openssl-cli.log`; the review's own script on the same
+keys, run again here, counted 72 and 67, all rejected,
+`finish/r7/logs/q161-recheck.log`).
+The eleventh round's check, which this paragraph cited for "rejected all of
+them" (46 and 71), read r and s from bytes that still began with that
+string's 4-byte length, and so rejected the control's 200 valid signatures
+as well (eleventh list, item 1). A 1024-bit key loads in the
 OpenSSH format and signs; the seventh round's review got a session on one
 with Twisted's client. It is the one size `ssh-keygen` writes for DSA where
 it writes DSA at all: OpenSSH 9.9p1's `ssh-keygen.c` has "Invalid DSA key
@@ -1203,11 +1259,13 @@ startup after `Error in configuration at
 'manhole_settings.ssh_priv_key_path':` and the DSA message in `57d9d26`'s
 wording (above).
 
-<a id="listener-condition"></a>**Only for a process that starts a manhole**
-(found by the review of the tenth round, fixed in the eleventh, commit
-`b1b91e8`). From `6c0aab8` to `8c74e04`, `ServerConfig.read_config` called
-`_check_manhole_host_key` whatever the listeners. Upstream loads
-`manhole_settings` without checking it, and only a process that starts a
+<a id="listener-condition"></a>**Only when the config declares a manhole
+listener** (found by the review of the tenth round, fixed in the eleventh,
+commit `b1b91e8`; worded exactly in the twelfth, commit `23ea07c`, after the
+review of the eleventh). From `6c0aab8` to `8c74e04`,
+`ServerConfig.read_config` called `_check_manhole_host_key` whatever the
+listeners. Upstream loads `manhole_settings` without checking it, and only a
+process that starts a
 manhole listener uses it, so a homeserver with no manhole listener and a
 `manhole_settings` block the check refuses (a DSA key, a mismatched `.pub`,
 a public key as the private one, a curve Twisted has no SSH key type for),
@@ -1228,10 +1286,30 @@ entry of `listeners` or the `manhole` option, in a worker an entry of
 `WorkerConfig` parses the worker's listeners after `ServerConfig`, so the
 function reads them from the raw config, and it takes
 `worker_app: synapse.app.homeserver` for the main process, as `WorkerConfig`
-canonicalises it. A key file that cannot be read still stops startup with
-or without a listener, as upstream's `Key.fromFile` call always has. Both
-documentation pages say when the checks run, and PATCHES.md's rationale
-sentence names the condition.
+canonicalises it. It reads the config, not what the process goes on to
+start, which the eleventh round's wording ("a process that starts a manhole
+listener", here, in both documentation pages, PATCHES.md and the
+docstrings) did not say: `synapse.app.admin_cmd` starts no listener and
+loads the homeserver's config with no `worker_app`, setting its own
+afterwards (`synapse/app/admin_cmd.py`, lines 277 to 288), so it is checked
+as the main process, or, given a worker config, as that worker. The review
+of the eleventh round showed the first case; the twelfth round ran
+`admin_cmd export-data` under each version with a 2048-bit DSA key from
+cryptography (a q of 256 bits) at `ssh_priv_key_path`
+(`finish/r7/logs/admincmd.log`): with the homeserver's config and a manhole
+listener in it, exit 1 with the DSA `ConfigError` at
+`manhole_settings.ssh_priv_key_path`; without that listener, past config
+load to the uninitialised database; with a worker config of
+`worker_app: synapse.app.admin_cmd` and `worker_manhole` added, exit 1 with
+the same `ConfigError`; and with that worker config without
+`worker_manhole`, past the manhole check to `WorkerConfig`'s missing
+`instance_map`. The homeserver refuses the same config, so the difference
+matters only for a config that declares a manhole listener for a process
+that never starts it. From `23ea07c` both documentation pages, PATCHES.md
+and the docstrings say what the check reads. A key file that cannot be read
+still stops startup with or without a listener, as upstream's `Key.fromFile`
+call always has. Both documentation pages say when the checks run, and
+PATCHES.md's rationale sentence names the condition.
 
 Tests (four new, twenty-nine in all), in `ManholeListenerTestCase`: five
 refused shapes (a public key as the private one, another RSA key's public
@@ -1266,7 +1344,8 @@ thing, kept to `manhole.py`, the manhole
 check in `synapse/config/server.py`, the tests and the two manhole
 documentation pages, in commits separate from the lock and the ignore changes
 (`20362e4`, which also carries this record's second-round corrections,
-`ce1bca9`, `6c0aab8`, `2bf76ad`, `57d9d26`, `54043e4`, `8c74e04`, `b1b91e8` and `0d36d47`), so they can be dropped from
+`ce1bca9`, `6c0aab8`, `2bf76ad`, `57d9d26`, `54043e4`, `8c74e04`, `b1b91e8`,
+`0d36d47` and `23ea07c`), so they can be dropped from
 the PR if the approved
 scope is to stay exact (the Scope paragraph says how); leaving them out would
 leave a known startup crash in a documented security feature with its fix in
@@ -1387,7 +1466,7 @@ four are the second round's, with the database of 2026-11-02 01:14 UTC; the
 next four are the third round's and the next four the fourth round's, both
 with the database of 2026-11-02 07:17 UTC; the next eight are the fifth
 round's and the next four the sixth round's, both with the database of
-2026-11-02 13:15 UTC; and the last twenty are the seventh to eleventh
+2026-11-02 13:15 UTC; and the last twenty-four are the seventh to twelfth
 rounds', four each, all with the database of 2026-11-08 00:37 UTC
 ([Method](#method)). The image-size suppressions in rows before the
 eleventh round's describe trees before #1001.
@@ -1445,6 +1524,10 @@ eleventh round's describe trees before #1001.
 | same, `--show-suppressed` (eleventh round)                                                                   | none; suppressed: the four Twisted ids, and no image-size id                                                                                                                                 | 0    |
 | this branch, `git archive` of `b1b91e8` (eleventh round)                                                     | none                                                                                                                                                                                         | 0    |
 | same, `--show-suppressed` (eleventh round)                                                                   | none; nothing suppressed                                                                                                                                                                     | 0    |
+| `develop` (`97756ff`), `git archive`, twelfth round (same database)                                          | none                                                                                                                                                                                         | 0    |
+| same, `--show-suppressed` (twelfth round)                                                                    | none; suppressed: the four Twisted ids, and no image-size id                                                                                                                                 | 0    |
+| this branch, `git archive` of `23ea07c` (twelfth round)                                                      | none                                                                                                                                                                                         | 0    |
+| same, `--show-suppressed` (twelfth round)                                                                    | none; nothing suppressed                                                                                                                                                                     | 0    |
 
 So the gate is green on both sides, and on this branch it is green without any
 Twisted entry: Twisted 26.10.0 matches no advisory in any of the five
@@ -1495,7 +1578,9 @@ round's are on `b1b91e8`, which changes no file Trivy reads, and on
 `pnpm-lock.yaml`, without image-size, and its removal of the image-size
 entries, so on this branch Trivy reports and suppresses nothing, and on
 `develop` it suppresses only the four Twisted ids. Both gates stay green on
-both sides ([Validation](#validation), OSV).
+both sides ([Validation](#validation), OSV). The twelfth round's are on
+`23ea07c`, which changes no file Trivy reads, and on `develop` at `97756ff`
+again, with the same results.
 
 ## Validation
 
@@ -1503,13 +1588,15 @@ both sides ([Validation](#validation), OSV).
     and `scripts-dev/check_locked_deps_have_sdists.py` (151 packages) pass;
     `poetry lock --check` passes again after the comment over `Twisted` was
     rewritten (the `content-hash` does not cover comments), and again in the
-    second to tenth rounds, which changed no lock file (the sixth on
+    second to twelfth rounds, which changed no lock file (the sixth on
     `6c0aab8`'s tree, the seventh on `2bf76ad`'s, the eighth on a
     `git archive` of `57d9d26`, the ninth on one of `54043e4`'s
     `pyproject.toml` and `poetry.lock`, with poetry 1.3.2,
     `finish/r4/scan/poetry-lock-check.log`; the tenth on `8c74e04`'s clean
     tree, `finish/r5/scan/poetry-lock-check.log`; the eleventh on
-    `b1b91e8`'s clean tree, `finish/r6/scan/poetry-lock-check.log`). Every file
+    `b1b91e8`'s clean tree, `finish/r6/scan/poetry-lock-check.log`; the
+    twelfth on `23ea07c`'s clean tree,
+    `finish/r7/scan/poetry-lock-check.log`). Every file
     hash in
     the two new lock entries matches PyPI's JSON (2 of 2 for twisted, 50 of 50 for
     zope-interface). `poetry export --extras all --without-hashes`, with and
@@ -1579,7 +1666,13 @@ both sides ([Validation](#validation), OSV).
     twenty-nine among them), all passing under each version
     (`finish/r6/tests.config-*.log`, `finish/r6/tests.blackout_runtime-*.log`,
     each headed with the paths `synapse` and `tests` were imported from, and
-    `finish/r6/heavy.log`). All 40
+    `finish/r6/heavy.log`). The twelfth round ran the two again under each
+    venv on `23ea07c`'s clean tree, under the same load rule:
+    `tests.config`, 103 tests, and `tests.blackout_runtime`, 80, all passing
+    under each version (`finish/r7/logs/tests.config-*.log`,
+    `finish/r7/logs/tests.blackout_runtime-*.log`, each headed with the
+    import paths, and `finish/r7/logs/heavy.log`, which records the commit
+    and a clean worktree). All 40
     failures and
     errors are in `tests.http`: 18 failures and 1 error in the federation
     agent's module, 13 and 6 in the federation client's, 2 failures in the
@@ -1674,7 +1767,8 @@ both sides ([Validation](#validation), OSV).
 -   **`blackout_runtime_tests`:** 85 passed under each venv (`pytest -q`,
     pytest 8.3.5 added with `--no-deps` as before), and 85 again from the
     after venv in the second, third, fourth and fifth rounds (not run in the
-    sixth, seventh, eighth, ninth, tenth or eleventh). `tests/blackout_runtime`
+    sixth, seventh, eighth, ninth, tenth, eleventh or twelfth).
+    `tests/blackout_runtime`
     is in the trial suite above.
 -   **Boot, before and after:** `--generate-config` wrote a sqlite config
     with the 8008 listener on `['::1', '127.0.0.1']`, `tls: false`, `client`
@@ -1763,8 +1857,10 @@ family not supported by protocol`, the same traceback apart from Twisted's
     with an http listener on loopback: an `openssl` 2048/256 DSA key, and an
     RSA key beside another RSA key's `.pub`, each with no manhole listener
     (answering `/health`, exit 0 on SIGTERM) and with one (exit 1 with the
-    `ConfigError`) ([Only for a process that starts a
-    manhole](#listener-condition)).
+    `ConfigError`) ([Only when the config declares a manhole
+    listener](#listener-condition)). The twelfth round booted nothing; it
+    ran `synapse.app.admin_cmd`, which starts no listener, eight times, four
+    configs under each version (the same paragraph).
 -   **Lint:** the first round changed no Python file, so ruff, black, isort
     and mypy did not run then. The second round's two Python files
     (`synapse/util/manhole.py`, `tests/blackout_runtime/test_manhole.py`)
@@ -1797,7 +1893,9 @@ family not supported by protocol`, the same traceback apart from Twisted's
     round's two (the same files) pass ruff, black and isort as written,
     under both venvs (`finish/r5/logs/lint-wip.txt`). The eleventh round's
     two (the same files) pass ruff, black and isort as written, under both
-    venvs (`finish/r6/lint-*.log`).
+    venvs (`finish/r6/lint-*.log`). The twelfth round's two (the same files,
+    docstrings only) pass them as written, under both venvs
+    (`finish/r7/logs/lint.log`).
 -   **mypy, before and after, compared evenly from the third round on.** The
     second round ran mypy on the two manhole files from both venvs in the
     worktree, got the same single `stubs/txredisapi.pyi` error, and
@@ -1873,7 +1971,11 @@ family not supported by protocol`, the same traceback apart from Twisted's
     round's, on the same two files in `git archive` copies of `4e759b4` and
     of `b1b91e8`: again 55 in 27 under 26.4.0 and 53 in 26 under 26.10.0 on
     each side, the same error lines before and after (sorted output
-    identical), none in the two files (`finish/r6/mypy/`).
+    identical), none in the two files (`finish/r6/mypy/`). The twelfth
+    round's, on the same two files in `git archive` copies of `c1a12e9` and
+    of `23ea07c`: again 55 in 27 under 26.4.0 and 53 in 26 under 26.10.0 on
+    each side, the same error lines before and after (sorted output
+    identical), none in the two files (`finish/r7/mypy/`).
 -   **OSV:** osv-scanner 2.3.3 on `pnpm-lock.yaml` with `TZ=UTC`,
     `TZ=Etc/GMT-3` and `TZ=Pacific/Kiritimati`: exit 0 each time, "Filtered 4
     vulnerabilities" (deepmerge, the two image-size entries with the new
@@ -1916,7 +2018,9 @@ family not supported by protocol`, the same traceback apart from Twisted's
     give the same six times: exit 0, "Filtered 1 vulnerability" (deepmerge),
     no unused-ignore line, and "No issues found"
     (`finish/r6/scan/osv-*.log`); no run prints an image-size reason any
-    more. On
+    more. The twelfth round's, on a `git archive` of `23ea07c` and on one of
+    `develop`'s `97756ff`, each in all three time zones, give the same six
+    times (`finish/r7/scan/osv-*.log`). On
     `apps/blackout-server/poetry.lock`, which no gate scans this way:
     `develop`'s lock shows the eight Twisted rows (the seven above and
     GHSA-8pqf, `--` for its fix) plus black 23.10.1, pygments 2.15.1 and
@@ -1941,7 +2045,9 @@ family not supported by protocol`, the same traceback apart from Twisted's
     The eleventh round ran both on `git archive` copies of `b1b91e8` and of
     `develop`'s `97756ff`, after #1001 took image-size out of the lock and
     emptied `ignoreGhsas`: exit 0 and "1 low" from each, the two ignored
-    highs, image-size's, gone (`finish/r6/scan/pnpm-*.log`).
+    highs, image-size's, gone (`finish/r6/scan/pnpm-*.log`). The twelfth
+    round ran both on `git archive` copies of `23ea07c` and of `develop`'s
+    `97756ff` with the same result (`finish/r7/scan/pnpm-*.log`).
     Unchanged by this PR.
 -   **gitleaks 8.21.2** over `origin/develop..HEAD`: after the first two
     commits, 2 commits scanned, no leaks; after the fourth (`20362e4`), 4
@@ -1961,7 +2067,9 @@ family not supported by protocol`, the same traceback apart from Twisted's
     (four merge commits), no leaks (`finish/r5/scan/gitleaks-code.log`); in
     the eleventh, after the fifth merge and `b1b91e8`, 25 commits scanned of
     the 30 in the range (five merge commits), no leaks
-    (`finish/r6/scan/gitleaks-code.log`).
+    (`finish/r6/scan/gitleaks-code.log`); in the twelfth, after `23ea07c`,
+    28 commits scanned of the 33 in the range (five merge commits), no leaks
+    (`finish/r7/scan/gitleaks-code.log`).
 -   **Semgrep 1.95.0**, the version the third review used, from PyPI into a
     scratch venv, with `security.yml`'s rulesets (`p/security-audit`,
     `p/secrets`) over the files the branch changes, each time in a
@@ -1979,8 +2087,8 @@ family not supported by protocol`, the same traceback apart from Twisted's
     own with an empty `.semgrepignore` in the copy, gives 0 findings (115 rules
     on 1 file). Whether the workflow's `semgrep ci` skips it the same way was
     not checked. The fifth round's bullet gave the summary's count and left out
-    the skip. Semgrep did not run in the seventh, eighth, ninth, tenth or
-    eleventh round.
+    the skip. Semgrep did not run in the seventh, eighth, ninth, tenth,
+    eleventh or twelfth round.
 -   **Centralized CI Parity** (`centralized-ci-parity.yml`, which this PR
     triggers through `docs/**`) runs `pnpm lint`, `pnpm test`, `pnpm build`,
     `guard:ops-artifacts` and the smoke-aligned checks. Run here:
@@ -2037,11 +2145,13 @@ tools/ci/check-auth-secrets.mjs`.
     the rest of this bullet is as the earlier rounds wrote it). #1001 was
     opened on 2026-11-08 at 05:17:59 UTC and merged at 06:28:36 UTC, and
     the merge `4e759b4` brought it here, so no image-size ignore is left to
-    lapse. "No change for it exists yet", below, was true when the first
-    round wrote it (`648c914`, 2026-11-02) and false when the tenth round
-    kept it: #1001 had been open since 05:17:59 UTC, and that round's Method
-    bullet names it. As written before: the image-size
-    ignores lapse at
+    lapse. "No change for it exists yet", below, was true when the fourth
+    round wrote it (`bf32a2b`, 2026-11-02 13:58 UTC; #1001's commit
+    `7e3cc87` is dated 17:09 UTC that day) and false when the tenth round
+    kept it (until the twelfth round this note named the first round and
+    `648c914`, which only reflowed it): #1001 had been open since 05:17:59
+    UTC, and that round's Method bullet names it. As written before: the
+    image-size ignores lapse at
     the start of that day in all three places that enforce a date (the two
     OSV gates through `ignoreUntil`, Trivy through `exp:`). The OSV gates'
     `ignoreUntil` is that date on `develop` already, so they go red then
@@ -2971,10 +3081,12 @@ reflowed paragraph) and in this record:
     package ([The gate](#the-gate), [Validation](#validation)).
 2.  **The metro bullet of Before merge or release said no change for the
     update existed**, while the same round's Method bullet named #1001,
-    open since 05:17:59 UTC. The sentence came from `648c914` and was
-    false when the tenth round kept it. The bullet and item 3 of Found
-    outside scope now say that #1001 was opened at 05:17:59 UTC and merged
-    at 06:28:36 UTC, and the bullet says the sentence was false when the
+    open since 05:17:59 UTC. The sentence came from the fourth round's
+    `bf32a2b` (this item said `648c914`, which only reflowed it: eleventh
+    list, item 2) and was false when the tenth round kept it. The bullet and
+    item 3 of Found outside scope now say that #1001 was opened at 05:17:59
+    UTC and merged at 06:28:36 UTC, and the bullet says the sentence was
+    false when the
     tenth round kept it.
 3.  **The gate's closing paragraph said Twisted 26.10.0 matches no advisory
     "in any of the four databases"**, written in `648c914` when four had
@@ -2985,25 +3097,108 @@ reflowed paragraph) and in this record:
     would serve a session "on the key exchanges whose signature fits".**
     The server signs some key exchanges with such a key, but Twisted's
     client refuses its host key, and the review got no session in 30
-    connections under each version; this round's check found OpenSSL
-    rejecting every signature `Key.sign` returned with it (46 and 71 of 200
-    under 26.4.0 and 26.10.0). PATCHES.md's rationale sentence, rewritten in
-    `b1b91e8`, puts such a key with the configs that serve no session and
-    says what it said before; the DSA paragraph of this record says the
-    same ([DSA](#dsa-refusal)).
+    connections under each version; and OpenSSL rejects every signature
+    `Key.sign` returns with it, valid as each is, because it refuses the
+    key's 161-bit subgroup order before it reads a signature (62 and 61 of
+    200 under 26.4.0 and 26.10.0 in the twelfth round's check; this item
+    gave the eleventh round's 46 and 71, from a check that read r and s from
+    the wrong bytes: eleventh list, item 1). PATCHES.md's rationale
+    sentence, rewritten in `b1b91e8`, puts such a key with the configs that
+    serve no session and says what it said before; the DSA paragraph of
+    this record says the same ([DSA](#dsa-refusal)).
 5.  **The host-key check ran when no manhole listener was configured**, so a
     homeserver that runs no manhole and has a stale `manhole_settings`
     block, which `develop` runs, stopped at config load, and no document
-    said so. From `b1b91e8` the check runs only for a process that starts a
-    manhole listener, four tests pin it, both documentation pages and
-    PATCHES.md say so, and the first and fourth Result bullets and the
-    opening paragraph name the condition
-    ([Only for a process that starts a manhole](#listener-condition)).
+    said so. From `b1b91e8` the check runs only when the config declares a
+    manhole listener for the process it is loaded as (this item said "for a
+    process that starts a manhole listener": eleventh list, item 3), four
+    tests pin it, both documentation pages and PATCHES.md say so, and the
+    first and fourth Result bullets and the opening paragraph name the
+    condition ([Only when the config declares a manhole
+    listener](#listener-condition)).
 
 Found while making these changes:
 
 6.  **The commit messages of `d673fe6`, `8c74e04` and `71fdfce`** carry
     sentences this round supersedes; see the note below.
+
+## Corrected after the eleventh review
+
+The eleventh round (commits `4e759b4`, `b1b91e8`, `0d36d47`, `c1a12e9`) was
+reviewed under the same three lenses. The manhole's behaviour and the merge
+lenses found nothing; the claims lens found four, one marked medium and
+three low, which reached this round in the task that carried them.
+`develop` had not moved from `97756ff`, so this round merges nothing
+([Method](#method)). Each finding and what changed, in commit `23ea07c`
+(`docs/manhole.md`, the manhole paragraph of `config_documentation.md`,
+PATCHES.md, and docstrings in `synapse/config/server.py` and the test
+module) and in this record:
+
+1.  **The eleventh round's q161 check read r and s from the wrong bytes**
+    (medium). Its `probe/q161_check.py` took r and s from
+    `common.getNS(sig)[1]`, the remainder after the signature's first
+    string, which still begins with the second string's 4-byte length
+    (`00000028`), so OpenSSL was never given the signatures the server
+    makes; the same decoding rejects all 200 valid signatures of a
+    standard 1024-bit key with a 160-bit q. Its "rejected all 46 and 71"
+    was cited by the DSA paragraph, by item 4 of the tenth list and by
+    PATCHES.md. This round's check reads them from
+    `common.getNS(sig, 2)[1]` and keeps that control: under each version
+    the control verifies 200 of 200 that way and none the old way, and the
+    q161 key's signatures (62 and 61 of 200) are all valid by a pure-Python
+    check and all rejected by OpenSSL 4.0.3 through cryptography 50.0.2,
+    because OpenSSL's `dsa_do_verify` refuses a q that is not 160, 224 or
+    256 bits before it reads the signature ("bad q value", as
+    `openssl dgst -verify` 3.0.13 prints it). The review's own re-run under
+    both venvs found the same (70 and 67 signed, all rejected; the control
+    200 of 200; `finish/verify-r6-claims/q161-recheck.log`), and this round
+    ran its script again (`finish/r7/logs/q161-recheck.log`). The DSA paragraph
+    ([DSA](#dsa-refusal)) and item 4 of the tenth list give this round's
+    counts, the reason and the logs; PATCHES.md's sentence says that
+    OpenSSL refuses such a subgroup order before it reads a signature, that
+    every signature the server returned in this round's check was valid,
+    and that the eleventh round's wording rested on the broken check; the
+    eleventh-round Method bullet says its check was replaced.
+2.  **The record named the wrong round and commit for "No change for it
+    exists yet"** (low). The metro bullet of [Before merge or
+    release](#before-merge-or-release) said the first round wrote it, in
+    `648c914`, and item 2 of the tenth list that it came from `648c914`.
+    It first appears in `bf32a2b` (2026-11-02 13:58 UTC), the fourth
+    round's record commit; `648c914`, the fifth round's, only reflowed it,
+    and the first round's commits never had it (`git show` of this file,
+    lines joined, at each of the thirteen commits from `6b6d96e` to
+    `648c914`). Both now name the fourth round and `bf32a2b`. It was true
+    when written: #1001's commit `7e3cc87` is dated 17:09 UTC that day.
+3.  **"Only for a process that starts a manhole" was not exact** (low).
+    `_starts_manhole_listener` decides from `worker_app` and the listeners
+    the config declares, not from what the process starts:
+    `synapse.app.admin_cmd`, which starts no listener, loads the
+    homeserver's config with no `worker_app`, so it is checked as the main
+    process and stops at config load with the manhole `ConfigError` when
+    that config has a manhole listener and a key the check refuses. The
+    review showed it with `admin_cmd export-data`; this round ran that
+    under each version, and also with a worker config naming `admin_cmd`,
+    with and without `worker_manhole` ([Only when the config declares a
+    manhole listener](#listener-condition)). `docs/manhole.md`, the config
+    manual, PATCHES.md, the docstrings of `_starts_manhole_listener`,
+    `_check_manhole_host_key` and the test module, and this record (the
+    opening paragraph, the first and fourth Result bullets, the paragraph
+    now headed "Only when the config declares a manhole listener", the
+    eleventh-round Method bullet's link and item 5 of the tenth list) now
+    say the check runs when the config declares a manhole listener for the
+    process it is loaded as, and that `admin_cmd` is checked as the process
+    whose config it reads. The code is unchanged; the homeserver refuses
+    the same configs.
+4.  **PATCHES.md's documentation bullet did not record the eleventh round's
+    fork text** in `docs/manhole.md` (its paragraph on when the checks run,
+    which ends "A key file that cannot be read stops startup either way.")
+    and in the config manual's fork paragraph (its sentence on the same).
+    The bullet now does, and records this round's rewording of both.
+
+Found while making these changes:
+
+5.  **The commit messages of `b1b91e8` and `c1a12e9`** carry sentences this
+    round supersedes; see the note below.
 
 ## Commit messages
 
@@ -3161,3 +3356,17 @@ each is superseded as follows.
     of the lock (Validation, pnpm audit). The record it commits kept the
     metro bullet's "No change for it exists yet" and said #1001 had not
     merged; both have eleventh-round notes (tenth list, items 1 and 2).
+-   `b1b91e8`: the subject's "runs only for a process that starts a manhole"
+    and the body's "The sentence now says the check runs only for a process
+    that starts a manhole": it runs when the config declares a manhole
+    listener for the process it is loaded as, `synapse.app.admin_cmd`,
+    which starts none, included (eleventh list, item 3). "OpenSSL 4.0.3,
+    through cryptography 50.0.2, rejected all 46 and 71 of the signatures
+    Key.sign returned": that check read r and s from the wrong bytes; read
+    correctly, OpenSSL rejects every one (62 and 61 of 200 in the twelfth
+    round) because it refuses the 161-bit q, and each is valid (eleventh
+    list, item 1).
+-   `c1a12e9`: "OpenSSL 4.0.3 (cryptography 50.0.2) rejected all 46 and 71
+    of the 200 signatures": as for `b1b91e8`. The paragraph it names, "Only
+    for a process that starts a manhole", is now headed "Only when the
+    config declares a manhole listener" (eleventh list, item 3).
