@@ -507,7 +507,9 @@ if (shouldListen) {
                 // that connection fails or the lock is gone, stop the loops and
                 // exit 1 through the drain below, as the background worker
                 // does: running on without the lock could double-process every
-                // job, and the restart takes the lock again.
+                // job, and the restart takes the lock again. On SIGTERM,
+                // releaseBackgroundLeader (in shutdown below) stops this watch
+                // before the connection goes back to the pool.
                 watchBackgroundLeadership((reason) => {
                     loops.stop();
                     shutdown(`background_leader_lost:${reason}`, 1);

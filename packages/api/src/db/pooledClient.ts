@@ -20,8 +20,9 @@ const asError = (err: unknown): Error => (err instanceof Error ? err : new Error
  * puts the client back in the idle list, and the next connect() can hand that
  * same client out; the write-behind queue's immediate retry got it, failed
  * with "Connection terminated unexpectedly", and dropped a write that Postgres
- * was up to take. Destroying the client on any error costs one new connection
- * after an error that left the connection usable (a constraint violation).
+ * was up to take. Destroying the client on any error also closes a connection
+ * that an error left usable (a constraint violation); the pool opens a
+ * replacement when it next has no idle connection to hand out.
  */
 export async function withPooledClient<C extends ReleasableClient, T>(
     pool: { connect(): Promise<C> },

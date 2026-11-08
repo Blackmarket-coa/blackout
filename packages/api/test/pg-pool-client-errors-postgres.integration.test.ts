@@ -5,9 +5,10 @@
 // sets it yet (2026-11-08), so they run only where someone points them at a
 // server. pg-pool-client-errors.integration.test.ts runs everywhere with
 // stand-in connections that fail in the orders pg 8.20.0 uses; it has no
-// stand-in for two things only this file checks: pg's own ordering of a real
-// drop, and the API exiting 1 through its drain when its leader-lock
-// connection drops (the watch in src/index.ts).
+// stand-in for three things only this file checks: pg's own ordering of a real
+// drop, the API exiting 1 through its drain when its leader-lock connection
+// drops (the watch in src/index.ts), and the API draining to exit 0 on SIGTERM
+// when the connection it held the lock on drops during the drain.
 //
 // A backend is dropped the ways production sees it: pg_terminate_backend (what
 // a restart, a failover or idle_session_timeout does to a session) and a TCP
@@ -147,6 +148,91 @@ const logged = (lines: string[], msg: string): Row[] =>
 const pidOf = async (client: Client): Promise<number> =>
     (await client.query('SELECT pg_backend_pid() AS pid')).rows[0].pid as number;
 
+/**
+ * End a pool in teardown without waiting forever. pool.end() waits for every
+ * client still checked out, so a test that fails before it gives one back
+ * would hang its teardown and cancel every test after it; what is left open is
+ * closed when the test databases are dropped at the end.
+ */
+const endPool = async (pool: { end(): Promise<void> }): Promise<void> => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    await Promise.race([pool.end(), new Promise((r) => (timer = setTimeout(r, 3_000)))]);
+    clearTimeout(timer);
+};
+
+/**
+ * The API (src/index.ts) in postgres mode on `database`, running the
+ * background loops in-process, as it does when
+ * BLACKOUT_BACKGROUND_WORKERS_DISABLED is unset. Resolves once it listens and
+ * its loops have started.
+ */
+const startApi = async (
+    t: { after(fn: () => void): void },
+    database: string,
+    extraEnv: NodeJS.ProcessEnv = {}
+) => {
+    const probe = net.createServer();
+    await new Promise<void>((r) => probe.listen(0, '127.0.0.1', () => r()));
+    const port = (probe.address() as net.AddressInfo).port;
+    await new Promise<void>((r) => probe.close(() => r()));
+
+    const env: NodeJS.ProcessEnv = {
+        ...process.env,
+        NODE_ENV: 'development',
+        BLACKOUT_DB_MODE: 'postgres',
+        DATABASE_URL: urlFor(database),
+        PORT: String(port),
+        JWT_SECRET_PRIMARY: generateTestJwtSecret(),
+        ...extraEnv,
+    };
+    for (const key of [
+        'BLACKOUT_BACKGROUND_WORKERS_DISABLED',
+        'BLACKOUT_API_SKIP_LISTEN',
+        'REDIS_URL',
+    ]) {
+        delete env[key];
+    }
+    const child = spawn(process.execPath, ['--import', 'tsx', 'src/index.ts'], {
+        cwd: apiDir,
+        env,
+        stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    t.after(() => {
+        if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+    });
+    const out = { stdout: '', stderr: '' };
+    child.stdout.on('data', (d) => (out.stdout += d));
+    child.stderr.on('data', (d) => (out.stderr += d));
+    const exited = new Promise<number | null>((r) => child.on('exit', (code) => r(code)));
+
+    await waitFor(
+        () =>
+            (out.stdout.includes('"background_loops_started"') &&
+                out.stdout.includes('"blackout-server listening"')) ||
+            child.exitCode !== null,
+        'the API to listen and start its loops',
+        60_000
+    );
+    assert.equal(child.exitCode, null, `the API exited early:\n${out.stdout}\n${out.stderr}`);
+
+    /** The exit code, or 'still running' after `ms`. */
+    const exitCode = async (ms: number): Promise<number | null | 'still running'> => {
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const code = await Promise.race([
+            exited,
+            new Promise<'still running'>((r) => (timer = setTimeout(() => r('still running'), ms))),
+        ]);
+        clearTimeout(timer);
+        return code;
+    };
+    const lines = (): Row[] =>
+        `${out.stdout}\n${out.stderr}`
+            .split('\n')
+            .filter((l) => l.startsWith('{'))
+            .map((l) => JSON.parse(l) as Row);
+    return { child, port, out, exitCode, lines };
+};
+
 test(
     'a terminated idle connection is dropped and logged; the next checkout gets a new backend',
     { skip },
@@ -154,7 +240,7 @@ test(
         const lines = captureWarnings(t);
         const database = await newDatabase();
         const pool = await sharedPool(database);
-        t.after(() => pool.end());
+        t.after(() => endPool(pool));
         const first = await pool.connect();
         const pid = await pidOf(first);
         first.release();
@@ -178,7 +264,7 @@ test(
         const lines = captureWarnings(t);
         const database = await newDatabase();
         const pool = await sharedPool(database);
-        t.after(() => pool.end());
+        t.after(() => endPool(pool));
         const held = await pool.connect();
         const pid = await pidOf(held);
 
@@ -229,7 +315,7 @@ test('a network reset under a query in flight does not end the process', { skip 
     const pool = (await getSharedPgPool()) as unknown as SharedPool;
     // The pool first: the proxy closes once its connections have.
     t.after(async () => {
-        await pool.end();
+        await endPool(pool);
         await new Promise<void>((r) => proxy.close(() => r()));
     });
 
@@ -266,12 +352,10 @@ test(
         const transport = new PgNotifyTransport(pool as never);
         // The transport first: pool.end() waits for the LISTEN client it holds.
         // Bounded, so a regression that leaks LISTEN clients fails rather than
-        // hangs; the database drop at the end closes what is left.
+        // hangs.
         t.after(async () => {
             await transport.close();
-            let timer: ReturnType<typeof setTimeout> | undefined;
-            await Promise.race([pool.end(), new Promise((r) => (timer = setTimeout(r, 3_000)))]);
-            clearTimeout(timer);
+            await endPool(pool);
         });
         let reconnects = 0;
         transport.onReconnect(() => (reconnects += 1));
@@ -302,46 +386,7 @@ test(
     { skip, timeout: 120_000 },
     async (t) => {
         const database = await newDatabase();
-        const probe = net.createServer();
-        await new Promise<void>((r) => probe.listen(0, '127.0.0.1', () => r()));
-        const port = (probe.address() as net.AddressInfo).port;
-        await new Promise<void>((r) => probe.close(() => r()));
-
-        const env: NodeJS.ProcessEnv = {
-            ...process.env,
-            NODE_ENV: 'development',
-            BLACKOUT_DB_MODE: 'postgres',
-            DATABASE_URL: urlFor(database),
-            PORT: String(port),
-            JWT_SECRET_PRIMARY: generateTestJwtSecret(),
-        };
-        for (const key of [
-            'BLACKOUT_BACKGROUND_WORKERS_DISABLED',
-            'BLACKOUT_API_SKIP_LISTEN',
-            'REDIS_URL',
-        ]) {
-            delete env[key];
-        }
-        const child = spawn(process.execPath, ['--import', 'tsx', 'src/index.ts'], {
-            cwd: apiDir,
-            env,
-            stdio: ['ignore', 'pipe', 'pipe'],
-        });
-        t.after(() => {
-            if (child.exitCode === null) child.kill('SIGKILL');
-        });
-        let stdout = '';
-        let stderr = '';
-        child.stdout.on('data', (d) => (stdout += d));
-        child.stderr.on('data', (d) => (stderr += d));
-        const exited = new Promise<number | null>((r) => child.on('exit', (code) => r(code)));
-
-        await waitFor(
-            () => stdout.includes('"background_loops_started"') || child.exitCode !== null,
-            'the API to start its loops',
-            60_000
-        );
-        assert.equal(child.exitCode, null, `the API exited early:\n${stdout}\n${stderr}`);
+        const api = await startApi(t, database);
 
         const pids = await terminate(
             database,
@@ -351,21 +396,10 @@ test(
         );
         assert.equal(pids.length, 1, 'the leader lock was held on one connection');
 
-        let timer: ReturnType<typeof setTimeout> | undefined;
-        const code = await Promise.race([
-            exited,
-            new Promise<'still running'>(
-                (r) => (timer = setTimeout(() => r('still running'), 30_000))
-            ),
-        ]);
-        clearTimeout(timer);
-        const all = `${stdout}\n${stderr}`;
-        assert.equal(code, 1, all);
-        assert.doesNotMatch(stderr, /Unhandled 'error' event/);
-        const lines = all
-            .split('\n')
-            .filter((l) => l.startsWith('{'))
-            .map((l) => JSON.parse(l) as Row);
+        const code = await api.exitCode(30_000);
+        assert.equal(code, 1, `${api.out.stdout}\n${api.out.stderr}`);
+        assert.doesNotMatch(api.out.stderr, /Unhandled 'error' event/);
+        const lines = api.lines();
         const lost = lines.find((e) => e.msg === 'background_leader_lost');
         assert.equal(lost?.reason, 'connection_error');
         const stop = lines.find((e) => e.msg === 'shutdown_signal_received');
@@ -378,13 +412,124 @@ test(
 );
 
 test(
+    'an API running the loops in-process drains on SIGTERM to exit 0 when its former leader connection drops during the drain, and the queued sign-ups land',
+    { skip, timeout: 120_000 },
+    async (t) => {
+        const database = await newDatabase();
+        const api = await startApi(t, database, { SHUTDOWN_TIMEOUT_MS: '30000' });
+        const a = await admin(urlFor(database));
+        t.after(() => a.end());
+        let signUps = 0;
+        const signUp = async (username: string): Promise<number> => {
+            const n = ++signUps;
+            const res = await fetch(`http://127.0.0.1:${api.port}/v1/auth/register`, {
+                method: 'POST',
+                headers: {
+                    'content-type': 'application/json',
+                    'x-forwarded-for': `10.77.0.${n}`,
+                },
+                body: JSON.stringify({
+                    username,
+                    email: `${username}@example.invalid`,
+                    password: `Correct-horse-battery-${n}!`,
+                }),
+            });
+            await res.arrayBuffer();
+            return res.status;
+        };
+        const tag = randomUUID().slice(0, 8);
+        const usernames = [`drainfirst${tag}`, `drainsecond${tag}`];
+
+        // Hold the drain open: with users locked, the first sign-up's INSERT
+        // waits on the server and the second waits behind it in the
+        // write-behind queue.
+        const locker = await admin(urlFor(database));
+        t.after(() => locker.end());
+        await locker.query('BEGIN');
+        await locker.query('LOCK TABLE users IN ACCESS EXCLUSIVE MODE');
+        for (const username of usernames) assert.equal(await signUp(username), 201);
+        let blocked = 0;
+        const deadline = Date.now() + 5_000;
+        while (blocked === 0 && Date.now() < deadline) {
+            const { rows } = await a.query(
+                `SELECT count(*)::int AS n FROM pg_stat_activity WHERE datname = current_database()
+                  AND wait_event_type = 'Lock' AND query ILIKE 'INSERT INTO users%'`
+            );
+            blocked = rows[0].n as number;
+            if (blocked === 0) await sleep(20);
+        }
+        assert.equal(blocked, 1, 'the first sign-up is written and blocked on the lock');
+        const leader = await a.query(
+            `SELECT pid FROM pg_locks WHERE locktype = 'advisory' AND objid = $1::bigint::oid
+               AND database = (SELECT oid FROM pg_database WHERE datname = current_database())`,
+            [BACKGROUND_LEADER_LOCK_KEY]
+        );
+        assert.equal(leader.rows.length, 1, 'the API holds the leader lock');
+        const former = [leader.rows[0].pid as number];
+
+        // SIGTERM gives the leader lock up and puts that connection back in the
+        // pool while the drain waits; then that idle connection drops.
+        api.child.kill('SIGTERM');
+        let idle = false;
+        const released = Date.now() + 10_000;
+        while (!idle && Date.now() < released) {
+            const { rows } = await a.query(
+                `SELECT 1 FROM pg_stat_activity WHERE pid = $1 AND state = 'idle'
+                   AND NOT EXISTS (SELECT 1 FROM pg_locks WHERE pid = $1 AND locktype = 'advisory')`,
+                former
+            );
+            idle = rows.length === 1;
+            if (!idle) await sleep(20);
+        }
+        assert.ok(idle, 'the former leader connection is unlocked and idle in the pool');
+        assert.deepEqual(await terminate(database, 'pid = $1', former), former);
+        await waitFor(
+            () =>
+                api.lines().some((e) => e.msg === 'pg_pool_client_error') ||
+                api.child.exitCode !== null,
+            'the dropped idle connection to be logged'
+        );
+        await sleep(300);
+        assert.equal(
+            api.child.exitCode,
+            null,
+            `the API ended before its drain finished:\n${api.out.stdout}\n${api.out.stderr}`
+        );
+
+        await locker.query('ROLLBACK');
+        const code = await api.exitCode(30_000);
+        assert.equal(code, 0, `${api.out.stdout}\n${api.out.stderr}`);
+        assert.doesNotMatch(api.out.stderr, /already been released|Unhandled 'error' event/);
+        const lines = api.lines();
+        assert.equal(lines.find((e) => e.msg === 'pg_pool_client_error')?.state, 'idle');
+        assert.ok(
+            lines.some((e) => e.msg === 'runtime_store_drained'),
+            'the store was drained before the exit'
+        );
+        assert.deepEqual(
+            lines.filter((e) => e.msg === 'db_write_behind_failed'),
+            [],
+            'no write was dropped'
+        );
+        const { rows } = await a.query(
+            'SELECT username FROM users WHERE username = ANY($1::text[]) ORDER BY username',
+            [usernames]
+        );
+        assert.deepEqual(
+            rows.map((r) => r.username),
+            [...usernames].sort()
+        );
+    }
+);
+
+test(
     'a write-behind write whose backend is terminated under its query lands on the retry',
     { skip },
     async (t) => {
         const lines = captureWarnings(t);
         const database = await newDatabase();
         const pool = await sharedPool(database);
-        t.after(() => pool.end());
+        t.after(() => endPool(pool));
         const a = await admin(urlFor(database));
         t.after(() => a.end());
         await a.query('CREATE TABLE probe_wb (id text PRIMARY KEY, v text)');
@@ -484,9 +629,7 @@ test(
         const transport = new PgNotifyTransport(pool as never);
         t.after(async () => {
             await transport.close();
-            let timer: ReturnType<typeof setTimeout> | undefined;
-            await Promise.race([pool.end(), new Promise((r) => (timer = setTimeout(r, 3_000)))]);
-            clearTimeout(timer);
+            await endPool(pool);
             await new Promise<void>((r) => proxy.close(() => r()));
         });
         let reconnects = 0;
@@ -529,7 +672,7 @@ test(
         const lines = captureWarnings(t);
         const database = await newDatabase();
         const pool = await sharedPool(database);
-        t.after(() => pool.end());
+        t.after(() => endPool(pool));
         await migrateUp({ pool: pool as never, migrationsDir: MIGRATIONS_DIR });
 
         // The replica under test: peer changes and reconnects are delivered by

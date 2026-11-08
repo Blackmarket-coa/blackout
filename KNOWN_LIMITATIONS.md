@@ -745,8 +745,9 @@ the drop is logged (`pg_pool_client_error`) and counted
 (`db_pool_client_errors_total`), and the dead connection is not handed out
 again: the pool discards an idle one, and the store gives a connection whose
 query failed back with that error, so the pool closes it and the next checkout
-opens a new one. A drop the server reports to a query in flight reaches only
-that query, so it is that query's error and is not counted. What remains:
+gets another connection (a new one only when none is idle). A drop the server
+reports to a query in flight reaches only that query, so it is that query's
+error and is not counted. What remains:
 
 -   An API that runs the background loops itself (started without
     `BLACKOUT_BACKGROUND_WORKERS_DISABLED=1`; the production compose files set
@@ -754,12 +755,19 @@ that query, so it is that query's error and is not counted. What remains:
     connection, and every Postgres restart drops it. That API stops its loops,
     drains the store and exits 1, as the worker does, and comes back through
     its restart policy rather than run on without the lock.
--   A write-behind write gets one immediate retry, on a new connection. A
-    write whose own connection was dropped under it lands on that retry; one
-    attempted while Postgres cannot be reached or is restarting fails twice and
-    is not written later (`db_write_behind_failed`,
-    `db_write_behind_failures_total`). Staying up keeps it in that process's
-    memory, not in Postgres.
+-   A write-behind write gets one immediate retry, on another connection than
+    the one it failed on (a new one only when none is idle). A write whose own
+    connection was dropped under it lands on that retry; one attempted while
+    Postgres cannot be reached or is restarting fails twice and is not written
+    later (`db_write_behind_failed`, `db_write_behind_failures_total`), though
+    the request that made it was answered 2xx. The change is then lost. If the
+    outage also dropped this replica's LISTEN connection (a Postgres restart
+    always does), the re-hydrate that follows its reconnect reloads every table
+    of the mirror from Postgres and drops the change from this replica's memory
+    too: an account created during the outage can no longer sign in, even on
+    the replica that created it. Otherwise the change stays only in that
+    process's memory until something reloads that table from Postgres (a
+    re-hydrate, a peer's whole-table change) or the process restarts.
 -   A peer replica's change that this replica cannot read back at that moment
     (no connection to be had) is logged (`pg_store_peer_refresh_failed`) and
     leaves that row stale in this replica's mirror until it changes again or

@@ -60,7 +60,8 @@ export class WriteBehindQueue {
         }
         try {
             // A failed attempt gives its connection back with the error, so the
-            // retry gets a new one rather than the same dead client.
+            // pool closes it and the retry gets another connection (a new one
+            // only when none is idle), never the same dead client.
             await this.withRetry(() =>
                 withPooledClient(this.pool, async (client) => {
                     if (op.kind === 'upsert') {

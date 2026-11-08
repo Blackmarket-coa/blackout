@@ -40,6 +40,8 @@ type LeaderClient = PgClient & {
 };
 
 let leaderClient: LeaderClient | null = null;
+/** How to stop each running watch on leaderClient (watchBackgroundLeadership). */
+const leaderWatches = new Set<() => void>();
 
 const asError = (err: unknown): Error => (err instanceof Error ? err : new Error(String(err)));
 
@@ -104,7 +106,8 @@ const ignoreError = (): void => undefined;
  * not held, fails, or gets no answer within `checkTimeoutMs`. The connection
  * is then destroyed rather than pooled, and this process is no longer the
  * leader; the background worker stops its loops. No-op where no lock is held
- * (file/memory mode). Returns a function that stops watching.
+ * (file/memory mode). Returns a function that stops watching;
+ * releaseBackgroundLeader also stops it.
  *
  * Unwatched, an error on the held connection is only logged by the shared
  * pool's listener (config/postgres.ts) and the process runs on without the
@@ -127,6 +130,7 @@ export const watchBackgroundLeadership = (
         clearInterval(interval);
         client.removeListener?.('error', onError);
         client.removeListener?.('end', onEnd);
+        leaderWatches.delete(stop);
     };
     const lose = (reason: string, err?: unknown): void => {
         if (!watching) return;
@@ -169,6 +173,7 @@ export const watchBackgroundLeadership = (
     client.on?.('end', onEnd);
     const interval = setInterval(() => void check(), checkIntervalMs);
     if (typeof interval.unref === 'function') interval.unref();
+    leaderWatches.add(stop);
     return stop;
 };
 
@@ -177,6 +182,12 @@ export const releaseBackgroundLeader = async (): Promise<void> => {
     const client = leaderClient;
     if (!client) return;
     leaderClient = null;
+    // Stop watching before the connection goes back to the pool. A watch left
+    // on it would give it back a second time when it fails there (pg-pool
+    // throws on a second release, here inside the connection's 'error'
+    // listener, which ends the process mid-drain), and its next lock check
+    // would destroy it under whoever has checked it out by then.
+    for (const stop of [...leaderWatches]) stop();
     try {
         await client.query('SELECT pg_advisory_unlock($1)', [BACKGROUND_LEADER_LOCK_KEY]);
     } catch (err) {

@@ -99,13 +99,16 @@ export class PgNotifyTransport implements StoreChangeTransport {
                 });
             }
         });
-        // pg can report one dropped connection twice, and in either order: a
-        // socket reset emits 'error' and then rejects the query in flight, while
-        // a backend terminated under LISTEN rejects LISTEN with the server's FATAL
-        // and emits 'error' only when the socket closes. Whichever comes first
-        // gives the dead client back to the pool to be destroyed, once, and one
-        // reconnect follows: each extra reconnect left one more LISTEN session,
-        // and a dead client never released kept its pool slot for good.
+        // pg can report one dropped connection twice: a socket reset emits
+        // 'error' and then rejects the query in flight, and a held client whose
+        // backend is terminated emits 'error' again when the socket closes,
+        // unless it has been ended by then. A backend terminated under LISTEN
+        // rejects LISTEN with the server's FATAL; the catch below gives that
+        // client back with its error, which ends it, so no 'error' follows.
+        // Whichever report comes first gives the dead client back to the pool
+        // to be destroyed, once, and one reconnect follows: each extra reconnect
+        // left one more LISTEN session, and a dead client never released kept
+        // its pool slot for good.
         client.on('error', (err: unknown) => {
             if (this.released.has(client)) return;
             log.warn('pg_notify_listen_error', {

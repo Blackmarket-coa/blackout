@@ -7,7 +7,10 @@
 // itself unqueryable, then emits 'error' (pg's Client._handleErrorEvent); or,
 // for a server FATAL that arrives while a query is in flight, it rejects that
 // query and stays queryable until its socket closes (Client._handleErrorMessage,
-// then the 'end' handler). The same drops against a real server are in
+// then the 'end' handler). When the socket closes, pg emits 'error' only if
+// nobody has ended the client (the 'end' handler checks client._ending), and
+// pg-pool ends every client it discards; the stand-ins do the same. The same
+// drops against a real server are in
 // pg-pool-client-errors-postgres.integration.test.ts.
 import test, { afterEach } from 'node:test';
 import assert from 'node:assert/strict';
@@ -22,6 +25,15 @@ const { dbPoolClientErrorsTotal } = await import('../src/telemetry/metrics');
 const { PgNotifyTransport } = await import('../src/db/pgNotify');
 const { WriteBehindQueue } = await import('../src/db/writeBehindQueue');
 const { PostgresBackedDb, REHYDRATE_RETRY_MS } = await import('../src/db/store');
+const {
+    acquireBackgroundLeaderLock,
+    isBackgroundLeader,
+    releaseBackgroundLeader,
+    watchBackgroundLeadership,
+} = await import('../src/services/backgroundLeader');
+const { MIGRATIONS_DIR, migrateDown, migrateUp, status, verifyMigrationChecksums } = await import(
+    '../src/db/migrate'
+);
 
 const PASSWORD = randomBytes(12).toString('hex');
 const DATABASE_URL = `postgres://pool_test_user:${PASSWORD}@pool-test-host.invalid:5432/pool_test_db`;
@@ -37,6 +49,7 @@ class FakeConnection extends EventEmitter {
     /** The server ended this backend; the socket has not closed yet. */
     private dead = false;
     private fatalOnNextQuery: Error | null = null;
+    private socketClosesAfterMs = 30;
     readonly connectionParameters: Record<string, unknown>;
 
     constructor(options: { connectionString?: string }) {
@@ -66,18 +79,18 @@ class FakeConnection extends EventEmitter {
             // emits 'error' then only if nobody has ended the client.
             this.fatalOnNextQuery = null;
             this.dead = true;
-            setTimeout(() => {
-                if (!this._ending) this.fail(new Error('Connection terminated unexpectedly'));
-            }, 30);
+            setTimeout(() => this.socketClosed(), this.socketClosesAfterMs);
             throw fatal;
         }
         FakeConnection.executed.push({ connection: FakeConnection.made.indexOf(this), sql });
+        if (sql.includes('pg_try_advisory_lock')) return { rows: [{ locked: true }] };
         return { rows: [] };
     }
 
     /** The server ends this backend while the next query is in flight. */
-    terminateUnderNextQuery(err: Error): void {
+    terminateUnderNextQuery(err: Error, socketClosesAfterMs = 30): void {
         this.fatalOnNextQuery = err;
+        this.socketClosesAfterMs = socketClosesAfterMs;
     }
 
     end(callback?: () => void): void {
@@ -90,6 +103,11 @@ class FakeConnection extends EventEmitter {
     fail(err: Error): void {
         this._queryable = false;
         this.emit('error', err);
+    }
+
+    /** The socket closes: pg reports it only if nobody has ended the client. */
+    socketClosed(): void {
+        if (!this._ending) this.fail(new Error('Connection terminated unexpectedly'));
     }
 }
 
@@ -105,6 +123,24 @@ interface SharedPool {
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const waitFor = async (condition: () => boolean, label: string, ms = 5_000) => {
+    const deadline = Date.now() + ms;
+    while (!condition()) {
+        if (Date.now() > deadline) throw new Error(`timed out waiting for ${label}`);
+        await sleep(20);
+    }
+};
+
+/**
+ * End a pool in teardown without waiting forever. pool.end() waits for every
+ * client still checked out, so a test that fails before it gives one back
+ * would hang the teardown and cancel every test after it.
+ */
+const endPool = async (pool: { end(): Promise<void> }): Promise<void> => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    await Promise.race([pool.end(), new Promise((r) => (timer = setTimeout(r, 3_000)))]);
+    clearTimeout(timer);
+};
 
 const terminated = (): Error =>
     Object.assign(new Error('terminating connection due to administrator command'), {
@@ -186,7 +222,7 @@ const assertSecretFree = (line: string): void => {
 
 let openPool: SharedPool | null = null;
 afterEach(async () => {
-    await openPool?.end();
+    if (openPool) await endPool(openPool);
     openPool = null;
     clearSharedPgPool();
 });
@@ -200,8 +236,8 @@ test('an idle pooled connection that fails is dropped, logged without connection
 
     const lines = warnings(() => {
         assert.doesNotThrow(() => dead.fail(terminated()));
-        // pg reports the same drop again when the socket closes.
-        assert.doesNotThrow(() => dead.fail(new Error('Connection terminated unexpectedly')));
+        // The pool has ended it, so pg does not report the socket closing.
+        assert.doesNotThrow(() => dead.socketClosed());
     });
 
     assert.equal(counted('idle'), before + 1);
@@ -227,10 +263,11 @@ test('a checked-out connection that fails does not end the process, and release(
     const dead = FakeConnection.made[0];
     const before = counted('held');
 
-    // Held with no query in flight, as the background-leader lock is.
+    // Held with no query in flight, as the background-leader lock is. Nobody
+    // has ended it, so pg reports the drop again when the socket closes.
     const lines = warnings(() => {
         assert.doesNotThrow(() => dead.fail(terminated()));
-        assert.doesNotThrow(() => dead.fail(new Error('Connection terminated unexpectedly')));
+        assert.doesNotThrow(() => dead.socketClosed());
     });
 
     assert.equal(counted('held'), before + 1, 'one drop, counted once');
@@ -275,12 +312,19 @@ test('a checked-out connection carries the listener only while it is held', asyn
 class FakeListenClient extends EventEmitter {
     queries: string[] = [];
     released: Array<'pooled' | Error> = [];
+    /** pg-pool ends a client given back with an error (pg's client._ending). */
+    ending = false;
     async query(sql: string): Promise<unknown> {
         this.queries.push(sql);
         return {};
     }
     release(err?: Error): void {
         this.released.push(err ?? 'pooled');
+        if (err) this.ending = true;
+    }
+    /** The socket closes: pg reports it only if nobody has ended the client. */
+    socketClosed(): void {
+        if (!this.ending) this.emit('error', new Error('Connection terminated unexpectedly'));
     }
 }
 
@@ -298,9 +342,12 @@ test('a dropped LISTEN connection is destroyed and replaced once, not leaked and
     await transport.subscribe(() => undefined);
     assert.equal(clients.length, 1);
 
+    // The server's FATAL reaches the idle LISTEN client as an 'error'. pg would
+    // report the socket closing too, but only if nobody had ended the client,
+    // and the handler gives it back with its error, which ends it.
     const lines = warnings(() => {
         clients[0].emit('error', terminated());
-        clients[0].emit('error', new Error('Connection terminated unexpectedly'));
+        clients[0].socketClosed();
     });
     assert.equal(lines.filter((l) => l.includes('pg_notify_listen_error')).length, 1);
     assert.equal(clients[0].released.length, 1, 'released once');
@@ -358,14 +405,13 @@ test('a reconnect whose LISTEN the server ends gives the dead client back once, 
             const c = new FakeListenClient();
             if (clients.length === 1) {
                 // The backend is terminated under the first reconnect's LISTEN:
-                // pg rejects LISTEN with the server's FATAL first, and emits
-                // 'error' only when the socket closes.
+                // pg rejects LISTEN with the server's FATAL, and when the socket
+                // closes it emits 'error' only if nobody has ended the client.
+                // The catch around LISTEN gives the client back with its error,
+                // which ends it, so no 'error' follows.
                 c.query = async (sql: string) => {
                     c.queries.push(sql);
-                    setTimeout(
-                        () => c.emit('error', new Error('Connection terminated unexpectedly')),
-                        30
-                    );
+                    setTimeout(() => c.socketClosed(), 30);
                     throw terminated();
                 };
             }
@@ -466,6 +512,8 @@ const storePool = () => {
     const state = {
         refuse: false,
         users: [] as Array<Record<string, unknown>>,
+        /** connect() calls, refused ones included. */
+        connects: 0,
     };
     const client = {
         async query(sql: string, params?: unknown[]) {
@@ -483,6 +531,7 @@ const storePool = () => {
     };
     const pool = {
         async connect() {
+            state.connects += 1;
             if (state.refuse) {
                 throw Object.assign(new Error('too many connections for role "app"'), {
                     code: '53300',
@@ -544,4 +593,164 @@ test('a peer change or a re-hydrate that cannot get a connection does not end th
     assert.equal(store.getUserById('u-missed')?.username, 'missed', 'the retry re-hydrated');
     assert.equal(logged(lines, 'pg_store_rehydrate_failed').length, 1, 'no retry once it worked');
     assert.deepEqual(rejections, []);
+});
+
+test('shutdown() stops a pending re-hydrate retry', async (t) => {
+    const lines = captureLogs(t);
+    const { pool, state } = storePool();
+    const transport = stubTransport();
+    const store = new PostgresBackedDb();
+    await store.init(pool as never, transport as never);
+
+    state.refuse = true;
+    transport.reconnect();
+    await waitFor(
+        () => logged(lines, 'pg_store_rehydrate_failed').length > 0,
+        'the re-hydrate to fail'
+    );
+    await store.shutdown();
+    const connectsAtShutdown = state.connects;
+
+    // Postgres takes connections again; a retry still pending would now reload.
+    state.refuse = false;
+    state.users = [{ id: 'u-after-shutdown', username: 'after' }];
+    await sleep(REHYDRATE_RETRY_MS + 1_000);
+    assert.equal(state.connects, connectsAtShutdown, 'no connection after shutdown');
+    assert.equal(store.getUserById('u-after-shutdown'), undefined, 'no re-hydrate after shutdown');
+    assert.equal(logged(lines, 'pg_store_rehydrate_failed').length, 1);
+});
+
+/**
+ * The other checkouts in the running app give their client back the same way as
+ * the write-behind queue (db/pooledClient.ts). Each case starts with one healthy
+ * connection idle in the pool, as after any earlier query, and the server ends
+ * that backend under the case's first query; the socket has not closed yet when
+ * the next checkout comes.
+ */
+const checkoutCases: Array<[string, (pool: SharedPool, lines: string[]) => Promise<void>]> = [
+    [
+        'the store loading at boot (PostgresBackedDb.init)',
+        async (pool) => {
+            const store = new PostgresBackedDb();
+            await assert.rejects(
+                store.init(pool as never, stubTransport() as never),
+                /terminating/
+            );
+        },
+    ],
+    [
+        'a change notification (PgNotifyTransport.publish)',
+        async (pool, lines) => {
+            const transport = new PgNotifyTransport(pool as never);
+            transport.publish({ src: 'this-replica', m: 'users', op: 'u', kv: ['u1'] });
+            await waitFor(
+                () => logged(lines, 'pg_notify_publish_failed').length > 0,
+                'the publish to fail'
+            );
+            assert.match(String(logged(lines, 'pg_notify_publish_failed')[0].error), /terminating/);
+        },
+    ],
+    [
+        'the migration checksum audit (verifyMigrationChecksums)',
+        async (pool) => {
+            await assert.rejects(
+                verifyMigrationChecksums(pool as never, MIGRATIONS_DIR),
+                /terminating/
+            );
+        },
+    ],
+    [
+        'migrateUp',
+        async (pool) => {
+            await assert.rejects(
+                migrateUp({ pool: pool as never, migrationsDir: MIGRATIONS_DIR }),
+                /terminating/
+            );
+        },
+    ],
+    [
+        'migrateDown',
+        async (pool) => {
+            await assert.rejects(
+                migrateDown({
+                    pool: pool as never,
+                    migrationsDir: MIGRATIONS_DIR,
+                    targetOrdinal: 10,
+                }),
+                /terminating/
+            );
+        },
+    ],
+    [
+        'the migration status (status)',
+        async (pool) => {
+            await assert.rejects(
+                status({ pool: pool as never, migrationsDir: MIGRATIONS_DIR }),
+                /terminating/
+            );
+        },
+    ],
+];
+
+for (const [name, run] of checkoutCases) {
+    test(`${name}: a checkout whose backend the server ends under its query is destroyed, not handed out again`, async (t) => {
+        const lines = captureLogs(t);
+        const pool = (openPool = await sharedPoolOfFakes());
+        (await pool.connect()).release();
+        const first = FakeConnection.made[0];
+        first.terminateUnderNextQuery(terminated(), 1_000);
+
+        await run(pool, lines);
+
+        assert.equal(first.ended, true, 'the dead connection was destroyed, not pooled');
+        const next = await pool.connect();
+        assert.equal(FakeConnection.made.length, 2, 'the next checkout is not the dead connection');
+        await next.query('SELECT 1');
+        next.release();
+    });
+}
+
+/** Take the leader lock on the shared pool's first connection, watch it, and give it back. */
+const leadWatchAndRelease = async (pool: SharedPool) => {
+    assert.equal(await acquireBackgroundLeaderLock(pool as never), true);
+    const conn = FakeConnection.made[0];
+    const watch = { lost: 0 };
+    watchBackgroundLeadership(() => (watch.lost += 1));
+    await releaseBackgroundLeader();
+    assert.equal(isBackgroundLeader(), false);
+    return { conn, watch };
+};
+
+test('giving the leader lock back stops its watch: that connection failing later in the pool does not end the process', async (t) => {
+    const lines = captureLogs(t);
+    const pool = (openPool = await sharedPoolOfFakes());
+    const { conn, watch } = await leadWatchAndRelease(pool);
+
+    // It fails while idle in the pool (a restart, a failover, an idle-session
+    // timeout). A watch still on it would give it back to the pool a second
+    // time, and pg-pool throws on that, inside the 'error' listener.
+    assert.doesNotThrow(() => conn.fail(terminated()));
+    assert.equal(watch.lost, 0, 'a lock given back is not reported lost');
+    assert.deepEqual(logged(lines, 'background_leader_lost'), []);
+    assert.equal(logged(lines, 'pg_pool_client_error')[0]?.state, 'idle');
+    assert.equal(conn.ended, true, 'the pool dropped it');
+});
+
+test('giving the leader lock back stops its watch: no lock check destroys that connection under its next holder', async (t) => {
+    captureLogs(t);
+    t.mock.timers.enable({ apis: ['setInterval'] });
+    const pool = (openPool = await sharedPoolOfFakes());
+    const { conn, watch } = await leadWatchAndRelease(pool);
+
+    // pg-pool hands out its newest idle client first: the next checkout is the
+    // former leader connection. A lock check falls due while it is held.
+    const next = await pool.connect();
+    assert.equal(FakeConnection.made.length, 1, 'the former leader connection, reused');
+    t.mock.timers.tick(10_000);
+    await sleep(50);
+    assert.equal(conn.ended, false, 'not destroyed under its new holder');
+    assert.equal(watch.lost, 0);
+    await next.query('SELECT 1');
+    next.release();
+    assert.equal(pool.totalCount, 1, 'pooled again');
 });
