@@ -9644,9 +9644,11 @@ export class PostgresBackedDb extends InMemoryDb {
      * (`writeDeadmanSwitchIf`). One refused `unanswered` is noted for the
      * sweep in this process (`ownerWriteUnansweredAt`): the owner was alive
      * and tried, so the switch is not fired at its deadline on that account
-     * alone; and the note is carried into the switch's own row once the
-     * database answers (`carryRefusedOwnerWrites`, decision 31), so the sweep
-     * in any other process reads it too. One that applied clears the note.
+     * alone; and the note is carried into the switch's own row, tried at
+     * once and then every `carryRetryMs` on a connection of its own, until
+     * Postgres answers it (`carryRefusedOwnerWrites`, decision 31), so the
+     * sweep in any other process reads it too. One that applied clears the
+     * note.
      */
     override async updateDeadmanSwitchIf(
         id: string,
@@ -9699,7 +9701,12 @@ export class PostgresBackedDb extends InMemoryDb {
      * per switch, and the owner's routes answer 503 at once. It is
      * process-wide on purpose, and since round 11 a statement waits only for
      * this process's earlier writes to the same switch, so a backlog of
-     * writes to other tables no longer sets it.
+     * writes to other tables no longer sets it. It stands until the
+     * statement settles, which nothing here bounds: the shared pool sets no
+     * connection or statement timeout, so a statement on a connection the
+     * database never answers settles only when the operating system gives up
+     * on its socket (minutes). The carry of a refused owner write is not
+     * held back by it (round 16 of part 2's review).
      */
     private stalledSwitchStatement: Promise<unknown> | null = null;
 
@@ -9723,8 +9730,8 @@ export class PostgresBackedDb extends InMemoryDb {
     >();
 
     /**
-     * How long after a carry that could not be sent, or that failed, it is
-     * tried again on its own (`scheduleCarryRetry`), whatever else the
+     * How long after a try of the carry that failed, or passed its bound, it
+     * is tried again on its own (`scheduleCarryRetry`), whatever else the
      * process asks the database meanwhile (round 15 of part 2's review: a
      * failed carry was tried again only when another switch statement of the
      * process answered, and in `deploy/docker/production` nothing else on the
@@ -9734,8 +9741,29 @@ export class PostgresBackedDb extends InMemoryDb {
      */
     carryRetryMs = 10_000;
 
+    /**
+     * How long one try of the carry may take: the pool's connection, and
+     * then each statement on it, each within this bound (round 16 of part
+     * 2's review: the carry had no bound of its own, and the shared pool
+     * sets no connection or statement timeout, so a carry sent on a
+     * connection the database never answered, a socket a failover left
+     * black-holed, held its note as on its way until the operating system
+     * gave up on the socket, minutes later, and nothing tried it again). A
+     * field, so a test can shorten it.
+     */
+    carryTimeoutMs = 5_000;
+
     /** The timer of the next carry retry, while a note is waiting for one. */
     private carryRetryTimer: ReturnType<typeof setTimeout> | null = null;
+
+    /** The try of the carry under way (`runCarryPass`), if one is. */
+    private carryPass: Promise<void> | null = null;
+
+    /** Asked to carry while a try was under way: try again when it ends well. */
+    private carryAgain = false;
+
+    /** Set by `shutdown`: no retry timer is set from then on. */
+    private carryStopped = false;
 
     override switchStatementsStalledBetween(fromMs: number, toMs: number): boolean {
         return this.switchStalls.some(
@@ -9750,108 +9778,214 @@ export class PostgresBackedDb extends InMemoryDb {
     }
 
     override clearOwnerWriteUnanswered(switchId: string): void {
-        this.unansweredOwnerWrites.delete(switchId);
+        this.endOwnerWriteNote(switchId);
+    }
+
+    /**
+     * A note of a refused owner write ends (its carry landed or was refused,
+     * a write of the switch applied, the sweep acted on it, the deletion took
+     * the switch): where no note is left waiting for a retry, the retry timer
+     * goes too (round 16 of part 2's review: it went only when a carry
+     * answered, so a note ended any other way left a timer that fired once
+     * for nothing).
+     */
+    private endOwnerWriteNote(switchId: string): void {
+        if (!this.unansweredOwnerWrites.delete(switchId)) return;
+        this.endCarryRetryIfNoneWaits();
     }
 
     /**
      * Carry each check-in or cancel refused `unanswered` here into Postgres
      * (decision 31, the operator's choice of 2026-11-02): one conditional
-     * statement per noted switch, in the switch's lane, that sets
-     * `owner_attempt_refused_at` to the attempt's moment only where the
-     * switch has not fired or been cancelled, its last check-in is still the
-     * one the refused attempt read (a check-in that landed since is the
-     * owner's later word), and the column is null or older; so the sweep in
-     * any process, the worker's in the deployed layout, gives the switch the
-     * backlog window as this process's own sweep does from the note
-     * (`ownerAttemptRefusedSinceCheckIn`). Sent only while no switch
-     * statement stands unanswered here: called when a note is made, when a
-     * stall settles, when a switch statement answers, and on its own timer
-     * every `carryRetryMs` after a carry failed (round 15 of part 2's review:
-     * without the timer a carry that failed, or was made during a stall
-     * that settled with an error, waited for another switch statement of
-     * the process to answer, and in `deploy/docker/production` nothing else
-     * on the API process asks the database by itself). A carry that lands
-     * ends the note (the row, with the column, is in the mirror and
-     * announced); one Postgres refuses ends it too (the switch moved on, or
-     * a check-in landed); one that fails keeps the note for the next try.
-     * Until it lands this process's sweep acts on the note as before, and a
-     * sweep elsewhere does not see it; a note is lost with the process if it
-     * stops before the carry lands.
+     * statement per noted switch that sets `owner_attempt_refused_at` to the
+     * attempt's moment only where the switch has not fired or been
+     * cancelled, its last check-in is still the one the refused attempt read
+     * (a check-in that landed since is the owner's later word), and the
+     * column is null, older or the same moment (a try whose answer was lost
+     * after it landed is written again, idempotently, so this mirror still
+     * takes it); so the sweep in any process, the worker's in the deployed
+     * layout, gives the switch the backlog window as this process's own
+     * sweep does from the note (`ownerAttemptRefusedSinceCheckIn`).
+     *
+     * Each try takes one connection of its own from the pool, outside the
+     * write-behind queue, and sends every waiting note's statement on it in
+     * turn, each step within `carryTimeoutMs` (`runCarryPass`); it is made
+     * when a note is made, when a switch statement of this process answers,
+     * when a stall settles, and on its own timer `carryRetryMs` after a try
+     * that failed or passed its bound. It is not held back by a switch
+     * statement of this process's that stands unanswered, nor by a try that
+     * does not answer (round 16 of part 2's review: a carry was sent only
+     * while no switch statement stood unanswered here, in the switch's lane
+     * behind them, and only a carry that failed armed the timer, so while
+     * this process's own stalled statement waited, which the shared pool
+     * bounds by nothing short of the operating system's TCP timeouts, or
+     * while a carry hung on a black-holed connection, no carry was sent at
+     * all, with the database answering every other connection, and the
+     * worker fired the switch at its deadline). Outside the queue it is
+     * ordered after nothing this process queued; its condition is what
+     * keeps it right in any order: a check-in or a move of the switch that
+     * lands after it clears or outranks the column as it would have
+     * anyway, and one that landed before it refuses it.
+     *
+     * A carry that lands ends the note (the row, with the column, is in the
+     * mirror and announced); one Postgres refuses ends it too (the switch
+     * moved on, or a check-in landed); one that fails or passes its bound
+     * keeps the note for the next try. Until it lands this process's sweep
+     * acts on the note as before, and a sweep elsewhere does not see it; a
+     * note is lost with the process if it stops before the carry lands.
      */
     private carryRefusedOwnerWrites(): void {
         const plan = this.plans.get('deadmanSwitches');
-        const queue = this.queue;
-        // While a stall stands nothing is sent: its settling calls this again.
-        if (!plan || !queue || this.stalledSwitchStatement) return;
+        const pool = this.pool;
+        if (!plan || !pool || !this.queue) return;
+        if (this.carryPass) {
+            this.carryAgain = true;
+            return;
+        }
+        if (![...this.unansweredOwnerWrites.values()].some((note) => !note.carrying)) return;
+        this.carryAgain = false;
+        const pass: Promise<void> = this.runCarryPass(pool, plan).then((wholePass) => {
+            if (this.carryPass === pass) this.carryPass = null;
+            if (!wholePass) {
+                // The next try is the timer's: one after each failure would
+                // ask a database that is not answering once per new note.
+                this.carryAgain = false;
+                this.scheduleCarryRetry();
+                return;
+            }
+            if (this.carryAgain) {
+                this.carryAgain = false;
+                this.carryRefusedOwnerWrites();
+            }
+        });
+        this.carryPass = pass;
+    }
+
+    /**
+     * One try of the carry: a connection taken from the pool for it alone,
+     * then each waiting note's statement on it in turn, the connection and
+     * each statement within `carryTimeoutMs`. True where every note it took
+     * up was answered. Where the connection is refused or not handed over in
+     * time, or a statement fails or does not answer in time, the try ends
+     * there, logged (`deadman_owner_attempt_carry_failed`), false, with the
+     * notes not answered left waiting; the connection is given back with
+     * the error, so the pool drops it (node-postgres destroys a connection
+     * with a statement still out), and a connection the pool hands over
+     * after the bound is given back at once, unused.
+     */
+    private async runCarryPass(pool: PgPool, plan: TablePlan): Promise<boolean> {
         const table = plan.descriptor.tableName;
-        const map = this.mapByName('deadmanSwitches');
-        for (const [id, note] of this.unansweredOwnerWrites) {
-            if (note.carrying) continue;
-            note.carrying = true;
-            const seen = map.get(id);
-            queue
-                .enqueueCall(
-                    async (client) =>
-                        (
-                            await client.query<Record<string, unknown>>(
+        const acquiring = pool.connect();
+        let client: PgClient;
+        try {
+            client = await this.withinCarryBound(acquiring);
+        } catch (err) {
+            void acquiring.then(
+                (late) => late.release?.(),
+                () => undefined
+            );
+            log.warn('deadman_owner_attempt_carry_failed', {
+                error: err instanceof Error ? err.message : String(err),
+            });
+            return false;
+        }
+        let failure: Error | undefined;
+        try {
+            for (const [id, note] of [...this.unansweredOwnerWrites]) {
+                if (note.carrying || this.unansweredOwnerWrites.get(id) !== note) continue;
+                note.carrying = true;
+                const seen = this.mapByName('deadmanSwitches').get(id);
+                let row: Record<string, unknown> | undefined;
+                try {
+                    row = await this.withinCarryBound(
+                        client
+                            .query<Record<string, unknown>>(
                                 `UPDATE ${table} SET owner_attempt_refused_at = $2::timestamptz, ` +
                                     'updated_at = $4::timestamptz ' +
                                     "WHERE id = $1 AND status <> 'triggered' AND status <> 'cancelled' " +
                                     'AND last_check_in_at = $3::timestamptz ' +
-                                    'AND (owner_attempt_refused_at IS NULL OR owner_attempt_refused_at < $2::timestamptz) ' +
+                                    'AND (owner_attempt_refused_at IS NULL OR owner_attempt_refused_at <= $2::timestamptz) ' +
                                     'RETURNING *',
                                 [id, note.at, note.lastCheckInAt, nowIso()]
                             )
-                        ).rows[0],
-                    { mapName: 'deadmanSwitches', key: id }
-                )
-                .then(
-                    (row) => {
-                        // A newer note, or none (a write applied meanwhile):
-                        // nothing of this one is this mirror's to take.
-                        if (this.unansweredOwnerWrites.get(id) !== note) return;
-                        this.unansweredOwnerWrites.delete(id);
-                        this.endCarryRetryIfNoneWaits();
-                        if (!row) {
-                            log.info('deadman_owner_attempt_not_carried', {});
-                            return;
-                        }
-                        const current = map.get(id);
-                        if (current === seen && !this.switchWritesInFlight.has(id)) {
-                            map.set(id, rowToRecord(plan, row));
-                        } else if (current && current.lastCheckInAt === note.lastCheckInAt) {
-                            map.set(id, { ...current, ownerAttemptRefusedAt: note.at });
-                        }
-                        this.transport?.publish({
-                            src: this.instanceId,
-                            m: 'deadmanSwitches',
-                            op: 'u',
-                            kv: [id],
-                        });
-                        log.info('deadman_owner_attempt_carried', {});
-                    },
-                    (err: unknown) => {
-                        note.carrying = false;
-                        log.warn('deadman_owner_attempt_carry_failed', {
-                            error: err instanceof Error ? err.message : String(err),
-                        });
-                        this.scheduleCarryRetry();
-                    }
-                );
+                            .then((answer) => answer.rows[0])
+                    );
+                } catch (err) {
+                    note.carrying = false;
+                    failure = err instanceof Error ? err : new Error(String(err));
+                    log.warn('deadman_owner_attempt_carry_failed', { error: failure.message });
+                    return false;
+                }
+                note.carrying = false;
+                this.takeCarryAnswer(plan, id, note, seen, row);
+            }
+            return true;
+        } finally {
+            client.release?.(failure);
         }
     }
 
+    /** `work`, or a rejection once `carryTimeoutMs` has passed without its answer. */
+    private withinCarryBound<T>(work: Promise<T>): Promise<T> {
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const bound = new Promise<never>((_, reject) => {
+            timer = setTimeout(
+                () => reject(new Error(`no answer within ${this.carryTimeoutMs} ms`)),
+                this.carryTimeoutMs
+            );
+        });
+        return Promise.race([work, bound]).finally(() => clearTimeout(timer));
+    }
+
     /**
-     * Try the carry again in `carryRetryMs` while any note's carry has failed
-     * and not been tried since: on its own timer, so a note is carried once
-     * the database answers this process again even when nothing else on the
-     * process asks it anything (round 15 of part 2's review). A timer that
-     * finds a stall standing sends nothing; the stall's settling tries again.
-     * The timer does not keep the process alive, and none is set once every
-     * note has landed, been refused or ended otherwise.
+     * A carry's answer: where the note is still the one carried (a newer
+     * refusal, or a write that applied meanwhile, means nothing of this one
+     * is this mirror's to take), it ends; a landed carry's row goes into the
+     * mirror where the mirror's entry is the one the carry read and no
+     * conditional write of the switch is in flight, otherwise the column
+     * alone where the mirror's last check-in is still the refused attempt's,
+     * and the switch is announced.
+     */
+    private takeCarryAnswer(
+        plan: TablePlan,
+        id: string,
+        note: { at: string; lastCheckInAt: string },
+        seen: Record<string, unknown> | undefined,
+        row: Record<string, unknown> | undefined
+    ): void {
+        if (this.unansweredOwnerWrites.get(id) !== note) return;
+        this.endOwnerWriteNote(id);
+        if (!row) {
+            log.info('deadman_owner_attempt_not_carried', {});
+            return;
+        }
+        const map = this.mapByName('deadmanSwitches');
+        const current = map.get(id);
+        if (current === seen && !this.switchWritesInFlight.has(id)) {
+            map.set(id, rowToRecord(plan, row));
+        } else if (current && current.lastCheckInAt === note.lastCheckInAt) {
+            map.set(id, { ...current, ownerAttemptRefusedAt: note.at });
+        }
+        this.transport?.publish({
+            src: this.instanceId,
+            m: 'deadmanSwitches',
+            op: 'u',
+            kv: [id],
+        });
+        log.info('deadman_owner_attempt_carried', {});
+    }
+
+    /**
+     * Try the carry again in `carryRetryMs` while any note is waiting and no
+     * try is under way: on its own timer, so a note is carried once the
+     * database answers a new connection from this process even when nothing
+     * else on the process asks it anything (round 15 of part 2's review). The
+     * timer does not keep the process alive, is not set once no note waits,
+     * goes once the last waiting note ends (`endOwnerWriteNote`), and is not
+     * set after `shutdown`.
      */
     private scheduleCarryRetry(): void {
-        if (this.carryRetryTimer) return;
+        if (this.carryRetryTimer || this.carryStopped) return;
         let waiting = false;
         for (const note of this.unansweredOwnerWrites.values()) {
             if (!note.carrying) waiting = true;
@@ -9917,8 +10051,7 @@ export class PostgresBackedDb extends InMemoryDb {
             ]);
             if (answer !== 'timeout') {
                 // The database answers: a refused attempt noted here whose
-                // carry failed, or was made while a stall stood, is carried
-                // now (decision 31).
+                // carry has not landed is tried now (decision 31).
                 this.carryRefusedOwnerWrites();
                 return { kind: 'answered', answer: answer as T };
             }
@@ -9942,8 +10075,8 @@ export class PostgresBackedDb extends InMemoryDb {
                     this.stalledSwitchStatement = null;
                     stall.endedAt = Date.now();
                     log.info('deadman_switch_write_settled', {});
-                    // The database answers again: the notes made meanwhile
-                    // are carried into their rows (decision 31).
+                    // The database answers again: a note whose carry has
+                    // not landed is tried now (decision 31).
                     this.carryRefusedOwnerWrites();
                 }
             });
@@ -10437,7 +10570,7 @@ export class PostgresBackedDb extends InMemoryDb {
         this.transport?.publish({ src: this.instanceId, m: 'deadmanSwitches', op: 'u', kv: [id] });
         const current = this.getDeadmanSwitch(id);
         if ('applied' in answer && current) {
-            this.unansweredOwnerWrites.delete(id);
+            this.endOwnerWriteNote(id);
             return { kind: 'applied', record: current, statusMovedHere: note.has('status') };
         }
         if (
@@ -10693,7 +10826,7 @@ export class PostgresBackedDb extends InMemoryDb {
             }
         }
         this.transport?.publish({ src: this.instanceId, m: 'deadmanSwitches', op: 'u', kv: [id] });
-        this.unansweredOwnerWrites.delete(id);
+        this.endOwnerWriteNote(id);
     }
 
     /**
@@ -10722,12 +10855,15 @@ export class PostgresBackedDb extends InMemoryDb {
      * success) or with another status or `releasedAt` than Postgres, which
      * ends the mark (round 15: a fired switch with no label, which the first
      * statement does not rewrite, kept a stale armed view and its mark for
-     * good, and was served to nobody here), and otherwise only where the
-     * mirror lacks it, its copies where the mirror lacks them; neither is
-     * announced (round 14: a fired switch this mirror never had went in
-     * with the owner's blanked copy alone, never the recipients' held ones,
-     * so the release was served to nobody on the deleting process until it
-     * restarted). An arm that
+     * good, and was served to nobody here), with its copies as Postgres has
+     * them (round 16: only those the mirror lacked, so a switch taken
+     * cancelled kept the sealed copies this mirror held), and otherwise only
+     * where the mirror lacks it, its copies where the mirror lacks them;
+     * neither row is announced (round 14: a fired switch this mirror never
+     * had went in with the owner's blanked copy alone, never the recipients'
+     * held ones, so the release was served to nobody on the deleting process
+     * until it restarted), and every copy the blanking changed on a switch
+     * not rewritten is set in the mirror and announced. An arm that
      * commits after this (a statement the database was still running when
      * its client was lost) is not reached. The caller
      * (`finishAccountDeletion`) drains first too; this one stands on its own,
@@ -10796,7 +10932,6 @@ export class PostgresBackedDb extends InMemoryDb {
             ofSwitch.set(switchId, [...(ofSwitch.get(switchId) ?? []), copy]);
         }
         const erasedIds = new Set(erased.map((row) => String(row.id)));
-        const ownSwitches = new Set(rows.map((row) => String(row.id)));
         const map = this.mapByName('deadmanSwitches');
         const wrapMap = this.mapByName('deadmanReleaseWraps');
         for (const row of rows) {
@@ -10820,8 +10955,15 @@ export class PostgresBackedDb extends InMemoryDb {
             // with no label was not rewritten here, so the stale armed view
             // and the mark stayed, and this process served the release to
             // nobody until it restarted); otherwise the row goes in only
-            // where this mirror lacks it. Its copies go in where this mirror
-            // lacks them. Either way nothing is announced.
+            // where this mirror lacks it. Where the row was taken so, its
+            // copies as Postgres has them replace this mirror's (round 16:
+            // they went in only where this mirror lacked them, so a switch a
+            // queued erase had cancelled, whose copies only the third
+            // statement here blanked, was taken cancelled with the people
+            // named still holding their sealed copies in this mirror);
+            // otherwise those this mirror lacks go in. The row is not
+            // announced (nothing in it changed); a copy the third statement
+            // blanked is, below.
             const fromPostgres = rowToRecord(plan, row);
             const held = map.get(id);
             const behind =
@@ -10831,7 +10973,7 @@ export class PostgresBackedDb extends InMemoryDb {
                     held.releasedAt !== fromPostgres.releasedAt);
             if (behind) {
                 this.erasesPending.delete(id);
-                this.unansweredOwnerWrites.delete(id);
+                this.endOwnerWriteNote(id);
                 if (!this.switchWritesInFlight.has(id)) map.set(id, fromPostgres);
             } else if (!held && !this.switchWritesInFlight.has(id)) {
                 map.set(id, fromPostgres);
@@ -10839,12 +10981,14 @@ export class PostgresBackedDb extends InMemoryDb {
             for (const copy of ofSwitch.get(id) ?? []) {
                 const record = rowToRecord(wrapPlan, copy);
                 const key = wrapPlan.descriptor.keyOf(record);
-                if (!wrapMap.has(key)) wrapMap.set(key, record);
+                if (behind || !wrapMap.has(key)) wrapMap.set(key, record);
             }
         }
-        // Copies sealed to the account on other owners' switches.
+        // Copies the third statement blanked, sealed to the account on other
+        // owners' switches or held on a switch of the owner's it did not
+        // rewrite (the switches it rewrote announced theirs when taken).
         for (const copy of blanked) {
-            if (ownSwitches.has(String(copy.switch_id))) continue;
+            if (erasedIds.has(String(copy.switch_id))) continue;
             const record = rowToRecord(wrapPlan, copy);
             wrapMap.set(wrapPlan.descriptor.keyOf(record), record);
             this.transport?.publish({
@@ -11082,12 +11226,21 @@ export class PostgresBackedDb extends InMemoryDb {
             await Promise.allSettled([...this.queuedErases]);
             await this.queue?.drain();
         }
+        // A try of the carry under way (it is outside the queue since round
+        // 16), and one it started again on its way out; each is bounded.
+        while (this.carryPass) await this.carryPass;
     }
 
-    /** Flush queued writes and tear down the change subscription — graceful shutdown only. */
+    /**
+     * Flush queued writes and tear down the change subscription — graceful
+     * shutdown only. Refused owner writes not yet carried get one last try,
+     * waited for; no retry timer is set after it.
+     */
     async shutdown(): Promise<void> {
+        this.carryStopped = true;
         if (this.carryRetryTimer) clearTimeout(this.carryRetryTimer);
         this.carryRetryTimer = null;
+        this.carryRefusedOwnerWrites();
         await this.drain();
         await this.transport?.close();
     }

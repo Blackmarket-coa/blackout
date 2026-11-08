@@ -50,7 +50,8 @@ export interface ChecksumMismatch {
 
 export interface PgClient {
     query<T = Record<string, unknown>>(sql: string, params?: unknown[]): Promise<{ rows: T[] }>;
-    release?(): void;
+    /** With an error, node-postgres's pool drops the connection rather than reuse it. */
+    release?(err?: Error): void;
 }
 
 export interface PgPool {
