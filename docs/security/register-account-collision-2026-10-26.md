@@ -18,7 +18,10 @@ out. The route chose the account id from the caller-supplied `username` and
 checked only for an existing **Blackout** row, not an existing **Matrix**
 account. A Matrix account can exist without a Blackout row — the two id spaces
 are separate — so a registration naming such an account would write to it
-instead of being refused.
+instead of being refused. The `PUT` with no lookup has been in `registerUser`
+since the Matrix client's first commit on `develop` (`9713cfd181`, 2026-03-23),
+and `/register` has called it since that same commit, so every build of the API
+from that commit to the merge of this fix is affected.
 
 A second gap sat next to it: under `REQUIRE_INVITE_TOKEN=1` the route created
 the Matrix account before it consumed the invitation, so a token that was not
@@ -59,8 +62,9 @@ the API, and takes no caller-chosen name.
 ## What an operator should check
 
 Whether the first gap was used before the fix is deployed can be read from the
-homeserver, not from the API, which recorded nothing that tells such a request
-apart from an ordinary registration:
+homeserver. The API recorded nothing that marks such a request on its own: each
+registration row is ordinary by itself. One cross-check on the API side does
+exist and is listed last.
 
 -   **Synapse's access log.** Every account the API created is a
     `PUT /_synapse/admin/v2/users/…` made with the bot's token. A new account
@@ -71,29 +75,72 @@ apart from an ordinary registration:
     of all its devices (Synapse keeps the token that made the request, so for
     the bot account: all but the API's own token), its display name was set to
     its localpart, and its password became the one the request carried.
+-   **The API's `users` table.** The API creates the Blackout `users` row and
+    the Matrix account together, with the row's `username` as the account's
+    localpart. So a `users` row whose username is the localpart of an account
+    that was created directly on the homeserver — the bot account, an admin
+    account made with Synapse's own tooling — is a registration that named that
+    account. The check finds; it does not clear: the row is absent when the
+    invite check then refused the request (the route rolled it back) or the
+    account was later deleted, and an account the API itself created that was
+    later made a server admin has such a row legitimately.
 
 ## After upgrading
 
-1. Deploy the API at or after the merge of this fix. Then take the interim
-   proxy block off `POST /v1/auth/register` (see "Disclosure" below; a deploy
-   from the repository replaces the server's Caddyfile, so reload the proxy)
-   and check that the route answers again, with anything other than `503`.
-2. Read Synapse's access log for the whole period before the block was in
-   place, as described above: a `PUT /_synapse/admin/v2/users/…` made with the
+1. Deploy the API at or after the merge of this fix, and keep the interim
+   proxy block on `POST /v1/auth/register` (see "Disclosure" below) in force
+   until the image that carries the fix is the one serving the route. The
+   block lives in the server's copy of `deploy/docker/production/Caddyfile`,
+   which the `canary` and `full-rollout` jobs of
+   `.github/workflows/deploy-compose-prod.yml` replace from the repository
+   (the `promote` job runs no sync). The two modes differ in when the running
+   proxy drops it:
+
+    - `canary` (the dispatch default) syncs the directory, brings up
+      `app_canary` beside the stable `app` and reloads Caddy at once. The
+      repository's Caddyfile names `app:3000` as its only upstream, so from
+      that reload until the separate `promote` job has replaced `app`, the
+      previous image serves the route with no block in front of it. If you
+      deploy this way, put the block back into the server's Caddyfile and
+      reload the proxy right after the canary job has synced, keep it until
+      `promote` has replaced `app`, and only then take it off.
+    - `full` syncs the directory too but reloads nothing, so the running
+      proxy keeps the block until it is reloaded or its container is
+      recreated or restarted. Once the new `app` is healthy, reload the
+      proxy; that takes the block off.
+
+    Afterwards check that the route answers with anything other than `503`.
+    The same sync replaces every other tracked file in that directory, so any
+    other hand edit made there has to be re-applied as well.
+
+2. Read Synapse's access log, as described above, for the whole period before
+   the block was in place and for any interval in which the block was off
+   while the previous image still served the route (the canary-to-promote
+   interval, for instance): a `PUT /_synapse/admin/v2/users/…` made with the
    bot's token that answered `200` modified an existing account. After the
    upgrade, the error log `matrix.account_create_updated_existing` marks the
    residual race described under "What the fix does not close".
 3. For each account found: its password is the one the request carried, so
    set a new one (the admin `PUT /_synapse/admin/v2/users/{mxid}` with
    `password` signs out its devices by default) and treat the account as having
-   been in the caller's hands from the time of the write. If the bot account
-   itself was written to, the API's own token was kept (Synapse spares the
-   token that made the request), so the API went on working and nothing
-   failed; the caller could sign in as the bot, a server admin, with the
-   password they sent, so also review what an admin could have done since.
-   Unless the request was then refused by the invite check, it also created a
-   Blackout `users` row with that username and issued the caller a session;
-   that row and its sessions belong to the caller and should be removed.
+   been in the caller's hands from the time of the write. Unless the request
+   was then refused by the invite check, it also created a Blackout `users`
+   row with that username and issued the caller a session; that row and its
+   sessions belong to the caller and should be removed.
+
+    If the bot account itself was written to, two more things hold. Synapse
+    keeps only the token that made a password reset, so the API's own token
+    survived the caller's write and nothing failed at the time — and for the
+    same reason a reset you make now with any token other than the API's
+    deletes `MATRIX_BOT_TOKEN`, and every Matrix call from the API fails until
+    it is replaced: make that `PUT` with the API's own token, or replace
+    `MATRIX_BOT_TOKEN` right after. Rotating it anyway is reasonable for the
+    credential of an account that was in a caller's hands. And the caller
+    could sign in as the bot, a server admin, with the password they sent, so
+    review what an admin could have done since; among other things an admin
+    can mint an access token for any account
+    (`POST /_synapse/admin/v1/users/{mxid}/login`), and resetting the bot's
+    password does not end such tokens on other accounts.
 
 ## What the fix does not close
 
@@ -130,26 +177,35 @@ admin endpoint): registering an existing name — the bot's own localpart among
 them — gets `409` and sends no create; a garbage token with the gate on creates
 nothing and makes no Matrix call; a `PUT` that answers `200` is refused and
 rolled back; a lookup that is neither `200` nor `404` fails closed; ordinary
-registration still works with one lookup and one create; and `registerUser` /
+registration still works with one lookup and one create; a usable token with
+the gate on registers once and consumes one use; and `registerUser` /
 `provisionBurner` are covered directly for the lookup, create-only and
-fail-closed paths. Each assertion was also run against the pre-fix code to
-confirm it fails there. The run used a stub homeserver only; nothing was
-exercised against a real Synapse.
+fail-closed paths. Each assertion except the usable-token case, which is a
+regression guard, was also run against the pre-fix code to confirm it fails
+there: with `develop`'s `matrix-client.ts` in place, 9 of the 11 cases fail
+(all but the garbage-token and usable-token cases); with `develop`'s `auth.ts`
+in place, 3 fail (the existing-name, garbage-token and `200`-create cases); the
+fixed tree passes all 11 (re-run 2026-11-08). The run used a stub homeserver
+only; nothing was exercised against a real Synapse.
 
 ## Disclosure
 
 -   **2026-10-26.** Found and fixed in this change set, against `develop` at
     `3c3c05c`. The fix was kept out of the public repository until the interim
-    measure below was in place.
+    measure below was in place and the operator had decided how to publish it
+    (2026-11-08, below).
 -   **2026-11-02.** The operator confirmed the interim measure in production:
     the reverse proxy (Caddy) answers `503` to `POST /v1/auth/register`, so the
-    affected route cannot be reached until the fix is deployed. That is the only
-    path that served the route: its `/api` alias has been off since 2026-08-31
-    (`API_ALIAS_REMOVAL_DATE` in `packages/api/src/index.ts`). The block is in
-    the server's copy of `deploy/docker/production/Caddyfile`, which
-    `deploy-compose-prod.yml` replaces from the repository on every deploy, so a
-    deploy that does not carry this fix removes the block and it has to be put
-    back. The shipped web client does not call `/v1/auth/register` (its sign-up
+    affected route cannot be reached while the block is in place. That is the
+    only path that served the route: its `/api` alias has been off since
+    2026-08-31 (`API_ALIAS_REMOVAL_DATE` in `packages/api/src/index.ts`). The
+    block is in the server's copy of `deploy/docker/production/Caddyfile`,
+    which the `canary` and `full-rollout` jobs of
+    `.github/workflows/deploy-compose-prod.yml` replace from the repository
+    (`promote` reloads what is on disk), so a deploy that does not carry this
+    fix removes the block and it has to be put back; "After upgrading" above
+    says how to keep it in force through the deploy that does carry it. The
+    shipped web client does not call `/v1/auth/register` (its sign-up
     is `/v1/auth/account-number`), and burner and account-number sign-up choose
     server-derived names, so the block takes nothing away from them.
 -   **2026-11-08.** The operator decided the fix is published as an ordinary
