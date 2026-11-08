@@ -165,7 +165,10 @@ jobs:
             # make an import without an extension find the wrong file on a
             # case-insensitive filesystem: the client build failed that way on
             # the macOS and Windows runners (desktop build check run
-            # 41461043012; fixed in 9eab8c9) while Linux CI built it.
+            # 41461043012; fixed in 9eab8c9) while Linux CI built it. It also
+            # fails on a name that equals a sibling's name without its last
+            # extension by case alone (foo.css beside Foo.css.ts: `./Foo.css`
+            # finds the styles module on Linux and the stylesheet elsewhere).
             # The script also keeps its whole-path and route-literal checks,
             # and needs only git and node. !cancelled(): a failure in one
             # step does not hide the others.

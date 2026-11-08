@@ -3,10 +3,10 @@
  * File-name guard: tracked paths that a case-insensitive filesystem (Windows,
  * and macOS by default) cannot tell apart, and route path literals declared in
  * more than one file. Linux, where most of CI builds, is case-sensitive, so the
- * first two build there and break only where the filesystem is not: the macOS
- * and Windows runners, and developer machines.
+ * first three build there and break only where the filesystem is not: the
+ * macOS and Windows runners, and developer machines.
  *
- * Three checks, each reported on its own:
+ * Four checks, each reported on its own:
  *
  *   1. Whole paths that are equal ignoring case (`src/Foo.ts` beside
  *      `src/foo.ts`, or `a.TS` beside `a.ts`). A case-insensitive checkout
@@ -21,23 +21,36 @@
  *      ignoring case too, since `src/Foo/` and `src/foo/` are one directory
  *      there. Only the last extension is removed, so `ToolBag.tsx` beside
  *      `ToolBag.css.ts` or `toolbag.css.ts` passes (`ToolBag` against
- *      `ToolBag.css`), and names whose stems are exactly equal (`index.ts`
- *      beside `index.css`) pass, because every filesystem resolves them alike.
- *   3. Absolute route path literals (`path: '/x'`) declared in more than one
+ *      `ToolBag.css`). Names whose stems are exactly equal (`index.ts` beside
+ *      `index.css`) pass this check: the probes for `./index` find the same
+ *      file on every filesystem as long as both extensions are lower case
+ *      (`a.TS` beside `a.tsx` is under Not covered).
+ *   3. A whole name that equals a sibling's name without its last extension,
+ *      ignoring case but not exactly (`foo.css` beside `Foo.css.ts`). The
+ *      client imports vanilla-extract styles as `./Foo.css`; Vite stats that
+ *      path as written before it tries any extension, so the import finds
+ *      `Foo.css.ts` on Linux and `foo.css` on macOS or Windows, and a named
+ *      import then fails there as the tool-bag pair did. `Foo.css` beside
+ *      `Foo.css.ts` passes: the exact name wins on every filesystem.
+ *   4. Absolute route path literals (`path: '/x'`) declared in more than one
  *      source file.
  *
- * Not covered: a file against a sibling directory (`Foo.ts` beside `foo/`),
- * Unicode case folding beyond String.prototype.toLowerCase, and the NFC/NFD
- * normalization that APFS ignores. There is no allowlist: rename one file of
- * a group instead.
+ * Not covered: a file against a sibling directory (`Foo.ts` beside `foo/`);
+ * an upper-case extension beside a sibling with the same stem (`a.TS` beside
+ * `a.tsx`: `./a` is probed as `a.ts`, which matches `a.TS` only on a
+ * case-insensitive filesystem; the stems are exactly equal and the whole
+ * names differ, so checks 1 to 3 all pass it, and catching it would take the
+ * resolver's probe order); Unicode case folding beyond
+ * String.prototype.toLowerCase; and the NFC/NFD normalization that APFS
+ * ignores. There is no allowlist: rename one file of a group instead.
  *
  * Run: pnpm guard:duplicate-paths (ci.yml, deployment-readiness job)
  * Test: pnpm test:guard:duplicate-paths
  */
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { readFileSync, realpathSync } from 'node:fs';
 import { extname, posix } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 
 const textExtensions = new Set(['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs']);
 
@@ -72,12 +85,21 @@ export function nameWithoutLastExtension(name) {
     return ext ? name.slice(0, -ext.length) : name;
 }
 
+// The path with the name's last extension removed: `x/ToolBag.css.ts` ->
+// `x/ToolBag.css`, and `Foo.md` at the root -> `Foo` (no `./`, so that it
+// compares with the paths `git ls-files` prints).
+function stemPathOf(file) {
+    const dir = posix.dirname(file);
+    const stem = nameWithoutLastExtension(posix.basename(file));
+    return dir === '.' ? stem : `${dir}/${stem}`;
+}
+
 // Check 2 above. Each group lists every file whose directory and stem match
 // ignoring case, when at least two of them do not match exactly.
 export function findCaseOnlyNameCollisions(files) {
     const groups = new Map();
     for (const file of files) {
-        const stemPath = `${posix.dirname(file)}/${nameWithoutLastExtension(posix.basename(file))}`;
+        const stemPath = stemPathOf(file);
         const key = stemPath.toLowerCase();
         const group = groups.get(key) ?? { stemPaths: new Set(), files: [] };
         group.stemPaths.add(stemPath);
@@ -88,6 +110,29 @@ export function findCaseOnlyNameCollisions(files) {
     return [...groups.values()]
         .filter((group) => group.stemPaths.size > 1)
         .map((group) => [...group.files].sort());
+}
+
+// Check 3 above. Each pair is a file with an extension and the sibling whose
+// whole path equals that file's stem path ignoring case but not exactly. A
+// file without an extension is its own stem, so it is left to check 1.
+export function findNameAgainstStemCollisions(files) {
+    const byLowerPath = new Map();
+    for (const file of files) {
+        const key = file.toLowerCase();
+        const bucket = byLowerPath.get(key) ?? [];
+        bucket.push(file);
+        byLowerPath.set(key, bucket);
+    }
+
+    const pairs = [];
+    for (const file of files) {
+        const stemPath = stemPathOf(file);
+        if (stemPath === file) continue;
+        for (const sibling of byLowerPath.get(stemPath.toLowerCase()) ?? []) {
+            if (sibling !== stemPath) pairs.push([file, sibling].sort());
+        }
+    }
+    return pairs.sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
 }
 
 function isTestLikeFile(file) {
@@ -150,6 +195,7 @@ export function runCli() {
 
     const pathCollisions = checkCaseInsensitivePathCollisions(files);
     const nameCollisions = findCaseOnlyNameCollisions(files);
+    const stemCollisions = findNameAgainstStemCollisions(files);
     const duplicateRoutePaths = collectRoutePathLiterals(files);
 
     if (pathCollisions.length === 0) {
@@ -174,6 +220,19 @@ export function runCli() {
         console.error('  Rename one file of each group; there is no allowlist.');
     }
 
+    if (stemCollisions.length === 0) {
+        printOk('No file name equals a sibling name without its last extension by case alone.');
+    } else {
+        printError(
+            "File names where one equals a sibling's name without its last extension, " +
+                'ignoring case but not exactly (an import of that name finds the wrong file on macOS or Windows):'
+        );
+        for (const pair of stemCollisions) {
+            console.error(`  - ${pair.join('  <->  ')}`);
+        }
+        console.error('  Rename one file of each pair; there is no allowlist.');
+    }
+
     if (duplicateRoutePaths.length === 0) {
         printOk('No duplicate absolute route path literals found.');
     } else {
@@ -186,13 +245,30 @@ export function runCli() {
         }
     }
 
-    if (pathCollisions.length > 0 || nameCollisions.length > 0 || duplicateRoutePaths.length > 0) {
+    if (
+        pathCollisions.length > 0 ||
+        nameCollisions.length > 0 ||
+        stemCollisions.length > 0 ||
+        duplicateRoutePaths.length > 0
+    ) {
         process.exit(1);
     }
 }
 
 // Only run the repository-wide scan when invoked directly, so the test can
-// import the pure functions without triggering it.
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+// import the pure functions without triggering it. Both sides are real paths:
+// the ESM loader resolves symlinks in import.meta.url, while process.argv[1]
+// keeps the path as given, so comparing the two as given would skip the scan,
+// and exit 0, whenever the script is called through a symlinked path.
+function isInvokedDirectly() {
+    if (!process.argv[1]) return false;
+    try {
+        return realpathSync(process.argv[1]) === fileURLToPath(import.meta.url);
+    } catch {
+        return false;
+    }
+}
+
+if (isInvokedDirectly()) {
     runCli();
 }

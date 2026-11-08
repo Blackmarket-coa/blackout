@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 import {
     checkCaseInsensitivePathCollisions,
     findCaseOnlyNameCollisions,
+    findNameAgainstStemCollisions,
     nameWithoutLastExtension,
 } from './check-duplicate-paths.mjs';
 
@@ -68,6 +69,39 @@ test('nameWithoutLastExtension removes only the last extension', () => {
     assert.equal(nameWithoutLastExtension('.eslintrc'), '.eslintrc');
     assert.equal(nameWithoutLastExtension('.eslintrc.cjs'), '.eslintrc');
     assert.equal(nameWithoutLastExtension('Makefile'), 'Makefile');
+});
+
+test('a name that equals a sibling stem ignoring case fails; the exact name passes', () => {
+    // `./Foo.css` is stat'd as written first: Foo.css.ts on Linux, foo.css on
+    // macOS and Windows. The stems (Foo.css, foo) and the whole paths differ,
+    // so neither older check sees the pair.
+    const pair = ['x/Foo.css.ts', 'x/foo.css'];
+    assert.deepEqual(findNameAgainstStemCollisions(pair), [['x/Foo.css.ts', 'x/foo.css']]);
+    assert.deepEqual(findCaseOnlyNameCollisions(pair), []);
+    assert.deepEqual(checkCaseInsensitivePathCollisions(pair), []);
+    // The exact name wins on every filesystem.
+    assert.deepEqual(findNameAgainstStemCollisions(['x/Foo.css.ts', 'x/Foo.css']), []);
+    // A sibling without an extension against a stem: `./A` finds `a` only
+    // where case does not matter.
+    assert.deepEqual(findNameAgainstStemCollisions(['x/A.ts', 'x/a']), [['x/A.ts', 'x/a']]);
+    assert.deepEqual(findNameAgainstStemCollisions(['x/a.ts', 'x/a']), []);
+    // Root-level files compare without a `./` prefix; directories compare
+    // ignoring case; different directories do not collide.
+    assert.deepEqual(findNameAgainstStemCollisions(['Foo.css.ts', 'foo.css']), [
+        ['Foo.css.ts', 'foo.css'],
+    ]);
+    assert.deepEqual(findNameAgainstStemCollisions(['src/Foo/bar.css.ts', 'src/foo/Bar.css']), [
+        ['src/Foo/bar.css.ts', 'src/foo/Bar.css'],
+    ]);
+    assert.deepEqual(findNameAgainstStemCollisions(['a/Foo.css.ts', 'b/foo.css']), []);
+    // Two files without extensions are check 1's: not reported here again.
+    assert.deepEqual(findNameAgainstStemCollisions(['x/A', 'x/a']), []);
+    // Unrelated neighbours, and the real client layout (index.css beside
+    // colors.css.ts), give nothing.
+    assert.deepEqual(
+        findNameAgainstStemCollisions(['src/index.css', 'src/colors.css.ts', 'src/config.css.ts']),
+        []
+    );
 });
 
 test('the whole-path check is kept for what the name rule does not see', () => {
@@ -136,6 +170,41 @@ test('the script fails on toolbag.ts beside ToolBag.tsx and names both', () => {
     assert.match(res.stdout, /No case-insensitive file path collisions found/);
 });
 
+test('the script fails on foo.css beside Foo.css.ts and names both', () => {
+    const res = runGuard({
+        'styles/Foo.css.ts': 'export const root = "foo";\n',
+        'styles/foo.css': '.foo { color: red; }\n',
+    });
+    assert.equal(res.status, 1, res.stdout + res.stderr);
+    assert.match(res.stderr, /equals a sibling's name without its last extension/);
+    assert.match(res.stderr, /styles\/Foo\.css\.ts {2}<-> {2}styles\/foo\.css/);
+    assert.match(res.stdout, /No case-only file name collisions found/);
+    assert.match(res.stdout, /No case-insensitive file path collisions found/);
+});
+
+test('the script runs when called through a symlinked path', () => {
+    // import.meta.url has symlinks resolved and process.argv[1] does not, so
+    // a main guard that compares the two as given skips the scan and exits 0
+    // when the script is reached through a symlink (/tmp on macOS is one).
+    const { dir, env } = makeRepo({
+        'toolbag/ToolBag.tsx': 'export default function ToolBag() { return null; }\n',
+        'toolbag/toolbag.ts': 'export const entries = [];\n',
+    });
+    const linkRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'duplicate-paths-link-'));
+    try {
+        const link = path.join(linkRoot, 'ci');
+        fs.symlinkSync(path.dirname(scriptPath), link, 'junction');
+        const viaLink = path.join(link, path.basename(scriptPath));
+        assert.notEqual(fs.realpathSync(viaLink), viaLink);
+        const res = spawnSync('node', [viaLink], { cwd: dir, env, encoding: 'utf8' });
+        assert.equal(res.status, 1, res.stdout + res.stderr);
+        assert.match(res.stderr, /toolbag\/ToolBag\.tsx {2}<-> {2}toolbag\/toolbag\.ts/);
+    } finally {
+        fs.rmSync(linkRoot, { recursive: true, force: true });
+        fs.rmSync(dir, { recursive: true, force: true });
+    }
+});
+
 test('the script passes on styles beside a component and one stem with two extensions', () => {
     const res = runGuard({
         'toolbag/ToolBag.tsx': 'export default function ToolBag() { return null; }\n',
@@ -146,7 +215,17 @@ test('the script passes on styles beside a component and one stem with two exten
     assert.equal(res.status, 0, res.stdout + res.stderr);
     assert.match(res.stdout, /No case-only file name collisions found/);
     assert.match(res.stdout, /No case-insensitive file path collisions found/);
+    assert.match(res.stdout, /No file name equals a sibling name without its last extension/);
     assert.match(res.stdout, /No duplicate absolute route path literals found/);
+});
+
+test('the script passes on Foo.css beside Foo.css.ts (the exact name)', () => {
+    const res = runGuard({
+        'styles/Foo.css.ts': 'export const root = "foo";\n',
+        'styles/Foo.css': '.foo { color: red; }\n',
+    });
+    assert.equal(res.status, 0, res.stdout + res.stderr);
+    assert.match(res.stdout, /No file name equals a sibling name without its last extension/);
 });
 
 test('the script reads non-ASCII paths unquoted (git ls-files -z)', () => {
