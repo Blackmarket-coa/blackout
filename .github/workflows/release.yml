@@ -1,221 +1,257 @@
 name: Release
 
 on:
-  push:
-    tags:
-      - 'v*'
+    push:
+        tags:
+            - 'v*'
 
 permissions:
-  contents: write
-  packages: write
-  # required for cosign keyless signing via Sigstore
-  id-token: write
-  attestations: write
+    contents: write
+    packages: write
+    # required for cosign keyless signing via Sigstore
+    id-token: write
+    attestations: write
 
 jobs:
-  build-web:
-    name: Build web artifact
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
-      - uses: pnpm/action-setup@v5
-        with:
-          version: 9.15.4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @blackout/client run build
+    build-web:
+        name: Build web artifact
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+            - uses: pnpm/action-setup@v5
+              with:
+                  version: 9.15.4
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+                  cache: pnpm
+            - run: pnpm install --frozen-lockfile
+            - run: pnpm --filter @blackout/client run build
 
-      - name: Generate SPDX SBOM for web bundle
-        uses: anchore/sbom-action@v0
-        with:
-          path: apps/blackout-client
-          format: spdx-json
-          artifact-name: blackout-web-${{ github.ref_name }}.spdx.json
-          output-file: apps/blackout-client/dist/sbom.spdx.json
+            - name: Generate SPDX SBOM for web bundle
+              uses: anchore/sbom-action@v0
+              with:
+                  path: apps/blackout-client
+                  format: spdx-json
+                  artifact-name: blackout-web-${{ github.ref_name }}.spdx.json
+                  output-file: apps/blackout-client/dist/sbom.spdx.json
 
-      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
-        with:
-          name: blackout-web-${{ github.ref_name }}
-          path: apps/blackout-client/dist
+            - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+              with:
+                  name: blackout-web-${{ github.ref_name }}
+                  path: apps/blackout-client/dist
 
-  # Desktop bundles are produced by the dedicated cross-OS workflow
-  # .github/workflows/blackout-desktop-tauri.yml (which also triggers on v* tags).
-  # It builds + signs via tauri-action and attaches the installers + updater JSON
-  # to this same release tag, so there is no separate build-desktop job here.
+    # Desktop bundles are produced by the dedicated cross-OS workflow
+    # .github/workflows/blackout-desktop-tauri.yml, on release-* tags only,
+    # so there is no build-desktop job here and a v* tag's release never
+    # holds a desktop file or the updater's latest.json. It used to run on
+    # v* tags too, into this tag's release: that is gone because this job
+    # uploads hundreds of files (every file of the web build, the mobile
+    # builds, then a signature, certificate and bundle for each) and
+    # tauri-action reads only the first page of a release's assets, so a
+    # shared release could lose latest.json (that workflow's header).
+    # The release job below keeps its GitHub release a draft (draft: true on
+    # both action-gh-release steps; operator decision of 2026-11-02 that a
+    # person publishes each release, pending the operator's yes for this
+    # workflow; docs/security/dependency-advisories-server-desktop-2026-10-30.md,
+    # Found outside scope, item 6). When publishing it, leave "Set as the
+    # latest release" unticked: the desktop updater reads
+    # releases/latest/download/latest.json, which this release does not
+    # have, so a v* release marked latest 404s every installed desktop's
+    # update check until the next desktop release is published.
 
-  build-mobile-android:
-    name: Build mobile artifact (Android)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
-      - uses: pnpm/action-setup@v5
-        with:
-          version: 9.15.4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: 17
-      - run: pnpm install --frozen-lockfile
-      - name: Ensure Android project exists
-        working-directory: blackout-mobile
-        run: |
-          if [ ! -f "android/gradlew" ]; then
-            pnpm add:android
-          fi
-      - run: pnpm --filter blackout-mobile run sync:android
-      - run: cd blackout-mobile/android && ./gradlew assembleRelease
-      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
-        with:
-          name: blackout-mobile-android-${{ github.ref_name }}
-          path: blackout-mobile/android/app/build/outputs/**/*.apk
-          if-no-files-found: warn
+    build-mobile-android:
+        name: Build mobile artifact (Android)
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+            - uses: pnpm/action-setup@v5
+              with:
+                  version: 9.15.4
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+                  cache: pnpm
+            - uses: actions/setup-java@v4
+              with:
+                  distribution: temurin
+                  java-version: 17
+            - run: pnpm install --frozen-lockfile
+            - name: Ensure Android project exists
+              working-directory: blackout-mobile
+              run: |
+                  if [ ! -f "android/gradlew" ]; then
+                    pnpm add:android
+                  fi
+            - run: pnpm --filter blackout-mobile run sync:android
+            - run: cd blackout-mobile/android && ./gradlew assembleRelease
+            - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+              with:
+                  name: blackout-mobile-android-${{ github.ref_name }}
+                  path: blackout-mobile/android/app/build/outputs/**/*.apk
+                  if-no-files-found: warn
 
-  build-mobile-ios:
-    name: Build mobile artifact (iOS)
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
-      - uses: pnpm/action-setup@v5
-        with:
-          version: 9.15.4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - name: Ensure iOS project exists
-        working-directory: blackout-mobile
-        run: |
-          if [ ! -d "ios/App" ]; then
-            pnpm add:ios
-          fi
-      - run: pnpm --filter blackout-mobile run sync:ios
-      - name: Build iOS app (unsigned simulator build)
-        working-directory: blackout-mobile/ios/App
-        run: |
-          xcodebuild \
-            -workspace App.xcworkspace \
-            -scheme App \
-            -configuration Release \
-            -sdk iphonesimulator \
-            -derivedDataPath build \
-            CODE_SIGNING_ALLOWED=NO
-      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
-        with:
-          name: blackout-mobile-ios-${{ github.ref_name }}
-          path: blackout-mobile/ios/App/build/Build/Products/**/*.app
-          if-no-files-found: warn
+    build-mobile-ios:
+        name: Build mobile artifact (iOS)
+        runs-on: macos-latest
+        steps:
+            - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+            - uses: pnpm/action-setup@v5
+              with:
+                  version: 9.15.4
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+                  cache: pnpm
+            - run: pnpm install --frozen-lockfile
+            - name: Ensure iOS project exists
+              working-directory: blackout-mobile
+              run: |
+                  if [ ! -d "ios/App" ]; then
+                    pnpm add:ios
+                  fi
+            - run: pnpm --filter blackout-mobile run sync:ios
+            - name: Build iOS app (unsigned simulator build)
+              working-directory: blackout-mobile/ios/App
+              run: |
+                  xcodebuild \
+                    -workspace App.xcworkspace \
+                    -scheme App \
+                    -configuration Release \
+                    -sdk iphonesimulator \
+                    -derivedDataPath build \
+                    CODE_SIGNING_ALLOWED=NO
+            - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+              with:
+                  name: blackout-mobile-ios-${{ github.ref_name }}
+                  path: blackout-mobile/ios/App/build/Build/Products/**/*.app
+                  if-no-files-found: warn
 
-  release:
-    name: Create GitHub release + deploy
-    needs: [build-web, build-mobile-android, build-mobile-ios]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
-      - uses: actions/download-artifact@v4
-        with:
-          path: artifacts
+    release:
+        name: Create GitHub release + deploy
+        needs: [build-web, build-mobile-android, build-mobile-ios]
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+            - uses: actions/download-artifact@v4
+              with:
+                  path: artifacts
 
-      - name: Create GitHub Release with all artifacts
-        uses: softprops/action-gh-release@v2
-        with:
-          files: artifacts/**
-          generate_release_notes: true
+            # Pinned to the version whose behaviour was read (v2.6.2,
+            # src/github.ts). It cannot find a draft by tag, so it creates
+            # one; if the tag already has a draft (one made by hand, or a
+            # re-run's) it keeps the oldest, deletes its own empty duplicate
+            # and uploads into the one it kept, which then has no generated
+            # notes. Without draft: true it would publish the release as
+            # latest (finalizeRelease), with no person in between.
+            - name: Create GitHub Release with all artifacts
+              uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
+              with:
+                  files: artifacts/**
+                  generate_release_notes: true
+                  draft: true
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+            - name: Set up QEMU
+              uses: docker/setup-qemu-action@v3
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+            - name: Set up Docker Buildx
+              uses: docker/setup-buildx-action@v3
 
-      - name: Login to GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+            - name: Login to GHCR
+              uses: docker/login-action@v3
+              with:
+                  registry: ghcr.io
+                  username: ${{ github.actor }}
+                  password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Docker image build + push to GHCR
-        id: docker_build
-        uses: docker/build-push-action@v6
-        with:
-          # The canonical `blackout` image is the backend API runtime the
-          # production compose stack (app/worker/app_canary) pulls and runs via
-          # ./bin/start-app | ./bin/start-worker. The static web client ships as
-          # a release artifact (build-web job) and as the separate
-          # ghcr.io/blackmarket-coa/blackout-web image published by docker.yml.
-          context: .
-          file: apps/blackout-server/Dockerfile
-          platforms: linux/amd64,linux/arm64
-          push: true
-          provenance: mode=max
-          sbom: true
-          tags: |
-            ghcr.io/blackmarket-coa/blackout:latest
-            ghcr.io/blackmarket-coa/blackout:stable
-            ghcr.io/blackmarket-coa/blackout:${{ github.ref_name }}
+            - name: Docker image build + push to GHCR
+              id: docker_build
+              uses: docker/build-push-action@v6
+              with:
+                  # The canonical `blackout` image is the backend API runtime the
+                  # production compose stack (app/worker/app_canary) pulls and runs via
+                  # ./bin/start-app | ./bin/start-worker. The static web client ships as
+                  # a release artifact (build-web job) and as the separate
+                  # ghcr.io/blackmarket-coa/blackout-web image published by docker.yml.
+                  context: .
+                  file: apps/blackout-server/Dockerfile
+                  platforms: linux/amd64,linux/arm64
+                  push: true
+                  provenance: mode=max
+                  sbom: true
+                  tags: |
+                      ghcr.io/blackmarket-coa/blackout:latest
+                      ghcr.io/blackmarket-coa/blackout:stable
+                      ghcr.io/blackmarket-coa/blackout:${{ github.ref_name }}
 
-      - name: Install cosign
-        uses: sigstore/cosign-installer@v3
-        with:
-          cosign-release: 'v2.4.1'
+            - name: Install cosign
+              uses: sigstore/cosign-installer@v3
+              with:
+                  cosign-release: 'v2.4.1'
 
-      - name: Sign published Docker image (keyless / OIDC)
-        env:
-          COSIGN_EXPERIMENTAL: '1'
-        run: |
-          cosign sign --yes \
-            "ghcr.io/blackmarket-coa/blackout@${{ steps.docker_build.outputs.digest }}"
+            - name: Sign published Docker image (keyless / OIDC)
+              env:
+                  COSIGN_EXPERIMENTAL: '1'
+              run: |
+                  cosign sign --yes \
+                    "ghcr.io/blackmarket-coa/blackout@${{ steps.docker_build.outputs.digest }}"
 
-      - name: Sign release artifacts (keyless / OIDC)
-        env:
-          COSIGN_EXPERIMENTAL: '1'
-        run: |
-          set -euo pipefail
-          shopt -s globstar nullglob
-          for f in artifacts/**/*; do
-            [ -f "$f" ] || continue
-            case "$f" in
-              *.sig|*.pem|*.bundle) continue ;;
-            esac
-            echo "Signing $f"
-            cosign sign-blob --yes \
-              --output-signature "$f.sig" \
-              --output-certificate "$f.pem" \
-              --bundle "$f.bundle" \
-              "$f"
-          done
+            - name: Sign release artifacts (keyless / OIDC)
+              env:
+                  COSIGN_EXPERIMENTAL: '1'
+              run: |
+                  set -euo pipefail
+                  shopt -s globstar nullglob
+                  for f in artifacts/**/*; do
+                    [ -f "$f" ] || continue
+                    case "$f" in
+                      *.sig|*.pem|*.bundle) continue ;;
+                    esac
+                    echo "Signing $f"
+                    cosign sign-blob --yes \
+                      --output-signature "$f.sig" \
+                      --output-certificate "$f.pem" \
+                      --bundle "$f.bundle" \
+                      "$f"
+                  done
 
-      - name: Attach signatures to GitHub release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            artifacts/**/*.sig
-            artifacts/**/*.pem
-            artifacts/**/*.bundle
+            # The same draft as above, found the same way; still a draft.
+            # Together the two steps upload every file under artifacts/**
+            # and three more per file, so this release has hundreds of
+            # assets; nothing here reads them back by page.
+            - name: Attach signatures to GitHub release
+              uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
+              with:
+                  draft: true
+                  files: |
+                      artifacts/**/*.sig
+                      artifacts/**/*.pem
+                      artifacts/**/*.bundle
 
-      - name: Deploy to production
-        run: |
-          curl --fail --show-error -X POST "$PRODUCTION_DEPLOY_WEBHOOK"
-        env:
-          PRODUCTION_DEPLOY_WEBHOOK: ${{ secrets.PRODUCTION_DEPLOY_WEBHOOK }}
+            # Runs at tag time, before anyone has looked at the draft above:
+            # pushing a v* tag deploys the server. Only the GitHub release
+            # waits for a person.
+            - name: Deploy to production
+              run: |
+                  curl --fail --show-error -X POST "$PRODUCTION_DEPLOY_WEBHOOK"
+              env:
+                  PRODUCTION_DEPLOY_WEBHOOK: ${{ secrets.PRODUCTION_DEPLOY_WEBHOOK }}
 
-      - name: Notify Matrix room of new release
-        run: |
-          MESSAGE="🚀 Blackout release ${{ github.ref_name }} is live."
-          curl --fail --show-error -X POST \
-            -H "Authorization: Bearer $MATRIX_ACCESS_TOKEN" \
-            -H "Content-Type: application/json" \
-            "$MATRIX_HOMESERVER/_matrix/client/v3/rooms/$MATRIX_ROOM_ID/send/m.room.message/$(date +%s)" \
-            -d "{\"msgtype\":\"m.text\",\"body\":\"${MESSAGE}\"}"
-        env:
-          MATRIX_HOMESERVER: ${{ secrets.MATRIX_HOMESERVER }}
-          MATRIX_ACCESS_TOKEN: ${{ secrets.MATRIX_ACCESS_TOKEN }}
-          MATRIX_ROOM_ID: ${{ secrets.MATRIX_ROOM_ID }}
+            # The message used to say the release "is live". The deploy was
+            # requested above, but the GitHub release is a draft until a
+            # person publishes it, so the message says both. The tag name is
+            # passed through the environment, not interpolated into the
+            # script: whoever pushes a tag chooses its name.
+            - name: Notify Matrix room of new release
+              run: |
+                  MESSAGE="🚀 Blackout $TAG: production deploy requested; the GitHub release is a draft until a person publishes it."
+                  curl --fail --show-error -X POST \
+                    -H "Authorization: Bearer $MATRIX_ACCESS_TOKEN" \
+                    -H "Content-Type: application/json" \
+                    "$MATRIX_HOMESERVER/_matrix/client/v3/rooms/$MATRIX_ROOM_ID/send/m.room.message/$(date +%s)" \
+                    -d "{\"msgtype\":\"m.text\",\"body\":\"${MESSAGE}\"}"
+              env:
+                  TAG: ${{ github.ref_name }}
+                  MATRIX_HOMESERVER: ${{ secrets.MATRIX_HOMESERVER }}
+                  MATRIX_ACCESS_TOKEN: ${{ secrets.MATRIX_ACCESS_TOKEN }}
+                  MATRIX_ROOM_ID: ${{ secrets.MATRIX_ROOM_ID }}
