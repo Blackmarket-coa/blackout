@@ -12,9 +12,12 @@ import { ClientPrefix, HTTPError, MatrixError, Method, type MatrixClient } from 
  * `null` when its own request failed (`rust-crypto/backup.js`,
  * `doCheckKeyBackup` catches the error and leaves `serverBackupInfo`
  * undefined; `rust-crypto.js` `getKeyBackupInfo` turns that into `null`) and
- * caches a success for the life of the client (`checkKeyBackupAndEnable`
- * returns early once `checkedForBackup` is set), so "no backup" and "couldn't
- * check" look the same and the answer can be old.
+ * keeps its last answer until the SDK's next forced check: at start-up, on
+ * the user's own identity update, after `resetKeyBackup`, after an upload
+ * failure of an active backup, or when the app calls
+ * `checkKeyBackupAndEnable` (`rust-crypto.js:124,1872,1244,1215`,
+ * `backup.js:439`). So "no backup" and "couldn't check" look the same, and
+ * the answer can be hours old.
  *
  * Both requests here are reads, sent every time (no cache). Only a 404
  * `M_NOT_FOUND` from `GET /room_keys/version` means "no backup": Synapse
