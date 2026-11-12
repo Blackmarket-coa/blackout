@@ -3,6 +3,8 @@
 
 # Blackout
 
+> **Implementation review (2026-11-12):** [Source/CI status and remaining gaps](docs/IMPLEMENTATION_STATUS_2026-11-12.md) separates code from operational availability. Platform enhancement features are **one-time purchases; no subscription**. Existing recurring platform-plan assumptions require migration through FBM. Recorded passing CI does not close documented operational defects or establish live availability.
+
 Federated, end-to-end-encrypted communication platform built on the Matrix
 protocol — with first-class governance, mutual aid, steganography, and
 deaddrop encrypted messaging (Dead Drop envelopes use post-quantum hybrid
