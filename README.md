@@ -22,6 +22,8 @@ Capacitor mobile, a Synapse-derived homeserver, and a Node/Hono API server.
 
 ## Product direction: meaningful participation
 
+**FBM integration direction (2026-11-12):** [Coalition integration contract](docs/coalitions/FBM_UNIFIED_PORTAL_INTEGRATION.md) records reuse of the existing Coalition map, needs/resources/projects/tasks, events and chat inside FBM's character-built unified member portal. FBM owns the market/equipment/checkout; Blackstar owns transport operations. This is an integration plan, not a claim the composed experience is deployed.
+
 Blackout's longer-term product direction extends its secure communication and cooperative governance foundation into a daily-use social experience that helps people **discover, express, connect, compete, learn, organize, and earn**. Passive participants should gain meaningful personal or community value; active creators and organizers should have clearer paths to collaboration, distribution, and economic returns.
 
 Planned experience areas include The Void (anonymous conversation starters with voluntary identity reveal), expanded Coliseum debates and faction play, creator workflows linked to FBM, cooperative games and missions, and opt-in real-world discovery. These are **strategic priorities, not a claim that every feature is shipped**. Community autonomy must coexist with privacy, moderation appeals, and safeguards against threats, doxxing, and targeted harassment.
