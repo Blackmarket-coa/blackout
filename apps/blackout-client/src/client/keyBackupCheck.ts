@@ -283,11 +283,12 @@ export const SETUP_WRITING_TEXT =
 /**
  * Above the recovery key of an attempt whose window went away after its first
  * write, before the attempt settled (eighth review): a browser's Back, the
- * search panel closing around the chip, the chip's message becoming readable.
- * The attempt runs on until it settles, to its end or at an account
- * confirmation still unanswered, and its key (finished, or partway with that
- * stage's text) is shown here, from a host mounted outside the app's routes,
- * so that no write is left whose recovery key nobody was shown.
+ * search results shifting under the chip, the chip's message becoming
+ * readable. The attempt runs on until it settles, at its end, at a step that
+ * fails or at an account confirmation that has not gone through, and its key
+ * (finished, or partway with that stage's text) is shown here, from a host
+ * mounted outside the app's routes, so that no write is left whose recovery
+ * key nobody was shown.
  */
 export const SETUP_KEY_ELSEWHERE_TEXT =
     'The window where Blackout was changing your account’s keys went away before it showed the recovery key, so the key is shown here.';

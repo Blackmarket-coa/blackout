@@ -56,17 +56,23 @@ export const MessageFailedContent = as<'div', { children?: never }>(({ ...props 
  *
  * Where the chip is mounted (eighth review, corrected by the ninth): the
  * shipped app renders it only in message-search results (`SearchResultGroup`,
- * through `RenderMessageContent` and `Reply`). The pinned-messages popout
- * (`RoomPinMenu`) would render it too, but only the room view renders that
- * popout, and the room view (`Room`, `RoomView`, `RoomViewHeader` in
+ * through `RenderMessageContent` and `Reply`). There it shows in practice in
+ * a result's reply preview whose replied event fails to decrypt here: a
+ * search hit itself is never encrypted, since Synapse indexes only
+ * unencrypted messages, so `RenderMessageContent`'s branch is reached there
+ * only by an event sent in the clear with that msgtype. The pinned-messages
+ * popout (`RoomPinMenu`) would render it too, but only the room view renders
+ * that popout, and the room view (`Room`, `RoomView`, `RoomViewHeader` in
  * `features/room`) is not mounted. The room timeline renders an undecryptable
  * message as plain text and has no chip. Inside a reply preview the chip sits
  * in `Reply`'s button, whose click opens the replied message and closes the
  * search panel, so the chip's click and every click in its overlay stop there
  * (`stopClick` in `KeyBackupSetupGuard`). Its overlay lives as long as the
- * chip does: the search panel closing, or the message becoming readable,
- * takes it away. Nothing is lost before the setup's first write; after it,
- * the attempt runs on and `RecoveryKeyHandoffHost` shows its key.
+ * chip does. While it is up it covers the search panel, whose close and
+ * result Open are then out of reach, so what takes it away is a browser's
+ * Back, the results list shifting under it, or the message becoming
+ * readable. Nothing is lost before the setup's first write; after it, the
+ * attempt runs on and `RecoveryKeyHandoffHost` shows its key.
  */
 export const CHIP_TEXT = 'Can’t decrypt this message on this device.';
 export const CHIP_LABEL = 'Why?';

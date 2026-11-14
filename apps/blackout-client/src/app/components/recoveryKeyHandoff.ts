@@ -8,13 +8,14 @@ import { useSyncExternalStore } from 'react';
  * The setup and reset windows live inside whatever opened them: the nudge's
  * banner in `ClientLayout` (a route element), the undecryptable-message chip
  * in the message-search panel (the only place the shipped app shows it). A
- * browser's Back, the search panel closing, or the chip's message becoming
- * readable takes the window away while the attempt is still writing, and the
- * attempt's recovery key, which then opens the account's secret storage, had
- * nowhere to be shown. The attempt now runs on until it settles (to its end,
- * or at an account confirmation still unanswered) and, when its form is gone,
- * puts its key here; the host, mounted beside the router rather than under
- * it, shows it.
+ * browser's Back, the search results shifting under the chip, or the chip's
+ * message becoming readable takes the window away while the attempt is still
+ * writing (the panel's own close is under the chip's overlay while it is up),
+ * and the attempt's recovery key, which then opens the account's secret
+ * storage, had nowhere to be shown. The attempt now runs on until it settles
+ * (at its end, at a step that fails, or at an account confirmation that has
+ * not gone through) and, when its form is gone, puts its key here; the host,
+ * mounted beside the router rather than under it, shows it.
  *
  * Kept in memory only, like the key itself: a reload loses both.
  */

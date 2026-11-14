@@ -272,9 +272,12 @@ export function SetupVerification({
     }, [alive]);
 
     // A form that goes away with its account confirmation open (a browser's
-    // Back, the search panel closing around the chip) leaves a prompt nobody
-    // can answer, and the attempt waited on it forever with its key unseen.
-    // Cancel it, so the attempt settles and hands its key off (eighth review).
+    // Back; for the chip, the search results shifting under it or its message
+    // becoming readable) leaves a prompt nobody can answer, and the attempt
+    // waited on it forever with its key unseen. Cancel it, so the attempt
+    // settles and hands its key off (eighth review). An answer still on its
+    // way is cancelled too: sending it leaves the ref set, and
+    // `makeUIAAction` resolves only once that request comes back.
     useEffect(
         () => () => {
             uiaActionRef.current?.cancelCallback(new SetupWindowGone());
@@ -389,10 +392,11 @@ export function SetupVerification({
                 markWriting(true);
                 const releaseHold = holdWhileWriting(mx);
                 // The form can still go away by another route while the
-                // attempt writes (a browser's Back, the search panel closing
-                // around the chip, the chip's message becoming readable). The
-                // attempt then runs on until it settles, to its end or at an
-                // account confirmation still unanswered, and its key,
+                // attempt writes (a browser's Back; for the chip, the search
+                // results shifting under it or its message becoming
+                // readable). The attempt then runs on until it settles, at
+                // its end, at a step that fails or at an account
+                // confirmation that has not gone through, and its key,
                 // finished or partway, goes to `RecoveryKeyHandoffHost`
                 // rather than to a form that is gone (eighth review; round 7
                 // stopped before the next write instead, and the key of what

@@ -79,15 +79,17 @@ got, since the account's secret storage may by then open only with that key
 offers no way on (sixth and seventh reviews of the same record). The window
 can still go away mid-attempt: a browser's Back leaves the screen, and the
 chip, which the app shows only in message-search results, takes its window
-with it when the search panel closes or the message becomes readable. The
-attempt then goes on to its end, or stops at the account confirmation (your
-password or single sign-on) if that is still unanswered; either way its
-recovery key is shown in a window of its own, with what the attempt did
-(eighth and ninth reviews). The key is still lost if the page reloads or
-closes during the attempt (the page asks the browser to confirm first;
-whether a prompt appears is up to the browser or app), if the session is
-signed out before the key shows, or if a request never answers. The restore
-path itself is still missing.
+with it when the results under it change or the message becomes readable
+(while that window is up it covers the search panel, so the panel's close
+and a result's Open can't be reached). The attempt then goes on until it
+ends or a step fails, or stops at the account confirmation (your password or
+single sign-on) if one is asked and has not gone through yet; either way its
+recovery key is shown in a window of its own, with how far the attempt got
+if it stopped partway (eighth and ninth reviews). The key is still lost if
+the page reloads or closes during the attempt (the page asks the browser to
+confirm first; whether a prompt appears is up to the browser or app), if the
+session is signed out before the key shows, or if a request never answers.
+The restore path itself is still missing.
 
 What BO-1 gates is anything that routes trust through Blackout
 (`TRANSMUTATION_NOTES.md` §5). It does not gate coalition external sync:

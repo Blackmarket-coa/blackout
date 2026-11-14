@@ -645,10 +645,12 @@ Now:
 -   If the form goes away by another route while it writes, round 7 started
     no further write (`stillOpen()` between the steps), and what was already
     written stayed under a key nobody saw. The eighth review replaced that:
-    the attempt runs on until it settles, to its end or at an account
-    confirmation still unanswered, and `RecoveryKeyHandoffHost` shows its key
-    (below). (The ninth review corrected this sentence, which said the attempt
-    runs to its end.)
+    the attempt runs on until it settles, at its end, at a step that fails or
+    at an account confirmation that has not gone through, and
+    `RecoveryKeyHandoffHost` shows its key (below). (The ninth review
+    corrected this sentence, which said the attempt runs to its end; its
+    checkers added the failed step and the confirmation whose answer is still
+    on its way, which "still unanswered" left out.)
 
 The verifier's other suggestion, a ref set by the close, comes to the same
 thing here, since every caller's close unmounts the form; disabling the ✕ for
@@ -733,15 +735,25 @@ dialog was gone, and after the held step was released no recovery key was
 ever shown. The nudge renders only in `ClientLayout` (`ClientLayout.tsx:792`),
 which is a route element, so a browser's Back does the same. The chip's
 overlay lives in the chip, and the shipped app renders the chip only in
-message-search results (S9-10), so the search panel closing (its close
-button, or opening a result: `ClientLayout.tsx:1782` and `:1814-1817`), or
-the message becoming readable, takes the window too; the results list is
+message-search results (S9-10), so the message becoming readable takes the
+window too, and so does a list that shifts under it: the results list is
 virtualized and keyed by index (`MessageSearch.tsx:122` and `:292`), so a
-list that shifts can unmount the tile (from code reading; not driven in a
-test). (The ninth review corrected this sentence: round 8 also named the
+shift can unmount the tile (from code reading; not driven in a test). The
+search panel's own ways to close, its close button and a result's Open
+(`ClientLayout.tsx:1782` and `:1814-1817`), are out of reach while the
+overlay is up: folds' `Overlay` is portaled to `document.body` and covers
+the page (`position: absolute`, inset 0, `z-index` 9999, under an `html`
+that is 100% high and does not scroll, `index.css:42-45`), above the
+panel's `z-index` 20 (`ClientLayout.tsx:1764`), its focus trap keeps
+focus inside, and `stopClick` keeps the overlay's clicks from reaching the
+reply preview, whose click opens a result too (S9-10). So while the overlay
+is up the panel goes only with the screen, when a browser's Back leaves it.
+(The ninth review corrected this sentence: round 8 also named the
 pinned-messages popout, with its list at `RoomPinMenu.tsx:286` and `:484`,
-which the shipped app does not mount.) The verifier also named the
-room timeline's virtualized rows; they hold no chip: `RoomTimeline` renders an
+which the shipped app does not mount. Its checkers corrected it again:
+round 8 and the ninth review named the search panel closing as a way the
+window goes, which the overlay rules out.) The verifier also named the room
+timeline's virtualized rows; they hold no chip: `RoomTimeline` renders an
 `m.bad.encrypted` event through `getMsgType` and its switch's default,
 `TextMessage`, never through `RenderMessageContent` or `Reply`.
 
@@ -760,16 +772,32 @@ Now:
     while the overlay is up (`ClientLayout` keeps its URL in step with its
     selection, `ClientLayout.tsx:379`), so a blocker would have to tell the
     two apart. Handing the key off covers every route instead:
--   A window that goes away no longer stops the attempt. It goes on to its
-    end, or stops at the account confirmation if that is still unanswered
-    (two points down). Under the fork's default Synapse configuration the
-    cross-signing upload asks for that confirmation every time ("Reproduced
-    how"; none of the five homeserver configs in this repository, the
-    Synapse fork's three and the two deploy templates, sets
-    `ui_auth.session_timeout`, which would let it skip), so an attempt that
-    reaches the upload stops there unless the confirmation was answered
-    before the window went. (The ninth review corrected "It runs to its
-    end", which left that stop out.) When it settles with its form gone
+-   A window that goes away no longer stops the attempt. It goes on until it
+    settles: at its end, at a step that fails, or at the account
+    confirmation if that has not gone through (two points down). Under the
+    fork's default Synapse configuration the cross-signing upload asks for
+    that confirmation every time ("Reproduced how"; none of the fork's three
+    homeserver configs, `apps/blackout-server/docker/conf/homeserver.yaml`
+    and `docs/homeserver.blackbox.yaml` and `docs/homeserver.edge.yaml`
+    there, nor the single-server deploy's template, whose Synapse is built
+    from the fork (`infra/single-server-baseline/deploy.sh:27`,
+    `docker-compose.yml:208`), sets `msc3967_enabled`, which would skip it
+    for a first-time upload, or `ui_auth.session_timeout`, which would skip
+    it soon after the session's last sign-in or confirmation), so an
+    attempt that reaches the upload stops there unless the upload carrying
+    the confirmation had come back before the window went. The backend
+    deploy's template is served by upstream Synapse instead
+    (`ghcr.io/element-hq/synapse:v1.163.2`,
+    `deploy/docker/blackout-backend/docker-compose.yml:36`), whose
+    `SigningKeyUploadServlet` asks for no confirmation when the account has
+    no cross-signing yet (MSC3967, `synapse/rest/client/keys.py` at that
+    tag): on that deploy a from-scratch attempt (`'none'`) whose window goes
+    away goes on to its end, and only the warned reset asks. (The ninth
+    review corrected "It runs to its end", which left that stop out. Its
+    checkers corrected this point in turn: it counted the backend template
+    among the configs the fork serves, and said "unless the confirmation was
+    answered before the window went", which reads as if an answer still on
+    its way carried the attempt on.) When it settles with its form gone
     (`alive()` false), its key goes to
     `handOffRecoveryKey` (`recoveryKeyHandoff.ts`, kept in memory only): the
     finished key with the finished screen's text, or the partway key with its
@@ -798,7 +826,16 @@ Now:
     (`SetupWindowGone`), so the upload rejects, the attempt settles at
     `cross_signing`, and the host shows the key with that stage's text. A
     401 that arrives after the form is gone was already rejected (the
-    `alive()` test in `authUploadDeviceSigningKeys`).
+    `alive()` test in `authUploadDeviceSigningKeys`). An answer still on its
+    way is cancelled too: sending it (`handleAction`) leaves the ref set, and
+    `makeUIAAction` resolves the upload only once the answered request comes
+    back, so the unmount rejects the upload first and that later answer
+    settles nothing. The attempt then settles at `cross_signing` even if the
+    homeserver goes on to accept the upload; that stage's text, "Cross-signing
+    wasn't finished", still holds, since the SDK sends this device's
+    signature only after the upload resolves
+    (`CrossSigningIdentity.resetCrossSigning`). From code reading; no test
+    drives it (the ninth review's checkers).
 -   One attempt of an account at a time. An attempt whose window went away
     runs on while the nudge or the chip can open a new setup; two attempts
     would each replace what the other wrote. Right before its first write a
@@ -822,8 +859,25 @@ search panel (`ClientLayout.tsx:1754` and `:1800`). The room timeline renders
 no chip (S9-9), and the mounted pins panel, `CanopyPinsPanel`, shows a pinned
 message's text through `getTimelineBody` and no chip. (Round 8 said the chip
 appears in the pinned-messages popout too, and traced the click below through
-the popout's handlers; the ninth review corrected both.) Inside a reply
-preview the chip sits in `Reply`'s `ReplyLayout`, a
+the popout's handlers; the ninth review corrected both.) Within search, the
+chip shows in practice in a result's reply preview, when the replied event
+fails to decrypt on this device: `Reply` fetches that event and attempts
+its decryption (`useRoomEvent.ts:12` and `:21-22`), and shows the chip when
+its msgtype is then `m.bad.encrypted` (`Reply.tsx:100` and `:123`). A
+search hit itself is never encrypted. The panel shows the raw events of the
+homeserver's `/search` (`useMessageSearch.ts:105-109`, which
+`parseSearchResult` does not decrypt); Synapse indexes only `m.room.name`,
+`m.room.topic` and `m.room.message` events, never `m.room.encrypted` (the
+fork's `synapse/storage/databases/main/events.py:1614-1622`, with the same
+three in `search.py:166`'s reindex, and upstream v1.163.2's `events.py`
+likewise); and `SearchResultGroup` hands only `m.room.message` to
+`RenderMessageContent` (`SearchResultGroup.tsx:125-131`; any other type
+shows as "`<type>` event", `:182`). So `MBadEncrypted` is reached there only
+by an event sent in the clear with that msgtype, and a reply preview's chip
+needs a message sent in the clear that replies to an encrypted one, which
+clients do not normally send in an encrypted room. (From code reading; the
+ninth review's checkers.) Inside a reply preview the chip sits in `Reply`'s
+`ReplyLayout`, a
 `<button onClick={onClick}>` (`Reply.tsx:108-124`); in a search result that
 handler is `handleOpenClick` (`SearchResultGroup.tsx:190-194`, given to
 `Reply` at `:310`), which reads the button's `data-event-id`, the replied
@@ -1621,6 +1675,13 @@ click opened the replied message and closed the search panel, and the same
 containment answers it. An attempt whose window goes away while its account
 confirmation is unanswered stops there, as the first row's next clause has
 it, with its key handed off; BO-1 and S9-9's first point now say so too.
+The ninth review's checkers added two more: the second row's "their closing
+takes its window" does not hold for the search panel, whose close and
+result Open sit under the overlay while it is up, and the same row's
+containment keeps the overlay's clicks from the reply preview (S9-9); and
+the first row's "running to its end" also leaves out a step that fails and
+an answered confirmation whose request is still on its way, both of which
+settle the attempt with its key handed off.
 
 ## Ninth review, 2026-11-08
 
@@ -1675,9 +1736,14 @@ Then `9edb0ec625`, this round's commit, was merged with develop at
 changed, `KNOWN_LIMITATIONS.md`, merged without conflict and keeps both:
 develop's new section on several API processes sharing one database and its
 rewritten account-number paragraph, and this branch's "older encrypted
-messages are not readable there (BO-1)". Develop changed no lockfile or manifest, so nothing
-was installed. The same mount chain holds there: develop changed nothing
-under `apps/blackout-client`. The checks on `bb30a5598f`, from the same
+messages are not readable there (BO-1)". Develop changed no JavaScript
+manifest or pnpm lockfile, so nothing was installed for the client checks;
+its one manifest and lockfile change is the Synapse fork's `pyproject.toml`
+and `poetry.lock` (Twisted 26.10.0, `6b6d96e173` in #1002), which none of
+these checks uses. (The ninth review's checkers corrected this sentence,
+which said, as `bdd9e3a5dc`'s commit message still does, that develop
+changed no lockfile or manifest.) The same mount chain holds there: develop
+changed nothing under `apps/blackout-client`. The checks on `bb30a5598f`, from the same
 places, logs in `scratchpad/v60/r9-claims/merged/`:
 
 | Check            | Command                                                                                                                                                      | Result                                                          |
@@ -1688,6 +1754,58 @@ places, logs in `scratchpad/v60/r9-claims/merged/`:
 | guard tests      | `pnpm --filter @blackout/client exec vitest run` on the 11 test files under `tests/unit` this branch adds or changes for S9, and `encryptionPosture.test.ts` | 12 files, 180 passed (load 0.69)                                |
 | trust page       | `node tools/ci/build-trust-page.mjs --check`                                                                                                                 | OK, `public/trust.html` matches                                 |
 | gitleaks 8.21.2  | `gitleaks git --log-opts="origin/develop..HEAD"`                                                                                                             | 37 commits scanned (the range's 42 less its 5 merges), no leaks |
+
+### The ninth review's checkers, 2026-11-14
+
+Checkers then read this round's text, `9edb0ec625` and `bdd9e3a5dc`, against
+the tree. Their ten findings come to nine problems (two were raised twice,
+and one finding held two), all in the text and all low; none was declined.
+Each is fixed in place above, in BO-1 or in the comments, and the rows above
+keep their words. No code changed: comments in four source files and one
+test file, this record and BO-1.
+
+| Finding                                                                                                                                                                                                                                                                                                                                                                                                                                              | Severity           | What changed                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The merge paragraph said develop changed no lockfile or manifest. Develop's side changed the Synapse fork's `pyproject.toml` and `poetry.lock` (Twisted 26.10.0, `6b6d96e173` in #1002); no `package.json` or `pnpm-lock.yaml` changed (`git diff --name-only 97756ff4ec 7a9814ebc9`)                                                                                                                                                                | low (raised twice) | The sentence says develop changed no JavaScript manifest or pnpm lockfile, so nothing was installed for the client checks, and names the Synapse fork's change; `bdd9e3a5dc`'s commit message keeps the old words, since commits here are not amended                                                                                                                                                                                                                                                                                                       |
+| S9-9 said an attempt that reaches the upload stops there "unless the confirmation was answered before the window went", and BO-1 "if that is still unanswered". An answer whose request is still on its way is cancelled too (`handleAction` leaves `uiaActionRef` set, `makeUIAAction` resolves only once the request comes back), and the attempt settles at `cross_signing` while the homeserver may still accept the upload                      | low (raised twice) | S9-9's first point says "unless the upload carrying the confirmation had come back before the window went"; its cancel point says why, and that "Cross-signing wasn't finished" still holds, since the SDK sends this device's signature only after the upload resolves; S9-6's last point, BO-1 ("has not gone through yet"), "What still loses an attempt's key", the eighth review's correction note and the comments in `DeviceVerificationSetup.tsx`, `recoveryKeyHandoff.ts`, `keyBackupCheck.ts` and the window-gone test say "has not gone through" |
+| BO-1's two outcomes left out a step that fails after the window went, which also settles the attempt and hands its key off with that stage's text (the catch's `handOff(SETUP_PARTWAY_TEXT[stage].what)`)                                                                                                                                                                                                                                            | low                | BO-1 says the attempt "goes on until it ends or a step fails, or stops at the account confirmation"; S9-6's last point, S9-9's first point, "What still loses an attempt's key" and the same comments name the failed step                                                                                                                                                                                                                                                                                                                                  |
+| BO-1, S9-9, "What still loses an attempt's key" and the comments in `DeviceVerificationSetup.tsx`, `FallbackContent.tsx`, `recoveryKeyHandoff.ts`, `keyBackupCheck.ts` and the window-gone test named the search panel closing as a way the chip's window goes mid-attempt. While the overlay is up the panel's ✕ (`ClientLayout.tsx:1782`) and a result's Open (`:1814-1817`) sit under it, and `stopClick` keeps its clicks from the reply preview | low                | S9-9 says why: folds' `Overlay` is portaled to `document.body` and covers the page (`position: absolute`, inset 0, `z-index` 9999, the root not scrolling; the checker's evidence called it fixed, which is another folds rule with the same `z-index`), above the panel's `z-index` 20, with a focus trap; it keeps the shifting results list and the message becoming readable. BO-1, "What still loses an attempt's key", the eighth review's correction note and those comments drop the panel closing                                                  |
+| Where in search the chip can appear was not said. Search results are the raw events of `/search`, Synapse indexes only `m.room.name`, `m.room.topic` and `m.room.message`, and `SearchResultGroup` hands only `m.room.message` to `RenderMessageContent`, so in practice the chip shows only in a result's reply preview whose replied event fails to decrypt here                                                                                   | low (optional)     | S9-10 says so, with the code path (`useMessageSearch.ts`, `SearchResultGroup.tsx`, `Reply.tsx`, `useRoomEvent.ts`) and the indexing, read in the fork and in upstream v1.163.2's `events.py` (`scratchpad/v60/r9-claims/verify-3/`); `FallbackContent.tsx`'s comment says it briefly                                                                                                                                                                                                                                                                        |
+| S9-9 rested "asks every time" on five homeserver configs, including both deploy templates. The backend deploy's template is served by upstream Synapse v1.163.2 (`deploy/docker/blackout-backend/docker-compose.yml:36`), whose `SigningKeyUploadServlet` asks for no confirmation on a first-time upload (MSC3967)                                                                                                                                  | low                | S9-9 rests the claim on the fork's three configs and the single-server template, whose Synapse is built from the fork, and says that on the backend deploy a from-scratch attempt whose window goes away goes on to its end, only the warned reset asking; the four were read again for `msc3967_enabled`, `ui_auth` and `msc3861` (none set)                                                                                                                                                                                                               |
+| BO-1 said the handed-off window shows "what the attempt did". For a finished attempt it shows `SETUP_KEY_ELSEWHERE_TEXT` and `RecoveryKeyDisplay`'s generic lead (`handOff()` passes none); only a partway stop says how far it got                                                                                                                                                                                                                  | low                | BO-1 says "with how far the attempt got if it stopped partway"; S9-9 already said "the finished key with the finished screen's text"                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| The window-gone test's header said the attempt settles "to its end, or at an account confirmation left open", leaving out a confirmation first asked after the window went (a 401 with `alive()` false is rejected at once)                                                                                                                                                                                                                          | low                | The header names the failed step and the three ways a confirmation has not gone through: left open, asked only after the window went, or answered with its request still on its way                                                                                                                                                                                                                                                                                                                                                                         |
+| "What remains"'s list of sentences to re-read when the room view or `RoomPinMenu` is mounted left out the window-gone test's comments, which also say search is the only place the shipped app shows the chip                                                                                                                                                                                                                                        | low                | The list adds them (the header, `ChipHost` and `renderReply`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+
+The mount chain was read again from the tree at `bdd9e3a5dc` before this
+commit, with the same greps as above: `MessageBadEncryptedContent` is
+rendered by `Reply` and by `MBadEncrypted`, which only `RenderMessageContent`
+renders; `RenderMessageContent` and `Reply` are used only by `RoomPinMenu`
+and `SearchResultGroup`; `RoomPinMenu` only by `RoomViewHeader`, it only by
+`RoomView`, it only by `Room`, which only `features/room/index.ts`
+re-exports, and nothing imports that barrel or those three components;
+`SearchResultGroup` is rendered by `MessageSearch`, which `ClientLayout`
+mounts in its search panel, and `ClientLayout` is rendered as a route's
+element by `main.tsx:246` (the home route, while the home feed is off) and
+by `CommunitiesRoute.tsx:86`. `TRUST.md`, `KNOWN_LIMITATIONS.md` and the
+trust page are unchanged.
+
+The checks ran on 2026-11-14 on the working tree over `bdd9e3a5dc` with
+these text changes, before their commit, from the same places as above;
+develop was still at `7a9814ebc9`; logs in `scratchpad/v60/r9-claims/round2/`.
+Only comments and documents changed, so the full suites, the build and the
+mutation checks were not re-run.
+
+| Check             | Command                                                                                                   | Result                                                                                                                                                                         |
+| ----------------- | --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| prettier          | root `prettier --check` on the 7 files changed here                                                       | clean                                                                                                                                                                          |
+| eslint, as CI     | `npx eslint --max-warnings=0` on the 4 changed `src` files                                                | exit 0 (load 0.33); with the test file added it exits 1 on its one warning, "File ignored by default": the client's config ignores `tests/`, and CI's run covers `src/**` only |
+| client typecheck  | `pnpm --filter @blackout/client run typecheck`                                                            | exit 0 (load 0.30)                                                                                                                                                             |
+| window-gone tests | `pnpm --filter @blackout/client exec vitest run` on `DeviceVerificationSetup.windowGone.test.tsx`         | 9 passed (load 0.68)                                                                                                                                                           |
+| chip and texts    | the same on `FallbackContent.chip.test.tsx` and `keyBackupCheck.test.ts`, whose sources' comments changed | 2 files, 65 passed (load 1.24)                                                                                                                                                 |
+| trust page        | `node tools/ci/build-trust-page.mjs --check` (`TRUST.md` not changed)                                     | OK, `public/trust.html` matches                                                                                                                                                |
+| auth secrets      | `node tools/ci/check-auth-secrets.mjs`                                                                    | passed                                                                                                                                                                         |
+| gitleaks 8.21.2   | `gitleaks git --log-opts="origin/develop..HEAD"`, before this commit                                      | 38 commits scanned (the range's 43 less its 5 merges), no leaks                                                                                                                |
+| lint-staged       | `npx lint-staged --concurrent false` from the root, on the staged files (`prettier --write`)              | exit 0, no file changed                                                                                                                                                        |
 
 ## What remains
 
@@ -1764,10 +1882,13 @@ places, logs in `scratchpad/v60/r9-claims/merged/`:
     `importRoomKeysAsJson`): `CHIP_NOT_VERIFIED`'s "a message sent before this
     device signed in stays unreadable here" (sixth review) holds only while no
     screen imports keys. The same goes for where the chip shows (ninth
-    review): BO-1, S9-9, S9-10, "What still loses an attempt's key" below and
+    review): BO-1, S9-9, S9-10, "What still loses an attempt's key" below,
     the comments in `FallbackContent.tsx`, `KeyBackupSetupGuard.tsx`,
     `DeviceVerificationSetup.tsx`, `recoveryKeyHandoff.ts` and
-    `keyBackupCheck.ts` say it shows only in message-search results, which
+    `keyBackupCheck.ts`, and those in
+    `DeviceVerificationSetup.windowGone.test.tsx` (its header, `ChipHost`
+    and `renderReply`; added by the ninth review's checkers) say it shows
+    only in message-search results, which
     holds while the room view (`Room`, `RoomView`, `RoomViewHeader`) and its
     pinned-messages popout (`RoomPinMenu`) stay unmounted. When either is
     mounted, re-read them: the popout renders the chip in its list and in its
@@ -1853,12 +1974,16 @@ places, logs in `scratchpad/v60/r9-claims/merged/`:
     eighth, corrected by the ninth). The setup and reset windows can't be
     closed from the first write until the attempt settles, Android's back
     press is held meanwhile, and a window that goes away by another route (a
-    browser's Back; for the chip, the search panel closing, the results list
-    under it shifting, or the message becoming readable) leaves the attempt
-    running until it settles, to its end or at an account confirmation still
-    unanswered, its key shown by `RecoveryKeyHandoffHost`. (The eighth
-    review's text also named the pinned-messages popout closing, and said the
-    attempt runs to its end.) Still lost: the page reloading or closing
+    browser's Back; for the chip, the results list under it shifting or the
+    message becoming readable, while the search panel's close and a result's
+    Open sit under its overlay, S9-9) leaves the attempt running until it
+    settles, at its end, at a step that fails or at an account confirmation
+    that has not gone through, its key shown by `RecoveryKeyHandoffHost`.
+    (The eighth review's text also named the pinned-messages popout closing,
+    and said the attempt runs to its end. The ninth review's text named the
+    search panel closing and said "still unanswered", which left out a
+    failed step and an answer still on its way; its checkers corrected
+    both.) Still lost: the page reloading or closing
     during the attempt (the page asks the browser to confirm, through
     `beforeunload`, which a browser may skip and the desktop and mobile shells
     may not show); the session being signed out before the key shows (the

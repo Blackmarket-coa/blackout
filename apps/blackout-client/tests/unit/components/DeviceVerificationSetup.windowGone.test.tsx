@@ -7,16 +7,19 @@
 // write until it settled. The window could still go: a browser's Back (or
 // Android's, which the app turns into `history.back()` when no overlay claims
 // it) unmounts the nudge with its route; the chip's overlay goes with the
-// message-search panel that renders the chip (the only place the shipped app
-// shows it). The attempt then stopped before its next write, and the recovery
-// key of what it had already written was never shown. Now:
+// chip, which the shipped app shows only in message-search results, when the
+// results shift under it or its message becomes readable. The attempt then
+// stopped before its next write, and the recovery key of what it had already
+// written was never shown. Now:
 //
 // - while the attempt writes, the dialogs claim Android's back press, and the
 //   page asks the browser to confirm an unload;
 // - a window that goes away anyway leaves the attempt running until it
-//   settles (to its end, or at an account confirmation left open, as the next
-//   point says), and its key (finished, or partway with that stage's text) is
-//   shown by `RecoveryKeyHandoffHost`, which the app mounts beside its router;
+//   settles (at its end, at a step that fails, or at an account confirmation
+//   that has not gone through: left open, as the next point says, asked only
+//   after the window went, or answered with its request still on its way),
+//   and its key (finished, or partway with that stage's text) is shown by
+//   `RecoveryKeyHandoffHost`, which the app mounts beside its router;
 // - an account confirmation left open by a window that went away is
 //   cancelled, so the attempt settles rather than wait forever;
 // - a second attempt of the same account does not start writing while such an
