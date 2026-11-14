@@ -54,17 +54,19 @@ export const MessageFailedContent = as<'div', { children?: never }>(({ ...props 
  * nudge's text for the row), with a "Set up backup" button that asks the
  * homeserver again before it opens the flow (`texts.offer`).
  *
- * Where the chip is mounted (eighth review): the shipped app renders it only
- * in the pinned-messages popout and in message-search results, through
- * `RenderMessageContent` and `Reply`; the room timeline renders an
- * undecryptable message as plain text and has no chip. Inside a reply preview
- * the chip sits in `Reply`'s button, whose click opens the replied message
- * and closes the popout or the search panel, so the chip's click and every
- * click in its overlay stop there (`stopClick` in `KeyBackupSetupGuard`).
- * Its overlay lives as long as the chip does: the popout or the search panel
- * closing, or the message becoming readable, takes it away. Nothing is lost
- * before the setup's first write; after it, the attempt runs on and
- * `RecoveryKeyHandoffHost` shows its key.
+ * Where the chip is mounted (eighth review, corrected by the ninth): the
+ * shipped app renders it only in message-search results (`SearchResultGroup`,
+ * through `RenderMessageContent` and `Reply`). The pinned-messages popout
+ * (`RoomPinMenu`) would render it too, but only the room view renders that
+ * popout, and the room view (`Room`, `RoomView`, `RoomViewHeader` in
+ * `features/room`) is not mounted. The room timeline renders an undecryptable
+ * message as plain text and has no chip. Inside a reply preview the chip sits
+ * in `Reply`'s button, whose click opens the replied message and closes the
+ * search panel, so the chip's click and every click in its overlay stop there
+ * (`stopClick` in `KeyBackupSetupGuard`). Its overlay lives as long as the
+ * chip does: the search panel closing, or the message becoming readable,
+ * takes it away. Nothing is lost before the setup's first write; after it,
+ * the attempt runs on and `RecoveryKeyHandoffHost` shows its key.
  */
 export const CHIP_TEXT = 'Can’t decrypt this message on this device.';
 export const CHIP_LABEL = 'Why?';

@@ -270,9 +270,9 @@ export const KeyBackupExplanation = forwardRef<HTMLDivElement, KeyBackupExplanat
  * out of the caller's DOM, but React still bubbles the portal's events up the
  * component tree, through whatever renders the overlay. The chip renders it
  * inside a reply preview (`Reply`), which is a button whose click opens the
- * replied message and closes the pinned-messages popout or the search panel;
- * without this, every click in the overlay reached that handler too (eighth
- * review).
+ * replied message and closes the search panel (message-search results are
+ * the only place the shipped app shows the chip); without this, every click
+ * in the overlay reached that handler too (eighth review).
  */
 const stopClick = (event: React.MouseEvent) => {
     event.stopPropagation();

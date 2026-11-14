@@ -645,8 +645,10 @@ Now:
 -   If the form goes away by another route while it writes, round 7 started
     no further write (`stillOpen()` between the steps), and what was already
     written stayed under a key nobody saw. The eighth review replaced that:
-    the attempt runs to its end and `RecoveryKeyHandoffHost` shows its key
-    (below).
+    the attempt runs on until it settles, to its end or at an account
+    confirmation still unanswered, and `RecoveryKeyHandoffHost` shows its key
+    (below). (The ninth review corrected this sentence, which said the attempt
+    runs to its end.)
 
 The verifier's other suggestion, a ref set by the close, comes to the same
 thing here, since every caller's close unmounts the form; disabling the ✕ for
@@ -730,12 +732,15 @@ writing text on screen; `dispatchBackIntent(window)` returned false, so
 dialog was gone, and after the held step was released no recovery key was
 ever shown. The nudge renders only in `ClientLayout` (`ClientLayout.tsx:792`),
 which is a route element, so a browser's Back does the same. The chip's
-overlay lives in the chip, and the shipped app renders the chip only in the
-pinned-messages popout and in message-search results (S9-10), so either one
-closing, or the message becoming readable, takes the window too; both lists
-are virtualized and keyed by index (`RoomPinMenu.tsx:286` and `:484`,
-`MessageSearch.tsx:122` and `:292`), so a list that shifts can unmount the
-tile (from code reading; not driven in a test). The verifier also named the
+overlay lives in the chip, and the shipped app renders the chip only in
+message-search results (S9-10), so the search panel closing (its close
+button, or opening a result: `ClientLayout.tsx:1782` and `:1814-1817`), or
+the message becoming readable, takes the window too; the results list is
+virtualized and keyed by index (`MessageSearch.tsx:122` and `:292`), so a
+list that shifts can unmount the tile (from code reading; not driven in a
+test). (The ninth review corrected this sentence: round 8 also named the
+pinned-messages popout, with its list at `RoomPinMenu.tsx:286` and `:484`,
+which the shipped app does not mount.) The verifier also named the
 room timeline's virtualized rows; they hold no chip: `RoomTimeline` renders an
 `m.bad.encrypted` event through `getMsgType` and its switch's default,
 `TextMessage`, never through `RenderMessageContent` or `Reply`.
@@ -755,8 +760,17 @@ Now:
     while the overlay is up (`ClientLayout` keeps its URL in step with its
     selection, `ClientLayout.tsx:379`), so a blocker would have to tell the
     two apart. Handing the key off covers every route instead:
--   A window that goes away no longer stops the attempt. It runs to its end,
-    and when it settles with its form gone (`alive()` false), its key goes to
+-   A window that goes away no longer stops the attempt. It goes on to its
+    end, or stops at the account confirmation if that is still unanswered
+    (two points down). Under the fork's default Synapse configuration the
+    cross-signing upload asks for that confirmation every time ("Reproduced
+    how"; none of the five homeserver configs in this repository, the
+    Synapse fork's three and the two deploy templates, sets
+    `ui_auth.session_timeout`, which would let it skip), so an attempt that
+    reaches the upload stops there unless the confirmation was answered
+    before the window went. (The ninth review corrected "It runs to its
+    end", which left that stop out.) When it settles with its form gone
+    (`alive()` false), its key goes to
     `handOffRecoveryKey` (`recoveryKeyHandoff.ts`, kept in memory only): the
     finished key with the finished screen's text, or the partway key with its
     stage's `what`, the stage worked out as before. `RecoveryKeyHandoffHost`,
@@ -794,22 +808,41 @@ Now:
     then try again." (`SETUP_BUSY_TEXT`), and writes nothing.
 
 **S9-10, the chip in a reply preview.** In the shipped app the chip
-(`MessageBadEncryptedContent`) appears only in the pinned-messages popout and
-in message-search results: `RenderMessageContent` (`:263-264`, the only user
-of `MBadEncrypted`) and `Reply` are imported only by `RoomPinMenu.tsx` and
-`SearchResultGroup.tsx`. Inside a reply preview the chip sits in `Reply`'s
-`ReplyLayout`, a `<button onClick={onClick}>` (`Reply.tsx:108-124`); in the
-popout that handler is `handleOpenClick` (`RoomPinMenu.tsx:130-135`), which
-calls `onOpen`, that is `handleOpen`: `navigateRoom`, then `requestClose()`
-(`:447-450`). The chip's click called `open()` without stopping propagation,
+(`MessageBadEncryptedContent`) appears only in message-search results.
+`RenderMessageContent` (`:263-264`, the only user of `MBadEncrypted`) and
+`Reply` are imported only by `RoomPinMenu.tsx` and `SearchResultGroup.tsx`.
+`RoomPinMenu`, the pinned-messages popout, is not mounted: only
+`RoomViewHeader` renders it (`RoomViewHeader.tsx:516`), only `RoomView`
+imports `RoomViewHeader`, only `Room` imports `RoomView`, only
+`features/room/index.ts` re-exports `Room`, and nothing imports that barrel
+or any of the three components (the room view's layout test imports
+`RoomView` directly; no app code does). `SearchResultGroup` is rendered by
+`MessageSearch` (`MessageSearch.tsx:294`), which `ClientLayout` mounts in its
+search panel (`ClientLayout.tsx:1754` and `:1800`). The room timeline renders
+no chip (S9-9), and the mounted pins panel, `CanopyPinsPanel`, shows a pinned
+message's text through `getTimelineBody` and no chip. (Round 8 said the chip
+appears in the pinned-messages popout too, and traced the click below through
+the popout's handlers; the ninth review corrected both.) Inside a reply
+preview the chip sits in `Reply`'s `ReplyLayout`, a
+`<button onClick={onClick}>` (`Reply.tsx:108-124`); in a search result that
+handler is `handleOpenClick` (`SearchResultGroup.tsx:190-194`, given to
+`Reply` at `:310`), which reads the button's `data-event-id`, the replied
+event, and calls `onOpen`. `MessageSearch` passes its own `onOpen ??
+navigateRoom` (`MessageSearch.tsx:300`), and `ClientLayout`'s `onOpen`
+(`ClientLayout.tsx:1814-1817`) calls `setMessageSearchOpen(false)`, which
+unmounts the panel, then `openRoom` (`:457-459`, `openRoomWithContext` from
+`useMentionNavigation`), which selects the room with the replied event as its
+jump target. The chip's click called `open()` without stopping propagation,
 and its overlay is rendered inside the chip; folds' `Overlay` portals out of
 the chip's DOM, but React bubbles a portal's events up the component tree. So
-one "Why?" click jumped the room to the replied event and closed the popout,
-the overlay went with it, and the guard's answer was dropped (`alive()`
-false): nothing was written, but "Why?" never explained there, and every
-click inside the overlay reached the same handler (the verifier's probes D
-and D2). Develop's chip did the same; this is not a regression. Now the chip's
-click stops propagation, and so does the overlay's root (`stopClick` on
+one "Why?" click opened the room at the replied event and closed the search
+panel, the overlay went with it, and the guard's answer was dropped
+(`alive()` false): nothing was written, but "Why?" never explained there, and
+every click inside the overlay reached the same handler (the verifier's
+probes D and D2, which round 8 recorded against the popout; the
+reply-preview tests drive `Reply` with a spy for its click, which stands for
+either handler). Develop's chip did the same; this is not a regression. Now
+the chip's click stops propagation, and so does the overlay's root (`stopClick` on
 folds' `Overlay`, which passes its props to the portal's root element). Only
 clicks: `Reply` handles nothing else, and its `ThreadIndicator` is beside the
 preview, not around it. Hosting the chip's overlay once at app level, which
@@ -1579,6 +1612,64 @@ which goes away anyway hands its key to a window of its own, and what still
 loses the key. `TRUST.md` and `KNOWN_LIMITATIONS.md` describe none of this
 flow and are unchanged; the trust page was not rebuilt.
 
+Ninth review: the second row's finding and its change name the
+pinned-messages popout as a place the chip shows, and the first row's change
+says a window that goes away leaves the attempt "running to its end". Both
+rows are left as written. The popout is not in the shipped app (S9-10): there
+the chip shows only in message-search results, where the same reply-preview
+click opened the replied message and closed the search panel, and the same
+containment answers it. An attempt whose window goes away while its account
+confirmation is unanswered stops there, as the first row's next clause has
+it, with its key handed off; BO-1 and S9-9's first point now say so too.
+
+## Ninth review, 2026-11-08
+
+Two findings, both in the text; each is fixed above or explained here.
+Severity as the reviewers gave it. The reachability and regressions lenses
+found round 8 clean. No code changed: comments in five source files and one
+test file, this record and BO-1.
+
+| Finding                                                                                                                                                                                                                                                                                                                                                                              | Severity | What changed                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| This record, BO-1, the comments in five source files and the window-gone test's comments said the chip shows in the pinned-messages popout and in message-search results. The popout (`RoomPinMenu`) is rendered only by the room view (`Room`, `RoomView`, `RoomViewHeader`), which nothing mounts, so the shipped app shows the chip only in search results                        | medium   | S9-10 now traces where the chip is mounted and re-anchors the reply preview's click on `SearchResultGroup`'s `handleOpenClick`, `MessageSearch`'s `onOpen` and `ClientLayout`'s `onOpen`, which closes the search panel; S9-9, "What still loses an attempt's key", BO-1 and the comments in `DeviceVerificationSetup.tsx`, `KeyBackupSetupGuard.tsx`, `FallbackContent.tsx`, `recoveryKeyHandoff.ts` and `keyBackupCheck.ts` name only search; the window-gone test's comments say what its stand-ins model and that search is the shipped surface; the eighth review's rows keep their words under a correction note; "What remains" adds the room view and the popout to the surfaces whose mounting means re-reading these sentences |
+| BO-1 said a setup whose window goes away "then runs to its end". Under the fork's default Synapse configuration the cross-signing upload asks for the account confirmation every time, and a window that goes before it is answered leaves it unanswered for good (the form cancels it as it unmounts, or rejects a 401 that comes later), so the attempt settles at `cross_signing` | low      | BO-1 says the attempt goes on to its end, or stops at the account confirmation if that is still unanswered, and either way its recovery key is shown in a window of its own with what the attempt did; S9-6's last point, S9-9's first point, "What still loses an attempt's key" and the comments in `DeviceVerificationSetup.tsx`, `recoveryKeyHandoff.ts`, `keyBackupCheck.ts` and the window-gone test say the same                                                                                                                                                                                                                                                                                                                  |
+
+The mount chain was read from the tree at `bb6919710e`, and read again on
+2026-11-14 before the commit, not from a running app: every importer of
+`RoomPinMenu`, `RoomViewHeader`, `RoomView`, `Room` and
+`features/room/index.ts` under `apps/blackout-client/src` (static imports,
+re-exports and `import()`), and every renderer of
+`MessageBadEncryptedContent`, `MBadEncrypted`, `RenderMessageContent` and
+`Reply`. `TRUST.md`,
+`KNOWN_LIMITATIONS.md` and the trust page say nothing about where the chip
+shows and are unchanged.
+
+Round 9's first pass stopped before its commit; its edits were read again,
+corrected where they were wrong (S9-10's note on probes D and D2 now says
+round 8 recorded them against the popout, and the window-gone test's
+reply-preview comment says `Reply` fetches the replied event when search
+passes no timeline set, rather than finding it in the room) and finished on
+2026-11-14. The checks below ran then, on the working tree over
+`bb6919710e` with this round's text changes, before their commit, Node 22,
+`pnpm` from the repository root, `npx` from `apps/blackout-client`; logs in
+`scratchpad/v60/r9-claims/resume/`. Only comments and documents changed, so
+the full suites, the build and the mutation checks were not re-run; round
+8's stand for the code. The 1-minute load was under 2 at the start of each
+check (shown). Develop had moved to `7a9814ebc9` (#1002 to #1007, none of
+them under `apps/blackout-client`); the merge follows this round's commit.
+
+| Check             | Command                                                                                                   | Result                                                                                                      |
+| ----------------- | --------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| prettier          | root `prettier --check` on the 8 files changed this round                                                 | clean                                                                                                       |
+| eslint, as CI     | `npx eslint --max-warnings=0` on the 5 changed `src` files                                                | exit 0; the client's config ignores `tests/` ("File ignored by default"), and CI's run covers `src/**` only |
+| client typecheck  | `pnpm --filter @blackout/client run typecheck`                                                            | exit 0 (load 0.97)                                                                                          |
+| window-gone tests | `pnpm --filter @blackout/client exec vitest run` on `DeviceVerificationSetup.windowGone.test.tsx`         | 9 passed (load 1.60)                                                                                        |
+| chip and texts    | the same on `FallbackContent.chip.test.tsx` and `keyBackupCheck.test.ts`, whose sources' comments changed | 2 files, 65 passed (load 1.17)                                                                              |
+| trust page        | `node tools/ci/build-trust-page.mjs --check` (`TRUST.md` not changed)                                     | OK, `public/trust.html` matches                                                                             |
+| auth secrets      | `node tools/ci/check-auth-secrets.mjs`                                                                    | passed                                                                                                      |
+| gitleaks 8.21.2   | `gitleaks git --log-opts="origin/develop..HEAD"`, develop at `7a9814ebc9`, before this round's commit     | 36 commits scanned (the range's 40 less its 4 merges), no leaks                                             |
+| lint-staged       | `npx lint-staged --concurrent false` from the root, on this round's staged files (`prettier --write`)     | exit 0, no file changed                                                                                     |
+
 ## What remains
 
 -   **The restore path (BO-1).** Blackout still has no screen that restores keys
@@ -1653,7 +1744,17 @@ flow and are unchanged; the trust page was not rebuilt.
     `LocalBackup` (the Devices page's key-file import,
     `importRoomKeysAsJson`): `CHIP_NOT_VERIFIED`'s "a message sent before this
     device signed in stays unreadable here" (sixth review) holds only while no
-    screen imports keys.
+    screen imports keys. The same goes for where the chip shows (ninth
+    review): BO-1, S9-9, S9-10, "What still loses an attempt's key" below and
+    the comments in `FallbackContent.tsx`, `KeyBackupSetupGuard.tsx`,
+    `DeviceVerificationSetup.tsx`, `recoveryKeyHandoff.ts` and
+    `keyBackupCheck.ts` say it shows only in message-search results, which
+    holds while the room view (`Room`, `RoomView`, `RoomViewHeader`) and its
+    pinned-messages popout (`RoomPinMenu`) stay unmounted. When either is
+    mounted, re-read them: the popout renders the chip in its list and in its
+    reply previews, its open handler closes the popout
+    (`RoomPinMenu.tsx:130-135` and `:447-450`), and its list is virtualized
+    and keyed by index too (`RoomPinMenu.tsx:286` and `:484`).
 -   **Two departures from the reviewed design, both deliberate** (third
     review). The chip no longer opens rows 1 and 2's flows straight from its
     overlay (§6.9's last line): "Why?" promised an explanation and the flows
@@ -1730,13 +1831,15 @@ flow and are unchanged; the trust page was not rebuilt.
     backup at its next forced check, since the device holds its key and the
     backup is signed by it.
 -   **What still loses an attempt's key** (seventh review, rewritten by the
-    eighth). The setup and reset windows can't be closed from the first write
-    until the attempt settles, Android's back press is held meanwhile, and a
-    window that goes away by another route (a browser's Back; for the chip,
-    the pinned-messages popout or the search panel closing, the list under it
-    shifting, or the message becoming readable) leaves the attempt running to
-    its end, its key shown
-    by `RecoveryKeyHandoffHost`. Still lost: the page reloading or closing
+    eighth, corrected by the ninth). The setup and reset windows can't be
+    closed from the first write until the attempt settles, Android's back
+    press is held meanwhile, and a window that goes away by another route (a
+    browser's Back; for the chip, the search panel closing, the results list
+    under it shifting, or the message becoming readable) leaves the attempt
+    running until it settles, to its end or at an account confirmation still
+    unanswered, its key shown by `RecoveryKeyHandoffHost`. (The eighth
+    review's text also named the pinned-messages popout closing, and said the
+    attempt runs to its end.) Still lost: the page reloading or closing
     during the attempt (the page asks the browser to confirm, through
     `beforeunload`, which a browser may skip and the desktop and mobile shells
     may not show); the session being signed out before the key shows (the

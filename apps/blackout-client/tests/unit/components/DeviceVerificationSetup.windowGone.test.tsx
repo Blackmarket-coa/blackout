@@ -7,24 +7,25 @@
 // write until it settled. The window could still go: a browser's Back (or
 // Android's, which the app turns into `history.back()` when no overlay claims
 // it) unmounts the nudge with its route; the chip's overlay goes with the
-// pinned-messages popout or the search panel that renders the chip. The
-// attempt then stopped before its next write, and the recovery key of what it
-// had already written was never shown. Now:
+// message-search panel that renders the chip (the only place the shipped app
+// shows it). The attempt then stopped before its next write, and the recovery
+// key of what it had already written was never shown. Now:
 //
 // - while the attempt writes, the dialogs claim Android's back press, and the
 //   page asks the browser to confirm an unload;
-// - a window that goes away anyway leaves the attempt running to its end, and
-//   its key (finished, or partway with that stage's text) is shown by
-//   `RecoveryKeyHandoffHost`, which the app mounts beside its router;
+// - a window that goes away anyway leaves the attempt running until it
+//   settles (to its end, or at an account confirmation left open, as the next
+//   point says), and its key (finished, or partway with that stage's text) is
+//   shown by `RecoveryKeyHandoffHost`, which the app mounts beside its router;
 // - an account confirmation left open by a window that went away is
 //   cancelled, so the attempt settles rather than wait forever;
 // - a second attempt of the same account does not start writing while such an
 //   attempt runs on.
 //
-// And the chip inside a reply preview (`Reply`, a button whose click opens the
-// replied message and closes the popout): its "Why?" and every click in its
-// overlay stop at the chip, so the overlay explains instead of the host
-// closing under it.
+// And the chip inside a reply preview (`Reply`, a button whose click, in the
+// shipped app's message-search results, opens the replied message and closes
+// the search panel): its "Why?" and every click in its overlay stop at the
+// chip, so the overlay explains instead of the host closing under it.
 import React from 'react';
 import { act } from 'react-dom/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -193,8 +194,9 @@ const openNudgeSetup = async () => {
 };
 
 /**
- * A surface that renders the chip until it closes, as the pinned-messages
- * popout and the search panel do, with the handoff host outside it.
+ * A stand-in for whatever renders the chip: the chip while `open`, gone when
+ * not, with the handoff host beside it rather than inside. In the shipped app
+ * that surface is the message-search panel.
  */
 function ChipHost({ open }: { open: boolean }) {
     return (
@@ -494,7 +496,14 @@ describe('the chip inside a reply preview', () => {
     const room = { roomId, getMember: () => null } as unknown as Room;
     const timelineSet = { findEventById: () => badEvent } as unknown as EventTimelineSet;
 
-    /** `Reply` as the pinned-messages popout renders it: its click opens the message and closes the popout. */
+    /**
+     * `Reply` with a spy for its click and the replied event from a stand-in
+     * timeline set. In the shipped app `Reply` shows the chip in
+     * message-search results (`SearchResultGroup`), where its click opens the
+     * replied message and closes the search panel; search passes no timeline
+     * set, so `Reply` fetches the replied event from the homeserver, which
+     * changes how the event arrives, not what a click does.
+     */
     const renderReply = async (client: MatrixClient, onOpen: () => void) => {
         mounted = await renderWithClient(
             client,

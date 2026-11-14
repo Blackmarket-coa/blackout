@@ -78,14 +78,16 @@ got, since the account's secret storage may by then open only with that key
 (or the passphrase entered with it); where it may have created a backup, it
 offers no way on (sixth and seventh reviews of the same record). The window
 can still go away mid-attempt: a browser's Back leaves the screen, and the
-chip, which the app shows only in the pinned-messages popout and in
-message-search results, takes its window with it when that popout or panel
-closes or the message becomes readable. The attempt then runs to its end
-and its recovery key is shown in a window of its own (eighth review). The
-key is still lost if the page reloads or closes during the attempt (the page
-asks the browser to confirm first; whether a prompt appears is up to the
-browser or app), if the session is signed out before the key shows, or if a
-request never answers. The restore path itself is still missing.
+chip, which the app shows only in message-search results, takes its window
+with it when the search panel closes or the message becomes readable. The
+attempt then goes on to its end, or stops at the account confirmation (your
+password or single sign-on) if that is still unanswered; either way its
+recovery key is shown in a window of its own, with what the attempt did
+(eighth and ninth reviews). The key is still lost if the page reloads or
+closes during the attempt (the page asks the browser to confirm first;
+whether a prompt appears is up to the browser or app), if the session is
+signed out before the key shows, or if a request never answers. The restore
+path itself is still missing.
 
 What BO-1 gates is anything that routes trust through Blackout
 (`TRANSMUTATION_NOTES.md` §5). It does not gate coalition external sync:

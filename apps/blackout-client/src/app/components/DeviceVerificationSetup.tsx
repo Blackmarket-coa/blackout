@@ -272,9 +272,9 @@ export function SetupVerification({
     }, [alive]);
 
     // A form that goes away with its account confirmation open (a browser's
-    // Back, the chip's popout closing) leaves a prompt nobody can answer, and
-    // the attempt waited on it forever with its key unseen. Cancel it, so the
-    // attempt settles and hands its key off (eighth review).
+    // Back, the search panel closing around the chip) leaves a prompt nobody
+    // can answer, and the attempt waited on it forever with its key unseen.
+    // Cancel it, so the attempt settles and hands its key off (eighth review).
     useEffect(
         () => () => {
             uiaActionRef.current?.cancelCallback(new SetupWindowGone());
@@ -389,9 +389,10 @@ export function SetupVerification({
                 markWriting(true);
                 const releaseHold = holdWhileWriting(mx);
                 // The form can still go away by another route while the
-                // attempt writes (a browser's Back, the chip's popout or the
-                // search panel closing, the chip's message becoming
-                // readable). The attempt then runs to its end, and its key,
+                // attempt writes (a browser's Back, the search panel closing
+                // around the chip, the chip's message becoming readable). The
+                // attempt then runs on until it settles, to its end or at an
+                // account confirmation still unanswered, and its key,
                 // finished or partway, goes to `RecoveryKeyHandoffHost`
                 // rather than to a form that is gone (eighth review; round 7
                 // stopped before the next write instead, and the key of what
