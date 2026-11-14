@@ -1670,6 +1670,25 @@ them under `apps/blackout-client`); the merge follows this round's commit.
 | gitleaks 8.21.2   | `gitleaks git --log-opts="origin/develop..HEAD"`, develop at `7a9814ebc9`, before this round's commit     | 36 commits scanned (the range's 40 less its 4 merges), no leaks                                             |
 | lint-staged       | `npx lint-staged --concurrent false` from the root, on this round's staged files (`prettier --write`)     | exit 0, no file changed                                                                                     |
 
+Then `9edb0ec625`, this round's commit, was merged with develop at
+`7a9814ebc9` in a merge commit, `bb30a5598f`. The one file both sides
+changed, `KNOWN_LIMITATIONS.md`, merged without conflict and keeps both:
+develop's new section on several API processes sharing one database and its
+rewritten account-number paragraph, and this branch's "older encrypted
+messages are not readable there (BO-1)". Develop changed no lockfile or manifest, so nothing
+was installed. The same mount chain holds there: develop changed nothing
+under `apps/blackout-client`. The checks on `bb30a5598f`, from the same
+places, logs in `scratchpad/v60/r9-claims/merged/`:
+
+| Check            | Command                                                                                                                                                      | Result                                                          |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------- |
+| prettier         | root `prettier --check` on the 33 files this branch changes against develop                                                                                  | clean                                                           |
+| client typecheck | `pnpm --filter @blackout/client run typecheck`                                                                                                               | exit 0 (load 0.36)                                              |
+| eslint, as CI    | `pnpm --filter @blackout/client exec eslint "src/**/*.{ts,tsx}" --max-warnings=0`                                                                            | exit 0 (load 0.78)                                              |
+| guard tests      | `pnpm --filter @blackout/client exec vitest run` on the 11 test files under `tests/unit` this branch adds or changes for S9, and `encryptionPosture.test.ts` | 12 files, 180 passed (load 0.69)                                |
+| trust page       | `node tools/ci/build-trust-page.mjs --check`                                                                                                                 | OK, `public/trust.html` matches                                 |
+| gitleaks 8.21.2  | `gitleaks git --log-opts="origin/develop..HEAD"`                                                                                                             | 37 commits scanned (the range's 42 less its 5 merges), no leaks |
+
 ## What remains
 
 -   **The restore path (BO-1).** Blackout still has no screen that restores keys
