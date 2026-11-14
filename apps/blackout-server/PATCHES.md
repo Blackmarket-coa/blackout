@@ -481,6 +481,9 @@ of these converge with upstream rather than diverge from it.
   clears its advisories but reformats 207 fork files. Twisted 26.4.0 still has
   three High advisories that only the 26.10.0rc1 pre-release fixes, in
   `twisted.words` and `twisted.conch.telnet`, which Synapse never loads.
+  Superseded by the 2026-11-02 entry below, which locks Twisted 26.10.0
+  (final), the release that fixes those three and the HTTP/2 one
+  (GHSA-vpp8-g58w-m8mp) that the 2026-10-30 record added.
 - `tox.ini` (`py311`), `mypy.ini` (`python_version = 3.11`),
   `synapse/__init__.py` (refuses to start below 3.11), `[tool.black]` and
   `[tool.cibuildwheel]` targets, `docker/Dockerfile` (build-arg example),
@@ -1415,3 +1418,280 @@ helpers are removed".
   that workflow in this repository, so here nothing but a hand run ran
   them. Whether it ran them in the fork's former repository was not
   checked.
+
+## 2026-11-02 Twisted 26.10.0 (seven advisories; zope-interface 8.7)
+
+Edits outside `blackout_runtime/` that lock the Twisted release which fixes
+the four High advisories `.trivyignore` carried against 26.4.0 until this
+change (GHSA-3476-c5c2-fr73, GHSA-53xc-49m8-p798, GHSA-cwm5-jh59-mwxr,
+GHSA-vpp8-g58w-m8mp) and the Moderate and Low ones GHSA-q7qq-6mhp-9rc4,
+GHSA-2qrf-pqgx-qh9v and GHSA-jj36-9pvh-vj5r. Recorded in
+`docs/security/dependency-advisories-twisted-2026-11-02.md` (repository root).
+Upstream element-hq/synapse `develop` at `cc172f7` still locks Twisted 26.4.0
+and zope-interface 8.2, so there was nothing to port; during a reconciliation
+keep whichever Twisted is newer, and keep zope-interface at 8 or above (26.10.0
+requires `zope-interface>=8`).
+
+- `pyproject.toml`: `Twisted = {extras = ["tls"], version = ">=26.10.0"}` (was
+  `>=26.4.0`), and its comment names the seven advisories.
+- `poetry.lock`: `poetry lock --no-update` under poetry 1.3.2. Two packages
+  move and nothing else changes: twisted 26.4.0 to 26.10.0 (its wheel and
+  sdist hashes match PyPI's) and zope-interface 6.0 to 8.7, which 26.10.0's
+  `zope-interface>=8` forces (all 50 file hashes match PyPI's; the
+  `setuptools = "*"` dependency of the 6.0 entry goes, since 8.0.1 removed
+  it; setuptools 84.2.1 stays in the lock for setuptools-rust, zope-event and
+  zope-schema). 151 packages before and after. The hashless export,
+  `poetry export --extras all --without-hashes`, differs in three
+  requirement entries, `twisted`, `twisted[tls]` and `zope-interface` (two
+  packages); the image's export, which carries hashes, also changes those
+  entries' `--hash` lines (94 changed lines in all). The fork uses
+  `zope.interface`'s `implementer`, `provider` and `Interface` only.
+- No fork code changed for the bump itself; one fork comment did (the next
+  bullet). 26.10.0's removals and behaviour changes were read against the
+  fork: `tcp.Connection` now ignores
+  a non-None return from `dataReceived` (`synapse/http/connectproxyclient.py`
+  returns the wrapped protocol's own return, which is None, as upstream's
+  file does); `LoggingFile.fileno()` raises `io.UnsupportedOperation` instead
+  of returning -1 (`synapse/app/_base.py` installs `LoggingFile` on stdout
+  and stderr; nothing in the fork calls `fileno()` on them); `SSHSession`
+  accepts one shell, exec or subsystem request per channel (the manhole's
+  `TerminalRealm` uses it; probed on a running homeserver from this branch, a
+  second shell request on one channel is refused and logged under 26.10.0
+  and accepted under 26.4.0; ordinary SSH clients send one); the manhole's
+  SSH server now offers the hybrid post-quantum key exchange
+  `mlkem768x25519-sha256` first (#12520), which OpenSSH clients from 9.9 on
+  negotiate with it by default (9.9 lists it after two sntrup761x25519 names
+  that Twisted does not implement, 10.0 lists it first; worked out from their
+  `myproposal.h` and Twisted's selection rule, not run with an OpenSSH
+  client). Twisted's own client, used by the tests, does not offer it;
+  asyncssh offering only that algorithm got a manhole shell under 26.10.0,
+  and 26.4.0 does not offer it. The removed
+  `PotentialZombieWarning`, `_makeGetterFactory`, `ThreadedResolver`,
+  `dns.Message` class attributes and `IProcessProtocol` without
+  `processExited` are not used.
+- `synapse/handlers/send_email.py`: the comment over the `ESMTPSenderFactory`
+  call said "the minimum Twisted is 26.4.0", fork text from the 2026-10-25
+  relock (upstream's file has no such comment), untrue once the floor is
+  26.10.0. It now says the fork's Twisted floor (`pyproject.toml`) is far
+  above 21.2, without naming a version, so a later bump cannot make it stale.
+  Comment only.
+- `synapse/util/manhole.py` (`_ephemeral_rsa_key`), found by the review of
+  this change's first round and fixed in commit `20362e4`, separate from the
+  lock and ignore commits (it also carries the record's second-round
+  corrections):
+  `Key(keyObject)` in
+  place of `Key.fromCryptographyKey(...)`, a method
+  `twisted.conch.ssh.keys.Key` has never had (26.4.0 and 26.10.0 both offer
+  `fromFile`, `fromString` and the constructor, which takes a cryptography
+  key). Since the 2026-09-13 SAST triage replaced upstream's hardcoded
+  manhole host key with a generated one, a homeserver with a `type: manhole`
+  listener without a configured key pair (either path unset) raised
+  AttributeError in
+  `start_listening` and never came up (`synapse.app._base - 267 - CRITICAL -
+Error during startup`), under either Twisted; a configured key pair never
+  reached the helper. That file's divergence from upstream (the removed key,
+  the generated one, the startup warning;
+  `docs/security/semgrep-triage-2026-09-13.md`) had no entry here until now.
+  Keep both the generated key and this constructor through a reconciliation:
+  upstream still ships the hardcoded key. Tests:
+  `tests/blackout_runtime/test_manhole.py` (the helper's key, the factory's
+  matching pair, a configured pair passed through unchanged, and a real SSH
+  session over loopback TCP: password authentication, pty, shell, an
+  expression evaluated in the manhole namespace), passing under 26.4.0 and
+  26.10.0 and erroring with the AttributeError against the file before the
+  fix.
+- `synapse/util/manhole.py` (`manhole`), found by the review of the fourth
+  round: the generated pair replaced both halves whenever either was unset,
+  and logged "no ssh_priv_key_path configured" even when it was. Now a
+  configured private key with no public key is the host key, with its public
+  half derived from it (`priv_key.public()`) and no warning; a configured
+  public key with no private key is ignored, since a host key must be able to
+  sign, and the warning says so; with neither, the warning is unchanged.
+  (That held for an RSA private key only until the next bullet's fix; since
+  it, it holds for RSA, Ed25519 and ECDSA keys.)
+  Upstream instead fills each unset half from its hardcoded pair, so a
+  configured private key is served beside the hardcoded public key, which
+  does not match it. Keep it, with the generated key above, through a
+  reconciliation. Tests in the same file: the private key alone is served
+  unchanged with a matching public half and no warning, the public key alone
+  gets the ephemeral pair and its own warning text, and a loopback SSH session
+  with only the private key configured is shown that key's public half; the
+  three fail against the file before this change, under 26.4.0 and 26.10.0.
+- `synapse/util/manhole.py` (`manhole`), found by the review of the fifth
+  round: the host key was filed as `factory.privateKeys[b"ssh-rsa"]` and
+  `publicKeys[b"ssh-rsa"]` whatever its type. Twisted's server offers the
+  signature algorithms of the keys in `privateKeys`
+  (`SSHFactory.buildProtocol`) and then looks the negotiated one up by key
+  type (`SSHServerTransport._getHostKeys`, `twisted/conch/ssh/transport.py`,
+  the same in 26.4.0 and 26.10.0), so with an Ed25519 or ECDSA key the
+  manhole started without a warning and every connection failed with a
+  `KeyError` (`b'ssh-ed25519'`, `b'ecdsa-sha2-nistp256'`, ...); on `develop` a
+  configured Ed25519 or ECDSA pair did the same. Both dicts are now keyed by
+  `priv_key.sshType()`, and each factory gets its own dicts instead of
+  writing into the two that `ConchFactory` declares on the class, which every
+  factory in the process shares. Upstream `develop`'s `manhole.py` (fetched
+  raw on 2026-11-02, sha256 `2aec8f2b…`) files every key under `b"ssh-rsa"`
+  in the shared dicts, so keep this through a reconciliation. Tests in the
+  same file: each of RSA, Ed25519 and ECDSA P-256, P-384 and P-521 is filed
+  under its own type and found by Twisted's own lookup for every algorithm
+  the server offers; a second factory leaves the first one's key alone; and
+  loopback SSH sessions on an Ed25519 key, an ECDSA P-256 pair, P-384 and
+  P-521 keys and an RSA key, each read from key files through the homeserver
+  config. The Ed25519, ECDSA P-256 and P-384/P-521 sessions (the last stops
+  at P-384) and the two factory tests, five tests, fail against the file
+  before this change, under 26.4.0 and 26.10.0.
+- `synapse/config/server.py` (`_check_manhole_host_key`, called from
+  `ServerConfig.read_config` when `_starts_manhole_listener` finds a manhole
+  listener for the process, and its helper `_manhole_key_type`), with the
+  previous bullet: a `ConfigError` at startup for a public key at
+  `ssh_priv_key_path` (at `manhole_settings.ssh_priv_key_path`), for an
+  `ssh_pub_key_path` whose key type differs from the private key's or which
+  is not the private key's public half (at `manhole_settings.ssh_pub_key_path`),
+  and, from the seventh round (found by the review of the sixth), for a key
+  on a curve Twisted has no SSH key type for, at `ssh_priv_key_path` or at
+  `ssh_pub_key_path` beside a private key (a public key with no private key
+  is not checked: `manhole()` ignores it with a warning, as above):
+  `Key.fromFile` loads a PEM `EC PRIVATE KEY` on any curve cryptography
+  knows, and `Key.sshType()` raises `KeyError` for every curve but P-256,
+  P-384 and P-521 (`_secToNist`, `twisted/conch/ssh/keys.py`, 26.4.0 and
+  26.10.0). Until then such a key (secp256k1 from `openssl`; `ssh-keygen`
+  cannot write one) passed the config and the homeserver stopped in
+  `start_listening` with that bare `KeyError`, or, at `ssh_pub_key_path`, in
+  this check's own type comparison. From the eighth round (found by the
+  review of the seventh), a DSA (`ssh-dss`) key is refused at the same two
+  places, because every ssh-dss signature uses SHA-1
+  (`Key._getHashAlgorithm`). Twisted's `Key.sign` also packs an ssh-dss
+  signature's r and s into 20 bytes each and raises `OverflowError` when
+  either is 2^160 or more. Both are reduced modulo the subgroup order, so a
+  DSA key whose subgroup order is 224 or 256 bits, as in every standard DSA
+  key larger than 1024 bits, which Twisted loads from a PEM
+  `DSA PRIVATE KEY` file, passed the config, and the server raised
+  `OverflowError` on every key exchange in practice (both halves fit with a
+  chance of at most about 2^-126) while the homeserver ran and logged
+  nothing about it at startup; a key with a 160-bit subgroup order (a
+  1024-bit key, the kind `ssh-keygen` wrote, or a non-standard larger one)
+  signs every time and serves a session, and one with a non-standard order
+  just over 160 bits signs on some key exchanges and raises on others. Until
+  the ninth round (found by the review of the eighth) the message said the
+  server cannot sign with any DSA key larger than 1024 bits; a 2048-bit key
+  with a 160-bit subgroup order signs, and the message now gives SHA-1 as
+  the reason for every DSA key and the subgroup order as the reason the
+  server cannot sign. Until the tenth round (found by the review of the
+  ninth) it put that limit at a subgroup order "longer than 160 bits", which
+  a non-standard order just over 160 bits contradicts; it now names the 224-
+  and 256-bit orders of the standard keys, with which the server in practice
+  cannot sign. Each message names the file and what it holds, and the curve
+  and DSA messages name the types that work. Upstream loads both files
+  without comparing them. From the eleventh round (found by the review of
+  the tenth), the check runs only when the config declares a manhole
+  listener for the process it is loaded as: for the main process a
+  `type: manhole` entry of `listeners` or the `manhole` option, for a worker
+  an entry of `worker_listeners` or the `worker_manhole` option, the
+  listeners `synapse/app/homeserver.py` and `synapse/app/generic_worker.py`
+  start. It follows the config, not what the process goes on to start:
+  `synapse.app.admin_cmd` starts no listener and loads the homeserver's
+  config with no `worker_app`, setting its own afterwards
+  (`synapse/app/admin_cmd.py`), so it is checked as the main process, or,
+  given a worker config, as that worker. From the thirteenth round an unset
+  or empty `worker_app` counts as the main process, as
+  `synapse/app/homeserver.py` treats it (before, `worker_app: ""` was read as
+  a worker and skipped the check). Until the twelfth round (found by
+  the review of the eleventh) this bullet and both documentation pages said
+  the check ran only for a process that starts a manhole listener, which
+  `admin_cmd` contradicts. Until the eleventh round it ran whatever the
+  listeners, so a homeserver with no manhole listener and a stale
+  `manhole_settings` block (a DSA key, a mismatched
+  `.pub`, a public key as the private one, a curve Twisted has no SSH key
+  type for), which `develop` loads and runs, stopped at config load. A key
+  file that cannot be read still stops startup with or without a manhole
+  listener, as upstream's `Key.fromFile` call always has. For the process
+  that would start the manhole the config declares, each refused config but
+  a DSA key with a 160-bit subgroup order would start a manhole on which no
+  SSH session completes, or not start. That includes a non-standard DSA key
+  whose subgroup order is just over 160 bits: the server signs some key
+  exchanges with it, and every signature it returned in the twelfth round's
+  check is a valid one, but Twisted's client refuses its host key
+  (cryptography: "q must be exactly 160, 224, or 256 bits long"), and
+  OpenSSL's DSA verification refuses a subgroup order
+  that is not 160, 224 or 256 bits before it looks at a signature
+  (`dsa_do_verify`, "bad q value", OpenSSL 3.0.13 and 4.0.3), so it rejects
+  every signature on such a key. Until the eleventh round this sentence
+  said such a key served a session on the key exchanges whose signature
+  fits; in the eleventh round it rested on a check that read r and s from
+  the wrong bytes, corrected in the twelfth (found by the review of the
+  eleventh). Keep it through a reconciliation. Tests in
+  `tests/blackout_runtime/test_manhole.py`, through
+  `HomeServerConfig`: a public key at `ssh_priv_key_path` and another key of
+  the same type at `ssh_pub_key_path`, each for RSA, Ed25519 and ECDSA
+  P-256, P-384 and P-521; a public key of another type for three pairs
+  (Ed25519 with RSA, RSA with ECDSA P-256, ECDSA P-256 with P-384); a
+  secp256k1 PEM key at `ssh_priv_key_path` (the test also pins that the key
+  loads and that `manhole()` itself raises `KeyError` on it) and at
+  `ssh_pub_key_path` beside a P-256 key; a 2048-bit DSA PEM key at
+  `ssh_priv_key_path` (the test also pins that the key loads, that its
+  subgroup order is 224 or 256 bits and that signing with it raises
+  `OverflowError`, and a loopback session test pins that the manhole, given
+  that key directly, drops the connection before authentication with the
+  `OverflowError` logged); a 1024-bit DSA key in the OpenSSH format at
+  `ssh_priv_key_path` and, as its `.pub`, at `ssh_pub_key_path` beside an RSA
+  key; and, from the ninth round, a 2048-bit DSA PEM key with a 160-bit
+  subgroup order (fixed FIPS 186-2-style parameters from `openssl`) at
+  `ssh_priv_key_path`, refused with SHA-1 named as the reason (the test also
+  pins that the key signs and verifies, and a loopback session test that the
+  manhole, given that key directly, serves a full session on `ssh-dss`); the
+  five tests failing against the
+  file before the sixth round's change ("the config loaded"), the two curve
+  tests against the sixth round's file too (the private-key one with "the
+  config loaded", the public-key one with the bare `KeyError: b'secp256k1'`
+  from the type comparison), the three DSA refusal tests against the
+  seventh round's file ("the config loaded"), and the ninth round's refusal
+  test against the eighth round's file too, on the message's reason (the
+  two DSA session tests pass against both, since neither goes through the
+  config), and, from the tenth round, the 2048-bit DSA refusal test
+  against the ninth round's file, on the limit the message states
+  ("'subgroup order is 224 or 256 bits' not in" it); from the eleventh
+  round, five refused shapes (a public key as the private one, another RSA
+  key's public key, an RSA public key beside an Ed25519 key, a 2048-bit DSA
+  key, a secp256k1 key) loading for five processes that start no manhole
+  (an http listener only, no listener, a manhole only in the main process's
+  `worker_listeners`, a worker with an http listener only, a worker beside
+  a manhole only in the shared `listeners`) and refused at their setting for
+  five that start one (a `listeners` entry, the same under
+  `worker_app: synapse.app.homeserver`, the `manhole` option, a worker's
+  `worker_listeners` entry, `worker_manhole`), a matching pair loading for
+  all ten and an unreadable key file refused for all ten, the no-manhole
+  test failing against the tenth round's file (`ConfigError` on its first
+  shape) and the other three passing against it; and
+  matching pairs and private keys alone still loading.
+- `docs/manhole.md`: its option list and example named `ssh_priv_key` and
+  `ssh_pub_key`. `synapse/config/server.py` reads only `ssh_priv_key_path`
+  and `ssh_pub_key_path`, and `_MANHOLE_SETTINGS_SCHEMA` accepts unknown
+  keys, so a config written from the page ran on an ephemeral host key (and,
+  before the `_ephemeral_rsa_key` fix above, did not start). Corrected in the
+  list, the example and the fork's host-key paragraph on that page, with a
+  note saying the page had the old names. Upstream `develop`'s `docs/manhole.md` carries the same wrong names
+  ("defaults to a hardcoded value"; fetched raw on 2026-11-02, sha256
+  `2f985e2e…`), so keep the correction through a reconciliation.
+  `docs/usage/configuration/config_documentation.md`'s fork paragraph under
+  `manhole_settings` now says the private key alone is enough and the public
+  key alone is ignored, and no longer says that leaving both unset "is no
+  longer a confidentiality problem": a host key that changes on every restart
+  gives a client nothing to tell a restart from an impersonator. With the
+  fixes for the review of the fifth round (above), both pages also name the
+  key types that work (RSA, Ed25519, ECDSA) and the refusals at startup,
+  the DSA refusal among them from the eighth round, and `docs/manhole.md`'s
+  example and `ssh-keygen` line use an Ed25519 key. From the eleventh round
+  `docs/manhole.md` has a fork paragraph after its option list, and the
+  `config_documentation.md` paragraph a sentence, saying when the checks run
+  and that a key file that cannot be read stops startup either way; from
+  the twelfth round both say the checks run when the config declares a
+  manhole listener for the process it is loaded as, and that
+  `synapse.app.admin_cmd`, which starts no listener, is checked as the main
+  process or as the worker its config names (`synapse/config/server.py`
+  bullet above).
+- `docs/usage/configuration/config_documentation.md`, an upstream line: the
+  `ssh_priv_key_path` and `ssh_pub_key_path` bullet opened with upstream's
+  "The private and public SSH key pair used to encrypt the manhole traffic".
+  A host key authenticates the server; the keys that encrypt a session come
+  from the SSH key exchange. The fork's line says that instead. A fork change
+  to upstream's text, so keep it through a reconciliation.

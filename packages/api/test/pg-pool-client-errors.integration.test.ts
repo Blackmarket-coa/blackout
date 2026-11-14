@@ -88,8 +88,13 @@ class FakeConnection extends EventEmitter {
         if (sql.includes('information_schema.columns') && params?.[0] === 'users') {
             return {
                 rows: [
-                    { column_name: 'id', data_type: 'text', is_nullable: 'NO' },
-                    { column_name: 'username', data_type: 'text', is_nullable: 'NO' },
+                    { column_name: 'id', data_type: 'text', udt_name: 'text', is_nullable: 'NO' },
+                    {
+                        column_name: 'username',
+                        data_type: 'text',
+                        udt_name: 'text',
+                        is_nullable: 'NO',
+                    },
                 ],
             };
         }
@@ -484,8 +489,8 @@ const probePlan = {
         conflictColumns: ['id'],
     },
     columns: [
-        { name: 'id', dataType: 'text', nullable: false },
-        { name: 'v', dataType: 'text', nullable: true },
+        { name: 'id', dataType: 'text', udtName: 'text', nullable: false },
+        { name: 'v', dataType: 'text', udtName: 'text', nullable: true },
     ],
     columnNames: new Set(['id', 'v']),
 };
@@ -497,11 +502,7 @@ test('a write whose backend the server ends under its query is retried on a new 
     (await pool.connect()).release();
     const first = FakeConnection.made[0];
     first.terminateUnderNextQuery(terminated());
-    const queue = new WriteBehindQueue(
-        pool as never,
-        new Map([['probe', probePlan]]) as never,
-        () => undefined
-    );
+    const queue = new WriteBehindQueue(pool as never, new Map([['probe', probePlan]]) as never);
     queue.enqueueUpsert('probe', { id: 'a', v: 'written' });
     await queue.drain();
 
@@ -528,8 +529,13 @@ const storePool = () => {
         async query(sql: string, params?: unknown[]) {
             if (sql.includes('information_schema.columns')) {
                 const users = [
-                    { column_name: 'id', data_type: 'text', is_nullable: 'NO' },
-                    { column_name: 'username', data_type: 'text', is_nullable: 'NO' },
+                    { column_name: 'id', data_type: 'text', udt_name: 'text', is_nullable: 'NO' },
+                    {
+                        column_name: 'username',
+                        data_type: 'text',
+                        udt_name: 'text',
+                        is_nullable: 'NO',
+                    },
                 ];
                 return { rows: params?.[0] === 'users' ? users : [] };
             }

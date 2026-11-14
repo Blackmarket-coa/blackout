@@ -1,5 +1,7 @@
 # Coalitions — ecosystem wiring
 
+> **2026-11-12 unified-portal decision:** [Local integration contract](FBM_UNIFIED_PORTAL_INTEGRATION.md) defines reuse of Coalition's existing map and coordination in FBM's single character-built member portal. The domain ownership below remains; one interface does not make underlying records or permissions co-owned.
+
 How a coalition on Blackout reaches the rest of the ecosystem, and the
 decisions behind each seam. Companion to `TASK0_AUDIT.md`, which records what
 already existed.
@@ -193,12 +195,19 @@ as every other job — no parallel board, no second claim mechanic.
 -   `node_coalition_memberships` maps nodes to coalitions. A pivot, because a
     haulier can serve several coalitions and picking one would force operators to
     choose.
--   **Award authority is widened, narrowly.** A drive that arrives from FBM is
-    owned by the FBM service account, which is not a person and will never log
-    in, so its bids could be placed and never awarded — the auction would collect
-    prices and stall. A coalition's coordinator may award listings carrying that
-    coalition's ref, and nothing else. It grants the same single act the poster
-    already had.
+-   **Award authority is poster-only in the inspected code.** The earlier
+    coordinator-award widening described here is superseded. Blackstar's
+    `ShipmentBoardListingController::mayAward` compares the signed-in user
+    with `created_by_user_id`; Coalition membership narrows eligibility but
+    does not confer award permission.
+-   **Still to resolve:** federation-created listings may belong to a service
+    account that cannot interactively choose a bid. Before enabling
+    Coalition-scoped transport bidding, define authenticated coordinator
+    delegation, who grants/revokes it, self-award protection and audit.
+    Do not infer authorization from a Coalition ref or a portal equipment item.
+-   **Ordinary delivery remains distinct:** FBM delivery selection currently
+    emits first-claim work; transport bidding/award is not proof of a complete
+    FBM goods-auction path.
 
 ## External sync sequencing
 

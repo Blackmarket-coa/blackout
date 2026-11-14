@@ -306,6 +306,12 @@ export const dbPoolClientErrorsTotal = new Counter(
     ['state']
 );
 
+export const dbTargetedWriteConflictsTotal = new Counter(
+    'db_targeted_write_conflicts_total',
+    'Targeted write-behind ops rolled back because a required statement matched no row (another process had already changed it); the keys were re-read from Postgres.',
+    ['map', 'method']
+);
+
 export const dbWriteBehindDepth = new Gauge(
     'db_write_behind_depth',
     'Approximate number of write-behind ops not yet flushed to Postgres (durability lag / backpressure).'

@@ -551,11 +551,7 @@ test(
             columns,
             columnNames: new Set(columns.map((c) => c.name)),
         };
-        const queue = new WriteBehindQueue(
-            pool as never,
-            new Map([['probe', plan]]) as never,
-            () => undefined
-        );
+        const queue = new WriteBehindQueue(pool as never, new Map([['probe', plan]]) as never);
 
         // Hold the write in flight on a lock, terminate only its backend, then
         // let go: Postgres stays reachable throughout.

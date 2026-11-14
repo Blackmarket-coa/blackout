@@ -17,58 +17,76 @@ process.env.WELCOME_MATRIX_ROOM_ALIAS = '#welcome:test.local';
 delete process.env.REQUIRE_INVITE_TOKEN;
 
 interface FetchCall {
-  url: string;
-  method?: string;
-  bodyText?: string;
+    url: string;
+    method?: string;
+    bodyText?: string;
 }
 const fetchCalls: FetchCall[] = [];
 
 const stubFetch = (url: string, init?: RequestInit): Response => {
-  // Synapse user provisioning.
-  if (url.includes('/_synapse/admin/v2/users/') && init?.method === 'PUT') {
-    return new Response(JSON.stringify({ name: '@x:test.local' }), {
-      headers: { 'content-type': 'application/json' },
-      status: 200,
+    // Synapse user provisioning. The account is looked up first (404 = free to
+    // create), then created with 201.
+    if (url.includes('/_synapse/admin/v2/users/') && !url.includes('?')) {
+        if (init?.method === 'PUT') {
+            return new Response(JSON.stringify({ name: '@x:test.local' }), {
+                headers: { 'content-type': 'application/json' },
+                status: 201,
+            });
+        }
+        return new Response(JSON.stringify({ errcode: 'M_NOT_FOUND' }), {
+            headers: { 'content-type': 'application/json' },
+            status: 404,
+        });
+    }
+    // Welcome-room alias resolution.
+    if (url.includes('/_matrix/client/v3/directory/room/')) {
+        return new Response(JSON.stringify({ room_id: '!welcome:test.local' }), {
+            headers: { 'content-type': 'application/json' },
+            status: 200,
+        });
+    }
+    // Admin force-join.
+    if (url.includes('/_synapse/admin/v1/join/')) {
+        return new Response(JSON.stringify({ room_id: '!welcome:test.local' }), {
+            headers: { 'content-type': 'application/json' },
+            status: 200,
+        });
+    }
+    return new Response(JSON.stringify({}), {
+        headers: { 'content-type': 'application/json' },
+        status: 200,
     });
-  }
-  // Welcome-room alias resolution.
-  if (url.includes('/_matrix/client/v3/directory/room/')) {
-    return new Response(JSON.stringify({ room_id: '!welcome:test.local' }), {
-      headers: { 'content-type': 'application/json' },
-      status: 200,
-    });
-  }
-  // Admin force-join.
-  if (url.includes('/_synapse/admin/v1/join/')) {
-    return new Response(JSON.stringify({ room_id: '!welcome:test.local' }), {
-      headers: { 'content-type': 'application/json' },
-      status: 200,
-    });
-  }
-  return new Response(JSON.stringify({}), { headers: { 'content-type': 'application/json' }, status: 200 });
 };
 globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-  const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
-  fetchCalls.push({
-    url,
-    method: init?.method,
-    bodyText: typeof init?.body === 'string' ? init.body : undefined,
-  });
-  return stubFetch(url, init);
+    const url =
+        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+    fetchCalls.push({
+        url,
+        method: init?.method,
+        bodyText: typeof init?.body === 'string' ? init.body : undefined,
+    });
+    return stubFetch(url, init);
 }) as typeof fetch;
 
 const { default: app } = await import('../src/index');
 
 test('registration force-joins the new user into the configured welcome room', async () => {
-  const username = `newbie${randomUUID().slice(0, 6)}`;
-  const res = await app.request('/v1/auth/register', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ username, email: `${username}@example.com`, password: 'Original-Pass-1234!' }),
-  });
-  assert.equal(res.status, 201);
+    const username = `newbie${randomUUID().slice(0, 6)}`;
+    const res = await app.request('/v1/auth/register', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+            username,
+            email: `${username}@example.com`,
+            password: 'Original-Pass-1234!',
+        }),
+    });
+    assert.equal(res.status, 201);
 
-  const joinCall = fetchCalls.find((call) => call.url.includes('/_synapse/admin/v1/join/'));
-  assert.ok(joinCall, 'expected an admin force-join against the welcome room');
-  assert.ok(joinCall.bodyText?.includes(`@${username}:test.local`), 'join targets the new user mxid');
+    const joinCall = fetchCalls.find((call) => call.url.includes('/_synapse/admin/v1/join/'));
+    assert.ok(joinCall, 'expected an admin force-join against the welcome room');
+    assert.ok(
+        joinCall.bodyText?.includes(`@${username}:test.local`),
+        'join targets the new user mxid'
+    );
 });

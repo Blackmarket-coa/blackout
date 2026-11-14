@@ -21,6 +21,12 @@ operations guide; it points at it.
 
 ## Current focus
 
+### FBM character-built portal integration — 2026-11-12
+
+The [Coalition integration contract](docs/coalitions/FBM_UNIFIED_PORTAL_INTEGRATION.md) is the local companion to FBM's canonical plan. Reuse Coalition as the shared real-world map and community coordination layer; expose supported views/actions through verified member identity and permission-safe adapters. Do not duplicate the map or its record backends in FBM.
+
+The first integration slice is character survey → useful organizer/participant portal → one real action. Blackstar supplies transport, while goods auctions remain an FBM commerce delivery package. Existing operational milestones below still govern deployment; this entry makes no enabled/readiness claim.
+
 The most recently landed workstreams (analytics, VOD recording, clips,
 proximity, feed quick-wins) are tracked with their file-level status in
 [`OSS_GAP_FILL_BUILD_PLAN.md`](OSS_GAP_FILL_BUILD_PLAN.md#status-update--2026-07-11).

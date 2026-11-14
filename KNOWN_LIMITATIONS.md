@@ -707,6 +707,69 @@ shipped (only incremental adoption remains).
 
 ## Operational
 
+### Several API processes on one database (2026-10-31)
+
+-   **Where:** the API in Postgres mode (`BLACKOUT_DB_MODE=postgres`) whenever
+    more than one process shares a database: the production Docker `app` and
+    `worker`, and the Kubernetes deployment's three replicas. Each process
+    serves reads from its own in-memory copy and tells the others, through
+    Postgres notifications, which rows it changed.
+-   **State:** no write rewrites a whole table. Deletes, revocations,
+    consumes, sweeps and a few others touch only the rows their call changed.
+    Every other write saves the one row the call returned, whole, even when
+    the call changed nothing in it: marking an already-verified address
+    verified rewrites the account row from that process's copy. Before this
+    release some writes (deleting an account, signing out, the hourly
+    revocation prune, a vault-item or webhook delete) rewrote a whole table
+    from one process's copy and could delete or revert rows another process
+    had just written: a sign-out, another person's account. What was fixed
+    and how, and what is below, is in
+    [`docs/security/store-cross-process-writes-2026-10-31.md`](docs/security/store-cross-process-writes-2026-10-31.md).
+-   A process can still act on a copy that has not yet heard of a change from
+    another process. In that window a password-reset, verification, deletion,
+    account-link or sign-in link, a refresh-token rotation, an invitation
+    admission or a bounty accept can be accepted once on each process. For a
+    link or a bounty accept the database keeps the first, and the other
+    process corrects its copy. For a rotation or an admission the last write
+    wins: two processes rotating the same refresh token this way can leave
+    both new refresh tokens live. Either way the second request has already
+    succeeded.
+-   That window ends only when the process hears of the change, and some
+    processes never do. A process that starts while others are writing loads
+    its copy before it starts listening, and nothing re-reads what changed in
+    between. Most writes, a sign-out among them, send their notification after
+    the write, and a failed send is only logged. A listening connection that
+    dies without an error is not noticed. Such a process keeps its old copy of
+    the row until it restarts, or until something makes it re-read the row (a
+    later change to the same row, or its listening connection failing and
+    being replaced). For example, after you sign out, such a process can keep
+    accepting the access token you signed out until it expires (up to 24
+    hours). On PostgreSQL 16, a process started while another recorded 425
+    sign-outs missed 229 of them. A change a process makes before it has
+    finished starting is not written to the database at all.
+-   Revoking a refresh-token family while another process is rotating a token
+    of that family can leave the new token live.
+-   Other writes, including some on these same tables (a password change,
+    marking an email address verified, a refresh-token rotation), replace the
+    whole row, and the last one wins. A stale copy can still undo a change
+    made elsewhere while it is stale, for example a password change, a
+    moderation decision, or a vault item's contents.
+-   After you delete your account, an access token you already hold keeps
+    working on the other processes until it expires (up to 24 hours), and
+    deleting an account that has messages, votes or tips fails in the
+    database while the process you used no longer shows it; it comes back
+    after a restart. Both were so before this release. A refresh token or vault
+    item another process creates for the account while the deletion is
+    running is removed from the database, but can stay in that process's copy
+    (and the deleting one's) until it restarts; such a refresh token is
+    refused, since its account is gone.
+-   Until every process runs this release, the ones that do not still write
+    whole tables.
+-   Four writes never reach the database in this mode, so each is lost on
+    restart and no other process sees it: closing a governance vote, an aid
+    post mirrored from FreeBlackMarket, and a campaign's attribution and
+    engagement counts. Found while fixing the above; not fixed yet.
+
 ### Invite-only registration during the Test Flight
 
 Signup at `matrix.theblackout.app` is gated by one-time tokens issued
@@ -718,8 +781,17 @@ with `mint-invite-token.sh` next to it as the issuing helper.
 
 The API's own sign-up routes honour the same gate: with `REQUIRE_INVITE_TOKEN=1`,
 `POST /v1/auth/register` and, since 2026-10-25, the no-PII
-`POST /v1/auth/account-number` refuse without an invitation token. Before that
-date the account-number route minted a Matrix account with no invite check
+`POST /v1/auth/account-number` refuse without an invitation token. A presented
+token is checked before any account is created, so an unusable one creates
+nothing, and account creation refuses a username the homeserver already holds
+rather than writing to the existing account of that name. Each check leaves one
+narrow race window it cannot fully close: an invitation that stops being usable
+between the check and its redemption (its last use goes elsewhere, it is
+revoked, or it expires) leaves the new homeserver account in place, and an
+account of the same name created between the lookup and the create is written
+to before the request is refused. Both are described in
+[`docs/security/register-account-collision-2026-10-26.md`](docs/security/register-account-collision-2026-10-26.md).
+Before 2026-10-25 the account-number route minted a Matrix account with no invite check
 (D3 in [`docs/black-mask-account-link-design.md`](docs/black-mask-account-link-design.md) §7;
 fixed in [`docs/security/api-findings-triage-2026-10-25.md`](docs/security/api-findings-triage-2026-10-25.md)).
 Since 2026-10-26 the web client's anonymous sign-up sends the invitation token
@@ -762,24 +834,27 @@ error and is not counted. What remains:
     (`db_write_behind_failed`, `db_write_behind_failures_total`), though the
     request that made it was answered 2xx, and the queue does not try it again.
     The change is then only in that process's memory, and it is lost unless the
-    same process writes it to Postgres first: a later write of the same record
-    (a write sends the whole record, not only what changed), or a later write
-    that reconciles the whole table (most deletes, consumes and prunes are
-    written that way), which writes every record of that table the process
-    holds. It leaves memory unwritten when the process restarts, when a
-    re-hydrate or a peer's whole-table change reloads that table from Postgres,
-    or when a peer's change to the same record replaces it with the copy in
-    Postgres. A Postgres restart always drops the LISTEN connection, and the
-    re-hydrate after the reconnect reloads every table, so after a restart the
-    change is gone within seconds of Postgres coming back: an account created
-    during the outage can no longer sign in, even on the replica that created
-    it.
+    same process writes that row again first, which only a later write that
+    saves the whole row does (most writes save the one row their call
+    returned, whole: see "Several API processes on one database"). A delete,
+    revocation, consume or sweep writes only what its own call changed, so it
+    never writes the lost change. The change leaves memory unwritten when the
+    process restarts, when a re-hydrate (or a table reload asked for by a
+    process still on the previous release) reloads that table from Postgres, or
+    when that row is read back from Postgres: after another process's change to
+    it, or after a later delete, revocation, consume or sweep of it from this
+    process that Postgres could not apply as the copy did (consuming a reset
+    token Postgres never received removes the token from the copy). A Postgres
+    restart always drops the LISTEN connection, and the re-hydrate after the
+    reconnect reloads every table, so after a restart the change is gone within
+    seconds of Postgres coming back: an account created during the outage can
+    no longer sign in, even on the replica that created it.
 -   A peer replica's change that this replica cannot read back at that moment
     (no connection to be had) is logged (`pg_store_peer_refresh_failed`) and
     leaves that row stale in this replica's mirror until it changes again or
     the mirror is re-hydrated. A re-hydrate after a dropped LISTEN connection
-    that fails (`pg_store_rehydrate_failed`) is retried every 5 s until it
-    succeeds.
+    that fails (`pg_store_rehydrate_failed`) is retried 5 s later, one retry
+    pending at a time, until one succeeds or the process shuts down.
 -   The one-shot command-line tools (`migrate`, `db:import-json`,
     `db:verify-import`, `db:clean-demo-seed`) make their own pools without
     these listeners, so a dropped connection still ends them. They hold no

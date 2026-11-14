@@ -16,8 +16,8 @@
 // likes/comments on a seeded feed item) are left alone.
 //
 // Stop the API (or restart it right after) when applying: a running server holds
-// the seed rows in memory and its next file persist / Postgres resync would
-// write them back. Boot it with demo seeding off (the production default, see
+// the seed rows in memory, its next file persist writes them back, and the
+// Postgres store keeps serving them and writes one back if it changes it. Boot it with demo seeding off (the production default, see
 // shouldSeedCoalitionDemoData) so they are not re-seeded.
 //
 // Exit codes: 0 = ok, 2 = usage error / nothing to clean against.

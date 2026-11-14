@@ -731,6 +731,14 @@ class ServerConfig(Config):
                     f"Failed to read manhole public key file {manhole_pub_key_path}"
                 ) from e
 
+        if _starts_manhole_listener(config, self.listeners):
+            _check_manhole_host_key(
+                manhole_priv_key_path,
+                manhole_priv_key,
+                manhole_pub_key_path,
+                manhole_pub_key,
+            )
+
         self.manhole_settings = ManholeConfig(
             username=manhole_username,
             password=manhole_password,
@@ -1076,6 +1084,160 @@ def parse_listener_def(num: int, listener: Any) -> ListenerConfig:
                 bind_addresses.extend(DEFAULT_BIND_ADDRESSES)
 
         return TCPListenerConfig(port, bind_addresses, listener_type, tls, http_config)
+
+
+def _starts_manhole_listener(
+    config: JsonDict, listeners: Iterable[ListenerConfig]
+) -> bool:
+    """Whether the config declares a manhole listener for the process it names.
+
+    A Blackout addition (PATCHES.md, 2026-11-02 Twisted entry), which decides
+    whether `_check_manhole_host_key` runs: a homeserver that starts no manhole
+    never uses `manhole_settings`, and upstream loads that block without
+    checking it, so a stale one must not stop startup. The main process starts
+    the `type: manhole` entries of `listeners`, with the one the `manhole`
+    option adds (`synapse/app/homeserver.py`); a worker those of
+    `worker_listeners`, with the one `worker_manhole` adds
+    (`synapse/app/generic_worker.py`). `WorkerConfig` parses the worker's
+    listeners after this class, so they are read from the raw config here, and
+    a `worker_app` that is unset or empty, or `synapse.app.homeserver`, names
+    the main process, as `synapse/app/homeserver.py` (which refuses only a
+    truthy `worker_app`) and `WorkerConfig` treat it. It reads the config, not what the process
+    goes on to start: `synapse.app.admin_cmd` starts no listener, and loads the
+    homeserver's config with no `worker_app` (setting its own afterwards), so
+    it is checked as the main process, or, given a worker config, as that
+    worker.
+    """
+    worker_app = config.get("worker_app")
+    if not worker_app or worker_app == "synapse.app.homeserver":
+        return any(listener.type == "manhole" for listener in listeners)
+    if config.get("worker_manhole"):
+        return True
+    worker_listeners = config.get("worker_listeners") or []
+    return any(
+        isinstance(listener, dict) and listener.get("type") == "manhole"
+        for listener in worker_listeners
+    )
+
+
+def _check_manhole_host_key(
+    priv_key_path: Optional[str],
+    priv_key: Optional[Key],
+    pub_key_path: Optional[str],
+    pub_key: Optional[Key],
+) -> None:
+    """Refuse a manhole host key the SSH server cannot use or should not offer.
+
+    A Blackout addition (PATCHES.md, 2026-11-02 Twisted entry). Upstream loads
+    both files without comparing them. Called only when the config declares a
+    manhole listener for the process it is loaded as (`_starts_manhole_listener`).
+    The manhole files the host key under the private key's own type and serves
+    `pub_key` as its public half (`synapse/util/manhole.py`), so each of these
+    would start a manhole on which no SSH session completes, or stop startup
+    with a bare KeyError:
+
+    - a key on a curve Twisted has no SSH key type for (an EC key other than
+      P-256, P-384 or P-521, which only a PEM file can hold: ssh-keygen cannot
+      write one), at `ssh_priv_key_path` or at `ssh_pub_key_path` beside it;
+    - a public key at `ssh_priv_key_path`: a host key must be able to sign;
+    - a public key of another type than the private key;
+    - a public key of the same type that is not the private key's public half.
+
+    A DSA key is refused at the same two places (`_manhole_key_type` says why):
+    every ssh-dss signature uses SHA-1, and one whose subgroup order is 224 or
+    256 bits, as in every standard DSA key larger than 1024 bits, serves no
+    session in practice.
+
+    With no private key configured the public key is not checked here:
+    `manhole()` ignores it, with a warning, and uses a generated key.
+
+    Raises:
+        ConfigError: naming the setting at fault.
+    """
+    if priv_key is None:
+        return
+
+    priv_type = _manhole_key_type(priv_key, priv_key_path, "ssh_priv_key_path")
+    if priv_key.isPublic():
+        raise ConfigError(
+            f"The manhole private key file {priv_key_path} holds a public key"
+            f" ({priv_type}), not a private one."
+            " ssh_priv_key_path must name the private half of the host key, the"
+            " file ssh-keygen writes without the .pub suffix.",
+            ("manhole_settings", "ssh_priv_key_path"),
+        )
+
+    if pub_key is None:
+        return
+
+    pub_type = _manhole_key_type(pub_key, pub_key_path, "ssh_pub_key_path")
+    if pub_type != priv_type:
+        raise ConfigError(
+            f"The manhole public key file {pub_key_path} holds a {pub_type} key,"
+            f" and the private key file {priv_key_path} a {priv_type} key."
+            " ssh_pub_key_path must be the public half of the key at"
+            " ssh_priv_key_path, or be left unset: the public half is then"
+            " derived from the private key.",
+            ("manhole_settings", "ssh_pub_key_path"),
+        )
+
+    if pub_key.public().blob() != priv_key.public().blob():
+        raise ConfigError(
+            f"The manhole public key file {pub_key_path} is not the public half"
+            f" of the private key file {priv_key_path} (both {priv_type})."
+            " ssh_pub_key_path must be the public half of the key at"
+            " ssh_priv_key_path, or be left unset: the public half is then"
+            " derived from the private key.",
+            ("manhole_settings", "ssh_pub_key_path"),
+        )
+
+
+def _manhole_key_type(key: Key, path: Optional[str], setting: str) -> str:
+    """The SSH key type of a manhole key file, or a ConfigError at `setting`.
+
+    Twisted names an EC key's type from a table of three curves (`_secToNist`
+    in `twisted/conch/ssh/keys.py`: P-256, P-384 and P-521) and `sshType()`
+    raises KeyError for any other, while `Key.fromFile` loads a PEM
+    `EC PRIVATE KEY` on any curve cryptography knows. Without this, such a key
+    passed the config and the manhole raised that KeyError in
+    `start_listening`, stopping the homeserver without naming the setting.
+
+    A DSA key (`ssh-dss`) is refused too, because every ssh-dss signature
+    uses SHA-1 (`Key._getHashAlgorithm`). Twisted's `Key.sign` also packs an
+    ssh-dss signature's r and s into 20 bytes each, and raises OverflowError
+    when either is 2^160 or more. Both are reduced modulo the subgroup order
+    q, so with the 224- or 256-bit q of every standard DSA key larger than
+    1024 bits the chance that both fit is at most about 2^-126 per signature:
+    in practice none does. Such a key loads from a PEM `DSA PRIVATE KEY` file,
+    and without this it passed the config and the server raised OverflowError
+    on its key exchanges, logging nothing at startup. With a 160-bit q, as in
+    a 1024-bit key or a non-standard larger one, every signature fits and the
+    key serves a session; with a non-standard q just over 160 bits, some
+    signatures fit and others raise. Any DSA key is refused for SHA-1 rather
+    than offered.
+    """
+    try:
+        key_type = key.sshType().decode("ascii")
+    except KeyError as e:
+        curve = getattr(getattr(key, "_keyObject", None), "curve", None)
+        what = f"an EC key on the curve {curve.name}" if curve is not None else "a key"
+        raise ConfigError(
+            f"The manhole key file {path} holds {what}, which the SSH server has"
+            " no key type for. The manhole host key must be an RSA, Ed25519 or"
+            " ECDSA P-256, P-384 or P-521 key.",
+            ("manhole_settings", setting),
+        ) from e
+    if key_type == "ssh-dss":
+        raise ConfigError(
+            f"The manhole key file {path} holds a DSA key (ssh-dss), which the"
+            " manhole does not use: every ssh-dss signature uses SHA-1, and the"
+            " SSH server cannot in practice sign with a DSA key whose subgroup"
+            " order is 224 or 256 bits, as every standard DSA key larger than"
+            " 1024 bits has. The manhole host key must be an RSA, Ed25519 or"
+            " ECDSA P-256, P-384 or P-521 key.",
+            ("manhole_settings", setting),
+        )
+    return key_type
 
 
 _MANHOLE_SETTINGS_SCHEMA = {

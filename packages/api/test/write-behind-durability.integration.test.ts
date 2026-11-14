@@ -24,11 +24,7 @@ test('write-behind permanent failures are counted, not silently swallowed (H3)',
         end: async () => {},
     };
     const plans = new Map([['widgets', { descriptor: { conflictColumns: ['id'] } }]]);
-    const queue = new WriteBehindQueue(
-        failingPool as never,
-        plans as never,
-        (() => new Map()) as never
-    );
+    const queue = new WriteBehindQueue(failingPool as never, plans as never);
 
     queue.enqueueUpsert('widgets', { id: 'row-1' });
     // drain() must resolve even though the write permanently failed — the queue
