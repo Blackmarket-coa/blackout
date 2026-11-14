@@ -2064,6 +2064,25 @@ changed.
     the HTTP level; nothing here ran against a Synapse. The 404 `M_NOT_FOUND`
     shape and the UIA shape are taken from the fork's Synapse source, and the
     design's §7.4 e2e (aborting `/room_keys/version`) is still to be written.
+-   **GitGuardian's check on the pull request** (#1008, 2026-11-14) is red on
+    one line of this branch's own test helper, and no commit here can clear
+    it. It flagged `OLD_MASTER_KEY` in
+    `apps/blackout-client/tests/unit/helpers/fakeKeyHomeserver.ts` (line 41 of
+    the file as `0dc627f87b` added it) as a generic high-entropy secret,
+    incident 40095888. The value is not a secret: it is the public master
+    cross-signing key the fake homeserver answers `/keys/query` with for an
+    account that already has one (`masterKeyBody`), a made-up 32-byte value
+    of the right length for the crypto layer to parse. The tests only ever
+    return it as a public key or compare against it, and nothing in the tree
+    holds or uses a private key for it. `BACKUP_PUBLIC_KEY`, on the line
+    above, is the same kind of value and was not flagged. The file is under a
+    path `.gitguardian.yaml` allowlists (`apps/blackout-client/tests/**/*.ts`),
+    but the pull-request check scans every commit and does not read that
+    file (`docs/security/release-identities-2026-10-26.md`, §6), and the
+    flagged commit stays in the pull request unless the branch's history is
+    rewritten, which it is not. So the incident is the operator's to close in
+    the GitGuardian dashboard as a false positive. The value was not renamed,
+    split or derived at run time for the scanner.
 -   **The two style commits.** `b72164697f` (Verification.tsx) said prettier made
     "no non-whitespace change"; it re-wrapped two JSX lines (7+/2- under
     `git diff -w`) and, to keep the space between an inline element and the
