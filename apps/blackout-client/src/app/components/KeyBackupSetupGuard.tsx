@@ -284,7 +284,8 @@ const stopClick = (event: React.MouseEvent) => {
  * Rendered whenever `panel` is set, independent of whatever else the caller
  * shows, so a setup that is under way (the recovery key on screen) stays up
  * when the caller's own banner goes away. It goes away with the component
- * that renders it (the chip's host closing, say); an attempt that is writing
+ * that renders it (the chip's host going with the screen, or the search
+ * results shifting under the chip, say); an attempt that is writing
  * then runs on and its key is shown by `RecoveryKeyHandoffHost`.
  */
 export function KeyBackupGuardOverlay({ guard }: { guard: KeyBackupSetupGuard }) {

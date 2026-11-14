@@ -15,7 +15,8 @@
 //   disabled and refuses to close it, so a close can't take the window away
 //   before it shows the attempt's recovery key (the finished one, or the
 //   partway one). The window can still go by another route (a browser's
-//   Back, the chip's host closing): DeviceVerificationSetup.windowGone.test.tsx
+//   Back, or for the chip its host going with the screen or the results
+//   shifting under it): DeviceVerificationSetup.windowGone.test.tsx
 //   covers that, where the key is then shown by `RecoveryKeyHandoffHost`, and
 //   the record's "What remains" lists what still loses it (eighth review).
 //

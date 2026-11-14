@@ -66,12 +66,14 @@ export const MessageFailedContent = as<'div', { children?: never }>(({ ...props 
  * `features/room`) is not mounted. The room timeline renders an undecryptable
  * message as plain text and has no chip. Inside a reply preview the chip sits
  * in `Reply`'s button, whose click opens the replied message and closes the
- * search panel, so the chip's click and every click in its overlay stop there
- * (`stopClick` in `KeyBackupSetupGuard`). Its overlay lives as long as the
- * chip does. While it is up it covers the search panel, whose close and
- * result Open are then out of reach, so what takes it away is a browser's
- * Back, the results list shifting under it, or the message becoming
- * readable. Nothing is lost before the setup's first write; after it, the
+ * search panel, so the chip's own click stops at the chip (its `onClick`
+ * below) and every click in its overlay stops at the overlay (`stopClick` in
+ * `KeyBackupSetupGuard`). Its overlay lives as long as the chip does. While it
+ * is up it covers the search panel, whose close and result Open are then out
+ * of reach, so what takes it away is, for example, the screen going (a
+ * browser's Back, a quick-switcher selection from the keyboard, or a route
+ * change the app makes itself, such as a notification tap), the results list
+ * shifting under it, or the message becoming readable. Nothing is lost before the setup's first write; after it, the
  * attempt runs on and `RecoveryKeyHandoffHost` shows its key.
  */
 export const CHIP_TEXT = 'Can’t decrypt this message on this device.';

@@ -670,7 +670,9 @@ export function RecoveryKeyDisplay({ recoveryKey, lead }: RecoveryKeyDisplayProp
  * false. Android's back press, which the app otherwise turns into
  * `history.back()` and so into a route change that unmounts the window, is
  * claimed and ignored meanwhile (eighth review). The window can still go
- * away by another route (a browser's Back, the chip's host closing); the
+ * away by another route (a browser's Back, a route change the app makes
+ * itself, or for the chip its host going with the screen or the results
+ * shifting under it); the
  * attempt's key is then shown by `RecoveryKeyHandoffHost`, and a reload or a
  * quit loses it (the record's "What remains").
  */
