@@ -1,5 +1,7 @@
 # Consolidation Status — Blackout
 
+> **2026-11-12 reconciliation:** [Implementation status](docs/IMPLEMENTATION_STATUS_2026-11-12.md) records current source/CI evidence and unresolved deployment/operational gaps. Enhancement features are one-time purchases with **no subscription**; historical subscription references below describe existing code or earlier design, not the approved enhancement offering. No runtime or billing migration is performed by this documentation update.
+
 Part of the 2026-08-28 seven-repo BMC consolidation review. The canonical review — audit
 verdicts, decisions, and the ordered roadmap — is `docs/REPO_CONSOLIDATION_REVIEW.md` in
 `Blackmarket-coa/free-black-market`. This file records what lands here.

@@ -3,6 +3,8 @@
 
 # Blackout
 
+> **Implementation review (2026-11-12):** [Source/CI status and remaining gaps](docs/IMPLEMENTATION_STATUS_2026-11-12.md) separates code from operational availability. Platform enhancement features are **one-time purchases; no subscription**. Existing recurring platform-plan assumptions require migration through FBM. Recorded passing CI does not close documented operational defects or establish live availability.
+
 Federated, end-to-end-encrypted communication platform built on the Matrix
 protocol — with first-class governance, mutual aid, steganography, and
 deaddrop encrypted messaging (Dead Drop envelopes use post-quantum hybrid
@@ -21,6 +23,8 @@ repository is a pnpm/turborepo monorepo containing web, Tauri desktop,
 Capacitor mobile, a Synapse-derived homeserver, and a Node/Hono API server.
 
 ## Product direction: meaningful participation
+
+**FBM integration direction (2026-11-12):** [Coalition integration contract](docs/coalitions/FBM_UNIFIED_PORTAL_INTEGRATION.md) records reuse of the existing Coalition map, needs/resources/projects/tasks, events and chat inside FBM's character-built unified member portal. FBM owns the market/equipment/checkout; Blackstar owns transport operations. This is an integration plan, not a claim the composed experience is deployed.
 
 Blackout's longer-term product direction extends its secure communication and cooperative governance foundation into a daily-use social experience that helps people **discover, express, connect, compete, learn, organize, and earn**. Passive participants should gain meaningful personal or community value; active creators and organizers should have clearer paths to collaboration, distribution, and economic returns.
 

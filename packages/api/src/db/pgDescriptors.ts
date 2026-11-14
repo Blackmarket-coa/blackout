@@ -1,13 +1,22 @@
-// Per-table descriptors + per-mutator write-through specs for PostgresBackedDb.
+// Per-table descriptors + per-mutator write specs for the PostgresBackedDb write-behind store.
 //
 // Most tables are regular: table name = snake_case(mapName), keyed by `id`,
 // reflection maps fields ↔ columns. The exceptions (composite/non-id keys, the
 // renamed webhook-audit table, and the nested coalition-aid location) are
-// declared explicitly. The MUTATOR_SPECS table says, for each of the 127
-// InMemoryDb mutators, whether a write-through is a targeted upsert of the
-// returned record or a (rarer) resync of the affected map(s).
+// declared explicitly. The MUTATOR_SPECS table says, for each InMemoryDb
+// mutator, what its call writes to Postgres: an upsert of the record it
+// returned, or targeted statements that name the rows it changed, by key or
+// by a predicate Postgres evaluates. No spec reconciles a whole table against
+// this process's mirror: that deleted every row another process had written
+// and this one had not heard of (docs/security/store-cross-process-writes-2026-10-31.md).
 
-import { camelToSnake, type Row, type TableDescriptor } from './pgWriter';
+import {
+    camelToSnake,
+    type Row,
+    type StepContext,
+    type TableDescriptor,
+    type TargetedStep,
+} from './pgWriter';
 
 const KEY_ID = (r: Record<string, unknown>) => String(r.id);
 
@@ -556,59 +565,275 @@ export const TABLE_DESCRIPTORS: TableDescriptor[] = ALL_MAP_NAMES.map((mapName) 
     };
 });
 
-export type MutatorSpec = { kind: 'upsert'; map: string } | { kind: 'resync'; maps: string[] };
+/**
+ * - `upsert`: persist the record the method returned, whole (last writer wins).
+ * - `targeted`: run fixed statements (pgWriter's TargetedStep) that name the
+ *   rows the call changed, by key or by a predicate Postgres evaluates, in one
+ *   transaction; the statements are checked against the schema at boot.
+ */
+export type MutatorSpec =
+    | { kind: 'upsert'; map: string }
+    | { kind: 'targeted'; steps: TargetedStep[] };
 
 const upsert = (map: string): MutatorSpec => ({ kind: 'upsert', map });
-const resync = (...maps: string[]): MutatorSpec => ({ kind: 'resync', maps });
+const targeted = (...steps: TargetedStep[]): MutatorSpec => ({ kind: 'targeted', steps });
 
 /**
- * Maps each of the 127 InMemoryDb mutators to its write-through. `upsert`
- * persists the method's returned record; `resync` reconciles a map after a
- * delete / bulk-revoke / consume. The `reset*ForTest` seams are intentionally
- * absent — postgres mode never calls them.
+ * Delete the one row whose key the call's arguments name, in conflict-column
+ * order. Only that row: a row this process has not heard of is never touched,
+ * as it was by the whole-table resync this replaces.
+ */
+const deleteKey = (map: string, key: (args: readonly unknown[]) => unknown[]): MutatorSpec =>
+    targeted({ op: 'deleteKey', map, key: (ctx) => key(ctx.args) });
+const deleteById = (map: string): MutatorSpec => deleteKey(map, ([id]) => [id]);
+
+type Params = (ctx: StepContext) => readonly unknown[] | undefined;
+const deleteWhere = (map: string, where: string, params: Params): TargetedStep => ({
+    op: 'deleteWhere',
+    map,
+    where,
+    params,
+});
+const updateWhere = (map: string, set: string, where: string, params: Params): TargetedStep => ({
+    op: 'updateWhere',
+    map,
+    set,
+    where,
+    params,
+});
+
+/** The record the call left for a key it changed in `map`, or undefined when it changed none there. */
+const changedTo = (ctx: StepContext, map: string): Record<string, unknown> | undefined =>
+    ctx.changed(map).find((c) => c.after)?.after;
+
+/** A prune's `now` argument as ISO; the time the call returned when it was left to default. */
+const nowArg = (ctx: StepContext): string => {
+    const v = ctx.args[0];
+    return v instanceof Date ? v.toISOString() : typeof v === 'string' ? v : ctx.at;
+};
+
+/**
+ * A single-use row consumed by key, only while Postgres still has it
+ * unconsumed: of two processes that consume it, the first one's
+ * `consumed_at` stays, and the other's mirror re-reads it. The call's own
+ * record supplies the values; a call that changed nothing (the mirror's row
+ * was already consumed, or absent) writes nothing.
+ */
+const consume = (map: string, keyColumn: string, keyField: string, also = ''): MutatorSpec =>
+    targeted(
+        updateWhere(
+            map,
+            'consumed_at = $2',
+            `${keyColumn} = $1 AND consumed_at IS NULL${also}`,
+            (c) => {
+                const r = changedTo(c, map);
+                return r ? [r[keyField], r.consumedAt] : undefined;
+            }
+        )
+    );
+
+/**
+ * Delete the rows Postgres itself finds expired at the call's `now`. A row
+ * this process has not heard of is judged on its own `expires_at`, so an
+ * unexpired one stays and an expired one goes, wherever it was written.
+ */
+const pruneWhere = (map: string, where: string): MutatorSpec =>
+    targeted(deleteWhere(map, where, (c) => [nowArg(c)]));
+
+/**
+ * Revoke every still-live refresh token matching `column = $1`, including any
+ * a peer minted that this process has not heard of. The timestamp is the one
+ * the mutator stamped on the mirror's records, so both hold the same value.
+ */
+const revokeRefreshTokensWhere = (column: string): MutatorSpec =>
+    targeted(
+        updateWhere(
+            'refreshTokens',
+            'revoked_at = $2, revoked_reason = $3',
+            `${column} = $1 AND revoked_at IS NULL`,
+            (c) => [c.args[0], changedTo(c, 'refreshTokens')?.revokedAt ?? c.at, c.args[1]]
+        )
+    );
+
+/**
+ * Every descriptor table with an `ON DELETE CASCADE` foreign key to `users`,
+ * and its column. Postgres deletes these rows with the account; deleteUser
+ * also deletes them explicitly, first and in the same transaction, so the
+ * keys of every child row those DELETEs see come back from RETURNING and
+ * every mirror is told they are gone (the cascade itself tells no one). A
+ * child row another process inserts after its table's DELETE has run and
+ * before the account's is removed by the cascade alone, unannounced
+ * (docs/security/store-cross-process-writes-2026-10-31.md, O15). A test
+ * checks this list, with USER_CASCADE_LEFT_IN_MIRRORS, against the live
+ * foreign-key catalogue.
+ */
+export const USER_CASCADE_CHILDREN: ReadonlyArray<{ map: string; column: string }> = [
+    { map: 'passwordResetTokens', column: 'user_id' },
+    { map: 'refreshTokens', column: 'user_id' },
+    { map: 'linkedAccounts', column: 'blackout_user_id' },
+    { map: 'pendingOAuthLinks', column: 'blackout_user_id' },
+    { map: 'twitchChatBridges', column: 'blackout_user_id' },
+    { map: 'twitchEventSubscriptions', column: 'blackout_user_id' },
+    { map: 'widgetAlertTokens', column: 'blackout_user_id' },
+    { map: 'youtubeChatBridges', column: 'blackout_user_id' },
+    { map: 'kickChatBridges', column: 'blackout_user_id' },
+    { map: 'simulcastDestinations', column: 'blackout_user_id' },
+    { map: 'discordCompatWebhooks', column: 'blackout_user_id' },
+    { map: 'outboundEventWebhooks', column: 'blackout_user_id' },
+    { map: 'twitchIrcBotTokens', column: 'blackout_user_id' },
+    { map: 'obsWsPasswords', column: 'blackout_user_id' },
+    { map: 'twitchExtensionPanels', column: 'creator_id' },
+    { map: 'channelPointsRewards', column: 'creator_id' },
+    { map: 'channelPointsLedger', column: 'channel_id' },
+    { map: 'channelPointsLedger', column: 'user_id' },
+    { map: 'creatorListings', column: 'seller_user_id' },
+    { map: 'vaultItems', column: 'owner_user_id' },
+];
+
+/**
+ * Cascaded by Postgres with the account but deliberately not deleted
+ * explicitly, so no mirror is told. The revocations of a deleted account
+ * (its logged-out tokens and its logout-everywhere cutoff) stay in every
+ * running process's mirror, which keeps refusing those tokens until it
+ * restarts; telling the mirrors would make every process accept them at once
+ * for the rest of their lifetime. Nothing reads a revocation as proof that
+ * the account exists.
+ */
+export const USER_CASCADE_LEFT_IN_MIRRORS: ReadonlyArray<{ map: string; column: string }> = [
+    { map: 'revokedSessions', column: 'user_id' },
+];
+
+/** The account's per-user auth rows, deleted by purgeUserAuthArtifacts. */
+const USER_AUTH_ARTIFACTS: ReadonlyArray<{ map: string; column: string }> = [
+    { map: 'passwordResetTokens', column: 'user_id' },
+    { map: 'emailVerificationTokens', column: 'user_id' },
+    { map: 'accountDeletionTokens', column: 'user_id' },
+    { map: 'refreshTokens', column: 'user_id' },
+    { map: 'linkedAccounts', column: 'blackout_user_id' },
+    { map: 'pendingOAuthLinks', column: 'blackout_user_id' },
+];
+
+/** The records the call left in `map` for the keys it changed (what an upsertEach writes). */
+const changedRecords = (ctx: StepContext, map: string): Array<Record<string, unknown>> =>
+    ctx.changed(map).flatMap((c) => (c.after ? [c.after] : []));
+
+/** The keys the call removed from `map`, as deleteKeys entries (single-column keys). */
+const removedKeys = (ctx: StepContext, map: string) =>
+    ctx.changed(map).flatMap((c) => (c.after ? [] : [{ kv: [c.key] }]));
+
+/**
+ * A mesh envelope's `seen_by` merges with whatever Postgres already holds, so
+ * a concurrent write from another process keeps the nodes it recorded. Each
+ * node is kept once, in the order it first appears (Postgres's, then this
+ * write's). The writer re-reads the merged row (BoundStatement.merges).
+ */
+const MESH_SEEN_BY_UNION = {
+    seen_by:
+        'ARRAY(SELECT u.s FROM unnest(mesh_envelopes.seen_by || EXCLUDED.seen_by) WITH ORDINALITY AS u(s, n) GROUP BY u.s ORDER BY min(u.n))',
+};
+
+/**
+ * An enqueue or a gossip merge writes exactly what it changed in the mirror:
+ * each new or changed envelope (with `seen_by` merged), and a delete by id of
+ * each envelope the call dropped (the oldest past the cap, or one the merge
+ * found expired). An envelope this process has not heard of is never touched.
+ */
+const meshEnvelopeWrites = (): MutatorSpec =>
+    targeted(
+        {
+            op: 'upsertEach',
+            map: 'meshEnvelopes',
+            records: (c) => changedRecords(c, 'meshEnvelopes'),
+            onConflictSet: MESH_SEEN_BY_UNION,
+        },
+        { op: 'deleteKeys', map: 'meshEnvelopes', keys: (c) => removedKeys(c, 'meshEnvelopes') }
+    );
+
+const deleteByUser = (rows: ReadonlyArray<{ map: string; column: string }>): TargetedStep[] =>
+    rows.map(({ map, column }) => deleteWhere(map, `${column} = $1`, (c) => [c.args[0]]));
+
+/**
+ * Maps each InMemoryDb mutator to its Postgres write. `upsert` persists the
+ * method's returned record; `targeted` writes only the rows the call changed.
+ * A method that writes a map and is absent here is never written to Postgres:
+ * store-spec-coverage's U1 lists those (the `reset*ForTest` seams, in-memory
+ * diagnostics, and the known gaps) and fails on any other.
  */
 export const MUTATOR_SPECS: Record<string, MutatorSpec> = {
     createUser: upsert('users'),
     updateUserPassword: upsert('users'),
     markUserEmailVerified: upsert('users'),
-    deleteUser: resync('users'),
+    // The account's cascaded child rows first (see USER_CASCADE_CHILDREN),
+    // then the account: only that id, never a row this process has not heard of.
+    deleteUser: targeted(...deleteByUser(USER_CASCADE_CHILDREN), {
+        op: 'deleteKey',
+        map: 'users',
+        key: (c) => [c.args[0]],
+    }),
     createScheduledMessage: upsert('scheduledMessages'),
     markScheduledMessageDelivered: upsert('scheduledMessages'),
     markScheduledMessageFailed: upsert('scheduledMessages'),
     cancelScheduledMessage: upsert('scheduledMessages'),
-    // Account deletion. A targeted upsert, not a resync: see the store method.
+    // Account deletion blanks the row and keeps it: see the store method.
     eraseScheduledMessage: upsert('scheduledMessages'),
     createPasswordResetToken: upsert('passwordResetTokens'),
-    consumePasswordResetToken: resync('passwordResetTokens'),
+    consumePasswordResetToken: consume('passwordResetTokens', 'id', 'id'),
+    deleteExpiredPasswordResetTokens: pruneWhere('passwordResetTokens', 'expires_at < $1'),
     createEmailVerificationToken: upsert('emailVerificationTokens'),
-    consumeEmailVerificationToken: resync('emailVerificationTokens'),
+    consumeEmailVerificationToken: consume('emailVerificationTokens', 'id', 'id'),
+    markEmailVerificationTokenSent: targeted(
+        updateWhere(
+            'emailVerificationTokens',
+            'sent_at = $2',
+            'id = $1 AND sent_at IS NULL',
+            (c) => {
+                const r = changedTo(c, 'emailVerificationTokens');
+                return r ? [r.id, r.sentAt] : undefined;
+            }
+        )
+    ),
+    // Supersedes every outstanding token of the account, including one a peer
+    // issued that this process has not heard of.
+    revokeEmailVerificationTokensForUser: targeted(
+        updateWhere(
+            'emailVerificationTokens',
+            'revoked_reason = $2',
+            'user_id = $1 AND consumed_at IS NULL AND revoked_reason IS NULL',
+            (c) => [c.args[0], c.args[1]]
+        )
+    ),
+    deleteExpiredEmailVerificationTokens: pruneWhere(
+        'emailVerificationTokens',
+        'expires_at < $1 AND consumed_at IS NULL'
+    ),
     createAccountDeletionToken: upsert('accountDeletionTokens'),
-    consumeAccountDeletionToken: resync('accountDeletionTokens'),
+    consumeAccountDeletionToken: consume('accountDeletionTokens', 'id', 'id'),
     createInvitationToken: upsert('invitationTokens'),
     incrementInvitationTokenUseCount: upsert('invitationTokens'),
     revokeInvitationToken: upsert('invitationTokens'),
     createInvitationRedemption: upsert('invitationRedemptions'),
     createInvitationAdmission: upsert('invitationAdmissions'),
     claimInvitationAdmission: upsert('invitationAdmissions'),
-    // Account deletion removes rows, so the map is reconciled, not upserted.
-    deleteInvitationAdmissionsForUser: resync('invitationAdmissions'),
+    // Account deletion: the admission the account claimed and any for its
+    // Matrix id, wherever they were written.
+    deleteInvitationAdmissionsForUser: targeted(
+        deleteWhere(
+            'invitationAdmissions',
+            'claimed_by_user_id = $1 OR ($2::text IS NOT NULL AND matrix_user_id = $2::text)',
+            (c) => [c.args[0], c.args[1] ?? null]
+        )
+    ),
     createBurnerIdentity: upsert('burnerIdentities'),
     markBurnerIdentityBurned: upsert('burnerIdentities'),
     rotateBurnerIdentity: upsert('burnerIdentities'),
-    purgeUserAuthArtifacts: resync(
-        'passwordResetTokens',
-        'emailVerificationTokens',
-        'accountDeletionTokens',
-        'refreshTokens',
-        'revokedSessions',
-        'pendingOAuthLinks'
-    ),
+    // The six maps the method writes. Revocations are not among them.
+    purgeUserAuthArtifacts: targeted(...deleteByUser(USER_AUTH_ARTIFACTS)),
     createRefreshToken: upsert('refreshTokens'),
     consumeRefreshTokenForRotation: upsert('refreshTokens'),
-    revokeRefreshTokenFamily: resync('refreshTokens'),
-    revokeRefreshTokensForUser: resync('refreshTokens'),
+    revokeRefreshTokenFamily: revokeRefreshTokensWhere('family_id'),
+    revokeRefreshTokensForUser: revokeRefreshTokensWhere('user_id'),
     revokeSession: upsert('revokedSessions'),
-    pruneExpiredRevokedSessions: resync('revokedSessions'),
+    pruneExpiredRevokedSessions: pruneWhere('revokedSessions', 'expires_at <= $1'),
     createMessage: upsert('messages'),
     createVote: upsert('votes'),
     castVote: upsert('voteEntries'),
@@ -618,13 +843,13 @@ export const MUTATOR_SPECS: Record<string, MutatorSpec> = {
     openDeadDrop: upsert('deadDrops'),
     createDeadmanSwitch: upsert('deadmanSwitches'),
     updateDeadmanSwitch: upsert('deadmanSwitches'),
-    // Account deletion. A targeted upsert, not a resync: see the store method.
+    // Account deletion blanks the row and keeps it: see the store method.
     eraseDeadmanSwitch: upsert('deadmanSwitches'),
     // Publishing supersedes the current identity (its own upsert, issued
     // first by publishReleaseIdentity) and then adds the new one.
     supersedeReleaseIdentity: upsert('releaseIdentities'),
     publishReleaseIdentity: upsert('releaseIdentities'),
-    // Account deletion. A targeted upsert, not a resync: see the store method.
+    // Account deletion blanks the row and keeps it: see the store method.
     eraseReleaseIdentity: upsert('releaseIdentities'),
     createModerationAction: upsert('moderationActions'),
     upsertCreatorStreamAuth: upsert('creatorStreamAuth'),
@@ -667,9 +892,48 @@ export const MUTATOR_SPECS: Record<string, MutatorSpec> = {
     updateBountyStatus: upsert('bounties'),
     claimBounty: upsert('bounties'),
     createBountyApplication: upsert('bountyApplications'),
-    // Accepting one applicant also claims the bounty and declines every sibling
-    // pending application, so resync both maps rather than upsert a single record.
-    acceptBountyApplication: resync('bounties', 'bountyApplications'),
+    // Accepting one applicant claims the bounty and declines every other pending
+    // application, in one transaction. The first two statements are gates: if
+    // Postgres no longer has the bounty open or the application pending (another
+    // process got there first), the op rolls back and this mirror re-reads.
+    // The decline reaches siblings this process has not heard of.
+    acceptBountyApplication: targeted(
+        {
+            ...updateWhere(
+                'bounties',
+                "status = 'claimed', claimed_by = $2, updated_at = $3",
+                "id = $1 AND status = 'open'",
+                (c) => {
+                    const r = c.result as { bounty: Record<string, unknown> } | undefined;
+                    return r ? [r.bounty.id, r.bounty.claimedBy, r.bounty.updatedAt] : undefined;
+                }
+            ),
+            required: true,
+        },
+        {
+            ...updateWhere(
+                'bountyApplications',
+                "status = 'accepted', updated_at = $2",
+                "id = $1 AND status = 'pending'",
+                (c) => {
+                    const r = c.result as { application: Record<string, unknown> } | undefined;
+                    return r ? [r.application.id, r.application.updatedAt] : undefined;
+                }
+            ),
+            required: true,
+        },
+        updateWhere(
+            'bountyApplications',
+            "status = 'declined', updated_at = $3",
+            "bounty_id = $1 AND id <> $2 AND status = 'pending'",
+            (c) => {
+                const r = c.result as { application: Record<string, unknown> } | undefined;
+                return r
+                    ? [r.application.bountyId, r.application.id, r.application.updatedAt]
+                    : undefined;
+            }
+        )
+    ),
     insertCreatorSubscriptionTier: upsert('creatorSubscriptionTiers'),
     updateCreatorSubscriptionTier: upsert('creatorSubscriptionTiers'),
     insertCreatorSubscription: upsert('creatorSubscriptions'),
@@ -683,64 +947,88 @@ export const MUTATOR_SPECS: Record<string, MutatorSpec> = {
     insertAdRevenueShare: upsert('adRevenueShares'),
     updateAdRevenueShare: upsert('adRevenueShares'),
     upsertLinkedAccount: upsert('linkedAccounts'),
-    deleteLinkedAccount: resync('linkedAccounts'),
+    deleteLinkedAccount: deleteKey('linkedAccounts', ([userId, provider]) => [userId, provider]),
     setLinkedAccountSyncCursor: upsert('linkedAccounts'),
     createPendingOAuthLink: upsert('pendingOAuthLinks'),
-    consumePendingOAuthLink: resync('pendingOAuthLinks'),
-    prunePendingOAuthLinks: resync('pendingOAuthLinks'),
+    // The same expiry test as the store method's.
+    consumePendingOAuthLink: consume(
+        'pendingOAuthLinks',
+        'state_hash',
+        'stateHash',
+        ' AND expires_at > $2'
+    ),
+    prunePendingOAuthLinks: pruneWhere('pendingOAuthLinks', 'expires_at <= $1'),
     createPendingOidcLogin: upsert('pendingOidcLogins'),
-    consumePendingOidcLogin: resync('pendingOidcLogins'),
-    prunePendingOidcLogins: resync('pendingOidcLogins'),
+    consumePendingOidcLogin: consume(
+        'pendingOidcLogins',
+        'state_hash',
+        'stateHash',
+        ' AND expires_at > $2'
+    ),
+    prunePendingOidcLogins: pruneWhere('pendingOidcLogins', 'expires_at <= $1'),
     createTwitchChatBridge: upsert('twitchChatBridges'),
     updateTwitchChatBridge: upsert('twitchChatBridges'),
-    deleteTwitchChatBridge: resync('twitchChatBridges'),
+    deleteTwitchChatBridge: deleteById('twitchChatBridges'),
     createTwitchEventSubscription: upsert('twitchEventSubscriptions'),
     updateTwitchEventSubscriptionStatus: upsert('twitchEventSubscriptions'),
-    deleteTwitchEventSubscription: resync('twitchEventSubscriptions'),
+    // Keyed by the Helix subscription id, not a row id.
+    deleteTwitchEventSubscription: deleteKey('twitchEventSubscriptions', ([helixId]) => [helixId]),
     createWidgetAlertToken: upsert('widgetAlertTokens'),
     revokeWidgetAlertToken: upsert('widgetAlertTokens'),
     createYoutubeChatBridge: upsert('youtubeChatBridges'),
     updateYoutubeChatBridge: upsert('youtubeChatBridges'),
-    deleteYoutubeChatBridge: resync('youtubeChatBridges'),
+    deleteYoutubeChatBridge: deleteById('youtubeChatBridges'),
     createKickChatBridge: upsert('kickChatBridges'),
     updateKickChatBridge: upsert('kickChatBridges'),
-    deleteKickChatBridge: resync('kickChatBridges'),
+    deleteKickChatBridge: deleteById('kickChatBridges'),
     createSimulcastDestination: upsert('simulcastDestinations'),
     updateSimulcastDestination: upsert('simulcastDestinations'),
-    deleteSimulcastDestination: resync('simulcastDestinations'),
+    deleteSimulcastDestination: deleteById('simulcastDestinations'),
     createDiscordCompatWebhook: upsert('discordCompatWebhooks'),
     updateDiscordCompatWebhook: upsert('discordCompatWebhooks'),
-    deleteDiscordCompatWebhook: resync('discordCompatWebhooks'),
+    deleteDiscordCompatWebhook: deleteById('discordCompatWebhooks'),
     createDiscordServerImport: upsert('discordServerImports'),
     updateDiscordServerImport: upsert('discordServerImports'),
     createDiscordImportMapping: upsert('discordImportMappings'),
     createDiscordBridgeActivation: upsert('discordBridgeActivations'),
     updateDiscordBridgeActivation: upsert('discordBridgeActivations'),
-    deleteDiscordBridgeActivation: resync('discordBridgeActivations'),
+    deleteDiscordBridgeActivation: deleteById('discordBridgeActivations'),
     createOutboundEventWebhook: upsert('outboundEventWebhooks'),
     updateOutboundEventWebhook: upsert('outboundEventWebhooks'),
-    deleteOutboundEventWebhook: resync('outboundEventWebhooks'),
+    deleteOutboundEventWebhook: deleteById('outboundEventWebhooks'),
     createTwitchIrcBotToken: upsert('twitchIrcBotTokens'),
     revokeTwitchIrcBotToken: upsert('twitchIrcBotTokens'),
-    deleteTwitchIrcBotToken: resync('twitchIrcBotTokens'),
+    deleteTwitchIrcBotToken: deleteById('twitchIrcBotTokens'),
     createObsWsPassword: upsert('obsWsPasswords'),
     revokeObsWsPassword: upsert('obsWsPasswords'),
-    deleteObsWsPassword: resync('obsWsPasswords'),
+    deleteObsWsPassword: deleteById('obsWsPasswords'),
     createTwitchExtensionPanel: upsert('twitchExtensionPanels'),
     updateTwitchExtensionPanel: upsert('twitchExtensionPanels'),
-    deleteTwitchExtensionPanel: resync('twitchExtensionPanels'),
+    deleteTwitchExtensionPanel: deleteById('twitchExtensionPanels'),
     createCreatorListing: upsert('creatorListings'),
     updateCreatorListing: upsert('creatorListings'),
-    deleteCreatorListing: resync('creatorListings'),
+    deleteCreatorListing: deleteById('creatorListings'),
     createVaultItem: upsert('vaultItems'),
     updateVaultItem: upsert('vaultItems'),
-    deleteVaultItem: resync('vaultItems'),
+    deleteVaultItem: deleteById('vaultItems'),
     createChannelPointsReward: upsert('channelPointsRewards'),
     updateChannelPointsReward: upsert('channelPointsRewards'),
-    deleteChannelPointsReward: resync('channelPointsRewards'),
+    deleteChannelPointsReward: deleteById('channelPointsRewards'),
     appendChannelPointsLedger: upsert('channelPointsLedger'),
     upsertCoalitionSpatialItem: upsert('coalitionSpatialItems'),
-    deleteCoalitionSpatialItem: resync('coalitionSpatialItems'),
+    // The sweeper deletes the pin it judged expired, and only while Postgres
+    // still holds that version: a pin another process has since rewritten (a
+    // restarted sale) is kept, re-read here, and judged again at the next sweep.
+    deleteCoalitionSpatialItem: targeted({
+        op: 'deleteKey',
+        map: 'coalitionSpatialItems',
+        key: (c) => [c.args[0]],
+        guard: {
+            column: 'updated_at',
+            nullMatchesAny: true,
+            value: (c) => c.before('coalitionSpatialItems', String(c.args[0]))?.updatedAt ?? null,
+        },
+    }),
     createCoalitionAidPost: upsert('coalitionAidPosts'),
     upsertCoalitionEvent: upsert('coalitionEvents'),
     upsertEventRsvp: upsert('eventRsvps'),
@@ -759,8 +1047,22 @@ export const MUTATOR_SPECS: Record<string, MutatorSpec> = {
     upsertCoalitionCampaign: upsert('coalitionCampaigns'),
     upsertCoalitionCampaignPost: upsert('coalitionCampaignPosts'),
     upsertCoalitionExternalActivity: upsert('coalitionExternalActivity'),
-    deleteCoalitionExternalActivity: resync('coalitionExternalActivity'),
-    deleteCoalitionExternalActivities: resync('coalitionExternalActivity'),
+    deleteCoalitionExternalActivity: deleteById('coalitionExternalActivity'),
+    // The retention sweep deletes the replies it judged past due, each only while
+    // Postgres still holds the version it judged. A reply another process has
+    // since changed (a steward's decision restarts its window) is kept and
+    // re-read; the next daily sweep judges it again.
+    deleteCoalitionExternalActivities: targeted({
+        op: 'deleteKeys',
+        map: 'coalitionExternalActivity',
+        keys: (c) =>
+            c
+                .changed('coalitionExternalActivity')
+                .flatMap((ch) =>
+                    ch.after ? [] : [{ kv: [ch.key], guard: ch.before?.updatedAt ?? null }]
+                ),
+        guard: { column: 'updated_at', nullMatchesAny: true },
+    }),
     upsertCoalitionCampaignSyncOptIn: upsert('coalitionCampaignSyncOptIns'),
     upsertCoalitionBoost: upsert('coalitionBoosts'),
     upsertCoalitionCampaignContribution: upsert('coalitionCampaignContributions'),
@@ -792,8 +1094,11 @@ export const MUTATOR_SPECS: Record<string, MutatorSpec> = {
     createCoalitionFeedComment: upsert('coalitionFeedComments'),
     addCircleEdge: upsert('circleEdges'),
     // A withdrawn follow is deleted outright (unlike a relay, which keeps its
-    // row and flips `active`), so the map has to be reconciled, not upserted.
-    removeCircleEdge: resync('circleEdges'),
+    // row and flips `active`): that one (follower, followee) row.
+    removeCircleEdge: deleteKey('circleEdges', ([followerId, followeeId]) => [
+        followerId,
+        followeeId,
+    ]),
     upsertRelayEdge: upsert('relayEdges'),
     upsertCommunityAsset: upsert('communityAssets'),
     upsertCommunityAssetReport: upsert('communityAssetReports'),
@@ -806,12 +1111,12 @@ export const MUTATOR_SPECS: Record<string, MutatorSpec> = {
     addSubscriptionAuditEvent: upsert('subscriptionAuditEvents'),
     markBillingWebhookEventProcessed: upsert('processedBillingWebhookEvents'),
     upsertSubscriptionGift: upsert('subscriptionGifts'),
-    // Whole-set reconciles: enqueue may evict the oldest; replace swaps the set.
-    enqueueMeshEnvelope: resync('meshEnvelopes'),
-    replaceMeshEnvelopes: resync('meshEnvelopes'),
+    enqueueMeshEnvelope: meshEnvelopeWrites(),
+    // Replaces the mirror's whole map: the wrapper diffs the old map against the new.
+    replaceMeshEnvelopes: meshEnvelopeWrites(),
     upsertClip: upsert('clips'),
     updateClip: upsert('clips'),
-    deleteClip: resync('clips'),
+    deleteClip: deleteById('clips'),
     upsertColiseumTopic: upsert('coliseumTopics'),
     upsertSellerProfile: upsert('marketplaceSellerProfiles'),
     createColiseumChallenge: upsert('coliseumChallenges'),
@@ -820,8 +1125,12 @@ export const MUTATOR_SPECS: Record<string, MutatorSpec> = {
     upsertChallengeEntry: upsert('challengeEntries'),
     addChallengeVote: upsert('challengeVotes'),
     upsertColiseumArgument: upsert('coliseumArguments'),
-    // Bulk insert returns void; resync persists every in-memory argument.
-    upsertColiseumArguments: resync('coliseumArguments'),
+    // A score recompute writes each argument it changed, whole; no deletes.
+    upsertColiseumArguments: targeted({
+        op: 'upsertEach',
+        map: 'coliseumArguments',
+        records: (c) => changedRecords(c, 'coliseumArguments'),
+    }),
     upsertColiseumVote: upsert('coliseumVotes'),
     upsertColiseumLiveSession: upsert('coliseumLiveSessions'),
     upsertColiseumMatch: upsert('coliseumMatches'),
@@ -837,7 +1146,7 @@ export const MUTATOR_SPECS: Record<string, MutatorSpec> = {
     upsertColiseumExplainerVote: upsert('coliseumExplainerVotes'),
     createPluginInstallation: upsert('pluginInstallations'),
     updatePluginInstallation: upsert('pluginInstallations'),
-    deletePluginInstallation: resync('pluginInstallations'),
+    deletePluginInstallation: deleteById('pluginInstallations'),
     addReputationEvent: upsert('reputationEvents'),
     createPluginDen: upsert('pluginDens'),
     createCoalitionKitManifestApplication: upsert('coalitionKitManifestApplications'),

@@ -70,7 +70,8 @@ async def _sendmail(
     d: "Deferred[object]" = Deferred()
 
     # Twisted >= 21.2 takes a 'hostname' parameter which enables TLS; the
-    # minimum Twisted is 26.4.0, so the pre-21.2 override is gone.
+    # fork's Twisted floor (pyproject.toml) is far above 21.2, so the pre-21.2
+    # override is gone.
     factory: IProtocolFactory = ESMTPSenderFactory(
         username,
         password,
