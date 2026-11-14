@@ -2,8 +2,8 @@
 // process. Needs a server: set BLACKOUT_TEST_PG_URL to one (a role that may
 // create databases, alter the ones it owns and terminate backends); each test
 // gets its own database. Without it these tests are skipped, and no CI workflow
-// sets it yet (2026-11-08), so they run only where someone points them at a
-// server. pg-pool-client-errors.integration.test.ts runs everywhere with
+// sets it yet (checked 2026-11-14), so they run only where someone points them
+// at a server. pg-pool-client-errors.integration.test.ts runs everywhere with
 // stand-in connections that fail in the orders pg 8.20.0 uses; it has no
 // stand-in for three things only this file checks: pg's own ordering of a real
 // drop, the API exiting 1 through its drain when its leader-lock connection
@@ -580,6 +580,88 @@ test(
         assert.equal(logged(lines, 'db_write_behind_retry').length, 1);
         const { rows } = await a.query('SELECT id, v FROM probe_wb');
         assert.deepEqual(rows, [{ id: 'a', v: 'written' }]);
+    }
+);
+
+test(
+    'a targeted write whose backend is terminated under its COMMIT lands on the retry',
+    { skip },
+    async (t) => {
+        const lines = captureWarnings(t);
+        const database = await newDatabase();
+        const pool = await sharedPool(database);
+        t.after(() => endPool(pool));
+        const a = await admin(urlFor(database));
+        t.after(() => a.end());
+        // A deferred constraint trigger that takes an advisory lock: a COMMIT
+        // that deleted a row waits while the test holds that lock.
+        await a.query('CREATE TABLE probe_wb (id text PRIMARY KEY, v text)');
+        await a.query(`INSERT INTO probe_wb VALUES ('a', 'old'), ('b', 'old')`);
+        await a.query(
+            `CREATE FUNCTION probe_wait() RETURNS trigger LANGUAGE plpgsql AS
+               $$ BEGIN PERFORM pg_advisory_xact_lock(4242); RETURN NULL; END $$`
+        );
+        await a.query(
+            `CREATE CONSTRAINT TRIGGER probe_wait AFTER DELETE ON probe_wb
+               DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION probe_wait()`
+        );
+        const columns = await (async () => {
+            const c = await pool.connect();
+            try {
+                return await introspectColumns(c as never, 'probe_wb');
+            } finally {
+                c.release();
+            }
+        })();
+        const plan = {
+            descriptor: {
+                mapName: 'probe',
+                tableName: 'probe_wb',
+                keyOf: (r: Record<string, unknown>) => String(r.id),
+                conflictColumns: ['id'],
+            },
+            columns,
+            columnNames: new Set(columns.map((c) => c.name)),
+        };
+        const queue = new WriteBehindQueue(pool as never, new Map([['probe', plan]]) as never);
+
+        // Hold the op's COMMIT on the lock, terminate only its backend, then let
+        // go: Postgres stays reachable throughout.
+        const locker = await admin(urlFor(database));
+        t.after(() => locker.end());
+        await locker.query('SELECT pg_advisory_lock(4242)');
+        queue.enqueueTargeted({
+            method: 'deleteProbe',
+            statements: [
+                {
+                    map: 'probe',
+                    sql: 'DELETE FROM probe_wb WHERE id = $1 RETURNING id',
+                    params: ['a'],
+                    required: false,
+                },
+            ],
+            touched: new Map([['probe', new Map([['a', ['a']]])]]),
+        });
+        let blocked: number[] = [];
+        const deadline = Date.now() + 5_000;
+        while (blocked.length === 0 && Date.now() < deadline) {
+            const { rows } = await a.query(
+                `SELECT pid FROM pg_stat_activity WHERE datname = current_database()
+                  AND wait_event_type = 'Lock' AND query = 'COMMIT'`
+            );
+            blocked = rows.map((r) => r.pid as number);
+            if (blocked.length === 0) await sleep(20);
+        }
+        assert.equal(blocked.length, 1, 'the COMMIT blocked on the lock');
+        assert.deepEqual(await terminate(database, 'pid = $1', [blocked[0]]), blocked);
+        await sleep(50);
+        await locker.query('SELECT pg_advisory_unlock(4242)');
+        await queue.drain();
+
+        assert.deepEqual(logged(lines, 'db_write_behind_failed'), [], 'the write was not dropped');
+        assert.equal(logged(lines, 'db_write_behind_retry').length, 1);
+        const { rows } = await a.query('SELECT id FROM probe_wb ORDER BY id');
+        assert.deepEqual(rows, [{ id: 'b' }]);
     }
 );
 

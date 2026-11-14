@@ -7,10 +7,12 @@
 // itself unqueryable, then emits 'error' (pg's Client._handleErrorEvent); or,
 // for a server FATAL that arrives while a query is in flight, it rejects that
 // query and stays queryable until its socket closes (Client._handleErrorMessage,
-// then the 'end' handler). When the socket closes, pg emits 'error' only if
-// nobody has ended the client (the 'end' handler checks client._ending), and
-// pg-pool ends every client it discards; the stand-ins do the same. The same
-// drops against a real server are in
+// then the 'end' handler). A query sent in between waits: no ReadyForQuery
+// follows a FATAL, so pg queues it and fails it when the socket closes, by
+// which time the client is marked unusable. When the socket closes, pg emits
+// 'error' only if nobody has ended the client (the 'end' handler checks
+// client._ending), and pg-pool ends every client it discards; the stand-ins do
+// the same. The same drops against a real server are in
 // pg-pool-client-errors-postgres.integration.test.ts.
 import test, { afterEach } from 'node:test';
 import assert from 'node:assert/strict';
@@ -49,7 +51,11 @@ class FakeConnection extends EventEmitter {
     /** The server ended this backend; the socket has not closed yet. */
     private dead = false;
     private fatalOnNextQuery: Error | null = null;
+    /** Only a query whose text matches gets the FATAL (terminateUnderQuery). */
+    private fatalWhen: RegExp | null = null;
     private socketClosesAfterMs = 30;
+    /** Queries sent after the FATAL, failed when the socket closes. */
+    private queued: Array<(err: Error) => void> = [];
     readonly connectionParameters: Record<string, unknown>;
 
     constructor(options: { connectionString?: string }) {
@@ -71,13 +77,16 @@ class FakeConnection extends EventEmitter {
         if (!this._queryable) {
             throw new Error('Client has encountered a connection error and is not queryable');
         }
-        if (this.dead) throw new Error('Connection terminated unexpectedly');
-        const fatal = this.fatalOnNextQuery;
+        if (this.dead) {
+            return new Promise((_resolve, reject) => this.queued.push(reject));
+        }
+        const fatal = this.fatalWhen && !this.fatalWhen.test(sql) ? null : this.fatalOnNextQuery;
         if (fatal) {
             // The server's FATAL goes to the query in flight; pg leaves the
             // client queryable until the socket closes, a moment later, and
             // emits 'error' then only if nobody has ended the client.
             this.fatalOnNextQuery = null;
+            this.fatalWhen = null;
             this.dead = true;
             setTimeout(() => this.socketClosed(), this.socketClosesAfterMs);
             throw fatal;
@@ -107,6 +116,12 @@ class FakeConnection extends EventEmitter {
         this.socketClosesAfterMs = socketClosesAfterMs;
     }
 
+    /** The server ends this backend while the next query matching `sql` is in flight. */
+    terminateUnderQuery(sql: RegExp, err: Error, socketClosesAfterMs = 30): void {
+        this.terminateUnderNextQuery(err, socketClosesAfterMs);
+        this.fatalWhen = sql;
+    }
+
     end(callback?: () => void): void {
         this._ending = true;
         this.ended = true;
@@ -119,8 +134,15 @@ class FakeConnection extends EventEmitter {
         this.emit('error', err);
     }
 
-    /** The socket closes: pg reports it only if nobody has ended the client. */
+    /**
+     * The socket closes: pg fails every query still waiting, then reports the
+     * drop (marking the client unusable) only if nobody has ended the client.
+     */
     socketClosed(): void {
+        const err = new Error(
+            this._ending ? 'Connection terminated' : 'Connection terminated unexpectedly'
+        );
+        for (const reject of this.queued.splice(0)) reject(err);
         if (!this._ending) this.fail(new Error('Connection terminated unexpectedly'));
     }
 }
@@ -517,6 +539,50 @@ test('a write whose backend the server ends under its query is retried on a new 
     );
 });
 
+/**
+ * A targeted op (one mutator call's statements) runs as one transaction on one
+ * checkout. A FATAL under a statement inside it is followed by a ROLLBACK,
+ * which pg queues until the socket closes, so by the time the client goes back
+ * pg has marked it unusable; a FATAL under BEGIN or COMMIT is not, and only the
+ * error given back with the client keeps the retry off it.
+ */
+for (const [step, sql] of [
+    ['BEGIN', /^BEGIN/],
+    ['COMMIT', /^COMMIT/],
+] as const) {
+    test(`a targeted write whose backend the server ends under its ${step} is retried on a new connection, not the dead one`, async (t) => {
+        const lines = captureLogs(t);
+        const pool = (openPool = await sharedPoolOfFakes());
+        (await pool.connect()).release();
+        const first = FakeConnection.made[0];
+        first.terminateUnderQuery(sql, terminated());
+        const queue = new WriteBehindQueue(pool as never, new Map([['probe', probePlan]]) as never);
+        queue.enqueueTargeted({
+            method: 'deleteProbe',
+            statements: [
+                {
+                    map: 'probe',
+                    sql: 'DELETE FROM probe_wb WHERE id = $1 RETURNING id',
+                    params: ['a'],
+                    required: false,
+                },
+            ],
+            touched: new Map([['probe', new Map([['a', ['a']]])]]),
+        });
+        await queue.drain();
+
+        assert.deepEqual(logged(lines, 'db_write_behind_failed'), [], 'the write was not dropped');
+        assert.equal(logged(lines, 'db_write_behind_retry').length, 1);
+        assert.equal(first.ended, true, 'the dead connection was destroyed, not pooled');
+        const commits = FakeConnection.executed.filter((e) => e.sql === 'COMMIT');
+        assert.deepEqual(
+            commits.map((c) => c.connection),
+            [1],
+            'the retry committed on a new connection'
+        );
+    });
+}
+
 /** A pool for PostgresBackedDb that can refuse new connections; one table, users. */
 const storePool = () => {
     const state = {
@@ -559,7 +625,7 @@ const storePool = () => {
     return { pool, state };
 };
 
-type Payload = { src: string; m: string; op: 'u' | 'r'; kv?: string[] };
+type Payload = { src: string; m: string; op: 'u' | 'k' | 'r'; kv?: string[]; kvs?: string[][] };
 
 /** A change transport whose peer changes and reconnects the test delivers. */
 const stubTransport = () => {
@@ -578,7 +644,7 @@ const stubTransport = () => {
     return stub;
 };
 
-test('a peer change or a re-hydrate that cannot get a connection does not end the process, and the re-hydrate is retried', async (t) => {
+test('a peer change or a re-hydrate that cannot get a connection does not end the process, and the re-hydrate is retried, one retry at a time', async (t) => {
     const rejections = captureUnhandledRejections(t);
     const lines = captureLogs(t);
     const { pool, state } = storePool();
@@ -591,14 +657,19 @@ test('a peer change or a re-hydrate that cannot get a connection does not end th
     // new one, and Postgres refuses it (connection limit, starting up, network).
     state.refuse = true;
     transport.peer({ src: 'peer-replica', m: 'users', op: 'r' });
+    // The listener reconnects twice during the outage (each reconnect asks for
+    // a re-hydrate), and both re-hydrates fail.
+    transport.reconnect();
     transport.reconnect();
     await sleep(100);
     assert.deepEqual(rejections, [], 'no unhandled rejection');
     const [peer] = logged(lines, 'pg_store_peer_refresh_failed');
     assert.equal(peer?.map, 'users');
     assert.match(String(peer?.error), /too many connections/);
-    const [rehydrate] = logged(lines, 'pg_store_rehydrate_failed');
-    assert.equal(rehydrate?.retryInMs, REHYDRATE_RETRY_MS);
+    const failed = logged(lines, 'pg_store_rehydrate_failed');
+    assert.equal(failed.length, 2);
+    assert.equal(failed[0].retryInMs, REHYDRATE_RETRY_MS);
+    const connectsBeforeRetry = state.connects;
 
     // Postgres takes connections again, and holds a user this mirror missed.
     state.refuse = false;
@@ -606,7 +677,9 @@ test('a peer change or a re-hydrate that cannot get a connection does not end th
     const deadline = Date.now() + REHYDRATE_RETRY_MS + 3_000;
     while (!store.getUserById('u-missed') && Date.now() < deadline) await sleep(50);
     assert.equal(store.getUserById('u-missed')?.username, 'missed', 'the retry re-hydrated');
-    assert.equal(logged(lines, 'pg_store_rehydrate_failed').length, 1, 'no retry once it worked');
+    await sleep(300);
+    assert.equal(state.connects, connectsBeforeRetry + 1, 'one retry for both failures');
+    assert.equal(logged(lines, 'pg_store_rehydrate_failed').length, 2, 'no retry once it worked');
     assert.deepEqual(rejections, []);
 });
 
@@ -637,12 +710,13 @@ test('shutdown() stops a pending re-hydrate retry', async (t) => {
 
 /**
  * The other checkouts in the running app give their client back the same way as
- * the write-behind queue (db/pooledClient.ts): the store's load at boot, a change
- * notification and migrate.ts's four functions here, and the store's two
- * checkouts after boot in the block after this one. Each case starts with one
- * healthy connection idle in the pool, as after any earlier query, and the
- * server ends that backend under the case's first query; the socket has not
- * closed yet when the next checkout comes.
+ * the write-behind queue (db/pooledClient.ts): the store's load at boot (and
+ * the check of its targeted statements that ends it), a change notification
+ * and migrate.ts's four functions here, and the store's checkouts after boot
+ * in the block after this one. Each case starts with one healthy connection
+ * idle in the pool, as after any earlier query, and the server ends that
+ * backend under the case's first query (or the one it names); the socket has
+ * not closed yet when the next checkout comes.
  */
 const checkoutCases: Array<[string, (pool: SharedPool, lines: string[]) => Promise<void>]> = [
     [
@@ -652,6 +726,25 @@ const checkoutCases: Array<[string, (pool: SharedPool, lines: string[]) => Promi
             await assert.rejects(
                 store.init(pool as never, stubTransport() as never),
                 /terminating/
+            );
+        },
+    ],
+    [
+        "the store's boot check of its targeted statements (PostgresBackedDb.init, the PREPARE transaction)",
+        async (pool) => {
+            // The load succeeds; the server ends the backend under the BEGIN
+            // of the transaction that PREPAREs each targeted statement.
+            FakeConnection.made[0].terminateUnderQuery(/^BEGIN/, terminated(), 1_000);
+            const store = new PostgresBackedDb();
+            await assert.rejects(
+                store.init(pool as never, stubTransport() as never),
+                /terminating/
+            );
+            assert.ok(
+                FakeConnection.executed.some(
+                    (e) => e.connection === 0 && e.sql.startsWith('SELECT * FROM users')
+                ),
+                'the load ran on that connection first'
             );
         },
     ],
@@ -728,8 +821,10 @@ for (const [name, run] of checkoutCases) {
 }
 
 /**
- * The store's checkouts after boot, which run un-awaited: the re-hydrate after
- * each LISTEN reconnect, and the read-back of each peer change. The store loads
+ * The store's checkouts after boot, which run un-awaited on its apply chain:
+ * the re-hydrate after each LISTEN reconnect, the read-back by key of a peer's
+ * change ('u' or 'k'; a re-read of this process's own keys after a targeted
+ * write takes the same path), and the reload of a table ('r'). The store loads
  * at boot on one healthy connection, which goes back to the pool idle, and the
  * server ends that backend under the next query. The peer-change and re-hydrate
  * tests above use a pool whose release() ignores its argument, so they cannot
@@ -746,6 +841,17 @@ const afterBootCases: Array<
     [
         'a peer change read back from Postgres (PostgresBackedDb.applyPeerChange)',
         (transport) => transport.peer({ src: 'peer-replica', m: 'users', op: 'u', kv: ['u1'] }),
+        'pg_store_peer_refresh_failed',
+    ],
+    [
+        "a peer's change to several keys read back by key (PostgresBackedDb.refreshKeys, op k)",
+        (transport) =>
+            transport.peer({ src: 'peer-replica', m: 'users', op: 'k', kvs: [['u1'], ['u2']] }),
+        'pg_store_peer_refresh_failed',
+    ],
+    [
+        "a peer's table reload (PostgresBackedDb.reloadTable, op r)",
+        (transport) => transport.peer({ src: 'peer-replica', m: 'users', op: 'r' }),
         'pg_store_peer_refresh_failed',
     ],
 ];
