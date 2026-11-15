@@ -478,6 +478,11 @@ test('the envelope’s form, the owner, the bounds, the identities and the signa
         [{ gracePeriodSeconds: -1 }, /gracePeriodSeconds/],
         [{ gracePeriodSeconds: 60 * 60 * 24 * 30 + 1 }, /gracePeriodSeconds/],
         [{ label: 'x'.repeat(281) }, /label/],
+        // PostgreSQL stores no U+0000 in a text value, so a label holding
+        // one is refused here in every store mode (round 21 of part 2's
+        // review: in Postgres mode it was a 500 every time).
+        [{ label: 'a\u0000b' }, /label must not contain the character U\+0000/],
+        [{ label: '\u0000' }, /U\+0000/],
     ] as const) {
         const refused = await errorOf(
             await arm(alice, armBody(envelope, overrides)),

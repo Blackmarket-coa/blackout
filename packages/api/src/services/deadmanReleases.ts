@@ -203,7 +203,17 @@ const availabilityFields = (): Pick<
         : { armingAvailable: false, armingUnavailableReason: availability.reason };
 };
 
-/** The timer and label, in the bounds of today; the message says which is out. */
+/**
+ * The timer and label, in the bounds of today; the message says which is out.
+ * A label holding U+0000 is refused: PostgreSQL stores no such character in
+ * a text value, so the arm's statement was refused by the database every
+ * time (round 21 of part 2's review: the owner got a 500 for ever, each try
+ * left the copy rows it had written, and since round 20 also held every
+ * other owner's switch statements for the length of a read). The label is
+ * the only free text an arm or a re-seal carries: every field of the
+ * envelope and of a copy is checked against its own pattern
+ * (`parseReleaseEnvelope`, `parseReleaseCopy`), none of which admits it.
+ */
 export const validateReleaseTimer = (input: {
     checkInIntervalSeconds: number;
     gracePeriodSeconds: number;
@@ -225,6 +235,9 @@ export const validateReleaseTimer = (input: {
     }
     if (input.label !== undefined && input.label.length > DEADMAN_LABEL_MAX_LENGTH) {
         return `label must be at most ${DEADMAN_LABEL_MAX_LENGTH} characters`;
+    }
+    if (input.label !== undefined && input.label.includes('\u0000')) {
+        return 'label must not contain the character U+0000';
     }
     return null;
 };
@@ -499,6 +512,12 @@ export type ArmReleaseOutcome =
     | { kind: 'write_unanswered' }
     /** The switch's write failed and a read afterwards found no switch: nothing is armed. */
     | { kind: 'write_failed' }
+    /**
+     * The database refused the arm's statement itself (an error it answered
+     * for the statement, Postgres only): nothing was written, no switch and
+     * no copy.
+     */
+    | { kind: 'write_refused' }
     | OwnerIdentityRefusal
     | RecipientRefusal
     | { kind: 'invalid_signature'; recipientAccountId: string };
@@ -506,7 +525,8 @@ export type ArmReleaseOutcome =
 /**
  * Arm a release switch for `ownerId` (§8, "the API, on arming"), in this
  * order: the envelope's form; the caller is its owner; the timer and label
- * are in bounds; the owner has room for one more release switch with content
+ * are in bounds and the label holds no U+0000 (`validateReleaseTimer`); the
+ * owner has room for one more release switch with content
  * held (`held_limit`) and has not armed `DEADMAN_MAX_ARMS_PER_DAY` in the
  * last 24 hours (`rate_limited`, with how long until one fits); the owner
  * has a current identity; every other copy names an account here whose
@@ -521,12 +541,13 @@ export type ArmReleaseOutcome =
  * current identity is still the one checked (the owner's deletion erases
  * the identities in the same synchronous step as the account, so an arm whose
  * owner was deleted during the signatures is refused here). The rows are
- * then written in one awaited store call, each of its
- * statements awaited in Postgres, the copies first and the switch last, and
- * nothing deletes a copy, so a crash between them, a failed arm or one that
- * finds the id taken leaves copies without a switch, which nothing lists or
- * serves, rather than a switch without copies, which would fire and release
- * to nobody. The bounds and the identities are checked twice on purpose:
+ * then written in one awaited store call, which in Postgres is one
+ * statement: the switch insert-only and its copies only where that insert
+ * took, so the database holds the switch with every copy or nothing of the
+ * arm, never a switch without copies, which would fire and release to
+ * nobody, and never copies without a switch (round 21 of part 2's review:
+ * the copies were written first and stayed where the switch's insert was
+ * refused). The bounds and the identities are checked twice on purpose:
  * before the signatures, so a refused arm costs no verification, and after
  * them, because a burst of arms that all passed the first checks against the
  * same counts resumes here one at a time, and a recipient may have rotated
@@ -619,15 +640,14 @@ export const armReleaseSwitch = async (input: {
         checkInIntervalSeconds: input.input.checkInIntervalSeconds,
         gracePeriodSeconds: input.input.gracePeriodSeconds,
     });
-    // One store call writes the copies first (over any row of the same key)
-    // and the switch last, insert-only (`armDeadmanSwitch`): in Postgres on
-    // one connection, awaited, so the switch is in the database before the
-    // owner is answered; a stop between the rows, a failed arm or one that
-    // finds the id taken leaves copies that no switch names (listed and
-    // served by nothing; nothing deletes them, since another process's switch
-    // for the same envelope may rely on them: round 12 of part 2's review)
-    // and never a switch without its copies, which would fire and release to
-    // nobody; and a write that fails arms nothing the store lists unless the
+    // One store call writes the switch, insert-only, and its copies
+    // (`armDeadmanSwitch`): in Postgres one statement, awaited, so the
+    // switch and every copy are in the database before the owner is
+    // answered, or nothing of the arm is; an arm that finds the id taken
+    // writes nothing and deletes nothing, so the copies the switch with that
+    // id relies on stay as they were (round 12 of part 2's review); one the
+    // database refuses leaves nothing (round 21: its copies stayed); and a
+    // write that fails arms nothing the store lists unless the
     // switch is found in the database afterwards (round 11: the owner was
     // answered 201 before the write-behind upsert ran, and a dropped one left
     // a switch only that process listed, which in the deployed layout never
@@ -689,6 +709,8 @@ export const armReleaseSwitch = async (input: {
             return { kind: 'write_unanswered' };
         case 'failed':
             return { kind: 'write_failed' };
+        case 'refused':
+            return { kind: 'write_refused' };
     }
 };
 

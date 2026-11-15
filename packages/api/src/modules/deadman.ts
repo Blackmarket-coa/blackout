@@ -136,11 +136,20 @@ const switchChanged = (c: Context) =>
  * failed it (`updateDeadmanSwitchIf`, `armDeadmanSwitch`): one that was sent
  * may or may not have been recorded. After one that failed, the switch has
  * been read back where the database answered that read within the bound, so
- * this process then holds what the database holds (a cancel it had recorded
- * shows cancelled); one not yet read back, and one that lands or fails
- * later, is read until a read answers, and nothing of it is in this
+ * this process then holds what the database held at that read (a cancel it
+ * had recorded shows cancelled); one not yet read back, and one that lands
+ * or fails later, is read until a read answers, and nothing of it is in this
  * process's memory until then (round 20 of part 2's review: a failed one
- * was read back by nothing). One refused at once because another switch
+ * was read back by nothing). A check-in or cancel the database applies only
+ * after that read (it was still running it when the connection was lost) is
+ * found when the refused attempt is then written onto the switch, which the
+ * database refuses over the applied row, and the switch is read once more
+ * (round 21); one the database begins only after that too is not seen by
+ * this process until the owner's next check-in or cancel of the switch, a
+ * refresh of it, a restart or the deadline, so the answer says to try
+ * again, which is what brings it in. A check-in or cancel the database
+ * refuses outright (an error it answers for the statement itself) is also
+ * answered here: it was not recorded. One refused at once because another switch
  * statement stood unanswered, or a failed one's switch unread, was not sent,
  * so it was not recorded. Doing a check-in or a cancel again is safe, since
  * each is conditional on the switch as it is read; an arm done again with
@@ -160,20 +169,40 @@ const switchWriteUnanswered = (c: Context, what: 'check-in' | 'cancel' | 'arm') 
     );
 
 /**
- * The arm's statement failed, and the switch read again afterwards was not
- * there: nothing is armed (a statement the database was still running when
- * its client was lost can commit after that read; no process then knows of
- * the switch, and no bound counts it, until the next arm of the same
- * envelope that reaches the store finds it and answers `release_id_taken`,
- * with the switch in the owner's list, or a process restarts; the bounds are
- * checked before the store is asked, so an owner who has reached one since
- * is refused by it first).
+ * The arm's statement failed with its outcome unknown, and the switch read
+ * again afterwards was not there: nothing is armed (a statement the database
+ * was still running when its client was lost can commit after that read; no
+ * process then knows of the switch, and no bound counts it, until the next
+ * arm of the same envelope that reaches the store finds it and answers
+ * `release_id_taken`, with the switch in the owner's list, or a process
+ * reads every table again, which it does when it starts and when its change
+ * subscription reconnects, and from then lists, counts and fires it; the
+ * bounds are checked before the store is asked, so an owner who has reached
+ * one since is refused by it first).
  */
 const switchWriteFailed = (c: Context) =>
     c.json(
         {
             code: 'switch_write_failed',
             message: 'The server could not record the switch and finds nothing armed; try again.',
+        },
+        500
+    );
+
+/**
+ * The database refused the arm's statement itself, with an error it answered
+ * for the statement (its data, a constraint, the schema): the statement did
+ * not apply, so no switch and no sealed copy was written, and none can land
+ * later. No request the route accepts is known to cause it (a label holding
+ * U+0000 did, and is now a 400: round 21 of part 2's review), so it says
+ * something is wrong on the server's side, and the same request may be
+ * refused again.
+ */
+const switchWriteRefused = (c: Context) =>
+    c.json(
+        {
+            code: 'switch_write_refused',
+            message: 'The database refused the switch as it was sent; nothing is armed.',
         },
         500
     );
@@ -497,6 +526,8 @@ const armResponse = (c: Context, outcome: ArmReleaseOutcome, subject: string) =>
             return switchWriteUnanswered(c, 'arm');
         case 'write_failed':
             return switchWriteFailed(c);
+        case 'write_refused':
+            return switchWriteRefused(c);
         default:
             return identityResponse(c, outcome);
     }
@@ -517,6 +548,7 @@ const identityResponse = (
         | { kind: 'id_taken' }
         | { kind: 'write_unanswered' }
         | { kind: 'write_failed' }
+        | { kind: 'write_refused' }
     >
 ) => {
     switch (outcome.kind) {

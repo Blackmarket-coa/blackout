@@ -34,7 +34,11 @@ export type DeadmanReleaseArmRequest = {
     format: typeof DEADMAN_RELEASE_FORMAT;
     checkInIntervalSeconds: number;
     gracePeriodSeconds: number;
-    /** Shown to the owner only; the server can read it. */
+    /**
+     * Shown to the owner only; the server can read it. At most
+     * `DEADMAN_LABEL_MAX_LENGTH` UTF-16 units, and no U+0000 (the server's
+     * database stores none in text): either is refused 400.
+     */
     label?: string;
     envelope: ReleaseEnvelope;
 };
