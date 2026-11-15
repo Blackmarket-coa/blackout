@@ -1,5 +1,5 @@
 import type { PgClient, PgPool } from '../db/migrate';
-import { exemptFromIdleSessionTimeout, restoreIdleSessionTimeout } from '../db/pooledClient';
+import { raiseIdleSessionTimeoutTo, restoreIdleSessionTimeout } from '../db/pooledClient';
 import { getSharedPgPool } from '../config/postgres';
 import { RUNTIME_DB_MODE } from '../db/store';
 import { log } from '../telemetry/logger';
@@ -28,6 +28,13 @@ export const BACKGROUND_LEADER_LOCK_KEY = 0x424c4f42;
 /** How often a watched lock is re-checked, and how long one check may take. */
 export const DEFAULT_LEADER_CHECK_INTERVAL_MS = 10_000;
 export const DEFAULT_LEADER_CHECK_TIMEOUT_MS = 5_000;
+/**
+ * The shortest idle_session_timeout a watched lock connection is left under,
+ * in lock-check intervals (30 s with the default interval): a lock check can
+ * then come up to two intervals late before the server ends the session of a
+ * process that is still there.
+ */
+export const LEADER_IDLE_SESSION_FLOOR_CHECKS = 3;
 
 /**
  * The held connection. A pg pool client is also an EventEmitter, and passing
@@ -87,17 +94,12 @@ export const acquireBackgroundLeaderLock = async (pool: PgPool): Promise<boolean
         return false;
     }
     leaderClient = client;
-    // Held idle between lock checks, so it would sit idle past an idle-session
-    // timeout shorter than the check interval. Only once the lock is held: a
-    // connection that did not get it has gone back to the pool as it came.
-    // Sent, not waited for. The caller watches the lock from the moment this
-    // returns, and a connection reset while the statement was out would
-    // report its drop during the wait, before any watch was on it: the
-    // process would then run the loops without the lock until the first lock
-    // check, 10 s later. The connection answers its statements in the order
-    // sent, so this one is answered before the first lock check and before
-    // the unlock.
-    void exemptFromIdleSessionTimeout(client);
+    // Nothing more is sent or waited for here. The caller watches the lock
+    // from the moment this returns, and a connection reset during a wait
+    // would report its drop before any watch was on it: the process would
+    // then run the loops without the lock until the first lock check, 10 s
+    // later. What the connection needs against the server's idle-session
+    // timeout is sent by the watch, once it listens.
     log.info('background_leader_acquired', {});
     return true;
 };
@@ -126,6 +128,16 @@ const ignoreError = (): void => undefined;
  * lock, so every holder watches: the worker exits 1, and an API that runs the
  * loops in-process stops them and tries for the lock again
  * (src/inProcessBackgroundLoops.ts).
+ *
+ * The lock check is also what keeps the session from sitting idle, so the
+ * watch is what deals with the server's idle_session_timeout. One shorter
+ * than a check interval ends the session of a live leader between two checks,
+ * and one not much longer does when a check comes late. So one shorter than
+ * LEADER_IDLE_SESSION_FLOOR_CHECKS check intervals is raised to that floor
+ * for this session, and the release puts it back. One that long or longer is
+ * left alone, and so is a server with none. The session is never exempted: a
+ * timeout is what ends it, and frees the lock for another process, when this
+ * process is gone and the server has not seen it go.
  */
 export const watchBackgroundLeadership = (
     onLost: (reason: string) => void,
@@ -187,6 +199,13 @@ export const watchBackgroundLeadership = (
     const interval = setInterval(() => void check(), checkIntervalMs);
     if (typeof interval.unref === 'function') interval.unref();
     leaderWatches.add(stop);
+    // After the listeners: a connection reset under one of its statements is
+    // then reported as a loss at once. Not waited for, and it never rejects.
+    void raiseIdleSessionTimeoutTo(
+        client,
+        LEADER_IDLE_SESSION_FLOOR_CHECKS * checkIntervalMs,
+        () => watching
+    );
     return stop;
 };
 
@@ -203,13 +222,13 @@ export const releaseBackgroundLeader = async (): Promise<void> => {
     for (const stop of [...leaderWatches]) stop();
     try {
         await client.query('SELECT pg_advisory_unlock($1)', [BACKGROUND_LEADER_LOCK_KEY]);
-        // An ordinary pooled connection from here on, under the server's
-        // idle-session timeout again.
+        // An ordinary pooled connection from here on, under the server's own
+        // idle-session timeout again if the watch raised it.
         await restoreIdleSessionTimeout(client);
     } catch (err) {
         // The lock goes when the connection drops, so a connection whose unlock
         // failed is destroyed, never pooled with the lock possibly still held;
-        // nor is one pooled that is still exempt from the timeout.
+        // nor is one pooled whose raised timeout could not be put back.
         client.release?.(asError(err));
         return;
     }

@@ -15,13 +15,16 @@
 //     a real server: staying up, stopping its loops and taking the lock again
 //     when its leader-lock connection drops, and draining to exit 0 on SIGTERM
 //     when the connection it held the lock on drops during the drain;
-//   - a real server's idle_session_timeout: sparing the two connections that
-//     turn it off for themselves, and ending the pool's other idle ones.
+//   - a real server's idle_session_timeout: sparing the LISTEN connection,
+//     which turns it off for itself, and the leader lock's, which raises one
+//     too short for its lock checks; ending the pool's other idle ones; and
+//     ending a lock session whose process is gone without the server seeing
+//     it, at the raised timeout.
 //
 // A backend is dropped the ways production sees it: pg_terminate_backend (what
 // a restart or a failover does to a session), the server's own
 // idle_session_timeout, and a TCP reset from a proxy in front of the server (a
-// network fault).
+// network fault), on both sides or on the process's side only.
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
@@ -139,6 +142,58 @@ const withIdleSessionTimeout = (url: string, timeout: string): string => {
     const u = new URL(url);
     u.searchParams.set('options', `-c idle_session_timeout=${timeout}`);
     return u.toString();
+};
+
+/**
+ * A TCP proxy in front of the server at `target`. orphan() resets every
+ * connection on the process's side and leaves the server's side open, so the
+ * server is not told that its client is gone: what a firewall or NAT that
+ * loses a connection's state does, or a host that goes away without closing.
+ */
+const orphaningProxy = async (target: URL) => {
+    const pairs = new Set<{ down: net.Socket; up: net.Socket }>();
+    const orphans: net.Socket[] = [];
+    const server = net.createServer((down) => {
+        const up = net.connect(Number(target.port || 5432), target.hostname);
+        const pair = { down, up };
+        pairs.add(pair);
+        down.pipe(up);
+        up.pipe(down);
+        const done = () => {
+            if (!pairs.delete(pair)) return;
+            down.destroy();
+            up.destroy();
+        };
+        for (const socket of [down, up]) {
+            socket.on('error', done);
+            socket.on('close', done);
+        }
+    });
+    await new Promise<void>((r) => server.listen(0, '127.0.0.1', () => r()));
+    const via = new URL(target.toString());
+    via.hostname = '127.0.0.1';
+    via.port = String((server.address() as net.AddressInfo).port);
+    return {
+        url: via.toString(),
+        /** Returns how many connections were orphaned. */
+        orphan(): number {
+            const open = [...pairs];
+            for (const pair of open) {
+                pairs.delete(pair);
+                pair.down.unpipe(pair.up);
+                pair.up.unpipe(pair.down);
+                // What the server still sends is read and dropped.
+                pair.up.resume();
+                pair.down.resetAndDestroy();
+                orphans.push(pair.up);
+            }
+            return open.length;
+        },
+        async close(): Promise<void> {
+            for (const up of orphans) up.destroy();
+            await new Promise<void>((r) => server.close(() => r()));
+        },
+    };
 };
 
 /** console.warn and console.error lines while the test runs. */
@@ -469,7 +524,9 @@ test(
         assert.equal(held.length, 2, 'the LISTEN session and the lock session');
 
         // Four timeout periods. Nothing is sent on either meanwhile: LISTEN is
-        // the last statement on one, and the first lock check is 10 s away.
+        // the last statement on one, which has turned the timeout off for
+        // itself; the other raised it to 30 s when the watch began, and its
+        // first lock check is 10 s away.
         await sleep(4_000);
         assert.deepEqual(await connected(held), held, 'both sessions are still connected');
         const idle = await a.query(
@@ -498,21 +555,21 @@ test(
 );
 
 test(
-    "a network reset while the leader-lock connection's idle-session statement is out is reported by the watch at once, not at the next lock check",
+    "a network reset while the leader-lock connection's idle-session read is out is reported by the watch at once, not at the next lock check",
     { skip },
     async (t) => {
         const lines = captureWarnings(t);
         const database = await newDatabase();
         const target = new URL(urlFor(database));
-        // A proxy that resets the connection the idle-session statement comes
-        // down, instead of passing the statement on. Only the lock's
-        // connection sends it here.
+        // A proxy that resets the connection the read of the idle-session
+        // timeout comes down, instead of passing the statement on. Only the
+        // lock's connection sends it here.
         let resets = 0;
         const proxy = net.createServer((down) => {
             const up = net.connect(Number(target.port || 5432), target.hostname);
             up.on('data', (d) => down.write(d));
             down.on('data', (d) => {
-                if (d.includes('SET idle_session_timeout')) {
+                if (d.includes("FROM pg_settings WHERE name = 'idle_session_timeout'")) {
                     resets += 1;
                     down.resetAndDestroy();
                     return;
@@ -538,16 +595,17 @@ test(
             await new Promise<void>((r) => proxy.close(() => r()));
         });
 
-        // The lock is taken, and reported taken without waiting for the
-        // statement; its caller watches it from that moment, as the API and
-        // the worker do.
+        // The lock is taken, and reported taken with nothing about the timeout
+        // sent or waited for; its caller watches it from that moment, as the
+        // API and the worker do, and the watch sends the read once it listens.
         assert.equal(await acquireBackgroundLeaderLock(pool as never), true);
         const lost: string[] = [];
         watchBackgroundLeadership((reason) => lost.push(reason));
         // pg reports the reset on the client before it fails the statement in
-        // flight. Waited for, the statement kept the watch off the connection
-        // until after that report, and the process believed it held a lock it
-        // had lost until the first lock check, 10 s later.
+        // flight. Waited for before the lock was reported taken, the statement
+        // kept the watch off the connection until after that report, and the
+        // process believed it held a lock it had lost until the first lock
+        // check, 10 s later.
         await waitFor(() => lost.length === 1, 'the watch to report the loss', 3_000);
         assert.equal(resets, 1);
         assert.deepEqual(lost, ['connection_error']);
@@ -577,6 +635,80 @@ test(
             if (!free) await sleep(20);
         }
         assert.ok(free, 'nobody holds the lock in Postgres');
+    }
+);
+
+test(
+    'a leader-lock session under an idle_session_timeout shorter than its lock checks is kept while its process is there; once the process is gone without the server seeing it, the server ends the session at the raised timeout and the lock is free',
+    { skip, timeout: 60_000 },
+    async (t) => {
+        captureWarnings(t);
+        const database = await newDatabase();
+        const proxy = await orphaningProxy(new URL(urlFor(database)));
+        // Half a second, with a lock check every second: left alone, the
+        // server ends the session between two checks. Three check intervals
+        // make the floor 3 s.
+        const pool = await sharedPool(database, withIdleSessionTimeout(proxy.url, '500ms'));
+        t.after(async () => {
+            await releaseBackgroundLeader();
+            await endPool(pool);
+            await proxy.close();
+        });
+        const a = await admin(urlFor(database));
+        t.after(() => a.end());
+        const holders = async (): Promise<number[]> =>
+            (
+                await a.query(
+                    `SELECT pid FROM pg_locks WHERE locktype = 'advisory' AND granted
+                       AND objid = $1::bigint::oid
+                       AND database = (SELECT oid FROM pg_database WHERE datname = current_database())`,
+                    [BACKGROUND_LEADER_LOCK_KEY]
+                )
+            ).rows.map((r) => r.pid as number);
+
+        assert.equal(await acquireBackgroundLeaderLock(pool as never), true);
+        const lost: string[] = [];
+        watchBackgroundLeadership((reason) => lost.push(reason), { checkIntervalMs: 1_000 });
+        const [holder] = await holders();
+        assert.ok(holder, 'a session holds the lock');
+
+        // Twelve of the server's timeout periods.
+        await sleep(6_000);
+        assert.deepEqual(lost, [], 'the lock was not lost while its process was there');
+        assert.deepEqual(await holders(), [holder], 'the same session still holds it');
+
+        // The process's side of the connection is reset. The server's side
+        // stays open, and the server is told nothing.
+        const orphanedAt = Date.now();
+        assert.ok(proxy.orphan() >= 1);
+        await waitFor(() => lost.length === 1, 'the watch to report the loss', 3_000);
+        assert.deepEqual(await holders(), [holder], 'the server still has the session');
+
+        // Nothing is sent on that session any more. The server ends it when
+        // the raised timeout runs out, 3 s after its last lock check (which
+        // came up to 1 s before the reset), and the lock goes with it. Exempt
+        // from the timeout, it would have kept the lock until the server's
+        // TCP keepalive gave up.
+        let freeAfterMs = -1;
+        while (freeAfterMs < 0) {
+            if (Date.now() - orphanedAt > 8_000) {
+                throw new Error('timed out waiting for the server to end the orphaned session');
+            }
+            await sleep(50);
+            if ((await holders()).length === 0) freeAfterMs = Date.now() - orphanedAt;
+        }
+        assert.ok(freeAfterMs >= 1_500, `the server saw its client go (${freeAfterMs} ms)`);
+        assert.equal(
+            (await a.query('SELECT 1 FROM pg_stat_activity WHERE pid = $1', [holder])).rows.length,
+            0,
+            'the orphaned session is gone'
+        );
+
+        // A process can take the lock again: here this one, on a new connection.
+        assert.equal(await acquireBackgroundLeaderLock(pool as never), true);
+        const after = await holders();
+        assert.equal(after.length, 1);
+        assert.notEqual(after[0], holder);
     }
 );
 

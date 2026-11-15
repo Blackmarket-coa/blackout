@@ -848,30 +848,85 @@ What remains:
     idle that long; the pool drops it, the drop is logged and counted as above
     (`state` `idle`, code `57P05`), and the pool opens another when it next
     needs one. With a short timeout those lines and counts keep coming while
-    nothing is wrong. Since 2026-11-15 the timeout no longer ends the two
-    connections a process holds idle on purpose, the LISTEN connection and the
-    background-leader lock's: each turns it off for its own session
-    (`SET idle_session_timeout = 0`; the LISTEN connection before it listens,
-    the lock's once the lock is held) and puts it back before it returns to
-    the pool. Before that the server ended the LISTEN connection once every
-    timeout period, each time costing a reconnect, a re-hydrate of every table
-    and about 2 s without change notifications; and with a timeout under the
-    10 s between lock checks it ended the lock's connection soon after every
-    acquisition, so an API that runs the loops itself ran them for a few
-    seconds in every 15 or more, and the worker exited 1 a few seconds after
-    every start. Each of those LISTEN drops also re-read every table from
-    Postgres, so where such a timeout was set, a replica that had missed
-    another's change was put right within one timeout period. That no longer
-    happens: with the timeout or without it, such a replica keeps its old
-    copy for as long as "Several API processes on one database" says (a
-    sign-out it missed stays accepted there until the access token expires,
-    up to 24 hours). A server older than 14 has no such timeout. It refuses
-    the statement, and the connection is used as it is. That is tested
-    against a stand-in for the refusal: the only server run here was
-    PostgreSQL 16. On a newer server, a connection on which the statement
-    fails and which is still up stays under the timeout. Whatever the cause,
-    only the first failure of the statement in a process is logged
-    (`pg_idle_session_timeout_not_exempted`).
+    nothing is wrong.
+-   The LISTEN connection sends nothing after LISTEN. Since 2026-11-15 it
+    turns the server's `idle_session_timeout` off for its own session
+    (`SET idle_session_timeout = 0`, before it listens) and puts it back
+    before it returns to the pool. Before that the server ended it once every
+    timeout period, each time costing a reconnect, a re-hydrate of every
+    table and about 2 s without change notifications. Two things went with
+    those drops. Each re-read every table from Postgres, so where such a
+    timeout was set, a replica that had missed another's change was put right
+    within one timeout period. That no longer happens: with the timeout or
+    without it, such a replica keeps its old copy for as long as "Several API
+    processes on one database" says (a sign-out it missed stays accepted
+    there until the access token expires, up to 24 hours). And the timeout
+    ended a LISTEN session whose process was gone without the server seeing
+    it go (a network reset that never reached the server, a lost host). Such
+    a session now holds one of the server's connections until the server
+    finds the connection dead or restarts, or someone ends the session
+    (`pg_terminate_backend`), as it always did where no timeout was set. How
+    long the server takes to find it was not measured. By the defaults of
+    the PostgreSQL 16 on Linux run here, the server's TCP keepalive gives up
+    on a connection that carries nothing after about 2 h 11 min
+    (`tcp_keepalives_idle` 7200 s, then 9 probes 75 s apart); the server's
+    `tcp_keepalives_*` settings shorten that, and a change notification the
+    server sends down a dead connection can show it dead sooner. A server
+    older than 14 has no such timeout. It refuses the statement, and the
+    connection is used as it is. On a newer server, a connection on which
+    the statement fails and which is still up stays under the timeout.
+    Whatever the cause, only the first failure of the statement in a process
+    is logged (`pg_idle_session_timeout_not_exempted`).
+-   The background-leader lock's connection sends a lock check every 10 s.
+    An `idle_session_timeout` shorter than that ends the session of a live
+    leader between two checks, and one not much longer does when a check
+    comes late. The same timeout is also what ends a lock session whose
+    process is gone without the server seeing it go. While the server keeps
+    such a session, the session keeps the lock, and no process runs the
+    loops (scheduled messages, the dead-man sweep, the sweepers): the API
+    and the worker take the same lock. So this session is not exempted from
+    the timeout as the LISTEN connection is. Since 2026-11-15 the lock's
+    holder reads its session's timeout once it watches the lock, and acts
+    on the value:
+
+    -   None set: nothing is changed. The server never ends the session for
+        sitting idle, and nothing in the API bounds how long an orphaned one
+        keeps the lock, before 2026-11-15 or since: it stays until the
+        server finds the connection dead (the same TCP keepalive, about
+        2 h 11 min by those defaults; the server sends nothing of its own
+        down this connection) or restarts, or someone ends the session.
+        Setting an `idle_session_timeout` for the API's role or database is
+        what bounds it.
+    -   Shorter than 30 s (three lock checks): it is raised to 30 s for that
+        session (`pg_idle_session_timeout_raised`), and put back before the
+        connection returns to the pool. The server ends an orphaned session
+        30 s after its last lock check. Before, a timeout shorter than the
+        10 s between lock checks ended the lock's connection soon after
+        every acquisition, so an API that runs the loops itself ran them for
+        a few seconds in every 15 or more, and the worker exited 1 a few
+        seconds after every start. A longer one, up to 30 s, was left as it
+        was, kept from running out by the lock checks with less than two
+        checks to spare, and it ended an orphaned session after its own
+        length: such a session now keeps the lock up to 20 s longer than it
+        did.
+    -   30 s or longer: nothing is changed. The server ends an orphaned
+        session that long after its last lock check, as before.
+    -   A server older than 14, which has no such setting: nothing is set,
+        and an orphaned session keeps the lock as where none is set.
+
+    The last lock check came up to 10 s before the process went. Once the
+    server has ended the session, a process that is trying for the lock
+    takes it at its next try, up to 15 s later: the API that held the lock,
+    if it is still running (first item), or a worker on standby. An API that
+    did not get the lock when it started does not try again, before
+    2026-11-15 or since, so where no such process is left the loops stay
+    stopped until an API or a worker next starts. A read that fails or
+    cannot be understood, or a raise the server refuses, leaves the session
+    as it was; the first of those in a process, the missing setting
+    included, is logged (`pg_idle_session_timeout_not_raised`). The answer
+    of a server older than 14, on this connection and the LISTEN one, is
+    tested against a stand-in: the only server run here was PostgreSQL 16.
+
 -   A write-behind write gets one immediate retry, on another connection than
     the one it failed on (a new one only when none is idle). A write whose own
     connection was dropped under it lands on that retry; one attempted while

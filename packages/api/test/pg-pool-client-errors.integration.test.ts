@@ -25,7 +25,7 @@ process.env.BLACKOUT_DB_MODE = 'memory';
 const { clearSharedPgPool, getSharedPgPool } = await import('../src/config/postgres');
 const { dbPoolClientErrorsTotal } = await import('../src/telemetry/metrics');
 const { PgNotifyTransport } = await import('../src/db/pgNotify');
-const { forgetIdleSessionExemptionFailureForTests } = await import('../src/db/pooledClient');
+const { forgetIdleSessionFailuresForTests } = await import('../src/db/pooledClient');
 const { WriteBehindQueue } = await import('../src/db/writeBehindQueue');
 const { PostgresBackedDb, REHYDRATE_RETRY_MS } = await import('../src/db/store');
 const {
@@ -45,7 +45,7 @@ const DATABASE_URL = `postgres://pool_test_user:${PASSWORD}@pool-test-host.inval
 class FakeConnection extends EventEmitter {
     static made: FakeConnection[] = [];
     /** Statements that reached the server, by connection. */
-    static executed: Array<{ connection: number; sql: string }> = [];
+    static executed: Array<{ connection: number; sql: string; params?: unknown[] }> = [];
     /**
      * The server's answer to a statement, where a test needs another than the
      * default: rows, or an error the statement is refused with while the
@@ -98,11 +98,17 @@ class FakeConnection extends EventEmitter {
             setTimeout(() => this.socketClosed(), this.socketClosesAfterMs);
             throw fatal;
         }
-        FakeConnection.executed.push({ connection: FakeConnection.made.indexOf(this), sql });
+        FakeConnection.executed.push({
+            connection: FakeConnection.made.indexOf(this),
+            sql,
+            params,
+        });
         const answer = FakeConnection.respond?.(sql);
         if (answer instanceof Error) throw answer;
         if (answer) return answer;
         if (sql.includes('pg_try_advisory_lock')) return { rows: [{ locked: true }] };
+        // A server with no idle-session timeout set.
+        if (sql.includes('pg_settings')) return { rows: [{ setting: '0', unit: 'ms' }] };
         // One store table, users, so PostgresBackedDb has a table to load and read back.
         if (sql.includes('information_schema.columns') && params?.[0] === 'users') {
             return {
@@ -355,11 +361,15 @@ test('a checked-out connection carries the listener only while it is held', asyn
     assert.equal(counted('idle'), idleBefore + 1);
 });
 
-// The two connections a process holds idle on purpose (the LISTEN connection
-// and the background-leader lock's) turn the server's idle_session_timeout off
-// for their own session, and put it back before they return to the pool.
+// The LISTEN connection, which a process holds idle on purpose, turns the
+// server's idle_session_timeout off for its own session, and puts it back
+// before it returns to the pool. The background-leader lock's connection sends
+// a lock check every 10 s: it raises a timeout too short for that to 30 s, and
+// puts that back.
 const EXEMPT = 'SET idle_session_timeout = 0';
 const RESTORE = 'RESET idle_session_timeout';
+const READ_TIMEOUT = "SELECT setting, unit FROM pg_settings WHERE name = 'idle_session_timeout'";
+const SET_TIMEOUT = "SELECT set_config('idle_session_timeout', $1, false)";
 const LISTEN = 'LISTEN blackout_store_change';
 const UNLISTEN = 'UNLISTEN blackout_store_change';
 
@@ -571,7 +581,7 @@ test('the LISTEN connection turns the idle-session timeout off for itself before
 test('a server that refuses the idle-session statement still gets its LISTEN connection, and the refusal is logged once', async (t) => {
     captureLogs(t);
     const info = captureInfo(t);
-    forgetIdleSessionExemptionFailureForTests();
+    forgetIdleSessionFailuresForTests();
     const clients: FakeListenClient[] = [];
     const transport = new PgNotifyTransport({
         connect: async () => {
@@ -1213,31 +1223,133 @@ test('giving the leader lock back stops its watch: no lock check destroys that c
     assert.equal(pool.totalCount, 1, 'pooled again');
 });
 
-/** What the stand-in connections were sent: the lock statements by name, the rest as text. */
+/** What the stand-in connections were sent: the lock's statements by name, the rest as text. */
 const sentToFakes = (): string[] =>
     FakeConnection.executed.map(
-        ({ connection, sql }) =>
+        ({ connection, sql, params }) =>
             `${connection}: ${
                 sql.includes('pg_try_advisory_lock')
                     ? 'lock'
                     : sql.includes('pg_advisory_unlock')
                     ? 'unlock'
+                    : sql === READ_TIMEOUT
+                    ? 'read timeout'
+                    : sql === SET_TIMEOUT
+                    ? `set timeout ${String(params?.[0])}`
                     : sql
             }`
     );
 
-test('the leader-lock connection turns the idle-session timeout off once it holds the lock, and puts it back when the lock is given up', async (t) => {
+/** A server whose sessions start with this idle_session_timeout, as pg_settings gives it. */
+const sessionTimeout =
+    (setting: string, unit = 'ms') =>
+    (sql: string): { rows: unknown[] } | undefined =>
+        sql === READ_TIMEOUT ? { rows: [{ setting, unit }] } : undefined;
+
+/** Long enough for a stand-in connection to answer what it has been sent. */
+const answered = () => sleep(20);
+
+/**
+ * Make `conn` answer one statement at a time, in the order sent, as a real
+ * connection does, and `held` only once the returned function is called.
+ */
+const holdAnswerTo = (conn: FakeConnection, held: string): (() => void) => {
+    let letGo: () => void = () => undefined;
+    const gate = new Promise<void>((r) => (letGo = r));
+    const query = conn.query.bind(conn);
+    let last: Promise<unknown> = Promise.resolve();
+    conn.query = (sql = '', params?: unknown[]) => {
+        const answer = last
+            .then(() => (sql === held ? gate : undefined))
+            .then(() => query(sql, params));
+        last = answer.catch(() => undefined);
+        return answer;
+    };
+    return letGo;
+};
+
+test('a leader lock that is held but not watched is sent nothing about the idle-session timeout', async (t) => {
     captureLogs(t);
     const pool = (openPool = await sharedPoolOfFakes());
     t.after(() => releaseBackgroundLeader());
+    FakeConnection.respond = sessionTimeout('3000');
     assert.equal(await acquireBackgroundLeaderLock(pool as never), true);
-    assert.deepEqual(sentToFakes(), ['0: lock', `0: ${EXEMPT}`]);
+    await answered();
+    assert.deepEqual(sentToFakes(), ['0: lock']);
 
     await releaseBackgroundLeader();
-    assert.deepEqual(sentToFakes().slice(2), ['0: unlock', `0: ${RESTORE}`]);
-    assert.equal(FakeConnection.made[0].ended, false, 'pooled once the timeout is back');
-    assert.equal(pool.totalCount, 1);
+    assert.deepEqual(sentToFakes(), ['0: lock', '0: unlock']);
+    assert.equal(FakeConnection.made[0].ended, false, 'pooled');
 });
+
+// With the default 10 s between lock checks the floor is 30 s.
+for (const [setting, raised] of [
+    ['0', false],
+    ['1', true],
+    ['3000', true],
+    ['12000', true],
+    ['29999', true],
+    ['30000', false],
+    ['45000', false],
+] as const) {
+    test(`a watched leader-lock connection whose idle-session timeout is ${setting} ms ${
+        raised
+            ? 'raises it to 30 s, not to off, and puts it back when the lock is given up'
+            : 'leaves it alone, and puts nothing back'
+    }`, async (t) => {
+        captureLogs(t);
+        const info = captureInfo(t);
+        const pool = (openPool = await sharedPoolOfFakes());
+        t.after(() => releaseBackgroundLeader());
+        FakeConnection.respond = sessionTimeout(setting);
+        assert.equal(await acquireBackgroundLeaderLock(pool as never), true);
+        watchBackgroundLeadership(() => assert.fail('no loss expected'));
+        await answered();
+        assert.deepEqual(
+            sentToFakes(),
+            raised
+                ? ['0: lock', '0: read timeout', '0: set timeout 30000ms']
+                : ['0: lock', '0: read timeout']
+        );
+        assert.deepEqual(
+            logged(info, 'pg_idle_session_timeout_raised').map((e) => [e.level, e.fromMs, e.toMs]),
+            raised ? [['info', Number(setting), 30_000]] : []
+        );
+        assert.deepEqual(logged(info, 'pg_idle_session_timeout_not_raised'), []);
+
+        const before = sentToFakes().length;
+        await releaseBackgroundLeader();
+        assert.deepEqual(
+            sentToFakes().slice(before),
+            raised ? ['0: unlock', `0: ${RESTORE}`] : ['0: unlock']
+        );
+        assert.equal(FakeConnection.made[0].ended, false, 'pooled');
+        assert.equal(pool.totalCount, 1);
+    });
+}
+
+// The floor is three of the watch's own lock-check intervals: 3 s with 1 s
+// between checks.
+for (const [setting, sent] of [
+    ['2999', ['0: lock', '0: read timeout', '0: set timeout 3000ms']],
+    ['3000', ['0: lock', '0: read timeout']],
+] as const) {
+    test(`with 1 s between lock checks, an idle-session timeout of ${setting} ms is ${
+        sent.length === 3 ? 'raised to 3 s' : 'left alone'
+    }`, async (t) => {
+        captureLogs(t);
+        captureInfo(t);
+        const pool = (openPool = await sharedPoolOfFakes());
+        t.after(() => releaseBackgroundLeader());
+        FakeConnection.respond = sessionTimeout(setting);
+        assert.equal(await acquireBackgroundLeaderLock(pool as never), true);
+        watchBackgroundLeadership(() => assert.fail('no loss expected'), {
+            checkIntervalMs: 1_000,
+        });
+        await answered();
+        assert.deepEqual(sentToFakes(), sent);
+    });
+}
 
 test('a connection that does not get the leader lock goes back to the pool as it came', async (t) => {
     captureLogs(t);
@@ -1250,46 +1362,165 @@ test('a connection that does not get the leader lock goes back to the pool as it
     assert.equal(FakeConnection.made[0].ended, false, 'pooled');
 });
 
-test('a server that refuses the idle-session statement still gives the leader lock, and nothing is put back when the lock is given up', async (t) => {
+test('a server with no idle-session timeout to read (older than PostgreSQL 14) keeps its leader lock; nothing is set or put back, and that is logged once', async (t) => {
     captureLogs(t);
     const info = captureInfo(t);
-    forgetIdleSessionExemptionFailureForTests();
+    forgetIdleSessionFailuresForTests();
     const pool = (openPool = await sharedPoolOfFakes());
     t.after(() => releaseBackgroundLeader());
-    FakeConnection.respond = (sql) => (sql === EXEMPT ? unrecognized() : undefined);
-    assert.equal(await acquireBackgroundLeaderLock(pool as never), true);
-    assert.equal(isBackgroundLeader(), true);
+    // pg_settings has no such row there.
+    FakeConnection.respond = (sql) => (sql === READ_TIMEOUT ? { rows: [] } : undefined);
     let lost = 0;
-    watchBackgroundLeadership(() => (lost += 1));
-    assert.equal(FakeConnection.made[0].ended, false, 'the connection is kept');
-    const refusals = logged(info, 'pg_idle_session_timeout_not_exempted');
-    assert.equal(refusals.length, 1);
-    assert.equal(refusals[0].code, '42704');
-    assertSecretFree(JSON.stringify(refusals[0]));
-
-    await releaseBackgroundLeader();
-    assert.deepEqual(sentToFakes(), ['0: lock', `0: ${EXEMPT}`, '0: unlock']);
-    assert.equal(FakeConnection.made[0].ended, false, 'pooled');
+    for (let round = 0; round < 2; round++) {
+        assert.equal(await acquireBackgroundLeaderLock(pool as never), true);
+        watchBackgroundLeadership(() => (lost += 1));
+        await answered();
+        assert.equal(isBackgroundLeader(), true);
+        await releaseBackgroundLeader();
+    }
+    assert.deepEqual(sentToFakes(), [
+        '0: lock',
+        '0: read timeout',
+        '0: unlock',
+        '0: lock',
+        '0: read timeout',
+        '0: unlock',
+    ]);
     assert.equal(lost, 0, 'the lock was never reported lost');
+    assert.equal(FakeConnection.made[0].ended, false, 'pooled');
+    const lines = logged(info, 'pg_idle_session_timeout_not_raised');
+    assert.equal(lines.length, 1, 'two locks, one line');
+    assert.equal(lines[0].level, 'info');
+    assert.equal(lines[0].reason, 'no_such_setting');
 });
 
-test('a leader-lock connection dropped while the idle-session statement is out is reported lost by the watch', async (t) => {
+for (const [what, setting, unit] of [
+    ['in another unit than milliseconds', '3', 's'],
+    ['not a number', 'soon', 'ms'],
+] as const) {
+    test(`an idle-session timeout that reads as ${what} is left alone, and that is logged`, async (t) => {
+        captureLogs(t);
+        const info = captureInfo(t);
+        forgetIdleSessionFailuresForTests();
+        const pool = (openPool = await sharedPoolOfFakes());
+        t.after(() => releaseBackgroundLeader());
+        FakeConnection.respond = sessionTimeout(setting, unit);
+        assert.equal(await acquireBackgroundLeaderLock(pool as never), true);
+        watchBackgroundLeadership(() => assert.fail('no loss expected'));
+        await answered();
+        assert.deepEqual(sentToFakes(), ['0: lock', '0: read timeout']);
+        assert.deepEqual(
+            logged(info, 'pg_idle_session_timeout_not_raised').map((e) => e.reason),
+            ['unreadable']
+        );
+        await releaseBackgroundLeader();
+        assert.deepEqual(sentToFakes().slice(2), ['0: unlock']);
+    });
+}
+
+for (const [refused, sql, sent] of [
+    ['read', READ_TIMEOUT, ['0: lock', '0: read timeout']],
+    ['SET', SET_TIMEOUT, ['0: lock', '0: read timeout', '0: set timeout 30000ms']],
+] as const) {
+    test(`a server that refuses the idle-session ${refused} still gives the leader lock; the refusal is logged once, and nothing is put back`, async (t) => {
+        captureLogs(t);
+        const info = captureInfo(t);
+        forgetIdleSessionFailuresForTests();
+        const pool = (openPool = await sharedPoolOfFakes());
+        t.after(() => releaseBackgroundLeader());
+        const timeout = sessionTimeout('3000');
+        FakeConnection.respond = (text) =>
+            text === sql
+                ? Object.assign(new Error('permission denied'), { code: '42501' })
+                : timeout(text);
+        let lost = 0;
+        for (let round = 0; round < 2; round++) {
+            assert.equal(await acquireBackgroundLeaderLock(pool as never), true);
+            watchBackgroundLeadership(() => (lost += 1));
+            await answered();
+            assert.equal(isBackgroundLeader(), true);
+            assert.equal(FakeConnection.made[0].ended, false, 'the connection is kept');
+            await releaseBackgroundLeader();
+        }
+        assert.deepEqual(sentToFakes(), [...sent, '0: unlock', ...sent, '0: unlock']);
+        assert.equal(lost, 0, 'the lock was never reported lost');
+        assert.equal(FakeConnection.made[0].ended, false, 'pooled');
+        const refusals = logged(info, 'pg_idle_session_timeout_not_raised');
+        assert.equal(refusals.length, 1, 'two refusals, one line');
+        assert.equal(refusals[0].level, 'info');
+        assert.equal(refusals[0].reason, 'failed');
+        assert.equal(refusals[0].code, '42501');
+        assert.equal(refusals[0].error, 'permission denied');
+        assertSecretFree(JSON.stringify(refusals[0]));
+    });
+}
+
+test('a leader lock given up while its idle-session read is out sets nothing on the connection it gives back', async (t) => {
+    captureLogs(t);
+    const info = captureInfo(t);
+    const pool = (openPool = await sharedPoolOfFakes());
+    t.after(() => releaseBackgroundLeader());
+    (await pool.connect()).release();
+    const conn = FakeConnection.made[0];
+    FakeConnection.respond = sessionTimeout('3000');
+    const answerRead = holdAnswerTo(conn, READ_TIMEOUT);
+
+    assert.equal(await acquireBackgroundLeaderLock(pool as never), true);
+    watchBackgroundLeadership(() => assert.fail('no loss expected'));
+    // The unlock is sent behind the read. A SET sent once the read is answered
+    // would follow the unlock, and nothing would put it back.
+    const released = releaseBackgroundLeader();
+    answerRead();
+    await released;
+    await answered();
+    assert.deepEqual(sentToFakes(), ['0: lock', '0: read timeout', '0: unlock']);
+    assert.deepEqual(logged(info, 'pg_idle_session_timeout_raised'), []);
+    assert.equal(conn.ended, false, 'pooled as it came');
+    assert.equal(pool.totalCount, 1);
+});
+
+test('a leader lock given up while its idle-session SET is out still puts the timeout back', async (t) => {
+    captureLogs(t);
+    const pool = (openPool = await sharedPoolOfFakes());
+    t.after(() => releaseBackgroundLeader());
+    (await pool.connect()).release();
+    const conn = FakeConnection.made[0];
+    FakeConnection.respond = sessionTimeout('3000');
+    const answerSet = holdAnswerTo(conn, SET_TIMEOUT);
+
+    assert.equal(await acquireBackgroundLeaderLock(pool as never), true);
+    watchBackgroundLeadership(() => assert.fail('no loss expected'));
+    await answered();
+    // The SET is out. The unlock is sent behind it, so the SET is answered
+    // first, and the release knows of it.
+    const released = releaseBackgroundLeader();
+    answerSet();
+    await released;
+    assert.deepEqual(sentToFakes(), [
+        '0: lock',
+        '0: read timeout',
+        '0: set timeout 30000ms',
+        '0: unlock',
+        `0: ${RESTORE}`,
+    ]);
+    assert.equal(conn.ended, false, 'pooled once the timeout is back');
+});
+
+test('a leader-lock connection dropped while the idle-session read is out is reported lost by the watch', async (t) => {
     const lines = captureLogs(t);
     const pool = (openPool = await sharedPoolOfFakes());
     t.after(() => releaseBackgroundLeader());
     // The pool's one idle connection, so the lock attempt checks it out.
     (await pool.connect()).release();
     const conn = FakeConnection.made[0];
-    // The server ends the backend under the idle-session statement: pg rejects
-    // that statement, and reports the drop when the socket closes.
+    // The server ends the backend under the read: pg rejects that statement,
+    // and reports the drop when the socket closes.
     conn.terminateUnderQuery(/idle_session_timeout/, terminated());
 
-    // The failed statement is passed over, so the lock counts as taken...
     assert.equal(await acquireBackgroundLeaderLock(pool as never), true);
     const lost: string[] = [];
     watchBackgroundLeadership((reason) => lost.push(reason));
-    // ...until the watch, on from the moment the lock is reported taken, hears
-    // of the drop.
+    // The failed read is passed over, and the watch hears of the drop.
     await waitFor(() => lost.length === 1, 'the watch to report the loss');
     assert.deepEqual(lost, ['connection_error']);
     assert.equal(isBackgroundLeader(), false);
@@ -1297,22 +1528,23 @@ test('a leader-lock connection dropped while the idle-session statement is out i
     assert.equal(logged(lines, 'pg_pool_client_error')[0]?.state, 'held');
 });
 
-test('a leader-lock connection reset while the idle-session statement is out is reported lost at once, not at the next lock check', async (t) => {
+test('a leader-lock connection reset while the idle-session read is out is reported lost at once, not at the next lock check', async (t) => {
     const lines = captureLogs(t);
+    const info = captureInfo(t);
+    forgetIdleSessionFailuresForTests();
     const pool = (openPool = await sharedPoolOfFakes());
     t.after(() => releaseBackgroundLeader());
     (await pool.connect()).release();
     const conn = FakeConnection.made[0];
-    // A network reset under the idle-session statement. On a connection that
-    // has sent a parameterized statement, as the lock statement is, pg 8.20.0
-    // passes over the socket's ECONNRESET (Connection.sync() leaves the
-    // connection marked as ending) and reports the drop when the socket
-    // closes: 'error' on the client first, and only then the rejection of the
-    // statement in flight.
+    // A network reset under the read. On a connection that has sent a
+    // parameterized statement, as the lock statement is, pg 8.20.0 passes over
+    // the socket's ECONNRESET (Connection.sync() leaves the connection marked
+    // as ending) and reports the drop when the socket closes: 'error' on the
+    // client first, and only then the rejection of the statement in flight.
     const closed = new Error('Connection terminated unexpectedly');
     const query = conn.query.bind(conn);
     conn.query = (sql = '', params?: unknown[]) =>
-        sql === EXEMPT
+        sql === READ_TIMEOUT
             ? new Promise<{ rows: unknown[] }>((_resolve, reject) =>
                   setImmediate(() => {
                       conn.fail(closed);
@@ -1324,10 +1556,11 @@ test('a leader-lock connection reset while the idle-session statement is out is 
     assert.equal(await acquireBackgroundLeaderLock(pool as never), true);
     const lost: string[] = [];
     watchBackgroundLeadership((reason) => lost.push(reason));
-    // The lock is reported taken without waiting for the statement, so the
-    // watch is on before the reset arrives. Waited for, the reset arrived with
-    // no watch on the connection, and nothing told the process it had lost the
-    // lock until the first lock check, 10 s later.
+    // The lock is reported taken with nothing about the timeout sent or
+    // waited for, and the watch sends the read once it listens. Waited for
+    // before the lock was reported taken, the reset arrived with no watch on
+    // the connection, and nothing told the process it had lost the lock until
+    // the first lock check, 10 s later.
     await waitFor(() => lost.length === 1, 'the watch to report the loss', 2_000);
     assert.deepEqual(lost, ['connection_error']);
     assert.equal(isBackgroundLeader(), false);
@@ -1335,21 +1568,36 @@ test('a leader-lock connection reset while the idle-session statement is out is 
     const drops = logged(lines, 'pg_pool_client_error');
     assert.equal(drops.length, 1, 'one drop, logged once');
     assert.equal(drops[0].state, 'held');
+    assert.deepEqual(
+        logged(info, 'pg_idle_session_timeout_not_raised'),
+        [],
+        'a read that failed with its connection is not logged as a refusal'
+    );
 });
 
-test('a leader-lock connection whose idle-session timeout cannot be put back is destroyed, not pooled', async (t) => {
+test('a leader-lock connection whose raised idle-session timeout cannot be put back is destroyed, not pooled', async (t) => {
     captureLogs(t);
+    captureInfo(t);
     const pool = (openPool = await sharedPoolOfFakes());
     t.after(() => releaseBackgroundLeader());
+    const timeout = sessionTimeout('3000');
     FakeConnection.respond = (sql) =>
         sql === RESTORE
             ? Object.assign(new Error('canceling statement due to statement timeout'), {
                   code: '57014',
               })
-            : undefined;
+            : timeout(sql);
     assert.equal(await acquireBackgroundLeaderLock(pool as never), true);
+    watchBackgroundLeadership(() => assert.fail('no loss expected'));
+    await answered();
     await releaseBackgroundLeader();
-    assert.deepEqual(sentToFakes(), ['0: lock', `0: ${EXEMPT}`, '0: unlock', `0: ${RESTORE}`]);
+    assert.deepEqual(sentToFakes(), [
+        '0: lock',
+        '0: read timeout',
+        '0: set timeout 30000ms',
+        '0: unlock',
+        `0: ${RESTORE}`,
+    ]);
     assert.equal(FakeConnection.made[0].ended, true, 'destroyed');
     assert.equal(pool.totalCount, 0);
 });
