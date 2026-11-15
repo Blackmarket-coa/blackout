@@ -928,3 +928,51 @@ test('giving the leader lock back stops its watch: no lock check destroys that c
     next.release();
     assert.equal(pool.totalCount, 1, 'pooled again');
 });
+
+test('an API that runs the loops itself stays up when its leader-lock connection fails, stops the loops, and takes the lock again on a new connection', async (t) => {
+    const { runBackgroundLoopsWhileLeader } = await import('../src/inProcessBackgroundLoops');
+    const lines = captureLogs(t);
+    const pool = (openPool = await sharedPoolOfFakes());
+    const loops = { started: 0, stopped: 0 };
+    // The lock as src/index.ts takes it in postgres mode, on the shared pool.
+    const inProcess = runBackgroundLoopsWhileLeader({
+        leadership: {
+            tryAcquire: () => acquireBackgroundLeaderLock(pool as never),
+            watch: (onLost) => watchBackgroundLeadership(onLost),
+        },
+        startLoops: () => {
+            loops.started += 1;
+            return {
+                ready: Promise.resolve(),
+                stop: () => {
+                    loops.stopped += 1;
+                },
+            };
+        },
+        retryMs: 50,
+    });
+    t.after(async () => {
+        await inProcess.stop();
+        await releaseBackgroundLeader();
+    });
+    await waitFor(() => loops.started === 1, 'the loops to start');
+    const first = FakeConnection.made[0];
+
+    // A Postgres restart, a failover or a network reset drops the connection
+    // the lock is held on.
+    assert.doesNotThrow(() => first.fail(terminated()));
+    assert.equal(loops.stopped, 1, 'the loops stopped with the lock');
+    assert.equal(first.ended, true, 'the dead connection was destroyed');
+    assert.equal(logged(lines, 'background_leader_lost')[0]?.reason, 'connection_error');
+    assert.equal(logged(lines, 'pg_pool_client_error')[0]?.state, 'held');
+
+    await waitFor(() => loops.started === 2, 'the loops to start again');
+    assert.equal(isBackgroundLeader(), true, 'the lock was taken again');
+    assert.equal(FakeConnection.made.length, 2, 'on a new connection');
+    assert.deepEqual(
+        FakeConnection.executed
+            .filter((e) => e.sql.includes('pg_try_advisory_lock'))
+            .map((e) => e.connection),
+        [0, 1]
+    );
+});

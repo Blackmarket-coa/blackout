@@ -6,9 +6,10 @@
 // at a server. pg-pool-client-errors.integration.test.ts runs everywhere with
 // stand-in connections that fail in the orders pg 8.20.0 uses; it has no
 // stand-in for three things only this file checks: pg's own ordering of a real
-// drop, the API exiting 1 through its drain when its leader-lock connection
-// drops (the watch in src/index.ts), and the API draining to exit 0 on SIGTERM
-// when the connection it held the lock on drops during the drain.
+// drop, the API staying up and taking the lock again when its leader-lock
+// connection drops (src/inProcessBackgroundLoops.ts), and the API draining to
+// exit 0 on SIGTERM when the connection it held the lock on drops during the
+// drain.
 //
 // A backend is dropped the ways production sees it: pg_terminate_backend (what
 // a restart, a failover or idle_session_timeout does to a session) and a TCP
@@ -382,31 +383,62 @@ test(
 );
 
 test(
-    'an API running the loops in-process exits 1 through its drain when the leader lock connection drops',
+    'an API running the loops in-process stays up when the leader lock connection drops, stops its loops and takes the lock again',
     { skip, timeout: 120_000 },
     async (t) => {
         const database = await newDatabase();
         const api = await startApi(t, database);
+        const a = await admin(urlFor(database));
+        t.after(() => a.end());
+        const holders = async (): Promise<number[]> =>
+            (
+                await a.query(
+                    `SELECT pid FROM pg_locks WHERE locktype = 'advisory' AND granted
+                       AND objid = $1::bigint::oid
+                       AND database = (SELECT oid FROM pg_database WHERE datname = current_database())`,
+                    [BACKGROUND_LEADER_LOCK_KEY]
+                )
+            ).rows.map((r) => r.pid as number);
 
-        const pids = await terminate(
-            database,
-            `pid IN (SELECT pid FROM pg_locks WHERE locktype = 'advisory' AND objid = $1::bigint::oid
-                   AND database = (SELECT oid FROM pg_database WHERE datname = current_database()))`,
-            [BACKGROUND_LEADER_LOCK_KEY]
+        const before = await holders();
+        assert.equal(before.length, 1, 'the leader lock was held on one connection');
+        assert.deepEqual(await terminate(database, 'pid = $1', before), before);
+
+        await waitFor(
+            () =>
+                api.lines().some((e) => e.msg === 'background_loops_stopped_leader_lost') ||
+                api.child.exitCode !== null,
+            'the loops to stop'
         );
-        assert.equal(pids.length, 1, 'the leader lock was held on one connection');
+        // The retry comes every 15 s (the worker's standby interval).
+        let after: number[] = [];
+        const deadline = Date.now() + 40_000;
+        while (after.length === 0 && api.child.exitCode === null && Date.now() < deadline) {
+            await sleep(250);
+            after = await holders();
+        }
+        assert.equal(api.child.exitCode, null, `${api.out.stdout}\n${api.out.stderr}`);
+        assert.equal(after.length, 1, 'the API took the lock again');
+        assert.notEqual(after[0], before[0], 'on a new connection');
+        await waitFor(
+            () => api.lines().filter((e) => e.msg === 'background_loops_started').length === 2,
+            'the loops to start again'
+        );
 
-        const code = await api.exitCode(30_000);
-        assert.equal(code, 1, `${api.out.stdout}\n${api.out.stderr}`);
+        const health = await fetch(`http://127.0.0.1:${api.port}/health`);
+        await health.arrayBuffer();
+        assert.equal(health.status, 200, 'the API still serves');
         assert.doesNotMatch(api.out.stderr, /Unhandled 'error' event/);
         const lines = api.lines();
-        const lost = lines.find((e) => e.msg === 'background_leader_lost');
-        assert.equal(lost?.reason, 'connection_error');
-        const stop = lines.find((e) => e.msg === 'shutdown_signal_received');
-        assert.equal(stop?.signal, 'background_leader_lost:connection_error');
-        assert.ok(
-            lines.some((e) => e.msg === 'runtime_store_drained'),
-            'the store was drained before the exit'
+        assert.equal(
+            lines.find((e) => e.msg === 'background_leader_lost')?.reason,
+            'connection_error'
+        );
+        assert.equal(lines.filter((e) => e.msg === 'background_leader_acquired').length, 2);
+        assert.deepEqual(
+            lines.filter((e) => e.msg === 'shutdown_signal_received'),
+            [],
+            'no shutdown'
         );
     }
 );

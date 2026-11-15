@@ -821,12 +821,20 @@ gets another connection (a new one only when none is idle). A drop the server
 reports to a query in flight reaches only that query, so it is that query's
 error and is not counted. What remains:
 
--   An API that runs the background loops itself (started without
-    `BLACKOUT_BACKGROUND_WORKERS_DISABLED=1`; the production compose files set
-    it on the app replicas) holds the background-leader lock on a pooled
-    connection, and every Postgres restart drops it. That API stops its loops,
-    drains the store and exits 1, as the worker does, and comes back through
-    its restart policy rather than run on without the lock.
+-   An API that runs the background loops itself holds the background-leader
+    lock on a pooled connection, and every Postgres restart drops it. That API
+    stops its loops, stays up and serving, and tries for the lock again every
+    15 s (not while a tick it started before the loss is still running); it
+    runs the loops again once it has the lock. So the loops (scheduled
+    messages, the dead-man sweep, the sweepers) pause after every Postgres
+    restart, until up to 15 s after Postgres takes connections again. The
+    deployments with no separate worker run the API that way (started without
+    `BLACKOUT_BACKGROUND_WORKERS_DISABLED=1`):
+    `infra/single-server-baseline/docker-compose.yml`,
+    `deploy/kubernetes/phase4/blackout-api.yaml` and the Helm chart
+    (`deploy/helm/blackout`). The production compose files set that variable
+    on the app replicas and leave the loops to the worker, which exits 1 on the
+    loss and comes back through its restart policy.
 -   A write-behind write gets one immediate retry, on another connection than
     the one it failed on (a new one only when none is idle). A write whose own
     connection was dropped under it lands on that retry; one attempted while

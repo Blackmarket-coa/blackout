@@ -111,8 +111,9 @@ const ignoreError = (): void => undefined;
  *
  * Unwatched, an error on the held connection is only logged by the shared
  * pool's listener (config/postgres.ts) and the process runs on without the
- * lock, so every holder watches: the worker exits 1, and so does an API that
- * runs the loops in-process (src/index.ts).
+ * lock, so every holder watches: the worker exits 1, and an API that runs the
+ * loops in-process stops them and tries for the lock again
+ * (src/inProcessBackgroundLoops.ts).
  */
 export const watchBackgroundLeadership = (
     onLost: (reason: string) => void,

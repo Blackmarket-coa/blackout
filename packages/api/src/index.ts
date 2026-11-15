@@ -99,12 +99,11 @@ import {
     startLegacyApiAliasWeeklyReporter,
 } from './telemetry/api-alias-usage';
 import { log } from './telemetry/logger';
-import { startBackgroundLoops } from './backgroundLoops';
 import {
-    tryBecomeBackgroundLeader,
-    releaseBackgroundLeader,
-    watchBackgroundLeadership,
-} from './services/backgroundLeader';
+    runBackgroundLoopsWhileLeader,
+    type InProcessBackgroundLoops,
+} from './inProcessBackgroundLoops';
+import { releaseBackgroundLeader } from './services/backgroundLeader';
 import { httpMetricsMiddleware } from './telemetry/http-metrics';
 import { registry as metricsRegistry } from './telemetry/metrics';
 import { initErrorReporter, errorReporter } from './telemetry/errors';
@@ -501,28 +500,13 @@ if (shouldListen) {
     // entirely; among the rest, a Postgres advisory-lock leader election ensures
     // only one actually runs the loops even if the env var is misconfigured
     // across replicas (in file/memory mode there is a single process anyway).
-    if (process.env.BLACKOUT_BACKGROUND_WORKERS_DISABLED !== '1') {
-        void (async () => {
-            const isLeader = await tryBecomeBackgroundLeader();
-            if (isLeader) {
-                const loops = startBackgroundLoops();
-                // In postgres mode the lock lives on a held pool connection. If
-                // that connection fails or the lock is gone, stop the loops and
-                // exit 1 through the drain below, as the background worker
-                // does: running on without the lock could double-process every
-                // job, and the restart takes the lock again. On SIGTERM,
-                // releaseBackgroundLeader (in shutdown below) stops this watch
-                // before the connection goes back to the pool.
-                watchBackgroundLeadership((reason) => {
-                    loops.stop();
-                    shutdown(`background_leader_lost:${reason}`, 1);
-                });
-                log.info('background_loops_started', {});
-            } else {
-                log.info('background_loops_skipped_not_leader', {});
-            }
-        })();
-    }
+    // In postgres mode the lock lives on a held pool connection; if that
+    // connection fails or the lock is gone, the loops stop, the API stays up,
+    // and it tries for the lock again (inProcessBackgroundLoops.ts).
+    const inProcessLoops: InProcessBackgroundLoops | null =
+        process.env.BLACKOUT_BACKGROUND_WORKERS_DISABLED !== '1'
+            ? runBackgroundLoopsWhileLeader()
+            : null;
 
     const httpServer = serve({ fetch: app.fetch, port: PORT }, (info) => {
         log.info('blackout-server listening', { port: info.port });
@@ -566,19 +550,22 @@ if (shouldListen) {
     // runtime store (a no-op unless BLACKOUT_DB_MODE=postgres), then exit. A
     // hard timeout guarantees the process still exits if a connection hangs.
     let shuttingDown = false;
-    const shutdown = (signal: string, exitCode = 0) => {
+    const shutdown = (signal: string) => {
         if (shuttingDown) return;
         shuttingDown = true;
         log.info('shutdown_signal_received', { signal });
         const forceTimer = setTimeout(() => {
             log.warn('shutdown_forced_after_timeout', { signal, timeoutMs: SHUTDOWN_TIMEOUT_MS });
-            process.exit(exitCode);
+            process.exit(0);
         }, SHUTDOWN_TIMEOUT_MS);
         if (typeof forceTimer.unref === 'function') forceTimer.unref();
+        // No new tick, and no retry for the leader lock, from here on.
+        const loopsStopped = inProcessLoops?.stop();
 
         httpServer.close(() => {
             void (async () => {
                 try {
+                    await loopsStopped;
                     await releaseBackgroundLeader();
                     await drainRuntimeStore();
                     log.info('runtime_store_drained', { signal });
@@ -586,7 +573,7 @@ if (shouldListen) {
                     log.warn('runtime_store_drain_failed', { error: String(err) });
                 } finally {
                     clearTimeout(forceTimer);
-                    process.exit(exitCode);
+                    process.exit(0);
                 }
             })();
         });
