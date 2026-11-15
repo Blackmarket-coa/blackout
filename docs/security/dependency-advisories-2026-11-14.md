@@ -36,8 +36,9 @@ first run that did was read from the Actions API on 2026-11-15 (item 21): the
 API lists no run of `ci.yml` or `security.yml` created between 21:00Z on
 2026-11-12 and 23:27Z on 2026-11-14, when the push run 43653345220 on PR
 #1008's branch failed in the "OSV scanner" step of `ci.yml`'s Dependency
-audit job; the pull-request run above followed at 23:30Z. Both workflows had
-last passed on `develop` at 17:47Z on 2026-11-12, at `7a9814ebc9`.
+audit job; the pull-request run above followed at 23:30Z. Both workflows
+last passed on `develop` in the runs started at 17:47Z on 2026-11-12, at
+`7a9814ebc9` (they finished at 17:55Z and 17:49Z).
 
 **Result:**
 
@@ -78,8 +79,9 @@ last passed on `develop` at 17:47Z on 2026-11-12, at `7a9814ebc9`.
     connection but neither answered nor closed the upgrade there; a review
     found that and `a3edcde179` corrects it ("Corrections after review",
     item 11). As corrected, a client that did not read the answers ahead
-    of its upgrade still kept its connection, since the `404` could not
-    leave, and a connection kept that way held the server open at SIGTERM
+    of its upgrade still kept its connection where those answers were
+    more than the kernel would take, since the `404` could not leave, and
+    a connection kept that way held the server open at SIGTERM
     until the forced exit, which does not drain the store. The next review
     found the first, runs on the real API showed the second, and the guard
     now destroys such a socket after 1 s (items 18 and 19). Whether the
@@ -408,15 +410,17 @@ package depends on either (the lockfile's only importer of both is
         whose answer closes the connection is closed by Node with that
         connection, with no `404` and no count: Node ends the socket
         itself, which the guard cannot tell from a listener ending it. An
-        upgrade behind answers its client is not reading is counted and
-        its `404` is written, but the `404` waits in Node behind those
-        answers: the guard destroys the socket 1 s after it ended it
+        upgrade behind answers its client is not reading, where they are
+        more than the kernel will take, is counted and its `404` is
+        written, but the `404` waits in Node behind those answers: the
+        guard destroys the socket 1 s after it ended it
         (`UNCLAIMED_CLOSE_TIMEOUT_MS`), with the `404` and whatever else was
         still queued unsent. The log line's `answered: true` says the `404`
         was written to the socket, not that it arrived. (Until this was
         added, after `e2439dad73`, such a socket stayed open until the
-        client read or left. A plain request's connection does the same
-        for a client that does not read, but the server closes that one
+        client read or left. The same requests without the upgrade keep
+        their connection the same way for a client that does not read;
+        their answers were complete, so the server closed that connection
         at SIGTERM, and it did not close this one: "What the correction
         still missed" below, and "Corrections after review", items 18 and
         19.)
@@ -490,11 +494,17 @@ package depends on either (the lockfile's only importer of both is
         times and ended in `shutdown_forced_after_timeout`, with no
         `runtime_store_drained`. The same 4,997 requests without the
         upgrade were held as long, and there SIGTERM took 26 ms and ended
-        in `runtime_store_drained`: at shutdown the server closed the
-        plain connection, and it did not close the upgraded socket. So
-        the case did expose something a plain request does not: the
-        forced exit, which the correction had removed for a kept-alive
-        connection.
+        in `runtime_store_drained`: at shutdown the server closed that
+        connection, whose answers were complete, and it did not close the
+        upgraded socket. So the upgrade gave these requests a way into
+        the forced exit that they did not have without it, and that the
+        correction had removed for a kept-alive connection. It was not
+        the only way in, then or now: a plain request the client leaves
+        unfinished ends in the same forced exit (the fifth review's runs
+        at `dc2ecd611f`: a POST with part of its body, 10,026 ms; a GET
+        with unfinished headers, 10,032 ms; no connection held, 41 ms and
+        drained), and `deploy/docker/production/README.md:58` says the
+        same of an SSE stream or a WebSocket client.
     -   With the 1 s close, in the working tree at 06:00Z, before
         `c081bad011` was committed (the guard's file is the committed one,
         by sha256): for both writes the API held the connection 1.5 s
@@ -1142,6 +1152,61 @@ had stood since the first version. It changed this record only:
     first run after them, 43653547397 at 23:30Z, failed in the same step of
     its "Dependency vulnerability audit" job. In each of the three runs
     that job was the only one that failed.
+22. **"Something a plain request does not"** and **"the server closes that
+    one at SIGTERM"** (the GHSA-qv5m section, as the check wrote them) said
+    more about plain requests than was run. The control was the same 4,997
+    `GET /` requests without the upgrade, whose answers were complete, so
+    the server closed that connection at SIGTERM. A plain request the
+    client leaves unfinished takes the forced exit by itself: the fifth
+    review ran a POST with part of its body (10,026 ms,
+    `shutdown_forced_after_timeout`) and a GET with unfinished headers
+    (10,032 ms, the same) on the API at `dc2ecd611f`, against 41 ms and a
+    drained store with no connection held, and
+    `deploy/docker/production/README.md:58` already says it of an SSE
+    stream or a WebSocket client. Both sentences now say "the same
+    requests without the upgrade", and that the stalled upgrade was one
+    more way into a path that exists without it. Item 19's own wording
+    ("the same write without the upgrade") was right.
+23. **The stalled client's condition, and the test header's count.** The
+    header of this record, the third case in the GHSA-qv5m section and the
+    test file's header said without condition that a client that does not
+    read the answers ahead of its upgrade kept its connection, or is not
+    sent the `404`. The runs in "What the correction still missed" show it
+    only where those answers are more than the kernel takes (not with
+    writes of about 65,000 bytes; with 129,998 and 194,998). Each now
+    carries the condition. The test file's header also counted two
+    exceptions where the test and this record have three; it now names the
+    third, an upgrade whose connection has already failed when the guard
+    looks.
+24. **Four small statements about the runs.** The check's runs ended at
+    07:35Z, not 07:40Z (its commit was made at 07:35:46Z). The 990 ms row
+    gave "1,000 to 1,003 ms" for 50 rounds: only the 25 rounds of 07:29Z
+    have a kept output (1,000 to 1,002), and the fifth review's 25 read
+    999 to 1,004, one of them 999; none is under the test's 990. "Both
+    workflows had last passed on `develop` at 17:47Z": that is when the
+    two runs started; they finished at 17:55Z and 17:49Z. And six rows of
+    fix 3 cite runs whose output was not kept; Verification now says so
+    and that the fifth review repeated them. The message of `dc2ecd611f`
+    carries the first two as first written and stays as it is.
+25. **One run of the fifth review ended in exit code 1, and it was not the
+    fixed app.** The reviewer attacking the API with raw sockets started
+    it from the worktree at 07:39:52Z, and that run died in its "upgrade
+    carrying a body, then reset" case with the unhandled `read ECONNRESET`
+    this record is about. The other reviewer of the same round was at that
+    moment running the test file against one-line changes made in the
+    same worktree and put back afterwards: from 07:39:45Z to 07:40:04Z
+    `src/webSocketUpgrades.ts` had the guard taken out of
+    `attachWebSocketShims`, and from 07:40:04Z to 07:40:10Z `src/index.ts`
+    was as at `6378d7c6bb` (the times of that reviewer's own diff and
+    output files). The API in the first run therefore loaded the wiring
+    with no guard, and its output shows it: the half-close case before
+    the crash, an unclaimed upgrade, got no answer and no count, and the
+    run logged no `http_upgrade_unclaimed` line, where every later run of
+    the same script got the `404`, a count of one and four lines. In
+    twelve further full runs and about 5,400 concentrated requests that
+    reviewer saw no socket error without a listener. So the run reproduces
+    the defect on the unguarded wiring once more and shows no gap in the
+    guard. Reviews of this branch that change files now do it in a copy.
 
 ---
 
@@ -1165,11 +1230,14 @@ The second correction (written from 05:46Z, its gates from 06:53Z) added the
 1 s close to `src/webSocketUpgrades.ts`, its test and the help text: the rows
 marked "fix 3" were run on the tree its commit `c081bad011` holds, before the
 commit was made, except where a row names another tree. The rows marked
-"check" were run for the check of that correction (07:17Z to 07:40Z), which
+"check" were run for the check of that correction (07:17Z to 07:35Z), which
 changed only this record: on the worktree at `a79bfb6bbd`, where they name
 no other tree. `origin/develop` moved to `898d466cb5` (#1009) while this
 branch was in review and is not merged into it: #1009 changes no file this
 branch changes, and none under `packages/api` or the JavaScript lockfile.
+The OSV, gitleaks, prettier, duplicate-path, lint-staged and auth-guard rows
+of fix 3 were run from the coordinating session and their output was not
+kept; the fifth review repeated each on `dc2ecd611f`, and each passed.
 Commands are as in `ci.yml` and `security.yml` where those run them. Heavy
 suites started only when the 1-minute load average was under 3.5, one at a
 time, with one exception: the post-merge suite of fix 3 started as its
@@ -1246,7 +1314,7 @@ integration suite ended, at 4.06.
 | 1 s close, one-line changes (fix 3)        | the test file in a copy of the tree holding the committed guard and test (by sha256), 05:58Z to 06:01Z, with one change at a time: the timer's callback emptied, the timeout 0, the timeout 60 s, `end()` for `destroy()`, the timer cleared as soon as set, the timer never cleared, the timer not unref'd                                                       | the first five: 15 of 16 pass, and the new test fails. Never cleared, and not unref'd: 16 of 16 pass                                                                                                                                                                                                                                          |
 | stalled client (check)                     | the 129,998-byte write, with and without the upgrade, on the export of `e2439dad73` (07:21Z); then both larger writes, the 129,998-byte one with SIGTERM 1,545 ms after it, and the one without the upgrade, on the worktree at `a79bfb6bbd` (07:22Z)                                                                                                             | `e2439dad73`: still held after 3 s, SIGTERM 10,021 ms, `shutdown_forced_after_timeout`; without the upgrade 23 ms, `runtime_store_drained`. `a79bfb6bbd`: not held at 3 s, SIGTERM 19 ms and 21 ms; still held, 147 ms; without the upgrade 20 ms; each `runtime_store_drained`                                                               |
 | upgrade guard test (check)                 | `tsx --test test/websocket-upgrade-guard.integration.test.ts` on the worktree at `a79bfb6bbd`, without and then with CI's env, 07:24Z                                                                                                                                                                                                                             | 16 tests, 16 pass, both times                                                                                                                                                                                                                                                                                                                 |
-| the test's 990 ms bound (check)            | the new test's flow on a plain `http.Server` with the guard, 25 rounds at 07:17Z and 25 at 07:29Z: the time from the hand-off to the close of the server's socket, by the clock the test reads                                                                                                                                                                    | 1,000 to 1,003 ms                                                                                                                                                                                                                                                                                                                             |
+| the test's 990 ms bound (check)            | the new test's flow on a plain `http.Server` with the guard: the time from the hand-off to the close of the server's socket, by the clock the test reads. 25 rounds at 07:29Z (output kept; an earlier 25 at 07:17Z, whose output was not kept), and 25 more by the fifth review at 07:46Z                                                                        | 07:29Z: 1,000 to 1,002 ms. 07:46Z: 999 to 1,004 ms, one round reading 999. None under 990, the test's bound                                                                                                                                                                                                                                   |
 | CI (check)                                 | GitHub's check runs for `a79bfb6bbd`, the head of pull request #1010, read through the REST API at 07:26Z                                                                                                                                                                                                                                                         | 62 check runs, all completed, the last at 07:23Z: 61 passed, 1 skipped ("Regenerate baselines and push to PR branch")                                                                                                                                                                                                                         |
 | CI, the first red runs (check)             | GitHub's Actions REST API (`gh api`), 07:31Z to 07:33Z: the runs of `ci.yml` and of `security.yml` created from 2026-11-11 to 23:35Z on 2026-11-14, the jobs of runs 43653345220, 43653547472 and 43653547397, and the log of the failed job of 43653547472                                                                                                       | both workflows last passed on `develop` at 17:47Z on 2026-11-12; no run of either is listed from then until 23:27Z on 2026-11-14; then the three runs, each with one failed job, its audit, in the "OSV scanner" step. The log: the seven rows and the total line the first paragraph quotes                                                  |
 | record, before its commit (check)          | `prettier --check` on this record; `node tools/ci/check-duplicate-paths.mjs`; osv-scanner as in the "fix 3" row, 07:33Z; `gitleaks dir` on this record and `gitleaks git` over `origin/develop..HEAD`; `npx lint-staged --concurrent false` and `node tools/ci/check-auth-secrets.mjs` with this record staged                                                    | prettier: pass; duplicate paths: exit 0, five checks passed; OSV: exit 0, "No issues found", 1 filtered (deepmerge); gitleaks: "no leaks found" on the file and over the range ("9 commits scanned"); lint-staged: no change to the staged file; guard: "Auth secret hardening check passed"                                                  |
