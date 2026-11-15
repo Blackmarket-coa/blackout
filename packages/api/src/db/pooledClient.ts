@@ -92,6 +92,11 @@ export async function exemptFromIdleSessionTimeout(client: {
  * Nothing is sent on a connection the exemption never took effect on. Rejects
  * if the statement fails; the caller then destroys the connection rather than
  * pool it still exempt.
+ *
+ * The leader lock does not wait for its exemption (services/backgroundLeader.ts).
+ * Whether it took effect is still known here: a connection answers its
+ * statements in the order sent, and the lock's release calls this only after
+ * its unlock, sent later on the same connection, has been answered.
  */
 export async function restoreIdleSessionTimeout(client: {
     query(sql: string): Promise<unknown>;

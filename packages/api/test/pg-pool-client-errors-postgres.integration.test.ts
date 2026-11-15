@@ -4,11 +4,13 @@
 // gets its own database. Without it these tests are skipped, and no CI workflow
 // sets it yet (checked 2026-11-15), so they run only where someone points them
 // at a server. pg-pool-client-errors.integration.test.ts runs everywhere: it
-// runs the same source (the pool's listeners, the LISTEN transport, the leader
-// lock and its watch, src/inProcessBackgroundLoops.ts) against stand-in
+// runs the same source (the pool's listeners, the LISTEN transport, the
+// write-behind queue's retry, the store's re-hydrate retry, the leader lock
+// and its watch, src/inProcessBackgroundLoops.ts) against stand-in
 // connections that fail in the orders pg 8.20.0 uses. What only this file
 // checks:
-//   - pg's own ordering of a real drop;
+//   - pg's own ordering of a real drop, and a real server's answer while it
+//     takes no new connections;
 //   - the API process itself (src/index.ts, spawned in postgres mode) against
 //     a real server: staying up, stopping its loops and taking the lock again
 //     when its leader-lock connection drops, and draining to exit 0 on SIGTERM
@@ -492,6 +494,89 @@ test(
             ['idle', 'idle', 'idle']
         );
         assert.deepEqual(await connected(held), []);
+    }
+);
+
+test(
+    "a network reset while the leader-lock connection's idle-session statement is out is reported by the watch at once, not at the next lock check",
+    { skip },
+    async (t) => {
+        const lines = captureWarnings(t);
+        const database = await newDatabase();
+        const target = new URL(urlFor(database));
+        // A proxy that resets the connection the idle-session statement comes
+        // down, instead of passing the statement on. Only the lock's
+        // connection sends it here.
+        let resets = 0;
+        const proxy = net.createServer((down) => {
+            const up = net.connect(Number(target.port || 5432), target.hostname);
+            up.on('data', (d) => down.write(d));
+            down.on('data', (d) => {
+                if (d.includes('SET idle_session_timeout')) {
+                    resets += 1;
+                    down.resetAndDestroy();
+                    return;
+                }
+                up.write(d);
+            });
+            for (const [a, b] of [
+                [down, up],
+                [up, down],
+            ]) {
+                a.on('error', () => b.destroy());
+                a.on('close', () => b.destroy());
+            }
+        });
+        await new Promise<void>((r) => proxy.listen(0, '127.0.0.1', () => r()));
+        const via = new URL(target.toString());
+        via.hostname = '127.0.0.1';
+        via.port = String((proxy.address() as net.AddressInfo).port);
+        const pool = await sharedPool(database, via.toString());
+        t.after(async () => {
+            await releaseBackgroundLeader();
+            await endPool(pool);
+            await new Promise<void>((r) => proxy.close(() => r()));
+        });
+
+        // The lock is taken, and reported taken without waiting for the
+        // statement; its caller watches it from that moment, as the API and
+        // the worker do.
+        assert.equal(await acquireBackgroundLeaderLock(pool as never), true);
+        const lost: string[] = [];
+        watchBackgroundLeadership((reason) => lost.push(reason));
+        // pg reports the reset on the client before it fails the statement in
+        // flight. Waited for, the statement kept the watch off the connection
+        // until after that report, and the process believed it held a lock it
+        // had lost until the first lock check, 10 s later.
+        await waitFor(() => lost.length === 1, 'the watch to report the loss', 3_000);
+        assert.equal(resets, 1);
+        assert.deepEqual(lost, ['connection_error']);
+        // Reported once, when the socket closes: pg 8.20.0 passes over the
+        // socket's ECONNRESET on a connection that has sent a parameterized
+        // statement, as the lock statement is.
+        const drops = logged(lines, 'pg_pool_client_error');
+        assert.equal(drops.length, 1, 'one drop, logged once');
+        assert.equal(drops[0].state, 'held');
+        assert.equal(drops[0].error, 'Connection terminated unexpectedly');
+        assert.equal(pool.totalCount, 0, 'the dead connection was destroyed');
+
+        // The server gives the lock up with the session; another connection
+        // can take it.
+        const a = await admin(urlFor(database));
+        t.after(() => a.end());
+        const deadline = Date.now() + 5_000;
+        let free = false;
+        while (!free && Date.now() < deadline) {
+            const { rows } = await a.query(
+                `SELECT 1 FROM pg_locks WHERE locktype = 'advisory' AND granted
+                   AND objid = $1::bigint::oid
+                   AND database = (SELECT oid FROM pg_database WHERE datname = current_database())`,
+                [BACKGROUND_LEADER_LOCK_KEY]
+            );
+            free = rows.length === 0;
+            if (!free) await sleep(20);
+        }
+        assert.ok(free, 'nobody holds the lock in Postgres');
     }
 );
 

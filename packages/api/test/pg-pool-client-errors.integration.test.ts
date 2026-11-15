@@ -1240,6 +1240,46 @@ test('a leader-lock connection dropped while the idle-session statement is out i
     assert.equal(logged(lines, 'pg_pool_client_error')[0]?.state, 'held');
 });
 
+test('a leader-lock connection reset while the idle-session statement is out is reported lost at once, not at the next lock check', async (t) => {
+    const lines = captureLogs(t);
+    const pool = (openPool = await sharedPoolOfFakes());
+    t.after(() => releaseBackgroundLeader());
+    (await pool.connect()).release();
+    const conn = FakeConnection.made[0];
+    // A network reset under the idle-session statement. On a connection that
+    // has sent a parameterized statement, as the lock statement is, pg 8.20.0
+    // passes over the socket's ECONNRESET (Connection.sync() leaves the
+    // connection marked as ending) and reports the drop when the socket
+    // closes: 'error' on the client first, and only then the rejection of the
+    // statement in flight.
+    const closed = new Error('Connection terminated unexpectedly');
+    const query = conn.query.bind(conn);
+    conn.query = (sql = '', params?: unknown[]) =>
+        sql === EXEMPT
+            ? new Promise<{ rows: unknown[] }>((_resolve, reject) =>
+                  setImmediate(() => {
+                      conn.fail(closed);
+                      reject(closed);
+                  })
+              )
+            : query(sql, params);
+
+    assert.equal(await acquireBackgroundLeaderLock(pool as never), true);
+    const lost: string[] = [];
+    watchBackgroundLeadership((reason) => lost.push(reason));
+    // The lock is reported taken without waiting for the statement, so the
+    // watch is on before the reset arrives. Waited for, the reset arrived with
+    // no watch on the connection, and nothing told the process it had lost the
+    // lock until the first lock check, 10 s later.
+    await waitFor(() => lost.length === 1, 'the watch to report the loss', 2_000);
+    assert.deepEqual(lost, ['connection_error']);
+    assert.equal(isBackgroundLeader(), false);
+    assert.equal(conn.ended, true, 'the dead connection was destroyed');
+    const drops = logged(lines, 'pg_pool_client_error');
+    assert.equal(drops.length, 1, 'one drop, logged once');
+    assert.equal(drops[0].state, 'held');
+});
+
 test('a leader-lock connection whose idle-session timeout cannot be put back is destroyed, not pooled', async (t) => {
     captureLogs(t);
     const pool = (openPool = await sharedPoolOfFakes());

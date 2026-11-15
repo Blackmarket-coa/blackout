@@ -90,7 +90,14 @@ export const acquireBackgroundLeaderLock = async (pool: PgPool): Promise<boolean
     // Held idle between lock checks, so it would sit idle past an idle-session
     // timeout shorter than the check interval. Only once the lock is held: a
     // connection that did not get it has gone back to the pool as it came.
-    await exemptFromIdleSessionTimeout(client);
+    // Sent, not waited for. The caller watches the lock from the moment this
+    // returns, and a connection reset while the statement was out would
+    // report its drop during the wait, before any watch was on it: the
+    // process would then run the loops without the lock until the first lock
+    // check, 10 s later. The connection answers its statements in the order
+    // sent, so this one is answered before the first lock check and before
+    // the unlock.
+    void exemptFromIdleSessionTimeout(client);
     log.info('background_leader_acquired', {});
     return true;
 };

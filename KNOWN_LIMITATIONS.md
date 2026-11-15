@@ -859,11 +859,19 @@ What remains:
     10 s between lock checks it ended the lock's connection soon after every
     acquisition, so an API that runs the loops itself ran them for a few
     seconds in every 15 or more, and the worker exited 1 a few seconds after
-    every start. A server older than 14 has no such timeout. It refuses the
-    statement, which is logged once per process
-    (`pg_idle_session_timeout_not_exempted`) and changes nothing else. The same
-    line is logged if the statement fails on a newer server, and that
-    connection then stays under the timeout.
+    every start. Each of those LISTEN drops also re-read every table from
+    Postgres, so where such a timeout was set, a replica that had missed
+    another's change was put right within one timeout period. That no longer
+    happens: with the timeout or without it, such a replica keeps its old
+    copy for as long as "Several API processes on one database" says (a
+    sign-out it missed stays accepted there until the access token expires,
+    up to 24 hours). A server older than 14 has no such timeout. It refuses
+    the statement, and the connection is used as it is. That is tested
+    against a stand-in for the refusal: the only server run here was
+    PostgreSQL 16. On a newer server, a connection on which the statement
+    fails and which is still up stays under the timeout. Whatever the cause,
+    only the first failure of the statement in a process is logged
+    (`pg_idle_session_timeout_not_exempted`).
 -   A write-behind write gets one immediate retry, on another connection than
     the one it failed on (a new one only when none is idle). A write whose own
     connection was dropped under it lands on that retry; one attempted while
