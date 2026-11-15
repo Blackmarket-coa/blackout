@@ -3,8 +3,80 @@
 // config/redis.ts. Only relevant when BLACKOUT_DB_MODE=postgres.
 
 import type { PgPool } from '../db/migrate';
+import { log } from '../telemetry/logger';
+import { dbPoolClientErrorsTotal } from '../telemetry/metrics';
 
 let cachedPool: PgPool | null = null;
+
+/** The EventEmitter side of a pg pool client. */
+export interface PgPoolClientEvents {
+    on(event: 'error', listener: (err: Error) => void): unknown;
+    removeListener(event: 'error', listener: (err: Error) => void): unknown;
+}
+
+/** The EventEmitter side of a pg (pg-pool) Pool. */
+export interface PgPoolEvents {
+    on(event: 'error', listener: (err: Error, client?: PgPoolClientEvents) => void): unknown;
+    on(event: 'acquire', listener: (client: PgPoolClientEvents) => void): unknown;
+    on(
+        event: 'release',
+        listener: (err: Error | undefined, client: PgPoolClientEvents) => void
+    ): unknown;
+}
+
+const reportClientError = (state: 'idle' | 'held', err: Error): void => {
+    dbPoolClientErrorsTotal.inc({ state });
+    const code = (err as { code?: unknown }).code;
+    // The message and code only: the error's `client` property carries the
+    // connection parameters.
+    log.warn('pg_pool_client_error', {
+        state,
+        ...(typeof code === 'string' ? { code } : {}),
+        error: err.message,
+    });
+};
+
+/**
+ * Keep a pooled connection's failure (its backend terminated by a Postgres
+ * restart, a failover or an idle-session timeout; a network reset) from ending
+ * the process. A pg client is an EventEmitter, and an 'error' with no listener
+ * throws:
+ *   - an idle client's error is re-emitted on the pool, which has no listener
+ *     of its own, so the pool gets one here;
+ *   - a client checked out with connect() has none either (pg-pool takes its
+ *     own off while the client is out), so each gets one from checkout until
+ *     release.
+ * The pool drops an idle client that failed. A held client whose 'error' has
+ * fired is marked unusable by pg (client._queryable = false), so even a plain
+ * release() destroys it rather than pooling it. A server FATAL that reaches a
+ * query in flight is not an 'error' event yet: pg hands it to that query and
+ * marks the client unusable only when the socket closes, a moment later, and a
+ * plain release() in between pools the dead client for the next connect(). So
+ * the store gives a client back with the error its work failed with
+ * (db/pooledClient.ts), and pg-pool destroys it.
+ */
+export function handlePoolClientErrors(pool: PgPoolEvents): void {
+    pool.on('error', (err) => reportClientError('idle', err));
+    const held = new WeakMap<PgPoolClientEvents, (err: Error) => void>();
+    pool.on('acquire', (client) => {
+        // pg reports one dropped connection twice (the server's message, then
+        // the socket closing); count it once.
+        let reported = false;
+        const listener = (err: Error): void => {
+            if (reported) return;
+            reported = true;
+            reportClientError('held', err);
+        };
+        held.set(client, listener);
+        client.on('error', listener);
+    });
+    pool.on('release', (_err, client) => {
+        const listener = held.get(client);
+        if (!listener) return;
+        held.delete(client);
+        client.removeListener('error', listener);
+    });
+}
 
 export function readDatabaseUrl(): string | null {
     const url = process.env.DATABASE_URL?.trim();
@@ -19,10 +91,12 @@ export async function getSharedPgPool(): Promise<PgPool> {
         throw new Error('DATABASE_URL is required when BLACKOUT_DB_MODE=postgres.');
     }
     const { default: pg } = (await import('pg')) as {
-        default: { Pool: new (cfg: { connectionString: string }) => PgPool };
+        default: { Pool: new (cfg: { connectionString: string }) => PgPool & PgPoolEvents };
     };
-    cachedPool = new pg.Pool({ connectionString: url });
-    return cachedPool;
+    const pool = new pg.Pool({ connectionString: url });
+    handlePoolClientErrors(pool);
+    cachedPool = pool;
+    return pool;
 }
 
 export function getExistingPgPool(): PgPool | null {

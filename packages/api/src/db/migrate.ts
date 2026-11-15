@@ -18,6 +18,7 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { basename, extname, join } from 'node:path';
 import { createHash } from 'node:crypto';
+import { withPooledClient } from './pooledClient';
 
 const ADVISORY_LOCK_KEY = 0x424c_4f43; // 'BLOC' (Blackout migration lock)
 const NON_REVERSIBLE_FLOOR = 7; // Migrations < 007 do not ship .down.sql.
@@ -50,7 +51,8 @@ export interface ChecksumMismatch {
 
 export interface PgClient {
     query<T = Record<string, unknown>>(sql: string, params?: unknown[]): Promise<{ rows: T[] }>;
-    release?(): void;
+    /** With an error, the pool destroys the connection instead of reusing it. */
+    release?(err?: Error): void;
 }
 
 export interface PgPool {
@@ -233,8 +235,7 @@ export const verifyMigrationChecksums = async (
 ): Promise<ChecksumVerificationResult> => {
     const all = discoverMigrations(migrationsDir);
     const onDisk = new Set(all.map((m) => m.id));
-    const client = await pool.connect();
-    try {
+    return withPooledClient(pool, async (client) => {
         await ensureSchemaMigrations(client);
         const applied = await fetchApplied(client);
         const mismatches = detectChecksumDrift(applied, all);
@@ -244,9 +245,7 @@ export const verifyMigrationChecksums = async (
             mismatches,
             missingOnDisk,
         };
-    } finally {
-        client.release?.();
-    }
+    });
 };
 
 /**
@@ -285,8 +284,7 @@ export const migrateUp = async (options: MigrateOptions): Promise<MigrationFile[
     const ceiling = options.targetOrdinal ?? Number.MAX_SAFE_INTEGER;
     const applied: MigrationFile[] = [];
 
-    const client = await options.pool.connect();
-    try {
+    await withPooledClient(options.pool, async (client) => {
         await ensureSchemaMigrations(client);
         await withAdvisoryLock(client, async () => {
             const appliedRows = await fetchApplied(client);
@@ -315,9 +313,7 @@ export const migrateUp = async (options: MigrateOptions): Promise<MigrationFile[
                 applied.push(migration);
             }
         });
-    } finally {
-        client.release?.();
-    }
+    });
     return applied;
 };
 
@@ -335,8 +331,7 @@ export const migrateDown = async (options: MigrateOptions): Promise<MigrationFil
     const all = discoverMigrations(options.migrationsDir);
     const reverted: MigrationFile[] = [];
 
-    const client = await options.pool.connect();
-    try {
+    await withPooledClient(options.pool, async (client) => {
         await ensureSchemaMigrations(client);
         await withAdvisoryLock(client, async () => {
             const applied = await fetchApplied(client);
@@ -369,9 +364,7 @@ export const migrateDown = async (options: MigrateOptions): Promise<MigrationFil
                 reverted.push(file);
             }
         });
-    } finally {
-        client.release?.();
-    }
+    });
     return reverted;
 };
 
@@ -383,8 +376,7 @@ export const status = async (
     drift: ChecksumMismatch[];
 }> => {
     const all = discoverMigrations(options.migrationsDir);
-    const client = await options.pool.connect();
-    try {
+    return withPooledClient(options.pool, async (client) => {
         await ensureSchemaMigrations(client);
         const applied = await fetchApplied(client);
         const appliedIds = new Set(applied.map((m) => m.id));
@@ -393,9 +385,7 @@ export const status = async (
             applied,
             drift: detectChecksumDrift(applied, all),
         };
-    } finally {
-        client.release?.();
-    }
+    });
 };
 
 // ---------------------------------------------------------------------------

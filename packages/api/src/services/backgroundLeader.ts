@@ -1,4 +1,5 @@
 import type { PgClient, PgPool } from '../db/migrate';
+import { raiseIdleSessionTimeoutTo, restoreIdleSessionTimeout } from '../db/pooledClient';
 import { getSharedPgPool } from '../config/postgres';
 import { RUNTIME_DB_MODE } from '../db/store';
 import { log } from '../telemetry/logger';
@@ -27,6 +28,13 @@ export const BACKGROUND_LEADER_LOCK_KEY = 0x424c4f42;
 /** How often a watched lock is re-checked, and how long one check may take. */
 export const DEFAULT_LEADER_CHECK_INTERVAL_MS = 10_000;
 export const DEFAULT_LEADER_CHECK_TIMEOUT_MS = 5_000;
+/**
+ * The shortest idle_session_timeout a watched lock connection is left under,
+ * in lock-check intervals (30 s with the default interval): a lock check can
+ * then come up to two intervals late before the server ends the session of a
+ * process that is still there.
+ */
+export const LEADER_IDLE_SESSION_FLOOR_CHECKS = 3;
 
 /**
  * The held connection. A pg pool client is also an EventEmitter, and passing
@@ -40,6 +48,8 @@ type LeaderClient = PgClient & {
 };
 
 let leaderClient: LeaderClient | null = null;
+/** How to stop each running watch on leaderClient (watchBackgroundLeadership). */
+const leaderWatches = new Set<() => void>();
 
 const asError = (err: unknown): Error => (err instanceof Error ? err : new Error(String(err)));
 
@@ -84,6 +94,12 @@ export const acquireBackgroundLeaderLock = async (pool: PgPool): Promise<boolean
         return false;
     }
     leaderClient = client;
+    // Nothing more is sent or waited for here. The caller watches the lock
+    // from the moment this returns, and a connection reset during a wait
+    // would report its drop before any watch was on it: the process would
+    // then run the loops without the lock until the first lock check, 10 s
+    // later. What the connection needs against the server's idle-session
+    // timeout is sent by the watch, once it listens.
     log.info('background_leader_acquired', {});
     return true;
 };
@@ -104,12 +120,24 @@ const ignoreError = (): void => undefined;
  * not held, fails, or gets no answer within `checkTimeoutMs`. The connection
  * is then destroyed rather than pooled, and this process is no longer the
  * leader; the background worker stops its loops. No-op where no lock is held
- * (file/memory mode). Returns a function that stops watching.
+ * (file/memory mode). Returns a function that stops watching;
+ * releaseBackgroundLeader also stops it.
  *
- * Unwatched, an error on the held connection is an unhandled `error` event
- * (the pool takes its own listener off a client while it is checked out), so
- * the process crashes rather than run on without the lock. That is still the
- * API's behaviour: it runs no watch.
+ * Unwatched, an error on the held connection is only logged by the shared
+ * pool's listener (config/postgres.ts) and the process runs on without the
+ * lock, so every holder watches: the worker exits 1, and an API that runs the
+ * loops in-process stops them and tries for the lock again
+ * (src/inProcessBackgroundLoops.ts).
+ *
+ * The lock check is also what keeps the session from sitting idle, so the
+ * watch is what deals with the server's idle_session_timeout. One shorter
+ * than a check interval ends the session of a live leader between two checks,
+ * and one not much longer does when a check comes late. So one shorter than
+ * LEADER_IDLE_SESSION_FLOOR_CHECKS check intervals is raised to that floor
+ * for this session, and the release puts it back. One that long or longer is
+ * left alone, and so is a server with none. The session is never exempted: a
+ * timeout is what ends it, and frees the lock for another process, when this
+ * process is gone and the server has not seen it go.
  */
 export const watchBackgroundLeadership = (
     onLost: (reason: string) => void,
@@ -127,6 +155,7 @@ export const watchBackgroundLeadership = (
         clearInterval(interval);
         client.removeListener?.('error', onError);
         client.removeListener?.('end', onEnd);
+        leaderWatches.delete(stop);
     };
     const lose = (reason: string, err?: unknown): void => {
         if (!watching) return;
@@ -169,6 +198,14 @@ export const watchBackgroundLeadership = (
     client.on?.('end', onEnd);
     const interval = setInterval(() => void check(), checkIntervalMs);
     if (typeof interval.unref === 'function') interval.unref();
+    leaderWatches.add(stop);
+    // After the listeners: a connection reset under its statement is then
+    // reported as a loss at once. Not waited for, and it never rejects.
+    void raiseIdleSessionTimeoutTo(
+        client,
+        LEADER_IDLE_SESSION_FLOOR_CHECKS * checkIntervalMs,
+        () => watching
+    );
     return stop;
 };
 
@@ -177,11 +214,21 @@ export const releaseBackgroundLeader = async (): Promise<void> => {
     const client = leaderClient;
     if (!client) return;
     leaderClient = null;
+    // Stop watching before the connection goes back to the pool. A watch left
+    // on it would give it back a second time when it fails there (pg-pool
+    // throws on a second release, here inside the connection's 'error'
+    // listener, which ends the process mid-drain), and its next lock check
+    // would destroy it under whoever has checked it out by then.
+    for (const stop of [...leaderWatches]) stop();
     try {
         await client.query('SELECT pg_advisory_unlock($1)', [BACKGROUND_LEADER_LOCK_KEY]);
+        // An ordinary pooled connection from here on, under the server's own
+        // idle-session timeout again if the watch raised it.
+        await restoreIdleSessionTimeout(client);
     } catch (err) {
         // The lock goes when the connection drops, so a connection whose unlock
-        // failed is destroyed, never pooled with the lock possibly still held.
+        // failed is destroyed, never pooled with the lock possibly still held;
+        // nor is one pooled whose raised timeout could not be put back.
         client.release?.(asError(err));
         return;
     }

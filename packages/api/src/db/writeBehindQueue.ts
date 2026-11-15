@@ -32,6 +32,7 @@ import {
 } from '../telemetry/metrics';
 import type { PgPool } from './migrate';
 import { keyChangePayloads, type StoreChangePayload, type StoreChangeTransport } from './pgNotify';
+import { withPooledClient } from './pooledClient';
 import {
     keyOfTuple,
     snakeToCamel,
@@ -235,14 +236,12 @@ export class WriteBehindQueue {
             return;
         }
         try {
-            await this.withRetry(async () => {
-                const client = await this.pool.connect();
-                try {
-                    await upsertRecord(client, plan, op.record);
-                } finally {
-                    client.release?.();
-                }
-            });
+            // A failed attempt gives its connection back with the error, so the
+            // pool closes it and the retry gets another connection (a new one
+            // only when none is idle), never the same dead client.
+            await this.withRetry(() =>
+                withPooledClient(this.pool, (client) => upsertRecord(client, plan, op.record))
+            );
             // Tell peer replicas to refresh their mirror for this change.
             if (this.transport) {
                 const kv = plan.descriptor.conflictColumns.map((col) =>
@@ -330,49 +329,50 @@ export class WriteBehindQueue {
     ): Promise<TargetedOutcome> {
         const returned: KeySet = new Map();
         const merged: KeySet = new Map();
-        const client = await this.pool.connect();
-        let open = false;
-        try {
-            await client.query('BEGIN');
-            open = true;
-            for (const s of write.statements) {
-                const res = await client.query<Row>(s.sql, s.params);
-                const plan = this.plans.get(s.map);
-                if (plan) {
-                    for (const row of res.rows) {
-                        const kv = plan.descriptor.conflictColumns.map((c) => row[c] ?? null);
-                        const key = keyOfTuple(plan, kv);
-                        addKey(returned, s.map, key, kv);
-                        if (s.merges) addKey(merged, s.map, key, kv);
+        // As for an upsert, a failed attempt gives its connection back with the
+        // error (withPooledClient), so the retry never gets the same dead client.
+        return withPooledClient(this.pool, async (client): Promise<TargetedOutcome> => {
+            let open = false;
+            try {
+                await client.query('BEGIN');
+                open = true;
+                for (const s of write.statements) {
+                    const res = await client.query<Row>(s.sql, s.params);
+                    const plan = this.plans.get(s.map);
+                    if (plan) {
+                        for (const row of res.rows) {
+                            const kv = plan.descriptor.conflictColumns.map((c) => row[c] ?? null);
+                            const key = keyOfTuple(plan, kv);
+                            addKey(returned, s.map, key, kv);
+                            if (s.merges) addKey(merged, s.map, key, kv);
+                        }
+                    }
+                    if (s.required && res.rows.length === 0) {
+                        open = false;
+                        await client.query('ROLLBACK');
+                        return { outcome: 'conflict', at: s };
                     }
                 }
-                if (s.required && res.rows.length === 0) {
-                    open = false;
-                    await client.query('ROLLBACK');
-                    return { outcome: 'conflict', at: s };
+                const transport = this.transport;
+                if (transport?.publishWithin) {
+                    for (const p of this.keyPayloads(union(returned, uncertain))) {
+                        await transport.publishWithin(client, p);
+                    }
                 }
-            }
-            const transport = this.transport;
-            if (transport?.publishWithin) {
-                for (const p of this.keyPayloads(union(returned, uncertain))) {
-                    await transport.publishWithin(client, p);
+                open = false;
+                try {
+                    await client.query('COMMIT');
+                } catch (err) {
+                    for (const [m, keys] of returned)
+                        for (const [k, kv] of keys) addKey(uncertain, m, k, kv);
+                    throw err;
                 }
-            }
-            open = false;
-            try {
-                await client.query('COMMIT');
+                return { outcome: 'committed', returned, merged };
             } catch (err) {
-                for (const [m, keys] of returned)
-                    for (const [k, kv] of keys) addKey(uncertain, m, k, kv);
+                if (open) await client.query('ROLLBACK').catch(() => undefined);
                 throw err;
             }
-            return { outcome: 'committed', returned, merged };
-        } catch (err) {
-            if (open) await client.query('ROLLBACK').catch(() => undefined);
-            throw err;
-        } finally {
-            client.release?.();
-        }
+        });
     }
 
     private keyPayloads(keys: KeySet): StoreChangePayload[] {

@@ -305,6 +305,12 @@ export const dbWriteBehindFailuresTotal = new Counter(
     ['map', 'kind']
 );
 
+export const dbPoolClientErrorsTotal = new Counter(
+    'db_pool_client_errors_total',
+    'Error events from pooled Postgres connections (backend terminated, network reset), by whether the client was idle in the pool or checked out. A failure seen only by the query in flight is reported by that query and not counted here.',
+    ['state']
+);
+
 export const dbTargetedWriteConflictsTotal = new Counter(
     'db_targeted_write_conflicts_total',
     'Targeted write-behind ops rolled back because a required statement matched no row (another process had already changed it); the keys were re-read from Postgres.',

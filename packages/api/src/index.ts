@@ -99,8 +99,11 @@ import {
     startLegacyApiAliasWeeklyReporter,
 } from './telemetry/api-alias-usage';
 import { log } from './telemetry/logger';
-import { startBackgroundLoops } from './backgroundLoops';
-import { tryBecomeBackgroundLeader, releaseBackgroundLeader } from './services/backgroundLeader';
+import {
+    runBackgroundLoopsWhileLeader,
+    type InProcessBackgroundLoops,
+} from './inProcessBackgroundLoops';
+import { releaseBackgroundLeader } from './services/backgroundLeader';
 import { httpMetricsMiddleware } from './telemetry/http-metrics';
 import { registry as metricsRegistry } from './telemetry/metrics';
 import { initErrorReporter, errorReporter } from './telemetry/errors';
@@ -498,17 +501,13 @@ if (shouldListen) {
     // entirely; among the rest, a Postgres advisory-lock leader election ensures
     // only one actually runs the loops even if the env var is misconfigured
     // across replicas (in file/memory mode there is a single process anyway).
-    if (process.env.BLACKOUT_BACKGROUND_WORKERS_DISABLED !== '1') {
-        void (async () => {
-            const isLeader = await tryBecomeBackgroundLeader();
-            if (isLeader) {
-                startBackgroundLoops();
-                log.info('background_loops_started', {});
-            } else {
-                log.info('background_loops_skipped_not_leader', {});
-            }
-        })();
-    }
+    // In postgres mode the lock lives on a held pool connection; if that
+    // connection fails or the lock is gone, the loops stop, the API stays up,
+    // and it tries for the lock again (inProcessBackgroundLoops.ts).
+    const inProcessLoops: InProcessBackgroundLoops | null =
+        process.env.BLACKOUT_BACKGROUND_WORKERS_DISABLED !== '1'
+            ? runBackgroundLoopsWhileLeader()
+            : null;
 
     const httpServer = serve({ fetch: app.fetch, port: PORT }, (info) => {
         log.info('blackout-server listening', { port: info.port });
@@ -534,10 +533,13 @@ if (shouldListen) {
             process.exit(0);
         }, SHUTDOWN_TIMEOUT_MS);
         if (typeof forceTimer.unref === 'function') forceTimer.unref();
+        // No new tick, and no retry for the leader lock, from here on.
+        const loopsStopped = inProcessLoops?.stop();
 
         httpServer.close(() => {
             void (async () => {
                 try {
+                    await loopsStopped;
                     await releaseBackgroundLeader();
                     await drainRuntimeStore();
                     log.info('runtime_store_drained', { signal });
