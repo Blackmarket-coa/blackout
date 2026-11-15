@@ -513,3 +513,21 @@ fourth review on 2026-10-31). The detail is in
     have them yet. They are fixed in 0.6.5, which the fork now locks; its
     `pyproject.toml` floor is 0.6.5. `service_identity` decodes the SRV-ID
     of each peer certificate it checks with pyasn1.
+
+## 2026-11-14: tornado, sentry-sdk and pygments; black and soupsieve re-checked
+
+Three entries above have changed or been checked again. The detail is in
+`dependency-advisories-server-desktop-2026-11-14.md`.
+
+-   **tornado 6.6, the version locked above, has a Low advisory**
+    (GHSA-5cjw-f85j-cv6r, published 2026-11-13). The fork now locks 6.6.1,
+    and its `pyproject.toml` line is `^6.6.1`.
+-   **sentry-sdk and pygments, which this record did not list** (both had
+    only a Low advisory), are locked at 1.45.1 and 2.20.0.
+-   **Black is still not bumped, and the reason was measured again.** On the
+    tree of 2026-11-14, black 26.10.1 would reformat 212 of 966 files and the
+    locked 23.10.1 would reformat 27.
+-   **soupsieve 2.10, the dev bump above, has three new advisories**
+    (published 2026-11-13, fixed in 3.0.2 and 4.0). It stays at 2.10: every
+    fixed release requires Python 3.11.5 or later, and the floor set above is
+    3.11.0.
