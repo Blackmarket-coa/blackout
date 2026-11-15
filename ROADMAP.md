@@ -21,6 +21,12 @@ operations guide; it points at it.
 
 ## Current focus
 
+### Blackout agency, community, character, and creator growth — 2026-11-15
+
+The [new product requirements](docs/product/BLACKOUT_AGENCY_COMMUNITY_CHARACTER_AND_CREATOR_GROWTH.md) extend the [participation strategy](docs/BLACKOUT_HABIT_AND_PARTICIPATION_STRATEGY.md): crowd-selected Coliseum finales, champion/team pride and coalition-building, game-theory learning, map-based Coalition microlearning and Pinterest-style discovery, feed curation, username/password signup with short visual goals, evolving personas and earned digital choices, and creator audience/campaign research.
+
+Start with signup and one meaningful goal, user-controlled discovery, a complete contest, and reliable character/reward fulfillment. Stage advanced strategy and campaign tools behind verified data and working integrations. This proposed sequence does not replace the canonical milestone tracker or claim shipped features.
+
 ### FBM character-built portal integration — 2026-11-12
 
 The [Coalition integration contract](docs/coalitions/FBM_UNIFIED_PORTAL_INTEGRATION.md) is the local companion to FBM's canonical plan. Reuse Coalition as the shared real-world map and community coordination layer; expose supported views/actions through verified member identity and permission-safe adapters. Do not duplicate the map or its record backends in FBM.

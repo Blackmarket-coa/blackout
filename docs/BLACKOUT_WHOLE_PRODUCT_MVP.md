@@ -2,6 +2,7 @@
 
 **Status:** Proposed product-level MVP definition; not an assertion of deployment readiness.  
 **Date:** 2026-11-03  
+**Requirements update:** 2026-11-15 — [agency, community, character, and creator growth](product/BLACKOUT_AGENCY_COMMUNITY_CHARACTER_AND_CREATOR_GROWTH.md)  
 **Scope:** Entire Blackout experience, not just Coalition.  
 **Companions:** [Feature inventory](features/OVERVIEW.md) · [Known limitations](../KNOWN_LIMITATIONS.md) · [Participation strategy](BLACKOUT_HABIT_AND_PARTICIPATION_STRATEGY.md) · [Coalition field operations MVP](COALITION_FIELD_OPERATIONS_MVP.md)
 
@@ -19,10 +20,11 @@ The goal is a credible alternative for everyday communication, community, discov
 ## Primary users and golden paths
 
 ### A. Passive member: join, discover, return
-1. Register/invite, choose a profile and privacy defaults.
-2. Discover a Canopy, enter a Den, and follow a relevant discussion or creator.
-3. Read a feed or media post, react, save/share, and find a friend or group.
-4. Receive a useful, controllable notification and return to the correct context.
+1. Register/invite with username and password; use understandable privacy defaults and defer optional profile details to a short visual tour.
+2. Choose a starter direction/persona and complete one small goal with visible, saved progress.
+3. Discover a Canopy, enter a Den, and follow a relevant discussion or creator.
+4. Curate the feed at will, read a post or microlearning item, react, save/share, and find a friend or group.
+5. Receive a useful, controllable notification and return to the correct context.
 **Success:** Useful discovery and repeated social interaction without requiring content creation.
 
 ### B. Friend group: private communication
@@ -49,21 +51,21 @@ The goal is a credible alternative for everyday communication, community, discov
 ### E. Coliseum participant: debate constructively
 1. Discover a debate or challenge.
 2. Submit a stance/argument and evidence.
-3. Reply, vote or react within clear rules.
-4. See outcomes and report abuse.
+3. Support, disagree, disapprove or boo, contribute a rebuttal, and vote within published eligibility and scoring rules.
+4. Reach a crowd-selected winner at a defined finish; see team/contributor recognition, evidence and unresolved claims, and report abuse.
 **Success:** Competitive expression without targeting individuals or compromising moderation safety.
 
 ## Required MVP surfaces
 
 | Surface | Must work in first release | May be staged/deferred |
 | --- | --- | --- |
-| Identity and onboarding | Invite/register, login/logout, profile, account recovery, understandable privacy controls | Multiple identities and advanced pseudonym switching |
+| Identity and onboarding | Username/password invite/register, login/logout, recovery, privacy defaults, short visual goals and saved progress; optional profile details later | Multiple identities, advanced pseudonym switching and rich character customization |
 | Communication | E2EE text, attachments, replies/reactions, notifications, membership, reliable sync | Advanced OPSEC/deaddrop/mesh and every bridge |
 | Canopies and Dens | Create/join/discover, roles, basic moderation, announcements | Full federated governance sophistication |
-| Home/discovery | One understandable home feed or discovery entry point, follow/join, content navigation | Complex recommendation engine and all feed formats |
+| Home/discovery | One understandable feed/discovery entry point, follow/join, content navigation and directly accessible user-controlled filters | Complex recommendations, full Pinterest-style Coalition masonry and information-video formats |
 | Posting and sharing | Text/image posting, simple media playback, comments/reactions, share/copy link | Full video editing studio, multi-platform simulcast |
 | Creator tools | Creator profile, publishing, basic insights, link to offers | Full subscriptions, gifts, ad splits, multi-rail payouts |
-| Coliseum | One complete debate/challenge journey with rules and reporting | Large faction wars, tournaments, complex reputation |
+| Coliseum | One complete debate/challenge with crowd selection, a defined finish, expressive reactions, contributor recognition, rules and reporting | Large faction wars, tournaments, advanced alliances, game-theory strategy bench and complex reputation |
 | Coordination | Basic event/task/RSVP in a community | Full Coalition field-operations suite and live GPS |
 | Safety and privacy | Block/report, role enforcement, visible encryption/failure states, abuse handling, data controls | Advanced privacy marketing claims without proof |
 | Platform | Responsive web app, mobile browser usability, diagnostics, rollback | Desktop/native store release parity at MVP |
@@ -110,6 +112,12 @@ Creator tools, governance, events, and Coalition operations can be contextual en
 - Mesh/LoRa, offline-first field operations, deep Blackstar and FBM integration.
 
 These are proposed product priorities; they do not supersede existing infrastructure or operational trackers.
+
+## November 15 requirements and staged growth
+
+The [agency, community, character, and creator plan](product/BLACKOUT_AGENCY_COMMUNITY_CHARACTER_AND_CREATOR_GROWTH.md) adds requirements without declaring advanced systems launch-ready. Signup, a short useful first goal, visible progress, feed control, and one completed crowd-selected contest shape the core journeys above.
+
+Stage richer character progression and milestone reward choices, Pinterest-style Coalition discovery, map-based games and IRL events, interactive game-theory scenarios, and complete creator campaign research as verified working slices. Creator research includes permitted social trends and aggregate voting, demographic and economic layers with explicit geographic coverage. Rewards must grant real usable digital products/native features before being advertised; preserve one-time enhancement purchases and basic privacy/community access.
 
 ## Explicitly out of the whole-product MVP
 

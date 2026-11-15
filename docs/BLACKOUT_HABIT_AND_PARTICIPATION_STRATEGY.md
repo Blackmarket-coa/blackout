@@ -1,6 +1,7 @@
 # Blackout Habit Formation & Participation Strategy
 
 **Status:** Product strategy  
+**Latest requirements addition:** November 15, 2026 — [agency, community, character, and creator growth](product/BLACKOUT_AGENCY_COMMUNITY_CHARACTER_AND_CREATOR_GROWTH.md)  
 **Scope:** Blackout social experience, Coliseum, Creator Hub, Dens, Blackmask, FBM, Blackstar, and BMC Connect  
 **Purpose:** Define the human needs Blackout serves, the habits it should earn, and the product systems that turn participation into personal, social, economic, and real-world value.
 
@@ -248,3 +249,18 @@ Before adding a feature, ask:
 ## Coalition field operations companion
 
 The [Coalition Field Operations Build Plan](COALITION_FIELD_OPERATIONS_BUILD_PLAN.md) translates community missions and real-world coordination into a privacy-first sequence: coalition-scoped authorization, manual status, resource/asset maps, operation lifecycles, safety check-ins, and only then carefully gated optional location sharing. It is a proposal, not an assertion that continuous tracking is implemented.
+
+## November 15, 2026 — Agency, community, character, and creator growth
+
+The [detailed requirements and acceptance plan](product/BLACKOUT_AGENCY_COMMUNITY_CHARACTER_AND_CREATOR_GROWTH.md) extends this strategy. These are product requirements, not implementation or deployment claims.
+
+- **Coliseum:** Give spectators and active participants visible influence through support, disagreement, disapproval, boos, champion recognition, and opt-in captain/strategist/contributor roles. Encourage alliances and team pride. Contests build through published rounds toward a crowd-selected winner, with scoring, eligibility, closing and tie rules declared in advance.
+- **Game theory:** Teach cooperation, competition, bargaining and coalition formation through interactive choices. A strategy bench helps groups explore turnout, support and alliance scenarios; show assumptions and distinguish scenarios from validated win probabilities.
+- **Coalition:** Build belonging, knowledge exchange, fulfillment and altruism through useful microlearning and real-world participation. Keep the chosen network and map central; add Pinterest-style masonry discovery, games, IRL events and information-focused video with direct links to groups, lessons, tasks and events.
+- **Feed control:** Let people filter and curate at any time, save presets, mute topics/accounts, choose supported ordering and reset recommendations. Respect explicit filters rather than silently widening them.
+- **Simple onboarding:** Username/password creates the account. Optional profile details come during a visual tour or when needed. Use short achievable goals, visible saved progress, demonstrations and contextual prompts; consolidate steps and reuse answers.
+- **Motivation and interaction:** Use social acceptance, relief from friction/pain, and hope through welcoming feedback and attainable next goals. Apply familiar controls, recognition, contextual defaults and immediate feedback; retain accessible labels and explanations.
+- **Rewards and true persona:** Characters personify users and evolve through ranks and achievements. Recognize useful learning, creation, competition and community contributions. Points work toward free native features; milestones offer a choice of real digital products. Vary discovery and reward choices while keeping earning terms predictable and allowing users to choose what they display.
+- **Creator campaigns:** Help creators define and compare intended versus measured audiences by state, topic, age bands and other supported criteria. Combine permitted social trend research, aggregate voting/demographic/economic map layers, campaign planning, publishing and outcome measurement. Preserve geographic provenance, coverage limits and private user data.
+
+The first implementation slices are simple signup and a meaningful starter goal, user-controlled Coalition discovery, a complete crowd-selected Coliseum contest, and reliable character/reward fulfillment. Interactive strategy tools and full campaign research follow dependency verification. The whole-product MVP and canonical operations guide continue to determine release readiness.

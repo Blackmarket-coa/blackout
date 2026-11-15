@@ -5,6 +5,7 @@
 # Product direction
 
 -   [Habit & participation strategy](BLACKOUT_HABIT_AND_PARTICIPATION_STRATEGY.md)
+-   [Agency, community, character, and creator growth](product/BLACKOUT_AGENCY_COMMUNITY_CHARACTER_AND_CREATOR_GROWTH.md)
 -   [Coalition field operations MVP](COALITION_FIELD_OPERATIONS_MVP.md)
 -   [Coalition field operations build plan](COALITION_FIELD_OPERATIONS_BUILD_PLAN.md)
 -   [Differentiation brief](blackout-differentiation-brief.md)
