@@ -2741,6 +2741,14 @@ The record's own commit changes no file Trivy reads.
     crates (proc-macro-error, zbus_names, zvariant, zvariant_derive). They
     are not triaged here.
 
+    2026-11-15: the change that
+    `dependency-advisories-server-desktop-2026-11-14.md` records is the "own
+    change" this item left them for. It moves the lock past every advisory
+    listed here except glib's, which has no release that tauri's GTK 3 stack
+    accepts, and it triages the seven notices: anyhow, event-listener and
+    tokio are bumped, and the four unmaintained crates, which have no fixed
+    version, are explained there.
+
 5.  **The Railway template renders every `${VAR:-default}` as text (sixth
     review).** (Removed on 2026-11-02 in `42f68f2`; see the end of this item.)
     `apps/blackout-server/services/blackout-server/entrypoint.sh`

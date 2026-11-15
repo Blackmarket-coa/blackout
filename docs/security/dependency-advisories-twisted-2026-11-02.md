@@ -2220,7 +2220,9 @@ tools/ci/check-auth-secrets.mjs`.
     (5.3). black is a dev dependency, which Trivy's poetry analyzer skips
     and the image does not install; `synapse-dependencies-triage-2026-10-25.md`
     ("Black: dev-only, not bumped") triaged all four and left the formatter
-    for a reconciliation with upstream. Unchanged here.
+    for a reconciliation with upstream. Unchanged here. (2026-11-15: the
+    change that `dependency-advisories-server-desktop-2026-11-14.md` records
+    locks sentry-sdk 1.45.1 and pygments 2.20.0; black stays as it is.)
 2.  **The baseline venv's console scripts point at a venv that no longer
     exists.** `venv-r5` under this session's scratch directory was made as a
     copy of `venv-after`, so its `bin/pip`, `bin/trial` and the rest carry

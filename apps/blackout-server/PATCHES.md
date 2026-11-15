@@ -1732,9 +1732,14 @@ upstream's; re-check the other two lines during any reconciliation.
   before and after; nothing else moves. The image's export
   (`poetry export --extras all`) changes in two requirements, `sentry-sdk` and
   `tornado`.
-- No fork code changed. No shipped homeserver template has a `sentry` or an
-  `opentracing` section, so neither package is imported in a deployment as
-  shipped; both are installed in the image by `--extras all`.
+- No fork code changed. Both packages are installed in the image by
+  `--extras all`. sentry-sdk is imported only inside `setup_sentry`, when the
+  config has a `sentry` section, and no shipped homeserver template has one.
+  tornado is loaded at startup wherever jaeger-client is installed, the image
+  included, because `synapse/logging/opentracing.py` imports jaeger-client at
+  module level; `tornado.web` is not among the modules that loads. (The first
+  version of this entry said neither package is imported as shipped, which
+  was wrong for tornado.)
 - Not bumped, with the reason beside the constraint or in the record:
   soupsieve 2.10 (optional `dev-docs` group; the fixed releases, 3.0.2 and
   4.0, require Python >=3.11.5 and the fork's floor is 3.11.0, so poetry
