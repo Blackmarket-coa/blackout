@@ -2748,7 +2748,8 @@ records what the API sends.
     the account, since release keys cannot be unpublished (identities
     record, decision 16). A refusal that the notifier and the release read
     honour is PR 4's or later; `KNOWN_LIMITATIONS.md` says so meanwhile.
-20. (Part 2, after its review.) The removal after 365 days is not extended to
+20. (Part 2, after its review. **Decided by the operator on 2026-11-15: leave it; the removal is not
+    extended to fired legacy switches.**) The removal after 365 days is not extended to
     fired legacy switches: their payload is served to the people they named
     with no removal date, as the design's "existing switches stay as they
     are" has it, and the deletion screen and `KNOWN_LIMITATIONS.md` now say
@@ -2763,14 +2764,17 @@ records what the API sends.
     have been told it after the trigger.
 23. (Part 2, after its review.) The export of an account includes the notice
     rows about it, for fired switches only (P3b-L8).
-24. (Part 2, after its review's round 2.) The rows of a cancelled release
+24. (Part 2, after its review's round 2. **Decided by the operator on 2026-11-15: delete a cancelled
+    release switch's rows after 365 days. Not built yet.**) The rows of a cancelled release
     switch (the switch row with whom it named, the label and timing, and one
     blanked copy row per account with the fingerprint of the key it was
     sealed to) are never deleted, as no dead-man row is; at the arming rate
     that is up to 10 switch rows and 650 copy rows a day per account, for
     good. Keep them, as the record of what was armed, or let a cancelled
     release switch's rows be deleted after some time.
-25. (Part 2, after its review's round 3.) The notices room carries an alias,
+25. (Part 2, after its review's round 3. **Decided by the operator on 2026-11-15: give the alias a
+    secret of its own, never rotated with `JWT_SECRET_PRIMARY`. Not built
+    yet.**) The notices room carries an alias,
     an HMAC of the person's Matrix id under a key derived from
     `JWT_SECRET_PRIMARY`, so that a create the homeserver finished after the
     notifier's 30 s, or one another process made, is found rather than made
@@ -2785,7 +2789,8 @@ records what the API sends.
     an extra, empty room again. Keep this key, give the alias a secret of its
     own that is never rotated with the JWT secret, or drop the alias and
     accept the extra rooms a slow homeserver leaves.
-26. (Part 2, after its review's round 4.) A room found through the person's
+26. (Part 2, after its review's round 4. **Decided by the operator on 2026-11-15: confirmed as
+    built.**) A room found through the person's
     alias that is not yet the whole room the create makes, with the bot in it
     (no `m.room.create`; or the bot's, without the bot's join or without
     power levels that keep the person from posting and inviting: round 5) is
@@ -3010,7 +3015,8 @@ records what the API sends.
     for a carry that failed). The cost chosen: one statement per refused
     attempt, one connection per try and one more try per 10 s while it
     fails, a migration, and one more condition on the trigger.
-32. (Part 2, after its review's round 13.) An account deletion can still
+32. (Part 2, after its review's round 13. **Decided by the operator on 2026-11-15: the four cases stay
+    documented as they are; no check is built.**) An account deletion can still
     leave an unfired switch armed in Postgres, which a process that reads it
     so fires at its deadline for an account that is gone, in four cases
     (§15, Still open): every attempt to erase it failing, the deletion's
@@ -3036,8 +3042,8 @@ records what the API sends.
     the four cases stay documented as they are, or have the check built
     together with whatever makes an account row reliably absent only for a
     deleted account.
-33. (Part 2, after its review's round 14. Built as the default; confirm or
-    veto.) The deletion route's third wait, for the owner's arms this
+33. (Part 2, after its review's round 14. Built as the default. **Decided by the operator on 2026-11-15:
+    the 30 s bound is confirmed.**) The deletion route's third wait, for the owner's arms this
     process is still writing before it lists the owner's switches (round 13
     added it, with no bound), is bounded at 30 s
     (`ACCOUNT_DELETION_ARMS_WAIT_MS`, the switch statements' own bound;
@@ -3059,8 +3065,8 @@ records what the API sends.
     decisions 30 and 32 already name (an arm the database was still running
     after it lost its client). Confirm the bound, choose another, or have
     the wait unbounded as round 13 built it.
-34. (Part 2, after its review's round 15. Built as the default; confirm or
-    veto.) A check-in or cancel refused `unanswered` whose carry into the
+34. (Part 2, after its review's round 15. Built as the default. **Decided by the operator on 2026-11-15:
+    10 s is confirmed.**) A check-in or cancel refused `unanswered` whose carry into the
     switch's row (decision 31) fails, or since round 16 passes its 5 s
     bound (decision 35), is tried again by the refusing process on its own
     timer 10 s later (`carryRetryMs`), and so on until it lands or Postgres
@@ -3084,7 +3090,10 @@ records what the API sends.
     then, and the "at most 10 s" above it held only for a carry that
     failed). Confirm 10 s, or choose another interval.
 35. (Part 2, after its review's round 16, corrected after round 17. Built
-    as the default; confirm or veto.) Each try of the carry takes one
+    as the default. **Decided by the operator on 2026-11-15: option (b), TCP keepalive and a
+    connection timeout on the shared pool, as a change of its own to
+    `develop`, where the pool now lives (pull request #1011); the 5 s bound
+    of the carry is confirmed. Not built yet.**) Each try of the carry takes one
     connection of its own from the shared pool, outside the write-behind
     queue, and gives up after 5 s (`carryTimeoutMs`) on the connection and
     on each statement, giving the connection back with the error so the
@@ -3165,8 +3174,8 @@ records what the API sends.
     on its process id, which a failed-over primary no longer has), which
     needs that id kept per statement and the role's right to signal it.
     Confirm (a) and the 5 s bound, or choose.
-36. (Part 2, after its review's round 19. Built as the default; confirm or
-    veto.) A switch statement that fails with its outcome unknown (a lost
+36. (Part 2, after its review's round 19. Built as the default. **Decided by the operator on 2026-11-15:
+    option (a), as built.**) A switch statement that fails with its outcome unknown (a lost
     connection; not one the database itself refuses, decision 37) is read
     back before anything else is sent (round 20). Where
     that read back answers within what is left of the statement's 30
@@ -3196,8 +3205,8 @@ records what the API sends.
     was refused gets the window, as before; an owner who could not reach
     the server at all during the outage then has the switch fire at the
     first pass after it. Confirm (a), or choose.
-37. (Part 2, after its review's round 20. Built as the default; confirm or
-    veto.) Which rejections of a switch statement are the database's own
+37. (Part 2, after its review's round 20. Built as the default. **Decided by the operator on 2026-11-15:
+    option (a), as built.**) Which rejections of a switch statement are the database's own
     refusal of it, and so an answer that the statement did not apply, with
     nothing read back and no other owner's statement held back (round 21).
     As built: an error that carries the server's five-character code and
