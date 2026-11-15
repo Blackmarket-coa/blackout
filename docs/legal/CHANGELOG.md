@@ -144,9 +144,18 @@ each correction.
     restarts and when its connection for change notices has dropped and
     been opened again. Arming the same message again is
     refused as already taken if the first was recorded, and the switch then
-    appears in your list, unless one of those limits, which are checked
-    first, refuses that arm: cancelling a release that counts toward the
-    limit, then arming the message again, lists it where the limit is on
+    appears in your list, but only where that arm still passes the checks
+    the server makes before it asks the database: your release keys and
+    those of every person the message names are still the ones it was
+    sealed under, every account it names still exists, and none of those
+    limits refuses it. Where a key has been replaced or an account deleted
+    since, arming the message again is refused every time, and the switch
+    is listed only once a server process reads the whole database again
+    (the process that fires switches can be the one that does, and then
+    fires it at its deadline like any other). Where a limit refuses it:
+    cancelling a release that counts toward the limit and has not fired (a
+    fired one cannot be cancelled, and counts until its removal), then
+    arming the message again, lists it where the limit is on
     releases held, only waiting does where it is the limit on arms in 24
     hours, and nothing you can do does where it is the limit on accounts
     naming one person. A check-in or
@@ -164,9 +173,13 @@ each correction.
     by then cancelled. If that
     process stops first, or the database carried the cancel out only after
     those reads, the copies stay in the database, sealed and given
-    to nobody, and that process goes on showing the switch armed, until the
-    process that runs the sweep learns the switch is
-    cancelled or you cancel it again. A write whose outcome is unknown,
+    to nobody, and that process goes on showing the switch armed, until you
+    cancel it again or check in on it there, or the process that runs the
+    sweep learns the switch is cancelled (from a notice between the
+    server's processes, on reading the whole database again, or when the
+    database refuses its move of the switch at the former deadline): that
+    process then removes the copies and tells the server's other processes,
+    which show the switch cancelled from then. A write whose outcome is unknown,
     whichever account made it, holds every account's arms, check-ins and
     cancels on that server process until its switch has been read back;
     one the database refuses outright holds nothing. While the database

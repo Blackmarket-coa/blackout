@@ -627,13 +627,17 @@ For the source-of-truth triage with tier/owner detail see
     has not answered, and once more when the database refuses to note your
     refused cancel on a switch it has by then cancelled. If that process
     stopped first, or the database carried the cancel out only after both
-    of those, the copies stay, and that server goes on showing the switch
-    armed, until you cancel again, which removes them, or the server's
-    background work next writes that switch, at the switch's former
-    deadline, or a check-in finds it cancelled; the sweep's pass also
-    removes any copy still
-    held on a cancelled release switch that its own process knows is
-    cancelled); backups keep them until they expire. Where the API runs as several
+    of those, the copies stay, and that server process goes on showing the
+    switch armed, until you cancel again, which removes them, or a check-in
+    finds it cancelled, or the process that runs the server's background
+    sweep comes to the switch. That process removes any copy still held on
+    a release switch it knows is cancelled, at its first sweep pass after
+    it learnt so (from a notice between the server's processes, or on
+    reading the whole database again), and tells the server's other
+    processes, which from then show
+    the switch cancelled; where it had not learnt so, the database refuses
+    its move of the switch at the switch's former deadline, and it does the
+    same then); backups keep them until they expire. Where the API runs as several
     replicas, a re-seal the owner's device makes on another replica in the
     moment the cancel is reaching it can leave one sealed copy on the
     cancelled switch, given to nobody (a cancelled switch is never released),
@@ -687,11 +691,24 @@ For the source-of-truth triage with tier/owner detail see
     dropped and been opened again; from then it lists, counts and fires the
     switch as any other, a late one as below. Arming the same message
     again is refused as already taken and puts the switch in your
-    list at once; the bounds are checked first, though, so if you have
+    list at once, but only where that arm still passes every check the
+    server makes before it asks the database. Your release keys and those
+    of every person the message names must still be the ones it was sealed
+    under, and every account it names must still exist: if you or one of
+    them has replaced their keys since, or one of them has deleted their
+    account, arming it again is refused for that every time (a replaced key
+    is never made current again), and the switch stays unlisted, so you can
+    neither check in on it nor cancel it, until a server process reads the
+    whole database again as above; the process that runs the sweep may be
+    the one that does, and it then fires the switch at its deadline like
+    any other, whether or not the process that answers you has read it too.
+    The bounds are checked first as well, so if you have
     reached one of them since, that arm is refused by the bound instead and
     the switch stays unlisted: where the bound is the 20 held or the 5
-    naming one person, cancelling a release that counts toward it makes
-    room; where it is the 10 arms in 24 hours, only waiting does (a
+    naming one person, cancelling a release that counts toward it and has
+    not fired makes room (one that has fired cannot be cancelled, and
+    counts until its removal 365 days after it fired); where it is the 10
+    arms in 24 hours, only waiting does (a
     cancelled arm still counts, and the answer's Retry-After says how
     long); and where it is the 50 accounts naming the person, nothing you
     can do makes room); if the look-up fails too,
@@ -758,10 +775,18 @@ For the source-of-truth triage with tier/owner detail see
     checked in, and the server then reads the switch once more. One the
     database carries out later still, after that note was written, is not
     seen by that server process until your next check-in or cancel of the
-    switch, a notice of it from another process, a restart, or its
-    deadline: until then that process shows the switch as it was before
+    switch reaches it, it restarts, or another of the server's processes
+    sends it a notice of the switch. The process that runs the background
+    sweep sends one when it moves the switch or the database refuses its
+    move of it (for a switch it still takes for armed, at the deadline),
+    and when it removes the sealed copies still held on a switch it has
+    learnt is cancelled (at its first sweep pass after learning so). Where
+    the process that answers you runs no sweep of its own, which is how the
+    server is deployed, the deadline by itself brings nothing to it. Until
+    then that process shows the switch as it was before
     (a switch the database has cancelled as armed, its sealed copies still
-    held there, though it can no longer fire), which is why the answer says
+    held there until the sweep's process removes them, though it can no
+    longer fire), which is why the answer says
     to try again. While a write
     stands unconfirmed, or a failed one's switch has not been read back,
     every further arm, check-in and cancel on that process, from any
