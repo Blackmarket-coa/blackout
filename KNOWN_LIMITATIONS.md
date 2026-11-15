@@ -1070,9 +1070,10 @@ What remains:
     write was logged as given up after 0.6 s and its row was in Postgres
     once the lock was released. The `SELECT 1` after a failure is under
     that timer too: where it runs out before the queue's 5 s, a connection
-    that gave neither an answer nor a close is counted as ended (after
-    0.3 s in a second run with that timeout), not as one that gave no
-    answer.
+    that gave neither an answer nor a close is counted as ended, not as one
+    that gave no answer (in a run here with a 2 s timeout, behind a proxy
+    that kept the server's close from the API, after 2 s; the write then
+    landed on another connection).
 
     Before 2026-11-15 the one retry could be handed an idle connection that
     the server had ended in the same instant as the write's own, and the
@@ -1093,7 +1094,9 @@ What remains:
         milliseconds, whatever ended connections it met first. A restart of
         the server under four writers here left 31 of 520 requests that
         were answered 201 without a row, as it did before the change (32 of
-        437).
+        437). Those runs were on the first version of the 2026-11-15
+        change, which waited for an answer with no bound; the bound added
+        since does not change what a refused connection meets.
     -   Every one of the attempts above finds its connection ended, the one
         on a connection opened after the first failure included: the server
         is ending the sessions it has just taken.
@@ -1110,7 +1113,10 @@ What remains:
         that failed, the first attempt of the next write was refused
         (`08P01`, invalid message format) and that write landed on its
         retry. The review of 2026-11-15 found no request that puts such a
-        value in a write.
+        value in a write. pg-protocol 1.15.0 and later empty that buffer
+        when a value fails, and node-postgres 8.20.0 accepts them
+        (`pg-protocol ^1.13.0`); moving the lockfile to one is a change of
+        its own, not made here.
 
     Such a write is logged and counted (`db_write_behind_failed`,
     `db_write_behind_failures_total`), though the request that made it was
