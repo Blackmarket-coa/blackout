@@ -10821,8 +10821,36 @@ harness's in-process requests such a loop never yields to the timers and
 the check-ins the probe makes beside it (`fix/r21b/probes/d2-yield.log`:
 60,000 such requests in 39.9 s, 120 answered 400 and the rest 429 by the
 global limiter, and a 300 ms timer set before them did not fire); a request
-that arrives over a socket yields. On round 20's head its unaided run
-refused none of 48 check-ins beside 24 failing arms.
+that arrives over a socket is handled in a turn of the event loop of its
+own (read, not run against a listening server). On round 20's head its
+unaided run refused none of 48 check-ins beside 24 failing arms.
+
+The gates on `e5146e9a0a`, the round's head before this paragraph
+(`fix/gates-r21`, the branch against `origin/develop` at `898d466cb5`,
+which it has merged), all finished and passed: API lint and typecheck; the
+pr-gate suite 2,215 of 2,215 and the post-merge suite 2,335 of 2,335,
+which are round 20's 2,207 and 2,327 plus this round's eight (tests 82 to
+89 of the switch-writes file); launch smoke 14 of 14; the core and design
+builds; the client's typecheck and lint; the client suite 3,643 passed and
+3 skipped in 519 files; the protocol and SDK typechecks; dead-drop parity
+2 of 2; the migration guard (107 migrations, the latest
+`107_deadman_owner_attempt_refused`) and the ephemeral migration run; the
+trust page; room encryption; the feature registry; auth secrets; prettier
+over the 98 files the branch changes against `develop`; and gitleaks over
+the branch (111 commits, no leaks). The runner waited for the machine's
+load to fall below 3 before each suite, from 08:21 to 08:42 on 2026-11-15.
+Before the runner, each changed test file was run alone on the round's
+code, the switch-writes file 89 of 89, three times, and the memory-mode
+releases file 28 of 28, and the other files that touch what changed, one
+at a time (`fix/r21b/logs/`: `deadman-releases-postgres` 3 of 3,
+`deadman-releases-file` 3, `deadman-routes` 12,
+`deadman-release-notices-postgres` 16, `deadman-backlog-postgres` 2,
+`background-worker-postgres` 2, `write-behind-queue-lanes` 5,
+`postgres-store` 4, `store-spec-coverage` 2 and `deadman-scheduler` 20).
+The commit after that head changes this record only: this paragraph, and
+the qualifier on the sentence before it. Prettier and the search of the
+branch's added lines for a model name were run on the record with this
+paragraph in it before the commit: clean, no match.
 
 ### Still open
 
