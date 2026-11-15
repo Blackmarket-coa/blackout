@@ -10123,7 +10123,7 @@ branch made untrue in `develop`'s text, is under "Claims" below.
 -   **Model names (Low, claims).** No action, as in rounds 5 to 19: the
     two trailer lines are the session's harness's and stay, and nothing
     is rebased or amended. The tracked files that carry a model name,
-    under `docs/` and the repository's own `CLAUDE.md`, are inherited
+    under `docs/` and the working notes at the repository's root, are inherited
     from `develop` and belong to a separate change there; no line this
     branch adds carries one.
 
@@ -10299,9 +10299,12 @@ the switch-writes file 81 of 81 and `write-behind-queue-lanes` 5 of 5,
 and, on the round's code before the refresh's fix, the other test files
 that touch what changed, one at a time (`fix/r20/files-final/summary.txt`:
 the dead-man files, `develop`'s store files, the sign-up and background
-files; `store-cross-process` was run again, 41 of 41). The commit that
-adds this paragraph changes this record only; prettier and gitleaks were
-run again on it.
+files; `store-cross-process` was run again, 41 of 41). The two commits
+after that head change this record only: this paragraph, and one line of
+this section that named the root's working-notes file by its file name,
+which is a model's name, reworded. Prettier, gitleaks and the search of
+the branch's added lines for a model name were run again on the last of
+them: clean, 108 commits, no match.
 
 ### Still open
 
