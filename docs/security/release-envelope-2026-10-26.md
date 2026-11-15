@@ -9672,6 +9672,30 @@ The second read's own probes are the two of the stall, which are test 63,
 the one of an arm at a bound, which is test 68, and the one of `drain`'s
 first wait (each above).
 
+The gates on `31de682f70`, the round's head before this paragraph
+(`fix/gates-r19-final`, the branch against its base `97756ff4ec`;
+`origin/develop`, at `7a9814ebc9`, is not merged, above), all finished and
+passed: API lint and typecheck; the pr-gate suite 2,127 of 2,127 and the
+post-merge suite 2,247 of 2,247 (round 18's 2,112 and 2,232 plus this
+round's fifteen tests, 54 to 68 of the switch-writes file); launch smoke 14
+of 14; the core and design builds; the client's typecheck and lint; the
+client suite 3,643 passed and 3 skipped in 519 files; the protocol and SDK
+typechecks; dead-drop parity 2 of 2; the migration guard (107 migrations,
+the latest `107_deadman_owner_attempt_refused`) and the ephemeral migration
+run; the trust page; room encryption; the feature registry; auth secrets;
+prettier over the 94 files the branch changes; and gitleaks over the branch
+(101 commits, no leaks). The runner waited for the machine's load to fall
+below 3 before each suite, from 00:41 to 01:12 on 2026-11-15. The first
+pass's run of the same gates on `07092f1551` (`fix/gates-r19`) had finished
+and passed too, with 2,121 and 2,241 (tests 54 to 62). Before the runner,
+each changed test file was run alone on the final code: the switch-writes
+file 68 of 68, and the other Postgres-backed dead-man files
+(`deadman-backlog-postgres`, `deadman-release-notices-postgres`,
+`deadman-releases-postgres`) 2, 16 and 3 of theirs
+(`fix/r19b/file-*.log`). The commit that adds this paragraph changes this
+record only; API lint and typecheck, prettier and gitleaks were run again
+on it.
+
 ### Still open
 
 -   **A recipient-side refusal of an owner** (decision 19), which the
