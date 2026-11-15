@@ -2,10 +2,12 @@
  * An upgrade request that no WebSocket shim takes must not be able to end the
  * process, and must not be left open. It is answered `404` and closed: on a
  * new connection, on one that has already carried a response, and behind
- * plain requests in one write. (Two exceptions, pinned below. Behind an answer
- * that closes the connection, Node closes it before the guard looks. And a
- * client that is not reading the answers ahead of its upgrade is not sent the
- * `404`: its connection is destroyed a second later.)
+ * plain requests in one write. (Three exceptions, pinned below. An upgrade
+ * whose connection has already failed when the guard looks is counted and not
+ * answered. Behind an answer that closes the connection, Node closes it before
+ * the guard looks. And a client that is not reading the answers ahead of its
+ * upgrade, where they are more than the kernel takes, is not sent the `404`:
+ * its connection is destroyed a second later.)
  *
  * Node removes its own `'error'` listener from a socket before it emits
  * `upgrade`. The Twitch-IRC and OBS-WebSocket shims return without touching a
