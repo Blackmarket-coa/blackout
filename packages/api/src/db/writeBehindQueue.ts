@@ -4,10 +4,12 @@
 // the in-memory mirror), so Postgres writes are applied asynchronously here.
 // A single FIFO promise chain preserves enqueue order — critical so that an
 // upsert followed by a delete of the same key never reorders. Failures are
-// logged (and retried once) but never thrown into the event loop; a write that
-// fails twice is dropped and counted (db_write_behind_failures_total), and a
-// crash loses what is still queued. Graceful shutdown awaits drain(), which
-// waits for every queued write, until the shutdown's forced exit.
+// logged and tried again at once (withRetry: once, and on another connection
+// for as long as the one the write was given had ended, within a bound) but
+// never thrown into the event loop; a write that is given up is dropped and
+// counted (db_write_behind_failures_total), and a crash loses what is still
+// queued. Graceful shutdown awaits drain(), which waits for every queued
+// write, until the shutdown's forced exit.
 //
 // The queue also keeps a per-key fence: for each (map, key), how many queued
 // ops write it. The fence is raised when an op is enqueued, right after the
@@ -30,9 +32,9 @@ import {
     dbWriteBehindDepth,
     dbWriteBehindFailuresTotal,
 } from '../telemetry/metrics';
-import type { PgPool } from './migrate';
+import type { PgClient, PgPool } from './migrate';
 import { keyChangePayloads, type StoreChangePayload, type StoreChangeTransport } from './pgNotify';
-import { withPooledClient } from './pooledClient';
+import { attemptOnPooledClient } from './pooledClient';
 import {
     keyOfTuple,
     snakeToCamel,
@@ -96,6 +98,16 @@ function minus(a: KeySet, b: KeySet): KeySet {
 }
 
 const sizeOf = (set: KeySet) => [...set.values()].reduce((n, keys) => n + keys.size, 0);
+
+/**
+ * How many connections `pool` holds: pg-pool's `totalCount`, which counts the
+ * idle ones, the ones checked out and the ones still connecting. Zero for a
+ * pool that does not say.
+ */
+const connectionsHeldBy = (pool: PgPool): number => {
+    const held = (pool as { totalCount?: unknown }).totalCount;
+    return typeof held === 'number' && Number.isInteger(held) && held > 0 ? held : 0;
+};
 
 type WriteOp = (
     | { kind: 'upsert'; mapName: string; record: Record<string, unknown> }
@@ -237,11 +249,9 @@ export class WriteBehindQueue {
         }
         try {
             // A failed attempt gives its connection back with the error, so the
-            // pool closes it and the retry gets another connection (a new one
-            // only when none is idle), never the same dead client.
-            await this.withRetry(() =>
-                withPooledClient(this.pool, (client) => upsertRecord(client, plan, op.record))
-            );
+            // pool closes it and the next attempt gets another connection (a
+            // new one only when none is idle), never the same dead client.
+            await this.withRetry((client) => upsertRecord(client, plan, op.record));
             // Tell peer replicas to refresh their mirror for this change.
             if (this.transport) {
                 const kv = plan.descriptor.conflictColumns.map((col) =>
@@ -250,7 +260,7 @@ export class WriteBehindQueue {
                 this.transport.publish({ src: this.instanceId, m: op.mapName, op: 'u', kv });
             }
         } catch (err) {
-            // Permanent failure after the retry: the in-memory mirror has the write
+            // Permanent failure after the last attempt: the in-memory mirror has the write
             // but Postgres does not, so a restart loses it and no other process
             // ever sees it. This is the data-loss condition — make it loud AND
             // measurable so alerting can catch it rather than it being silently
@@ -269,18 +279,22 @@ export class WriteBehindQueue {
     }
 
     /**
-     * Run one targeted op, retrying once (every statement is idempotent: a
-     * keyed delete of a gone row, or a predicate the first attempt already
-     * made false, changes nothing the second time). Returns the keys to re-read.
+     * Run one targeted op, trying again as withRetry does (every statement is
+     * idempotent: a keyed delete of a gone row, or a predicate an earlier
+     * attempt already made false, changes nothing the next time). Returns the
+     * keys to re-read.
      */
     private async runTargeted(label: string, write: TargetedWrite): Promise<KeySet> {
         // Keys returned by an attempt whose COMMIT was sent but did not report
         // back: that attempt may have committed, so its keys are announced and
-        // re-read with whatever the final attempt returns.
+        // re-read with whatever the final attempt returns. One set for every
+        // attempt, however many there are.
         const uncertain: KeySet = new Map();
         let result: TargetedOutcome | null = null;
         try {
-            result = await this.withRetry(() => this.attemptTargeted(write, uncertain));
+            result = await this.withRetry((client) =>
+                this.attemptTargeted(client, write, uncertain)
+            );
         } catch (err) {
             // As for an upsert: the mirror has the change and Postgres may not.
             dbWriteBehindFailuresTotal.inc({ map: label, kind: 'targeted' });
@@ -323,56 +337,59 @@ export class WriteBehindQueue {
         return minus(uncertain, write.touched);
     }
 
+    /**
+     * One attempt at a targeted op, on `client`. A failed attempt leaves no
+     * transaction open on a connection that is still up: a failure inside the
+     * transaction is rolled back here, and a COMMIT the server refuses has
+     * ended it.
+     */
     private async attemptTargeted(
+        client: PgClient,
         write: TargetedWrite,
         uncertain: KeySet
     ): Promise<TargetedOutcome> {
         const returned: KeySet = new Map();
         const merged: KeySet = new Map();
-        // As for an upsert, a failed attempt gives its connection back with the
-        // error (withPooledClient), so the retry never gets the same dead client.
-        return withPooledClient(this.pool, async (client): Promise<TargetedOutcome> => {
-            let open = false;
+        let open = false;
+        try {
+            await client.query('BEGIN');
+            open = true;
+            for (const s of write.statements) {
+                const res = await client.query<Row>(s.sql, s.params);
+                const plan = this.plans.get(s.map);
+                if (plan) {
+                    for (const row of res.rows) {
+                        const kv = plan.descriptor.conflictColumns.map((c) => row[c] ?? null);
+                        const key = keyOfTuple(plan, kv);
+                        addKey(returned, s.map, key, kv);
+                        if (s.merges) addKey(merged, s.map, key, kv);
+                    }
+                }
+                if (s.required && res.rows.length === 0) {
+                    open = false;
+                    await client.query('ROLLBACK');
+                    return { outcome: 'conflict', at: s };
+                }
+            }
+            const transport = this.transport;
+            if (transport?.publishWithin) {
+                for (const p of this.keyPayloads(union(returned, uncertain))) {
+                    await transport.publishWithin(client, p);
+                }
+            }
+            open = false;
             try {
-                await client.query('BEGIN');
-                open = true;
-                for (const s of write.statements) {
-                    const res = await client.query<Row>(s.sql, s.params);
-                    const plan = this.plans.get(s.map);
-                    if (plan) {
-                        for (const row of res.rows) {
-                            const kv = plan.descriptor.conflictColumns.map((c) => row[c] ?? null);
-                            const key = keyOfTuple(plan, kv);
-                            addKey(returned, s.map, key, kv);
-                            if (s.merges) addKey(merged, s.map, key, kv);
-                        }
-                    }
-                    if (s.required && res.rows.length === 0) {
-                        open = false;
-                        await client.query('ROLLBACK');
-                        return { outcome: 'conflict', at: s };
-                    }
-                }
-                const transport = this.transport;
-                if (transport?.publishWithin) {
-                    for (const p of this.keyPayloads(union(returned, uncertain))) {
-                        await transport.publishWithin(client, p);
-                    }
-                }
-                open = false;
-                try {
-                    await client.query('COMMIT');
-                } catch (err) {
-                    for (const [m, keys] of returned)
-                        for (const [k, kv] of keys) addKey(uncertain, m, k, kv);
-                    throw err;
-                }
-                return { outcome: 'committed', returned, merged };
+                await client.query('COMMIT');
             } catch (err) {
-                if (open) await client.query('ROLLBACK').catch(() => undefined);
+                for (const [m, keys] of returned)
+                    for (const [k, kv] of keys) addKey(uncertain, m, k, kv);
                 throw err;
             }
-        });
+            return { outcome: 'committed', returned, merged };
+        } catch (err) {
+            if (open) await client.query('ROLLBACK').catch(() => undefined);
+            throw err;
+        }
     }
 
     private keyPayloads(keys: KeySet): StoreChangePayload[] {
@@ -383,15 +400,71 @@ export class WriteBehindQueue {
         return out;
     }
 
-    private async withRetry<T>(fn: () => Promise<T>): Promise<T> {
-        try {
-            return await fn();
-        } catch (err) {
-            // One retry for transient connection blips; a second failure surfaces to the caller's logger.
+    /**
+     * Run `fn` on a pooled connection, and again at once after a failure.
+     * How often depends on what failed:
+     * - the attempt's connection had ended (attemptOnPooledClient asks it):
+     *   again on another connection, once for every connection the pool
+     *   still held when the first one was found ended, and once more;
+     * - anything else (no connection to be had; a statement that failed on a
+     *   connection that still answers): once, whatever else the write's
+     *   attempts fail with.
+     * So a write is attempted at most once for every connection the pool held
+     * when the first one was found ended, that one included, once more, and
+     * once again for a failure of the second kind: twelve times at most with
+     * pg-pool's default of ten connections.
+     *
+     * Why more than once. The server can end several of the process's
+     * sessions together (a failover, every backend of the role terminated)
+     * and still take connections. pg-pool (3.13.0) hands out an idle
+     * connection without asking anything of it, and it learns that one has
+     * ended only when the event loop reads that connection's socket. An
+     * attempt made before then can be handed it: on PostgreSQL 16 the one
+     * retry of a write whose own connection had been ended was handed an idle
+     * connection ended by the same statement, failed on it with the server's
+     * 57P01, and the write was dropped with Postgres up.
+     *
+     * Why that many. A failed attempt gives its connection back with the
+     * error, so the pool destroys it and never hands it out again. Any of the
+     * connections the pool holds when the first one is found ended may have
+     * ended with it. Once each of those has been handed out and destroyed,
+     * an attempt can only be on a connection opened since, so of that many
+     * attempts and one more, at least one is. If every one of them finds its
+     * connection ended, the server has ended a session it took after the
+     * first failure as well, and the write is given up. A pool that does not
+     * say how many connections it holds (a test's stand-in) is taken to hold
+     * no others: one further attempt.
+     *
+     * What an attempt on an ended connection can have done. Nothing, where
+     * the server had ended the session before the attempt's first statement
+     * reached it: every attempt on a connection that ended while it sat idle.
+     * Otherwise the server may have applied the write and ended the session,
+     * or lost the connection, before its answer arrived: an upsert whose
+     * statement was sent, a targeted op whose COMMIT was sent. Both are sent
+     * again all the same: the upsert writes the same row, and a targeted
+     * op's statements change nothing a second time, with the keys of a
+     * COMMIT that was sent and not answered kept in `uncertain` across every
+     * attempt (runTargeted).
+     */
+    private async withRetry<T>(fn: (client: PgClient) => Promise<T>): Promise<T> {
+        /** Attempts left for a write whose connection has just been found ended. */
+        let endedLeft: number | null = null;
+        let retried = false;
+        for (let attempt = 1; ; attempt += 1) {
+            const result = await attemptOnPooledClient(this.pool, fn);
+            if (result.ok) return result.value;
+            if (result.connectionEnded) {
+                endedLeft = endedLeft === null ? connectionsHeldBy(this.pool) + 1 : endedLeft - 1;
+                if (endedLeft === 0) throw result.error;
+            } else {
+                if (retried) throw result.error;
+                retried = true;
+            }
             log.warn('db_write_behind_retry', {
-                error: err instanceof Error ? err.message : String(err),
+                attempt,
+                connectionEnded: result.connectionEnded,
+                error: result.error instanceof Error ? result.error.message : String(result.error),
             });
-            return await fn();
         }
     }
 

@@ -42,6 +42,79 @@ export async function withPooledClient<C extends ReleasableClient, T>(
     }
 }
 
+/** Whether the connection still answers a statement. */
+const stillAnswers = async (client: { query(sql: string): Promise<unknown> }): Promise<boolean> => {
+    try {
+        await client.query('SELECT 1');
+        return true;
+    } catch {
+        return false;
+    }
+};
+
+/** What became of one piece of work on a pooled connection. */
+export type PooledAttempt<T> =
+    | { ok: true; value: T }
+    /** `connectionEnded`: the pool gave a connection, and it had ended when the work failed. */
+    | { ok: false; error: unknown; connectionEnded: boolean };
+
+/**
+ * As withPooledClient, for a caller that tries failed work again and has to
+ * know whether the connection was what failed: the write-behind queue
+ * (db/writeBehindQueue.ts). The failure comes back as a value, with
+ * `connectionEnded`.
+ *
+ * `connectionEnded` is not read off the error. A drop reaches the work as the
+ * server's own error (its FATAL to the statement in flight), as pg's
+ * ("Connection terminated unexpectedly", "Client has encountered a connection
+ * error and is not queryable") or as the socket's (ECONNRESET), and of a
+ * server error's severity pg-protocol (1.13.0) passes on only the wording.
+ * So the connection is asked for one more answer before it goes back, and it
+ * had ended if it gives none. From pg 8.20.0's lib/client.js:
+ * - after a FATAL the server sends no ReadyForQuery, so pg holds the
+ *   statement back and fails it when the socket closes (_errorAllQueries);
+ * - a client whose socket failed or closed is marked unqueryable
+ *   (_handleErrorEvent), and pg fails the statement on the next tick;
+ * - a connection that is up answers. The work must not leave a failed
+ *   transaction open on it: there the server refuses SELECT 1, which would
+ *   read as ended (a targeted write rolls its transaction back first).
+ * The wait is for the server's answer or for the socket to close, whichever
+ * the connection gives; no timer is involved, and a connection that gives
+ * neither holds the caller there, as a statement of the work's own would. A
+ * connection still checked out when its socket closes reports the drop
+ * itself, as an 'error' event: the shared pool's listener for a checked-out
+ * connection takes it, logs it and counts it (`held`, config/postgres.ts).
+ * On a pool with no such listener that event would end the process, as it
+ * would under any second statement the work sends after a drop (a targeted
+ * write's ROLLBACK).
+ *
+ * A failure to get a connection at all (`pool.connect()` rejects) is not a
+ * connection that ended: nothing was handed out.
+ *
+ * The connection is given back with the error either way, as in
+ * withPooledClient, so the pool destroys it.
+ */
+export async function attemptOnPooledClient<
+    C extends ReleasableClient & { query(sql: string): Promise<unknown> },
+    T
+>(pool: { connect(): Promise<C> }, fn: (client: C) => Promise<T>): Promise<PooledAttempt<T>> {
+    let client: C;
+    try {
+        client = await pool.connect();
+    } catch (error) {
+        return { ok: false, error, connectionEnded: false };
+    }
+    let failure: Error | undefined;
+    try {
+        return { ok: true, value: await fn(client) };
+    } catch (error) {
+        failure = asError(error);
+        return { ok: false, error, connectionEnded: !(await stillAnswers(client)) };
+    } finally {
+        client.release?.(failure);
+    }
+}
+
 /** Connections whose idle_session_timeout one of the statements below changed. */
 const changedSessions = new WeakSet<object>();
 let exemptionFailureLogged = false;
@@ -100,13 +173,6 @@ const RAISE_IDLE_SESSION_TIMEOUT_SQL = `SELECT s.setting,
   FROM pg_settings s
  WHERE s.name = 'idle_session_timeout' AND s.unit = 'ms'`;
 let raiseFailureLogged = false;
-
-/** Whether the connection still answers a statement. */
-const stillAnswers = (client: { query(sql: string): Promise<unknown> }): Promise<boolean> =>
-    client.query('SELECT 1').then(
-        () => true,
-        () => false
-    );
 
 /**
  * Raise this session's idle_session_timeout to `floorMs` if the server has
