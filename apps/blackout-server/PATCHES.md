@@ -1728,8 +1728,10 @@ upstream's; re-check the other two lines during any reconciliation.
   moved with a temporary `pygments = "2.20.0"` constraint that was removed
   again, so `content-hash` corresponds to the committed `pyproject.toml`
   (`poetry lock --check` passes). All three entries' file hashes match PyPI's,
-  and the pygments entry is the one upstream's lock carries. 151 packages
-  before and after; nothing else moves. The image's export
+  and the pygments entry is the one upstream's lock carries (the same version,
+  Python requirement, extras and file hashes; upstream's newer lock format
+  writes `groups = ["dev"]` where this one writes `category = "dev"`). 151
+  packages before and after; nothing else moves. The image's export
   (`poetry export --extras all`) changes in two requirements, `sentry-sdk` and
   `tornado`.
 - No fork code changed. Both packages are installed in the image by
@@ -1737,9 +1739,13 @@ upstream's; re-check the other two lines during any reconciliation.
   config has a `sentry` section, and no shipped homeserver template has one.
   tornado is loaded at startup wherever jaeger-client is installed, the image
   included, because `synapse/logging/opentracing.py` imports jaeger-client at
-  module level; `tornado.web` is not among the modules that loads. (The first
+  module level; `tornado.web` is not among the modules that loads. With a
+  `sentry` section it is loaded after all: sentry-sdk's default Tornado
+  integration imports `tornado.web` to wrap its `RequestHandler`. No code in
+  Synapse, or in the installed packages the record searched, builds a tornado
+  application, so `RedirectHandler` is not reachable either way. (The first
   version of this entry said neither package is imported as shipped, which
-  was wrong for tornado.)
+  was wrong for tornado; the second left out what turning Sentry on loads.)
 - Not bumped, with the reason beside the constraint or in the record:
   soupsieve 2.10 (optional `dev-docs` group; the fixed releases, 3.0.2 and
   4.0, require Python >=3.11.5 and the fork's floor is 3.11.0, so poetry
