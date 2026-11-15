@@ -2,8 +2,10 @@
  * An upgrade request that no WebSocket shim takes must not be able to end the
  * process, and must not be left open. It is answered `404` and closed: on a
  * new connection, on one that has already carried a response, and behind
- * plain requests in one write. (One exception, pinned below: behind an answer
- * that closes the connection, Node closes it before the guard looks.)
+ * plain requests in one write. (Two exceptions, pinned below. Behind an answer
+ * that closes the connection, Node closes it before the guard looks. And a
+ * client that is not reading the answers ahead of its upgrade is not sent the
+ * `404`: its connection is destroyed a second later.)
  *
  * Node removes its own `'error'` listener from a socket before it emits
  * `upgrade`. The Twitch-IRC and OBS-WebSocket shims return without touching a
@@ -838,11 +840,100 @@ test('the 404 closes the connection even when the client keeps its side open', a
     await once(client, 'end');
     assert.equal(received, GUARD_404);
     assert.equal(client.destroyed, false, 'the client has not closed its side');
+    // Closed as soon as the 404 had left, which is before the client can
+    // have read the server's FIN: not a second later, by the timeout.
+    assert.equal(await openConnections(server), 0);
+    assertNothingUncaught('the half-open client');
+});
+
+test('a client that does not read the answer ahead of its upgrade does not keep the connection: destroyed after a second, the 404 unsent', async (t) => {
+    const { guardUpgradedSockets } = await import('../src/webSocketUpgrades');
+    const lines = captureGuardLines(t);
+    const before = await unclaimedTotal();
+    // More than a kernel holds for a connection whose client is not reading,
+    // so that part of the answer waits in Node, ahead of the guard's 404.
+    const big = Buffer.alloc(32 * 1024 * 1024, 0x61);
+    const serverSockets: Socket[] = [];
+    let handedOverAt = 0;
+    let closedAt = 0;
+    let onServerSocketClosed: () => void = () => undefined;
+    const serverSocketClosed = new Promise<void>((resolve) => {
+        onServerSocketClosed = resolve;
+    });
+    const { server, port } = await startPlainServer(
+        t,
+        (plainServer) => {
+            plainServer.on('connection', (socket: Socket) => {
+                serverSockets.push(socket);
+                socket.once('close', () => {
+                    closedAt = Date.now();
+                    onServerSocketClosed();
+                });
+            });
+            plainServer.on('upgrade', () => {
+                handedOverAt = Date.now();
+            });
+            guardUpgradedSockets(plainServer);
+        },
+        (_req, res) => {
+            res.end(big);
+        }
+    );
+
+    const client = connect({ port, host: '127.0.0.1' });
+    t.after(() => client.destroy());
+    client.on('error', () => undefined);
+    // Paused before it connects: the client takes nothing off the connection.
+    client.pause();
+    await once(client, 'connect');
+    client.write(plainRequest('/big') + upgradeRequest('/v1/health'));
+
+    // The guard has ended the socket with its 404, which cannot leave: the
+    // answer ahead of it is still queued.
+    await waitFor('the upgrade to be counted', async () => (await unclaimedTotal()) === before + 1);
+    const [serverSocket] = serverSockets;
+    assert.equal(serverSockets.length, 1);
+    assert.equal(serverSocket.writableEnded, true);
+    assert.equal(serverSocket.writableFinished, false);
+    assert.equal(serverSocket.destroyed, false, 'the 404 is given its second to leave');
+    assert.equal(await openConnections(server), 1);
+
+    // No longer than that second. Before the timeout the socket stayed like
+    // this until the client read or left.
     await waitFor(
         'the server to have no connection left',
         async () => (await openConnections(server)) === 0
     );
-    assertNothingUncaught('the half-open client');
+    await serverSocketClosed;
+    assert.equal(serverSocket.destroyed, true);
+    assert.equal(serverSocket.writableFinished, false, 'the 404 never left');
+    assert.ok(
+        closedAt - handedOverAt >= 990,
+        `closed ${closedAt - handedOverAt} ms after the hand-off, not before the second was up`
+    );
+
+    // What the client finds if it reads after all: part of the answer, no
+    // 404, and a closed connection.
+    let readBytes = 0;
+    let tail = '';
+    client.on('data', (chunk: Buffer) => {
+        readBytes += chunk.length;
+        tail = (tail + chunk.toString('latin1')).slice(-GUARD_404.length);
+    });
+    client.resume();
+    await once(client, 'close');
+    assert.ok(readBytes < big.length, `the client read ${readBytes} of ${big.length} bytes`);
+    assert.notEqual(tail, GUARD_404);
+
+    // Counted once, and logged as answered: the line says the 404 was
+    // written to the socket, not that it arrived.
+    assert.equal(await unclaimedTotal(), before + 1);
+    assert.deepEqual(
+        lines.parsed.map((line) => [line.answered, line.count]),
+        [[true, 1]]
+    );
+    await sleep(20);
+    assertNothingUncaught('the client that does not read');
 });
 
 /** A port nothing listens on right now (the API's env check refuses PORT=0). */

@@ -33,6 +33,14 @@ import { httpUpgradesUnclaimedTotal } from './telemetry/metrics';
 const UNCLAIMED_RESPONSE =
     'HTTP/1.1 404 Not Found\r\nConnection: close\r\nContent-Length: 0\r\n\r\n';
 
+/**
+ * How long the `404` has to leave before the socket is destroyed without it.
+ * It leaves at once unless the connection still owes earlier answers to a
+ * client that is not reading them. engine.io gives an upgrade it does not
+ * recognise the same second.
+ */
+const UNCLAIMED_CLOSE_TIMEOUT_MS = 1_000;
+
 /** At most one `http_upgrade_unclaimed` line per guard in this long. */
 const UNCLAIMED_LOG_INTERVAL_MS = 10_000;
 
@@ -63,8 +71,9 @@ const firstSegment = (target: string | undefined): string =>
  *    destroyed it, or attached an `'error'` listener of its own (the first
  *    line of `ws`'s `handleUpgrade`, which each of the three shims reaches
  *    before its listener returns for a request it accepts). Any other socket
- *    is answered `404` and closed there and then, counted, and logged at most
- *    once per interval.
+ *    is ended with a `404` there and then, counted, and logged at most once
+ *    per interval. It is destroyed when the `404` has left, and after
+ *    `UNCLAIMED_CLOSE_TIMEOUT_MS` whether it has left or not.
  *
  * Bytes written are not a sign that a listener took the socket, though
  * engine.io reads them so. On a connection that has been kept alive the
@@ -85,7 +94,10 @@ const firstSegment = (target: string | undefined): string =>
  * within that turn of the loop, is not answered: the connection is closed.
  * If its answer closes the connection, Node ends the socket itself; that
  * looks like a listener ending it, and the upgrade goes with the connection,
- * unanswered and uncounted.
+ * unanswered and uncounted. And if the client is not reading the answers
+ * sent ahead of the upgrade, the `404` waits behind them: the socket is
+ * destroyed after the timeout, with the `404` and whatever else was still
+ * queued unsent.
  *
  * Returns a function that removes the listener.
  */
@@ -97,8 +109,15 @@ export const guardUpgradedSockets = (server: HttpServer): (() => void) => {
         httpUpgradesUnclaimedTotal.inc();
         sinceLastLine += 1;
         // False when the client's reset got here first: nothing to answer.
+        // True says the `404` was written to the socket, not that it arrived.
         const answered = !socket.destroyed;
         if (answered) {
+            // `finish` comes when the `404` has left Node, which it cannot do
+            // while earlier answers are queued for a client that does not
+            // read. Such a client does not get to keep the socket open.
+            const giveUp = setTimeout(() => socket.destroy(), UNCLAIMED_CLOSE_TIMEOUT_MS);
+            giveUp.unref();
+            socket.once('close', () => clearTimeout(giveUp));
             socket.once('finish', () => socket.destroy());
             socket.end(UNCLAIMED_RESPONSE);
         }
