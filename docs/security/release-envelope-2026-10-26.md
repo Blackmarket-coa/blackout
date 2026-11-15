@@ -11205,6 +11205,33 @@ waiting with nothing held, another owner's check-in made meanwhile) show
 what they showed, which the documents and the comments now say; B, C, D
 and H as before.
 
+The gates on `edad10f050`, the round's head before this paragraph
+(`fix/gates-r22`, the branch against `origin/develop` at `898d466cb5`,
+which it has merged), all finished and passed: API lint and typecheck; the
+pr-gate suite 2,219 of 2,219 and the post-merge suite 2,339 of 2,339,
+which are round 21's 2,215 and 2,335 plus this round's four (tests 90 to
+93 of the switch-writes file); launch smoke 14 of 14; the core and design
+builds; the client's typecheck and lint; the client suite 3,643 passed and
+3 skipped in 519 files; the protocol and SDK typechecks; dead-drop parity
+2 of 2; the migration guard (107 migrations, the latest
+`107_deadman_owner_attempt_refused`) and the ephemeral migration run; the
+trust page; room encryption; the feature registry; auth secrets; prettier
+over the 98 files the branch changes against `develop`; and gitleaks over
+the branch (115 commits, no leaks). The runner waited for the machine's
+load to fall below 3 before each suite, from 12:11 to 12:36 on 2026-11-15.
+Before the runner, each changed test file was run alone on the round's
+code, the switch-writes file 93 of 93, three times, and the other files
+that touch what changed, one at a time (`fix/r22/logs/`:
+`deadman-releases` 28 of 28, `deadman-releases-postgres` 3,
+`deadman-releases-file` 3, `deadman-routes` 12, `deadman-release-notices`
+32, `deadman-release-notices-postgres` 16, `deadman-backlog-postgres` 2,
+`background-worker-postgres` 2, `write-behind-queue-lanes` 5,
+`postgres-store` 4, `store-spec-coverage` 2 and `deadman-scheduler` 20).
+The commit after that head changes this record only: this paragraph.
+Prettier and the search of the branch's added lines for a model name were
+run on the record with this paragraph in it before the commit: clean, no
+match.
+
 ### Still open
 
 -   **A recipient-side refusal of an owner** (decision 19), which the
