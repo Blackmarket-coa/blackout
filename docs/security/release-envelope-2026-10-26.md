@@ -10063,7 +10063,8 @@ branch made untrue in `develop`'s text, is under "Claims" below.
     (`pg_store_peer_refresh_failed`) and not tried again, as any refresh:
     the mirror then holds the change that kept the row out until the
     switch is next refreshed or written, and the copies of a switch read
-    cancelled are blanked all the same. Test 81 (a cancel past its bound; a refresh's
+    cancelled are blanked all the same. Test 81 (a cancel past its bound;
+    a refresh's
     read runs before it lands and its answer is held; the cancel lands
     and its read back is held; the refresh's row, armed, is applied; the
     read back answers cancelled and is kept out: the process ends holding
@@ -10274,6 +10275,33 @@ arm committed after its look is 500, the sixth 201 and six held, the
 stated limit; shutdown is pending while the landed cancel's read back is
 out; probe A ends cancelled with no copy held. The attack replay's
 decision-30 and decision-31 probes give what they gave on round 19's head.
+
+The gates on `82fbba483d`, the round's head before this paragraph
+(`fix/gates-r20`, the branch against `origin/develop` at `898d466cb5`,
+which it has merged), all finished and passed: API lint and typecheck; the
+pr-gate suite 2,207 of 2,207 and the post-merge suite 2,327 of 2,327,
+which are round 19's 2,127 and 2,247, plus the 62 tests `develop` brought
+(`store-cross-process` 41, `register-matrix-collision` 11,
+`pg-writer-targeted` 6, `store-spec-coverage` 2,
+`file-store-temp-snapshots` 1 and one more in `pg-notify-replication`),
+plus this round's eighteen (tests 69 to 81 of the switch-writes file and
+the five of `write-behind-queue-lanes`); launch smoke 14 of 14; the core
+and design builds; the client's typecheck and lint; the client suite 3,643
+passed and 3 skipped in 519 files; the protocol and SDK typechecks;
+dead-drop parity 2 of 2; the migration guard (107 migrations, the latest
+`107_deadman_owner_attempt_refused`) and the ephemeral migration run; the
+trust page; room encryption; the feature registry; auth secrets; prettier
+over the 98 files the branch changes against `develop`; and gitleaks over
+the branch (106 commits, no leaks). The runner waited for the machine's
+load to fall below 3 before each suite, from 04:24 to 04:46 on 2026-11-15.
+Before the runner, each changed test file was run alone on the final code,
+the switch-writes file 81 of 81 and `write-behind-queue-lanes` 5 of 5,
+and, on the round's code before the refresh's fix, the other test files
+that touch what changed, one at a time (`fix/r20/files-final/summary.txt`:
+the dead-man files, `develop`'s store files, the sign-up and background
+files; `store-cross-process` was run again, 41 of 41). The commit that
+adds this paragraph changes this record only; prettier and gitleaks were
+run again on it.
 
 ### Still open
 
