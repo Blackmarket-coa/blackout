@@ -80,6 +80,17 @@ export interface MatrixStub {
     stateReads: string[];
     /** Alias lookups, the alias as asked. Cleared with the calls. */
     aliasReads: string[];
+    /**
+     * Matrix ids the homeserver already has. The admin single-user GET answers
+     * 200 for these and 404 otherwise, and the admin PUT (account creation)
+     * answers 200 ("modified") for these and 201 ("created") otherwise. A test
+     * that needs account creation to meet an existing name adds its mxid here.
+     */
+    existingUsers: Set<string>;
+    /** Matrix ids the admin GET was asked about. */
+    userLookups: string[];
+    /** Matrix ids the admin PUT (account create/update) was asked to write. */
+    userWrites: string[];
     sendStatus: number;
     createStatus: number;
     inviteStatus: number;
@@ -93,7 +104,7 @@ export interface MatrixStub {
     /** Runs when a room's state is read, before the answer goes back. */
     onStateRead: ((roomId: string) => void) | null;
     fetch: typeof fetch;
-    /** Forget recorded calls (rooms and aliases are kept). */
+    /** Forget recorded calls (rooms, aliases and existing users are kept). */
     clearCalls(): void;
     /** Matrix id of a username on the stub's domain. */
     mxid(username: string): string;
@@ -208,6 +219,10 @@ const parseBody = (init?: RequestInit): Record<string, unknown> => {
         return {};
     }
 };
+// The single-user admin endpoint, `/_synapse/admin/v2/users/{mxid}` — distinct
+// from the list endpoint, which has a `?` query. The id segment is a URL-encoded
+// mxid, so it carries no bare `/` and ends at the end of the path.
+const ADMIN_USER_RE = /\/_synapse\/admin\/v2\/users\/([^/?]+)$/;
 
 export function createMatrixStub(
     options: { domain?: string; botLocalpart?: string; fallback?: typeof fetch } = {}
@@ -226,6 +241,9 @@ export function createMatrixStub(
         invites: [],
         stateReads: [],
         aliasReads: [],
+        existingUsers: new Set(),
+        userLookups: [],
+        userWrites: [],
         sendStatus: 200,
         createStatus: 200,
         inviteStatus: 200,
@@ -239,6 +257,8 @@ export function createMatrixStub(
             stub.invites.length = 0;
             stub.stateReads.length = 0;
             stub.aliasReads.length = 0;
+            stub.userLookups.length = 0;
+            stub.userWrites.length = 0;
         },
         mxid: (username: string) => `@${username}:${domain}`,
         sendsTo: (roomId: string) => stub.sends.filter((s) => s.roomId === roomId),
@@ -254,6 +274,20 @@ export function createMatrixStub(
         const url = urlOf(input);
         if (url.includes('/_matrix/client/v3/account/whoami')) {
             return json({ user_id: stub.botUserId });
+        }
+        const userMatch = ADMIN_USER_RE.exec(url);
+        if (userMatch) {
+            const userId = decodeURIComponent(userMatch[1]);
+            const method = (init?.method ?? 'GET').toUpperCase();
+            if (method === 'PUT') {
+                stub.userWrites.push(userId);
+                // 200 = modified an account that already existed; 201 = created.
+                return json({ name: userId }, stub.existingUsers.has(userId) ? 200 : 201);
+            }
+            stub.userLookups.push(userId);
+            return stub.existingUsers.has(userId)
+                ? json({ name: userId }, 200)
+                : json({ errcode: 'M_NOT_FOUND' }, 404);
         }
         const stateMatch = ADMIN_STATE_RE.exec(url);
         if (stateMatch) {

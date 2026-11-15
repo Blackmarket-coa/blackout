@@ -683,13 +683,38 @@ on the manhole [here](../../manhole.md). Manhole sub-options include:
 
 - `username` : the username for the manhole. This defaults to 'matrix'.
 - `password`: The password for the manhole. This defaults to 'rabbithole'.
-- `ssh_priv_key_path` and `ssh_pub_key_path`: The private and public SSH key pair used to encrypt the manhole traffic.
+- `ssh_priv_key_path` and `ssh_pub_key_path`: The private and public halves of the manhole's SSH host key, which lets an SSH client check that it is talking to this server.
+  The keys that encrypt the manhole traffic come from the SSH key exchange on
+  each connection, not from this pair. An RSA, Ed25519 or ECDSA key works, in
+  the format `ssh-keygen` writes and without a passphrase. A DSA key does not:
+  every ssh-dss signature uses SHA-1, and the SSH server cannot in practice
+  sign with one whose subgroup order is 224 or 256 bits, as every standard
+  DSA key larger than 1024 bits has.
+  `ssh_priv_key_path` alone is enough: the public half is derived from the
+  private key. A public key at `ssh_priv_key_path`, an `ssh_pub_key_path`
+  that is not the public half of that private key, or a DSA key or an EC key
+  on a curve other than P-256, P-384 or P-521 at `ssh_priv_key_path`, or at
+  `ssh_pub_key_path` beside a private key, stops startup with a configuration
+  error. Those checks run only when the configuration declares a manhole
+  listener for the process it is loaded as (for the main process a
+  `type: manhole` entry in `listeners` or the `manhole` option, for a worker
+  one in `worker_listeners` or the `worker_manhole` option), so a
+  `manhole_settings` block left over on a homeserver that runs no manhole does
+  not stop it; a key file that cannot be read stops startup either way. They
+  follow the configuration, not what the process starts:
+  `synapse.app.admin_cmd`, which starts no listener, is checked as the main
+  process when given the homeserver's configuration, and as the worker when
+  given a worker configuration. `ssh_pub_key_path` without
+  `ssh_priv_key_path` cannot be used, since a host key must be able to sign,
+  and is ignored with a warning.
   Upstream Synapse falls back to a keypair hardcoded in its source when these
   are unset — published, therefore not secret, and identical on every install.
   **This build has removed that key** and generates a fresh one per process
-  instead, logging a warning when it does. Leaving these unset is no longer a
-  confidentiality problem, but the host key then changes on every restart and
-  your ssh client will say so. Set them to pin a stable, genuinely private key.
+  instead, logging a warning when it does. Leaving these unset no longer means
+  presenting a host key everyone has, but the host key then changes on every
+  restart: your ssh client will say so each time and has nothing stable to
+  check it against, so it cannot tell a restart from an impersonator. Set
+  `ssh_priv_key_path` to pin a stable, genuinely private key.
   See [the manhole documentation](../../manhole.md) for the reasoning.
 
 Example configuration:

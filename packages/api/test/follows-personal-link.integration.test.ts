@@ -12,10 +12,10 @@ process.env.BLACKOUT_DB_MODE = 'memory';
 process.env.MATRIX_HOMESERVER = process.env.MATRIX_HOMESERVER ?? 'https://matrix.test.local';
 process.env.MATRIX_BOT_TOKEN = process.env.MATRIX_BOT_TOKEN ?? 'syt_test_admin_token';
 
-// Minimal Synapse stub: the mint endpoint returns a token; everything else
-// (account provisioning during register) gets an empty 200, which the register
-// path tolerates — mirrors invitations.integration.test.ts.
-globalThis.fetch = (async (input: RequestInfo | URL) => {
+// Minimal Synapse stub: the mint endpoint returns a token; account provisioning
+// during register is looked up (404) and then created (201), below; everything
+// else gets an empty 200 — mirrors invitations.integration.test.ts.
+globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url =
         typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
     if (url.includes('/_synapse/admin/v1/registration_tokens/new')) {
@@ -26,6 +26,20 @@ globalThis.fetch = (async (input: RequestInfo | URL) => {
                 status: 200,
             }
         );
+    }
+    // Account provisioning during register: look the user up (404 = free to
+    // create), then create it with 201.
+    if (url.includes('/_synapse/admin/v2/users/') && !url.includes('?')) {
+        if ((init?.method ?? 'GET').toUpperCase() === 'PUT') {
+            return new Response(JSON.stringify({ name: '@x:test.local' }), {
+                headers: { 'content-type': 'application/json' },
+                status: 201,
+            });
+        }
+        return new Response(JSON.stringify({ errcode: 'M_NOT_FOUND' }), {
+            headers: { 'content-type': 'application/json' },
+            status: 404,
+        });
     }
     return new Response(JSON.stringify({}), {
         headers: { 'content-type': 'application/json' },

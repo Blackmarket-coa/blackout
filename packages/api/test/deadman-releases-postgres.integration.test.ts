@@ -231,8 +231,10 @@ test('a release switch, its copies and its notices survive a restart; it has no 
         );
         assert.equal(store2.getCurrentReleaseIdentity(bob)?.id, bobsKey.id);
 
-        // A wholesale refresh of the mirror (the listener's reconnect, a peer's
-        // table resync) rebuilds both indexes with the rows.
+        // A reload of every table (the listener's reconnect; a table reload
+        // is also what an `'r'` from a process still on the previous release
+        // asks for) updates the indexed maps in place, through their own
+        // `set` and `delete`, so both indexes stay current with the rows.
         await (store2 as unknown as { rehydrateAll(): Promise<void> }).rehydrateAll();
         assert.equal(
             store2.listDeadmanReleaseWraps(sw.id).length,

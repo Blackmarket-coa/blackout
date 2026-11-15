@@ -21,6 +21,12 @@ operations guide; it points at it.
 
 ## Current focus
 
+### FBM character-built portal integration — 2026-11-12
+
+The [Coalition integration contract](docs/coalitions/FBM_UNIFIED_PORTAL_INTEGRATION.md) is the local companion to FBM's canonical plan. Reuse Coalition as the shared real-world map and community coordination layer; expose supported views/actions through verified member identity and permission-safe adapters. Do not duplicate the map or its record backends in FBM.
+
+The first integration slice is character survey → useful organizer/participant portal → one real action. Blackstar supplies transport, while goods auctions remain an FBM commerce delivery package. Existing operational milestones below still govern deployment; this entry makes no enabled/readiness claim.
+
 The most recently landed workstreams (analytics, VOD recording, clips,
 proximity, feed quick-wins) are tracked with their file-level status in
 [`OSS_GAP_FILL_BUILD_PLAN.md`](OSS_GAP_FILL_BUILD_PLAN.md#status-update--2026-07-11).
@@ -31,13 +37,13 @@ Historical build plans and superseded design docs live in
 
 The [Blackout Habit & Participation Strategy](docs/BLACKOUT_HABIT_AND_PARTICIPATION_STRATEGY.md) defines the user-facing outcomes and staged product direction. It is **not** a replacement for the canonical operations milestones, nor a claim that the proposed capabilities are implemented.
 
-| Proposed stage | Outcome | Key dependencies |
-| --- | --- | --- |
-| 1. Daily-use foundation | Better discovery, feeds, sharing, groups, and useful return visits | Existing communication, safety, and client surfaces |
-| 2. Expression and choice | The Void, expanded Coliseum debates/factions, accountable moderation | Privacy, anonymity abuse controls, transparent community rules |
-| 3. Creator economics | Simplified creator distribution, collaboration, and FBM-linked monetization | Creator Hub, FBM contracts, attribution, payments |
-| 4. Community gameplay | Multiplayer and cooperative challenges, missions, group achievements | Social graph, governance, anti-abuse and reward integrity |
-| 5. Physical-world connections | Opt-in location discovery, local events, businesses, and projects | Location privacy, user consent, FBM and Blackstar integration |
+| Proposed stage                | Outcome                                                                     | Key dependencies                                               |
+| ----------------------------- | --------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| 1. Daily-use foundation       | Better discovery, feeds, sharing, groups, and useful return visits          | Existing communication, safety, and client surfaces            |
+| 2. Expression and choice      | The Void, expanded Coliseum debates/factions, accountable moderation        | Privacy, anonymity abuse controls, transparent community rules |
+| 3. Creator economics          | Simplified creator distribution, collaboration, and FBM-linked monetization | Creator Hub, FBM contracts, attribution, payments              |
+| 4. Community gameplay         | Multiplayer and cooperative challenges, missions, group achievements        | Social graph, governance, anti-abuse and reward integrity      |
+| 5. Physical-world connections | Opt-in location discovery, local events, businesses, and projects           | Location privacy, user consent, FBM and Blackstar integration  |
 
 Evaluate work against tangible user value (relationships, knowledge, creator earnings, projects, and offline participation), not screen time alone. Confirm implementation readiness and dependencies in the existing operational trackers before scheduling releases.
 
