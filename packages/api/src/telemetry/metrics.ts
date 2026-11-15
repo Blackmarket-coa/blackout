@@ -231,7 +231,7 @@ export const httpRequestsTotal = new Counter('http_requests_total', 'Total HTTP 
 
 export const httpUpgradesUnclaimedTotal = new Counter(
     'http_upgrades_unclaimed_total',
-    'HTTP Upgrade requests that no WebSocket endpoint took; each is answered 404 and closed (webSocketUpgrades.ts).'
+    'HTTP Upgrade requests that no WebSocket endpoint took and the guard closed: answered 404, unless the connection had already failed (webSocketUpgrades.ts).'
 );
 
 export const authFailuresTotal = new Counter(

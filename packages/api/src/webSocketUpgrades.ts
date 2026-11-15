@@ -9,13 +9,15 @@
  *
  * Why the guard. Node removes its own `'error'` listener from a socket before
  * it emits `upgrade`, and once any `upgrade` listener exists it hands every
- * request that carries an `Upgrade` header to the listeners, whatever the
- * path. A shim that does not recognise the path returns without touching the
- * socket, and engine.io ends an upgrade it does not recognise only from a
- * 1,000 ms timer. Until that timer nothing listened for the socket's errors,
- * so a client that reset the connection raised an unhandled `'error'` event
- * and the process exited: one request, with no session, on `/v1/health` or
- * any other path no shim takes
+ * request that asks for an upgrade (`Upgrade` with `Connection: upgrade`) to
+ * the listeners, whatever the path. A shim that does not recognise the path
+ * returns without touching the socket. engine.io ends an upgrade it does not
+ * recognise from a 1,000 ms timer, and only on a connection that has sent no
+ * byte yet; on one that has already carried a response, nothing ended it.
+ * For as long as the socket stayed open nothing listened for its errors, so a
+ * client that reset the connection raised an unhandled `'error'` event and
+ * the process exited: one request, with no session, on `/v1/health` or any
+ * other path no shim takes
  * (docs/security/dependency-advisories-2026-11-14.md).
  */
 import type { IncomingMessage, Server as HttpServer } from 'node:http';
@@ -23,9 +25,6 @@ import type { Duplex } from 'node:stream';
 import type { ServerType } from '@hono/node-server';
 import { log } from './telemetry/logger';
 import { httpUpgradesUnclaimedTotal } from './telemetry/metrics';
-
-/** What `upgrade` hands over: a `net.Socket`, which counts the bytes written. */
-type UpgradedSocket = Duplex & { readonly bytesWritten?: number };
 
 /**
  * The answer to an upgrade nobody took. No body, and none of the app's
@@ -58,19 +57,35 @@ const firstSegment = (target: string | undefined): string =>
  *    in one synchronous step, and a stream emits `'error'` on a later tick, so
  *    no error can be emitted while the socket has none: whichever shims are
  *    attached, in whatever order, and whether or not one takes the socket.
- *    The guard has to be attached before the first shim is.
+ *    The guard is prepended, so it runs first wherever it was attached.
  * 2. One turn of the event loop later, when every `upgrade` listener has run,
- *    it looks at what they left. A socket is taken if a listener wrote to it,
- *    ended it, destroyed it, or attached an `'error'` listener of its own (the
- *    first line of `ws`'s `handleUpgrade`, which each of the three shims
- *    reaches before its listener returns for a request it accepts). Any other
- *    socket is answered `404` and closed there and then, counted, and logged
- *    at most once per interval.
+ *    it looks at what they left. A socket is taken if a listener ended it,
+ *    destroyed it, or attached an `'error'` listener of its own (the first
+ *    line of `ws`'s `handleUpgrade`, which each of the three shims reaches
+ *    before its listener returns for a request it accepts). Any other socket
+ *    is answered `404` and closed there and then, counted, and logged at most
+ *    once per interval.
  *
- * So a listener must take the socket it wants before it returns. One that has
- * to wait first attaches its own `'error'` listener before it waits, and that
- * is the claim. test/websocket-upgrade-guard.integration.test.ts holds the
- * three shims to this: each still upgrades through the guard.
+ * Bytes written are not a sign that a listener took the socket, though
+ * engine.io reads them so. On a connection that has been kept alive the
+ * earlier responses are in `bytesWritten`, and when a client sends a plain
+ * request and an upgrade in one write, Node hands the upgrade over while the
+ * plain request is still being answered. `'error'` listeners are counted
+ * from what the socket had at the hand-off, since a server may give every
+ * connection one when it accepts it.
+ *
+ * So a listener must take the socket it wants before it returns, and writing
+ * to it is not enough. One that has to wait first attaches its own `'error'`
+ * listener before it waits, and that is the claim.
+ * test/websocket-upgrade-guard.integration.test.ts holds the three shims to
+ * this: each still upgrades through the guard.
+ *
+ * The `404` goes out after whatever the connection has written by then. A
+ * plain request sent ahead of the upgrade in the same write, and not answered
+ * within that turn of the loop, is not answered: the connection is closed.
+ * If its answer closes the connection, Node ends the socket itself; that
+ * looks like a listener ending it, and the upgrade goes with the connection,
+ * unanswered and uncounted.
  *
  * Returns a function that removes the listener.
  */
@@ -78,7 +93,7 @@ export const guardUpgradedSockets = (server: HttpServer): (() => void) => {
     let lastLineAt = 0;
     let sinceLastLine = 0;
 
-    const closeUnclaimed = (req: IncomingMessage, socket: UpgradedSocket): void => {
+    const closeUnclaimed = (req: IncomingMessage, socket: Duplex): void => {
         httpUpgradesUnclaimedTotal.inc();
         sinceLastLine += 1;
         // False when the client's reset got here first: nothing to answer.
@@ -99,16 +114,16 @@ export const guardUpgradedSockets = (server: HttpServer): (() => void) => {
         sinceLastLine = 0;
     };
 
-    const onUpgrade = (req: IncomingMessage, socket: UpgradedSocket): void => {
+    const onUpgrade = (req: IncomingMessage, socket: Duplex): void => {
+        const errorListenersBefore = socket.listenerCount('error');
         let errored = false;
         socket.on('error', () => {
             errored = true;
         });
         setImmediate(() => {
             const taken =
-                (socket.bytesWritten ?? 0) > 0 ||
                 socket.writableEnded ||
-                socket.listenerCount('error') > 1 ||
+                socket.listenerCount('error') > errorListenersBefore + 1 ||
                 // Destroyed by a listener, not by an error: the OBS shim
                 // closes a path with no password id without answering.
                 (socket.destroyed && !errored);
