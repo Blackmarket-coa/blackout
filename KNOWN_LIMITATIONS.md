@@ -554,7 +554,12 @@ For the source-of-truth triage with tier/owner detail see
     least 365 days after it fires). The bounds hold on one
     API server against requests sent all at once (the server counts the arms
     it is still writing, and while a database write of a switch stands
-    unanswered it refuses every arm until that write's row is in its memory).
+    unanswered, or has failed and its switch has not been looked up again,
+    it refuses every arm until that switch is in its memory), with one
+    exception: an arm the database records only after the server lost its
+    connection and looked the switch up without finding it ("Durability",
+    below) is counted by no server process until one reads it, so each such
+    arm lets one more release past a bound.
     A deployment running several API replicas can exceed each: a replica
     sees another's arms only once that replica's database has confirmed them
     and its change notice has arrived, so across replicas a burst can exceed
@@ -615,8 +620,10 @@ For the source-of-truth triage with tier/owner detail see
     switch stays in the owner's list as fired, with how many notices were
     sent. Save the message before then if you need it after. Cancelling a
     release switch removes its encrypted message and every copy (a cancel the
-    database confirms only after the server has answered 503 removes the
-    copies when it does, and the switch then shows cancelled, as long as the
+    database confirms only after the server has answered 503, or records
+    while its answer never reaches the server, removes the copies once that
+    server process has read the switch back, which it tries until the
+    database answers, and the switch then shows cancelled, as long as the
     server process that sent it is still running; if that process stopped
     first, the copies stay until the server's background work next writes
     that switch, at the switch's former deadline, or a check-in or a second
@@ -634,7 +641,9 @@ For the source-of-truth triage with tier/owner detail see
     and can name one person on at most 5 held releases, who can be named by
     at most 50 accounts at a time (which fifty accounts can fill: above).
     `GET /v1/deadman/limits` reports each. The bounds
-    hold on one API server against requests sent all at once; across several
+    hold on one API server against requests sent all at once (but for an arm
+    the database records after the server looked for it and did not find
+    it: above); across several
     API replicas a burst can exceed each by up to its own size until each
     replica's arms are confirmed by the database and announced to the others
     (above). An owner whose 20
@@ -657,25 +666,38 @@ For the source-of-truth triage with tier/owner detail see
     only your own copy among them: the others stay, sealed, until each
     person named deletes their account), and never a switch that fires with
     copies missing. An arm whose statement the database fails is looked up
-    again: if your switch is there (the connection can drop after the
-    database committed it), it is answered 201 and listed (a switch of
-    someone else's with the same id is refused as already taken); if it is
-    not, 500 with
+    again before it is answered: if your switch is there (the connection can
+    drop after the database committed it), it is answered 201 and listed (a
+    switch of someone else's with the same id is refused as already taken);
+    if it is not, 500 with
     nothing armed (except that a statement the database was still running
-    when it lost its client can commit after that look, in which case arming
-    the same message again is refused as already taken and the switch then
-    appears in your list; if you do not arm it again, the switch is in the
-    database but none of the server's running processes knows of it, so it
-    is neither listed nor fired until one of them restarts and reads it, and
-    is then handled as any switch is, a late one as below); if the look-up
-    fails too, 503, and a switch the database did record is in the same
-    position. One the database
+    when it lost its client can commit after that look: the switch is then
+    in the database but none of the server's running processes knows of it,
+    so it is not listed, counts toward none of the bounds and is not fired,
+    until one of them restarts and reads it, after which it is handled as
+    any switch is, a late one as below, or until you arm the same message
+    again, which is refused as already taken and puts the switch in your
+    list; the bounds are checked first, so if you have reached one of them
+    since, that arm is refused by the bound instead and the switch stays
+    unlisted until you make room under it, by cancelling a release that
+    counts toward it, and arm the message again); if the look-up fails too,
+    or is not answered within what is left of the 30 seconds, 503: after a
+    look-up that failed the server looks the switch up again (each try
+    given up after 5 seconds, the next 10 seconds after one that failed)
+    until the database answers, and one still unanswered it goes on waiting
+    for, refusing every arm, check-in and cancel on that server process
+    meanwhile (below); a switch the database did record is then listed and
+    counted. One the database
     does not confirm within 30 seconds is 503, in which case it may still
-    land, and the switch then appears in your list (arming the same message
-    again is then refused as already taken); one sent while an earlier write
-    of a switch on that server still stands unconfirmed is 503 at once
-    without being sent, so it cannot land, until that write's row is in the
-    server's memory. If a switch with the same id already exists in the
+    land, or fail later with the database having recorded it; either way the
+    server then looks the switch up as above, and a switch the database
+    holds appears in your list (arming the same message again is then
+    refused: as already taken, or by a bound the switch itself now fills,
+    which is checked first); one sent while an earlier write
+    of a switch on that server still stands unconfirmed, or has failed and
+    not yet been looked up, is 503 at once
+    without being sent, so it cannot land, until that write's switch is in
+    the server's memory. If a switch with the same id already exists in the
     database, the arm is refused as already taken and that switch is taken
     into the server's memory, so your list shows it. A re-seal's copy is still a write-behind write: one that
     fails twice is dropped (`db_write_behind_failed` in the logs), and the API
@@ -702,12 +724,18 @@ For the source-of-truth triage with tier/owner detail see
     cancel 409 `switch_cancelled`. The write waits for that process's own
     earlier writes to the same switch and for the database, not for its
     writes to other tables; one the database does not confirm within 30
-    seconds is answered 503 (`switch_write_unanswered`): it may or may not
-    have been recorded, and doing it again is safe. While such a write stands
-    unconfirmed, every further check-in and cancel on that process is
+    seconds, or fails (the connection can drop after the database recorded
+    it), is answered 503 (`switch_write_unanswered`): it may or may not
+    have been recorded, and doing it again is safe. After a write that
+    failed, the server reads the switch back before it answers, where the
+    database answers that read within what is left of the 30 seconds, so
+    that server then shows what the database holds (a cancel it had
+    recorded shows cancelled, and its copies are removed). While a write
+    stands unconfirmed, or a failed one's switch has not been read back,
+    every further check-in and cancel on that process is
     answered 503 at once, without being sent, so those were certainly not
-    recorded, until that write is answered and the switch read back into
-    that server's memory, or the write fails; a read back that fails is
+    recorded, until that write is answered or fails and the switch has been
+    read back into that server's memory; a read back that fails is
     tried again on a database connection of its own, given up after 5
     seconds and tried again 10 seconds after each try that failed, until
     one is answered, and the refusals last until then. Nothing on the
@@ -743,9 +771,10 @@ For the source-of-truth triage with tier/owner detail see
     switch that falls due back for one backlog window only (72 hours, once
     per missed check-in): when the window ends the switch fires while that
     process still refuses every check-in and cancel, unless it has been
-    restarted by then. A cancel the database confirms late is in force in
-    the database from then: the switch can no longer fire, and nothing is
-    released from it. That server shows it cancelled, removes its sealed
+    restarted by then. A cancel the database confirms late, or records
+    while its answer never reaches the server (the write then fails), is in
+    force in the database from then: the switch can no longer fire, and
+    nothing is released from it. That server shows it cancelled, removes its sealed
     copies and tells the server's other processes once the switch has been
     read back, as above. If that server process stops before then, or
     before the removal it then queues has been written, the
@@ -758,10 +787,16 @@ For the source-of-truth triage with tier/owner detail see
     (into grace, or firing it) is checked the same way and reaches the
     process's memory only once the database has it, so nothing is served or
     sent for a firing the database refused; one the database does not
-    confirm is tried at the first pass after the database answers, and while
-    one stands unconfirmed no switch moves on that process. A database that
-    does not answer is treated as an outage of the sweep: a switch due while
-    its statements stood unanswered, or whose check-in or cancel was refused
+    confirm, or fails, is tried at the first pass after the database answers
+    (a move the database had recorded before its write failed is found when
+    the switch is read back, and shown from then), and while
+    one stands unconfirmed, or a failed one's switch has not been read back,
+    no switch moves on that process. A database that
+    does not answer is treated as an outage of the sweep, and so is one that
+    fails a switch's write and then the read back of that switch, until a
+    read back is answered: a switch due while
+    its statements stood unanswered or such a switch stood unread, or whose
+    check-in or cancel was refused
     that way, gets the backlog window (below) at the first pass after it
     rather than firing, within the 15 minutes or not. A check-in or cancel
     refused that way is noted by the server process that refused it and
@@ -827,8 +862,9 @@ For the source-of-truth triage with tier/owner detail see
     switch then: the switch goes to grace with at least 72 hours left from
     that moment, once per missed check-in, and a check-in ends that as usual;
     the same window is given, within the 15 minutes or not, when the
-    database did not answer the sweep's own process at some moment since the
-    switch was due, or when your check-in or cancel was refused for want of
+    database did not answer the sweep's own process, or failed a switch's
+    write there and then the read back of that switch, at some moment since
+    the switch was due, or when your check-in or cancel was refused for want of
     an answer on that process, or on another once it has written the refusal
     onto the switch, and you have not checked in since (above). So an outage
     of the server's background work or
@@ -1150,7 +1186,15 @@ shipped (only incremental adoption remains).
     consumes, sweeps and a few others touch only the rows their call changed.
     Every other write saves the one row the call returned, whole, even when
     the call changed nothing in it: marking an already-verified address
-    verified rewrites the account row from that process's copy. Before this
+    verified rewrites the account row from that process's copy. A
+    dead-man switch's own row is written in neither way: an arm, a check-in,
+    a cancel, the server's move of a switch, the 365-day removal and the
+    owner's deletion are each one conditional statement the server waits
+    for; a release's notice row is created only where none exists and
+    changed by the bot only where the stored row is still as the bot read
+    it; a sealed copy's re-seal and blanking, and the ending of a notice
+    when its recipient deletes their account, save the whole row like the
+    rest ("Dead-man's switch", above). Before this
     release some writes (deleting an account, signing out, the hourly
     revocation prune, a vault-item or webhook delete) rewrote a whole table
     from one process's copy and could delete or revert rows another process

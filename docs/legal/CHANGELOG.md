@@ -123,24 +123,34 @@ each correction.
     the database holds the switch and its copies; otherwise it is answered
     with an error, after which the server finds nothing armed, or as
     unconfirmed. Where the database did not confirm it within 30 seconds,
-    that arm may still be recorded, and then appears in your list. Where the
-    server could not look, or the database was still finishing the write
-    when the error was given, the arm may be recorded without appearing in
-    your list: no running server process knows of it, and it can fire after
+    or failed the write and the server could not look the switch up in that
+    time, that arm may still be recorded: the server then looks the switch
+    up until the database answers, refusing every arm, check-in and cancel
+    on that server process meanwhile, and a switch the database holds then
+    appears in your list. Where the database was still finishing the write
+    when the server looked and found nothing (the error then says nothing
+    is armed), the arm may be recorded without appearing in
+    your list: no running server process knows of it, it counts toward none
+    of the limits on releases, and it can fire after
     the server restarts and reads it. Arming the same message again is
     refused as already taken if the first was recorded, and the switch then
-    appears in your list. A check-in or
+    appears in your list, unless one of those limits, which are checked
+    first, refuses that arm; cancelling a release that counts toward the
+    limit, then arming the message again, lists it. A check-in or
     cancel is answered only once the database has applied it to the switch
     as that server process read it, so one made after the switch fired is
     refused rather than taking the release back; one the database does not
-    confirm within 30 seconds is answered as unconfirmed, and a cancel
-    confirmed late stops the switch from firing from then on and removes
+    confirm within 30 seconds, or fails, is answered as unconfirmed, and a
+    cancel confirmed late, or recorded while its answer was lost, stops the
+    switch from firing from then on and removes
     the copies once the server process that sent it has read the switch
-    back, which it tries again until the database answers it; if that
+    back, which it does before it answers where the database answers in
+    time, and otherwise tries again until the database answers it; if that
     process stops first, the copies stay in the database, sealed and given
     to nobody, until the process that runs the sweep learns the switch is
     cancelled or you cancel it again. While the database
-    does not answer, check-ins are refused, and the server treats that time
+    does not answer, or has failed a switch's write and then the look-up of
+    that switch, check-ins are refused, and the server treats that time
     as an outage of its own for the switches it kept from moving: one due
     then gets the 72-hour grace window instead of firing; such a stall counts
     only in the server process whose statements stood. A check-in or cancel
