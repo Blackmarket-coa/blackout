@@ -225,23 +225,34 @@ const switchStillAsRead = (
 ): boolean => current.status === read.status && current.lastCheckInAt === read.lastCheckInAt;
 
 /**
+ * Whether the switch as given is still as a refused attempt read it: it has
+ * not fired or been cancelled, and its last check-in is the one the attempt
+ * read. What the statement the attempt was refused for is conditional on
+ * (`writeDeadmanSwitchIf`), so a mirror that shows the switch otherwise
+ * proves that statement cannot have applied unseen.
+ */
+const stillAsAttemptRead = (
+    current: Record<string, unknown> | undefined,
+    note: { lastCheckInAt: string }
+): current is Record<string, unknown> =>
+    current !== undefined &&
+    current.status !== 'triggered' &&
+    current.status !== 'cancelled' &&
+    current.lastCheckInAt === note.lastCheckInAt;
+
+/**
  * Whether the carry of a refused attempt (`carryRefusedOwnerWrites`) would
- * apply to the switch as given, by the statement's own conditions: it has
- * not fired or been cancelled, its last check-in is still the one the
- * refused attempt read, and it holds no later attempt.
+ * apply to the switch as given, by the statement's own conditions: it is
+ * still as the refused attempt read it (`stillAsAttemptRead`), and it holds
+ * no later attempt. What a landed carry's column is taken onto
+ * (`takeCarriedColumn`); whether a refused carry is followed by a read of
+ * the switch is decided on `stillAsAttemptRead` alone (`takeCarryAnswer`).
  */
 const carryWouldApplyTo = (
     current: Record<string, unknown> | undefined,
     note: { at: string; lastCheckInAt: string }
 ): boolean => {
-    if (
-        !current ||
-        current.status === 'triggered' ||
-        current.status === 'cancelled' ||
-        current.lastCheckInAt !== note.lastCheckInAt
-    ) {
-        return false;
-    }
+    if (!stillAsAttemptRead(current, note)) return false;
     const held = current.ownerAttemptRefusedAt;
     return !(typeof held === 'string' && held > note.at);
 };
@@ -423,9 +434,10 @@ const eraseSwitchUnlessFiredOn = async (
 /**
  * What a switch's read back in its lane found (`settleSwitchStatement`): the
  * switch and, where asked, its copies as Postgres holds them; `undefined`
- * where Postgres has no such switch; `'unread'` where the read failed or had
- * not answered when its caller stopped waiting (the switch is then read
- * again until a read answers, `retrySettleReads`).
+ * where Postgres has no such switch; `'unread'` where the read failed (the
+ * switch is then read again on a connection of its own until a read
+ * answers, `retrySettleReads`) or had not answered when its caller stopped
+ * waiting (that one read is waited for, and nothing bounds it).
  */
 type SwitchReadBack =
     | { row: Record<string, unknown>; copies: Array<Record<string, unknown>> }
@@ -475,6 +487,16 @@ type PendingSettle = {
  */
 const wasNotRun = (landed: unknown): boolean =>
     !landed || typeof landed !== 'object' || 'skipped' in landed || 'refused' in landed;
+
+/**
+ * The SQLSTATE in a switch statement's answer where the database refused
+ * the statement (`answeredOrRefused`), otherwise `undefined`.
+ */
+const refusalIn = (answer: unknown): string | undefined => {
+    if (!answer || typeof answer !== 'object' || !('refused' in answer)) return undefined;
+    const { refused } = answer as { refused: unknown };
+    return typeof refused === 'string' ? refused : undefined;
+};
 
 /**
  * The SQLSTATE classes of an error the database raises about a statement
@@ -10816,9 +10838,17 @@ export class PostgresBackedDb extends InMemoryDb {
             log.info('deadman_owner_attempt_not_carried', {});
             // Refused: Postgres does not hold the switch as the refused
             // attempt read it (it fired or was cancelled, a check-in landed,
-            // or it holds a later attempt). Where this mirror still does,
-            // the mirror is behind: the switch is read back.
-            if (carryWouldApplyTo(map.get(id), note)) this.readBackAfterRefusedCarry(id);
+            // or it holds a later attempt). Where this mirror still shows
+            // it unfired, uncancelled and at that check-in, the mirror may
+            // be behind: the switch is read back. A later attempt in this
+            // mirror, which another process carried, is no reason to skip
+            // that read: the statement the attempt was refused for is not
+            // conditional on that column, so the database can have applied
+            // it since, and the carry was then refused over the row it
+            // changed (round 22 of part 2's review: the read was skipped,
+            // and a cancel applied after another process's carry landed
+            // left this process holding the switch armed).
+            if (stillAsAttemptRead(map.get(id), note)) this.readBackAfterRefusedCarry(id);
             return;
         }
         const current = map.get(id);
@@ -10864,14 +10894,21 @@ export class PostgresBackedDb extends InMemoryDb {
     }
 
     /**
-     * A carry Postgres refused although this mirror still holds the switch
-     * as the refused attempt read it: the mirror is behind Postgres, so the
+     * A carry Postgres refused although this mirror still shows the switch
+     * unfired, uncancelled and at the check-in the refused attempt read
+     * (`stillAsAttemptRead`): the mirror may be behind Postgres, so the
      * switch is read back in its lane and taken as after a failed statement
      * (`settleSwitchStatement`: the row into the mirror where the mirror has
      * not changed meanwhile, announced, a cancelled switch's held copies
      * blanked, and read again on a connection of its own where the read
      * fails). No switch statement is held back for it: the mirror already
-     * has the switch, so no arm reads the bounds without it.
+     * has the switch, so no arm reads the bounds without it. Where the
+     * mirror holds a later attempt that another process carried, the read
+     * is made all the same and usually finds the row as the mirror has it
+     * (the carry was refused over that later attempt); it costs one read
+     * and one announcement, and finds a statement of this process's that
+     * the database applied after that other carry landed (round 22: the
+     * read was skipped there).
      *
      * Round 21 of part 2's review: a failed statement's read back can run
      * before the database applies the statement (the client was lost while
@@ -11141,7 +11178,13 @@ export class PostgresBackedDb extends InMemoryDb {
      * and no other owner's statement is held back for it (round 21 of part
      * 2's review: any account could send one, a label holding U+0000, and
      * each held every owner's switch statements back for the length of a
-     * read). One that rejects otherwise is an unknown outcome, within its
+     * read). Answered within the bound, its caller logs it with its
+     * SQLSTATE (`deadman_switch_arm_refused`, `deadman_switch_write_refused`);
+     * answered after the bound, when the caller has been answered `timeout`
+     * and a timeout logged, it is logged here on the same line, with
+     * `afterBound`, and the hold ends with nothing to read (round 22: such a
+     * refusal was logged as a timeout only, and its SQLSTATE dropped). One
+     * that rejects otherwise is an unknown outcome, within its
      * bound or after it: the connection can be lost after the database
      * applied the statement, or while the database is still running it
      * (a failover, a reset, a pooler dropping its client). It is logged
@@ -11217,10 +11260,26 @@ export class PostgresBackedDb extends InMemoryDb {
         this.openSwitchStall();
         this.holdSwitchStatements(
             statement.then(
-                (landed) =>
-                    wasNotRun(landed)
+                (landed) => {
+                    const refused = refusalIn(landed);
+                    if (refused !== undefined) {
+                        // The database's own refusal, answered after the
+                        // bound: the caller was answered at the bound and
+                        // logged a timeout, so the refusal and its code are
+                        // logged here, on the line the caller logs one
+                        // answered in time on (the arm is the one statement
+                        // read back with its copies), marked as late.
+                        log.error(
+                            withCopies
+                                ? 'deadman_switch_arm_refused'
+                                : 'deadman_switch_write_refused',
+                            { sqlstate: refused, afterBound: true }
+                        );
+                    }
+                    return wasNotRun(landed)
                         ? undefined
-                        : this.settleSwitchStatement(id, withCopies, 'answer').taken,
+                        : this.settleSwitchStatement(id, withCopies, 'answer').taken;
+                },
                 // Rejected after its bound: an unknown outcome, read back too.
                 () => this.settleSwitchStatement(id, withCopies, 'failure').taken
             )
@@ -11266,8 +11325,10 @@ export class PostgresBackedDb extends InMemoryDb {
      * in its lane and taken (`settleSwitchStatement`), no switch statement
      * being sent meanwhile, and this waits for that read until `deadline`
      * (the statement's own bound). Where the read has not answered by then,
-     * or failed, the answer is `'unread'`, the hold is a stall from then on
-     * (`openSwitchStall`), and the switch is read until a read answers.
+     * or failed, the answer is `'unread'` and the hold is a stall from then
+     * on (`openSwitchStall`): a read that failed is made again on a
+     * connection of its own until one answers (`retrySettleReads`), and one
+     * not yet answered is waited for, with nothing bounding it.
      * Where it answered, the hold has ended by the time this returns (it
      * ends a few turns of the microtask queue after the row was taken), so
      * the caller's next statement, the sweep's move of the next switch in
@@ -11497,8 +11558,12 @@ export class PostgresBackedDb extends InMemoryDb {
      * settle's own read ran; the mirror's entry tells: a write of the switch
      * this process made since, or a refresh, changed it, and the row read is
      * then kept out and the switch read once more by key (`takeSettledRow`).
-     * While a settle waits here the stall
-     * stands, so no conditional write of a switch is sent by this process.
+     * While a settle waits here whose caller holds this process's switch
+     * statements back (`holdSwitchStatements`: one after a statement that
+     * answered late or failed), the stall stands, so no conditional write
+     * of a switch is sent by this process; a settle after a refused carry
+     * (`readBackAfterRefusedCarry`) waits here with nothing held, and
+     * statements are sent meanwhile.
      */
     private retrySettleReads(): void {
         const plan = this.plans.get('deadmanSwitches');
@@ -11707,7 +11772,10 @@ export class PostgresBackedDb extends InMemoryDb {
      * error it answers for the statement itself) is `refused`: nothing of it
      * was written, nothing is read back and no other switch statement is
      * held back (round 21: such an arm was read back with every owner's
-     * switch statements held meanwhile).
+     * switch statements held meanwhile). It is logged with its SQLSTATE
+     * (`deadman_switch_arm_refused`); one refused only after the bound was
+     * `unanswered` at the bound, and is logged so, with `afterBound`, when
+     * its answer comes (`awaitSwitchStatement`, round 22).
      *
      * Where a switch with the id exists, before the statement or by the time
      * of its insert (another process armed it between the check and the
@@ -11730,15 +11798,22 @@ export class PostgresBackedDb extends InMemoryDb {
      * list shows it and no bound counts it, until an arm of the same
      * envelope reaches the store, finds it and takes it into the mirror, or
      * a process reads every table again, which it does when it starts and
-     * when its change subscription reconnects (`rehydrateAll`); the route's
-     * bounds are checked before the store is asked, so an owner who has
-     * since filled one is refused by it first; the same holds for an arm
+     * when its change subscription reconnects (`rehydrateAll`); every check
+     * the route makes comes before the store is asked, so such an arm
+     * reaches it only where it still passes them: an owner who has since
+     * filled a bound is refused by it first, and one whose release
+     * identity, or that of a person the envelope names, has been replaced
+     * since, or whose envelope names an account since deleted, is refused
+     * for that, whatever they do, and then only a process reading every
+     * table again brings the switch in; the same holds for an arm
      * past its bound whose statement then rejects and is read back before
      * the database commits it, answered 503); where that read fails too, or
      * does not answer within what
-     * is left of the statement's bound, `unanswered`, and the switch is read
-     * again until a read answers, no switch statement being sent by this
-     * process meanwhile, so no arm reads the bounds without it (round 20:
+     * is left of the statement's bound, `unanswered`: a read that failed is
+     * made again on a connection of its own until one answers, and one not
+     * yet answered is waited for, with nothing bounding it, no switch
+     * statement being sent by this process meanwhile, so no arm reads the
+     * bounds without it (round 20:
      * nothing read it again, and the next arm passed a bound the hidden
      * switch had filled). One that does not answer in time is `unanswered`
      * (the route answers 503) with nothing in the mirror; when it answers
@@ -11824,9 +11899,10 @@ export class PostgresBackedDb extends InMemoryDb {
             // Unknown outcome: the insert may have committed. The switch has
             // been read back in its lane, and where Postgres holds it, it and
             // its copies are in the mirror and announced (`takeSettledRow`).
-            // Where that read failed, or did not answer within what was left
-            // of the bound, the switch is read until a read answers, and no
-            // arm reads the bounds without it meanwhile: the stall stands
+            // Where that read failed it is made again on a connection of
+            // its own until one answers, and where it did not answer within
+            // what was left of the bound it is waited for; no arm reads the
+            // bounds without the switch meanwhile: the stall stands
             // (round 20 of part 2's review: nothing read it again, and the
             // next arm passed a bound the hidden switch had filled).
             const found = waited.readBack;
@@ -11940,9 +12016,13 @@ export class PostgresBackedDb extends InMemoryDb {
      *
      * An update the database refuses (`sqlstateOfStatementRefusal`: an error
      * it answers for the statement itself) did not apply: it is logged
-     * (`deadman_switch_write_refused`) and `unanswered`, with nothing read
-     * back and no other switch statement held back (round 21 of part 2's
-     * review). A statement that fails otherwise is logged and `unanswered`,
+     * (`deadman_switch_write_refused`, with its SQLSTATE) and `unanswered`,
+     * with nothing read back and no other switch statement held back (round
+     * 21 of part 2's review); one the database refuses only after the bound
+     * was `unanswered` at the bound and logged as a timeout then, and is
+     * logged as refused, on the same line with `afterBound`, when its
+     * answer comes (`awaitSwitchStatement`, round 22).
+     * A statement that fails otherwise is logged and `unanswered`,
      * and is an unknown outcome (the connection can be lost after the
      * database applied it, or while the database is still running it):
      * the switch is read back in its lane before the answer, within what is
@@ -12555,6 +12635,20 @@ export class PostgresBackedDb extends InMemoryDb {
      * switch otherwise this mirror's view of it was behind and Postgres's row
      * is taken. Bounded as a switch statement is, without opening a stall:
      * one not answered in time is taken when it lands, and the pass goes on.
+     *
+     * Where it blanked a copy, the switch itself is announced with the
+     * copies (round 22 of part 2's review). Copies still held on a switch
+     * Postgres has cancelled are what a cancel leaves that the database
+     * carried out with no process blanking them after it: the process that
+     * sent it was answered 503 and, where the database began the cancel
+     * only after that process's read back and its carry of the refused
+     * attempt, still holds the switch armed (round 21's stated limit). In
+     * the deployed layout that process runs no sweep, so nothing there
+     * comes back to the switch, and the pass of the process that does,
+     * which has read the switch cancelled, sent it nothing about the row:
+     * it showed the switch armed, with its content, in the owner's list and
+     * export, past the deadline, until the owner's next check-in or cancel
+     * there or its own restart. The announcement has it read the row.
      */
     override async blankCopiesOfCancelledSwitch(switchId: string): Promise<number> {
         const plan = this.plans.get('deadmanSwitches');
@@ -12656,6 +12750,18 @@ export class PostgresBackedDb extends InMemoryDb {
                     }
                 }
                 if (blanked.length > 0) {
+                    // The switch too, not only its copies: a process that
+                    // still holds it armed refreshes it from this (it sent
+                    // the cancel, and the database carried that out only
+                    // after that process's reads of the switch), where the
+                    // copies' announcements alone would leave its row as it
+                    // was.
+                    this.transport?.publish({
+                        src: this.instanceId,
+                        m: 'deadmanSwitches',
+                        op: 'u',
+                        kv: [switchId],
+                    });
                     log.info('deadman_cancelled_switch_copies_blanked', { copies: blanked.length });
                 }
                 return blanked.length;

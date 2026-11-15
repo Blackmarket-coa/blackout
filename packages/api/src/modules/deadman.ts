@@ -138,16 +138,25 @@ const switchChanged = (c: Context) =>
  * been read back where the database answered that read within the bound, so
  * this process then holds what the database held at that read (a cancel it
  * had recorded shows cancelled); one not yet read back, and one that lands
- * or fails later, is read until a read answers, and nothing of it is in this
- * process's memory until then (round 20 of part 2's review: a failed one
- * was read back by nothing). A check-in or cancel the database applies only
- * after that read (it was still running it when the connection was lost) is
- * found when the refused attempt is then written onto the switch, which the
- * database refuses over the applied row, and the switch is read once more
- * (round 21); one the database begins only after that too is not seen by
- * this process until the owner's next check-in or cancel of the switch, a
- * refresh of it, a restart or the deadline, so the answer says to try
- * again, which is what brings it in. A check-in or cancel the database
+ * or fails later, is read back then (a read that fails is made again until
+ * one answers; one not yet answered is waited for, with nothing bounding
+ * it), and nothing of it is in this process's memory until then (round 20
+ * of part 2's review: a failed one was read back by nothing). A check-in or
+ * cancel the database applies only after that read (it was still running it
+ * when the connection was lost) is found when the refused attempt is then
+ * written onto the switch, which the database refuses over the applied row,
+ * and the switch is read once more (round 21; since round 22 also where
+ * this process has meanwhile taken a later refused attempt that another
+ * process wrote); one the database begins only after that too is not seen
+ * by this process until the owner's next check-in or cancel of the switch
+ * here, a restart, or a refresh of the switch from another process's
+ * announcement, so the answer says to try again, which is what brings it
+ * in. The process that runs the sweep makes such an announcement when it
+ * moves the switch or is refused a move of it (for a switch it still holds
+ * armed, at the deadline) and, since round 22, when its pass removes the
+ * copies still held on a switch it has read cancelled; in the deployed
+ * layout this process runs no sweep, so its own deadline brings nothing
+ * in. A check-in or cancel the database
  * refuses outright (an error it answers for the statement itself) is also
  * answered here: it was not recorded. One refused at once because another switch
  * statement stood unanswered, or a failed one's switch unread, was not sent,
@@ -176,9 +185,15 @@ const switchWriteUnanswered = (c: Context, what: 'check-in' | 'cancel' | 'arm') 
  * arm of the same envelope that reaches the store finds it and answers
  * `release_id_taken`, with the switch in the owner's list, or a process
  * reads every table again, which it does when it starts and when its change
- * subscription reconnects, and from then lists, counts and fires it; the
- * bounds are checked before the store is asked, so an owner who has reached
- * one since is refused by it first).
+ * subscription reconnects, and from then lists, counts and fires it; every
+ * check of `armReleaseSwitch` comes before the store is asked, so that arm
+ * reaches it only where it still passes them: an owner who has reached a
+ * bound since is refused by it first, and one whose release identity, or
+ * that of a person the envelope names, was replaced since, or whose
+ * envelope names an account since deleted, is refused for that
+ * (`owner_identity_changed`, `recipient_identity_superseded`,
+ * `unknown_recipient`) however often they try, and for them only a process
+ * reading every table again brings the switch in).
  */
 const switchWriteFailed = (c: Context) =>
     c.json(
