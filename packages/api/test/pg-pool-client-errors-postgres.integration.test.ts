@@ -41,6 +41,7 @@ const skip = PG_URL ? false : 'set BLACKOUT_TEST_PG_URL to run against PostgreSQ
 
 const { clearSharedPgPool, getSharedPgPool } = await import('../src/config/postgres');
 const { PgNotifyTransport } = await import('../src/db/pgNotify');
+const { forgetIdleSessionFailuresForTests } = await import('../src/db/pooledClient');
 const {
     BACKGROUND_LEADER_LOCK_KEY,
     acquireBackgroundLeaderLock,
@@ -208,6 +209,24 @@ const captureWarnings = (t: { after(fn: () => void): void }): string[] => {
     });
     return lines;
 };
+
+/** console.info lines while the test runs. */
+const captureInfo = (t: { after(fn: () => void): void }): string[] => {
+    const lines: string[] = [];
+    const { info } = console;
+    console.info = (line: unknown) => lines.push(String(line));
+    t.after(() => {
+        console.info = info;
+    });
+    return lines;
+};
+
+/**
+ * Part of the one statement the leader lock's watch sends about the session's
+ * idle_session_timeout (db/pooledClient.ts): nothing else here calls
+ * set_config. A proxy finds the statement by it.
+ */
+const IDLE_SESSION_STATEMENT = "set_config('idle_session_timeout'";
 
 /** Unhandled rejections while the test runs; Node ends the process on one. */
 const captureUnhandledRejections = (t: { after(fn: () => void): void }): unknown[] => {
@@ -555,21 +574,23 @@ test(
 );
 
 test(
-    "a network reset while the leader-lock connection's idle-session read is out is reported by the watch at once, not at the next lock check",
+    "a network reset while the leader-lock connection's idle-session statement is out is reported by the watch at once, not at the next lock check",
     { skip },
     async (t) => {
         const lines = captureWarnings(t);
+        const info = captureInfo(t);
+        forgetIdleSessionFailuresForTests();
         const database = await newDatabase();
         const target = new URL(urlFor(database));
-        // A proxy that resets the connection the read of the idle-session
-        // timeout comes down, instead of passing the statement on. Only the
-        // lock's connection sends it here.
+        // A proxy that resets the connection the idle-session statement comes
+        // down, instead of passing the statement on. Only the lock's
+        // connection sends it.
         let resets = 0;
         const proxy = net.createServer((down) => {
             const up = net.connect(Number(target.port || 5432), target.hostname);
             up.on('data', (d) => down.write(d));
             down.on('data', (d) => {
-                if (d.includes("FROM pg_settings WHERE name = 'idle_session_timeout'")) {
+                if (d.includes(IDLE_SESSION_STATEMENT)) {
                     resets += 1;
                     down.resetAndDestroy();
                     return;
@@ -597,7 +618,8 @@ test(
 
         // The lock is taken, and reported taken with nothing about the timeout
         // sent or waited for; its caller watches it from that moment, as the
-        // API and the worker do, and the watch sends the read once it listens.
+        // API and the worker do, and the watch sends the statement once it
+        // listens.
         assert.equal(await acquireBackgroundLeaderLock(pool as never), true);
         const lost: string[] = [];
         watchBackgroundLeadership((reason) => lost.push(reason));
@@ -617,6 +639,11 @@ test(
         assert.equal(drops[0].state, 'held');
         assert.equal(drops[0].error, 'Connection terminated unexpectedly');
         assert.equal(pool.totalCount, 0, 'the dead connection was destroyed');
+        assert.deepEqual(
+            logged(info, 'pg_idle_session_timeout_not_raised'),
+            [],
+            'a statement that failed with its connection is not logged as a refusal'
+        );
 
         // The server gives the lock up with the session; another connection
         // can take it.
@@ -635,6 +662,106 @@ test(
             if (!free) await sleep(20);
         }
         assert.ok(free, 'nobody holds the lock in Postgres');
+    }
+);
+
+test(
+    'the server ending the leader-lock session under its idle-session statement is reported by the watch and logged as a drop, not as a refusal; a refusal on the next lock connection is still logged',
+    { skip },
+    async (t) => {
+        const lines = captureWarnings(t);
+        const info = captureInfo(t);
+        forgetIdleSessionFailuresForTests();
+        const database = await newDatabase();
+        const target = new URL(urlFor(database));
+        const a = await admin(urlFor(database));
+        t.after(() => a.end());
+        const holders = async (): Promise<number[]> =>
+            (
+                await a.query(
+                    `SELECT pid FROM pg_locks WHERE locktype = 'advisory' AND granted
+                       AND objid = $1::bigint::oid
+                       AND database = (SELECT oid FROM pg_database WHERE datname = current_database())`,
+                    [BACKGROUND_LEADER_LOCK_KEY]
+                )
+            ).rows.map((r) => r.pid as number);
+        // A proxy that holds back the first idle-session statement and has
+        // the server end the lock's session instead (pg_terminate_backend,
+        // which is what a restart or a failover does to a session). The
+        // server's FATAL then reaches a connection whose statement is out.
+        let heldBack = 0;
+        const proxy = net.createServer((down) => {
+            const up = net.connect(Number(target.port || 5432), target.hostname);
+            up.on('data', (d) => down.write(d));
+            down.on('data', (d) => {
+                if (heldBack === 0 && d.includes(IDLE_SESSION_STATEMENT)) {
+                    heldBack += 1;
+                    void holders().then((pids) =>
+                        a.query('SELECT pg_terminate_backend(pid) FROM unnest($1::int[]) AS pid', [
+                            pids,
+                        ])
+                    );
+                    return;
+                }
+                up.write(d);
+            });
+            for (const [from, to] of [
+                [down, up],
+                [up, down],
+            ]) {
+                from.on('error', () => to.destroy());
+                from.on('close', () => to.destroy());
+            }
+        });
+        await new Promise<void>((r) => proxy.listen(0, '127.0.0.1', () => r()));
+        const via = new URL(target.toString());
+        via.hostname = '127.0.0.1';
+        via.port = String((proxy.address() as net.AddressInfo).port);
+        const pool = await sharedPool(database, via.toString());
+        t.after(async () => {
+            await releaseBackgroundLeader();
+            await endPool(pool);
+            await new Promise<void>((r) => proxy.close(() => r()));
+        });
+        const notRaised = (): Row[] => logged(info, 'pg_idle_session_timeout_not_raised');
+
+        assert.equal(await acquireBackgroundLeaderLock(pool as never), true);
+        const lost: string[] = [];
+        watchBackgroundLeadership((reason) => lost.push(reason));
+        await waitFor(() => lost.length === 1, 'the watch to report the loss', 3_000);
+        assert.equal(heldBack, 1);
+        assert.deepEqual(lost, ['connection_error']);
+        // The statement got the server's FATAL. The connection was still
+        // checked out when its socket closed, so the drop is also the
+        // connection's own report: logged once, as held.
+        assert.deepEqual(
+            logged(lines, 'pg_pool_client_error').map((e) => [e.state, e.error]),
+            [['held', 'Connection terminated unexpectedly']]
+        );
+        await sleep(200);
+        assert.deepEqual(notRaised(), [], "the server's FATAL is not a refusal of the statement");
+        assert.equal(pool.totalCount, 0, 'the dead connection was destroyed');
+
+        // The lock is taken again on a new connection, and there the server
+        // refuses the statement: a temporary view named pg_settings stands in
+        // front of the catalog's in that session and gives a setting that is
+        // not a number. The connection stays up, so this one is a refusal,
+        // and the once-per-process line is still there for it.
+        const next = await pool.connect();
+        await next.query(
+            `CREATE TEMP VIEW pg_settings AS
+             SELECT 'idle_session_timeout'::text AS name, 'soon'::text AS setting, 'ms'::text AS unit`
+        );
+        next.release();
+        assert.equal(await acquireBackgroundLeaderLock(pool as never), true);
+        watchBackgroundLeadership((reason) => lost.push(reason));
+        await waitFor(() => notRaised().length === 1, 'the refusal to be logged', 3_000);
+        assert.deepEqual(
+            notRaised().map((e) => [e.reason, e.code]),
+            [['failed', '22P02']]
+        );
+        assert.deepEqual(lost, ['connection_error'], 'the lock taken again was not lost');
+        assert.equal((await holders()).length, 1, 'and is held in Postgres');
     }
 );
 

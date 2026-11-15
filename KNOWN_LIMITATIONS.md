@@ -813,18 +813,44 @@ In postgres mode each API and worker process uses one shared connection pool
 (`packages/api/src/config/postgres.ts`). Before 2026-11-08 a pooled connection
 that the server dropped (a Postgres restart, a failover, an idle-session
 timeout, a network reset) ended the process with nothing drained. Since then
-the drop is logged (`pg_pool_client_error`) and counted
-(`db_pool_client_errors_total`), and the dead connection is not handed out
-again: the pool discards an idle one, and the store gives a connection whose
-query failed back with that error, so the pool closes it and the next checkout
-gets another connection (a new one only when none is idle). A drop the server
-reports to a query in flight is that query's error. It is not counted unless
-the code then sends another statement on that connection before giving it
-back, as the store does with the ROLLBACK after a statement inside a targeted
-write's transaction (or inside the boot check of its statements) fails, and as
-a migration does with its ROLLBACK and the unlock of the migration lock: that
-statement waits until the socket closes, the connection reports the drop while
-it is still checked out, and the drop is also logged and counted, as `held`.
+the process stays up, and the dead connection is not handed out again: the
+pool discards an idle one, and the store gives a connection whose query failed
+back with that error, so the pool closes it and the next checkout gets another
+connection (a new one only when none is idle).
+
+A drop is logged (`pg_pool_client_error`) and counted
+(`db_pool_client_errors_total`) when the connection itself reports it: sitting
+in the pool (`state` `idle`), or checked out (`held`). A drop that lands on a
+statement in flight goes to that statement first, as the server's error, and
+the connection reports it only when its socket closes, a moment later. Code
+that gives the connection back with that error at once has the pool close it
+before then, and such a drop is that statement's error and nothing more: no
+`pg_pool_client_error` line and no count. A write-behind write that is a
+single statement goes that way. So do a lock check on the background-leader
+lock's connection (the loss is logged as `background_leader_lost`,
+`lock_check_failed`) and the LISTEN connection's LISTEN. Where the connection
+is still checked out when its socket closes, the drop is also logged and
+counted, as `held`:
+
+-   where the code sends another statement on the connection before giving it
+    back, since that statement waits until the socket closes, as the store
+    does with the ROLLBACK after a statement inside a targeted write's
+    transaction (or inside the boot check of its statements) fails, and as a
+    migration does with its ROLLBACK and the unlock of the migration lock;
+-   where the code passes the failure over and keeps the connection, as the
+    leader lock's holder does with the statement it sends about the
+    idle-session timeout (below), and the LISTEN connection with its
+    `SET idle_session_timeout = 0`.
+
+Two connections stay checked out for as long as the process uses them: the
+LISTEN connection and the leader lock's. A restart, a failover or a reset
+finds the first between statements always, once it listens, and the second
+nearly always (it sends a lock check every 10 s). Such a drop is logged and
+counted once, as `held`, with the server's code (`57P01`) where the server
+said why, beside the line of the connection's own: `pg_notify_listen_error`
+and a reconnect 2 s later for the LISTEN connection, `background_leader_lost`
+(`connection_error`) for the lock's.
+
 What remains:
 
 -   An API that runs the background loops itself holds the background-leader
@@ -881,7 +907,8 @@ What remains:
     connection is used as it is. On a newer server, a connection on which
     the statement fails and which is still up stays under the timeout.
     Whatever the cause, only the first failure of the statement in a process
-    is logged (`pg_idle_session_timeout_not_exempted`).
+    is logged (`pg_idle_session_timeout_not_exempted`), a connection the
+    server ended under the statement included.
 -   The background-leader lock's connection sends a lock check every 10 s.
     An `idle_session_timeout` shorter than that ends the session of a live
     leader between two checks, and one not much longer does when a check
@@ -891,8 +918,8 @@ What remains:
     loops (scheduled messages, the dead-man sweep, the sweepers): the API
     and the worker take the same lock. So this session is not exempted from
     the timeout as the LISTEN connection is. Since 2026-11-15 the lock's
-    holder reads its session's timeout once it watches the lock, and acts
-    on the value:
+    holder sends one statement once it watches the lock, and the server
+    acts on the session's timeout:
 
     -   None set: nothing is changed. The server never ends the session for
         sitting idle, and nothing in the API bounds how long an orphaned one
@@ -919,18 +946,34 @@ What remains:
     -   A server older than 14, which has no such setting: nothing is set,
         and an orphaned session keeps the lock as where none is set.
 
+    The statement is sent as soon as the lock is taken and watched, and the
+    server reads and raises in that one step. Until the server has it, the
+    session is under the server's own timeout like any other: if more than
+    that timeout passes between the server's answer to the lock statement
+    and this statement reaching it (the process or the network stalled for
+    that long), the server ends the session, and the holder loses the lock
+    as it did before 2026-11-15. The shorter the timeout, the shorter the
+    stall that does it.
+
     The last lock check came up to 10 s before the process went. Once the
     server has ended the session, a process that is trying for the lock
     takes it at its next try, up to 15 s later: the API that held the lock,
     if it is still running (first item), or a worker on standby. An API that
     did not get the lock when it started does not try again, before
     2026-11-15 or since, so where no such process is left the loops stay
-    stopped until an API or a worker next starts. A read that fails or
-    cannot be understood, or a raise the server refuses, leaves the session
-    as it was; the first of those in a process, the missing setting
-    included, is logged (`pg_idle_session_timeout_not_raised`). The answer
-    of a server older than 14, on this connection and the LISTEN one, is
-    tested against a stand-in: the only server run here was PostgreSQL 16.
+    stopped until an API or a worker next starts. A statement the server
+    refuses leaves the session as it was; the first refusal in a process,
+    the missing setting included, is logged
+    (`pg_idle_session_timeout_not_raised`). A statement that fails because
+    the server ended the session under it is not a refusal, and is not
+    logged as one: the process asks the connection for one more answer
+    before it logs, and a session the server has ended gives none. That
+    drop is logged as any drop of this connection is (above). The answer of
+    a server older than 14 is not taken from such a server; the only server
+    run here was PostgreSQL 16. For this connection it is tested on PGlite
+    (PostgreSQL 17.5 inside the test process) behind a view that hides the
+    setting, and against a stand-in; for the LISTEN connection, against a
+    stand-in.
 
 -   A write-behind write gets one immediate retry, on another connection than
     the one it failed on (a new one only when none is idle). A write whose own

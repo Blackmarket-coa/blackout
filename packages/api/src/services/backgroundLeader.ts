@@ -199,8 +199,8 @@ export const watchBackgroundLeadership = (
     const interval = setInterval(() => void check(), checkIntervalMs);
     if (typeof interval.unref === 'function') interval.unref();
     leaderWatches.add(stop);
-    // After the listeners: a connection reset under one of its statements is
-    // then reported as a loss at once. Not waited for, and it never rejects.
+    // After the listeners: a connection reset under its statement is then
+    // reported as a loss at once. Not waited for, and it never rejects.
     void raiseIdleSessionTimeoutTo(
         client,
         LEADER_IDLE_SESSION_FLOOR_CHECKS * checkIntervalMs,
