@@ -45,20 +45,28 @@ API, which this session cannot reach.
     `@hono/node-server` turns a raw backslash in the request path into `/`
     and resolves `..` on every request (shown on the wire below). No proxy
     rule in this repository that it would get past was found. The other six
-    are in code the API does not load or configure: `hono/css`, `csrf()`,
-    `validator('form')`, `mount()`, RegExpRouter (SmartRouter settles on
-    TrieRouter for this route table) and node-server's own WebSocket support.
-    Details per advisory below.
--   **Found while checking GHSA-qv5m, and not fixed by the bump:** that
-    advisory's code is not reached, but its impact is, by another route. One
-    unauthenticated request with `Upgrade: websocket` on a path none of the
-    API's three WebSocket shims claims (`/v1/health` will do), reset by the
-    client within about a second, leaves an unhandled socket `'error'` and
-    the API process exits 1. Measured on the real app with node-server 2.1.3
-    and with 2.1.6. The cause is the API's own `upgrade` listeners, not
-    node-server. Whether the deployed proxies pass such a request and the
-    reset through to the API was not established. The code fix is left for a
-    separate change ("Found outside the gates", item 1).
+    are in code the API never selects or calls: `hono/css`, `csrf()` and
+    `validator('form')` (not imported), `mount()` (not called), RegExpRouter
+    (loaded, and tried on the first request, where SmartRouter settles on
+    TrieRouter for this route table, so its matcher is never selected) and
+    node-server's own WebSocket support (not switched on). Details per
+    advisory below.
+-   **Found while checking GHSA-qv5m, not fixed by the bump, and fixed in
+    this change by code:** that advisory's code is not reached, but its
+    impact was, by another route. One unauthenticated request with
+    `Upgrade: websocket` on a path none of the API's three WebSocket shims
+    claims (`/v1/health` will do), reset by the client within about a
+    second, left an unhandled socket `'error'` and the API process exited 1.
+    Measured on the real app with node-server 2.1.3 and with 2.1.6. The
+    cause was the API's own `upgrade` listeners, not node-server. The third
+    commit of this change puts a guard ahead of them
+    (`packages/api/src/webSocketUpgrades.ts`): every upgraded socket has an
+    `'error'` listener from the moment Node hands it over, and an upgrade no
+    shim takes is answered `404` and closed. Of eleven requests, each to a
+    fresh API process, seven ended the process before the fix and none does
+    after it (the GHSA-qv5m section; "Found outside the gates", item 1).
+    Whether the deployed proxies passed such a request and the reset through
+    to the API was not established.
 -   **After the bump** the OSV scan exits 0 in UTC, UTC+3 and UTC+14 ("No
     issues found", 1 filtered), Trivy with `security.yml`'s flags exits 0
     with no finding in any of its six targets, and the API's lint, typecheck, integration, post-merge
@@ -71,9 +79,9 @@ API, which this session cannot reach.
     not fixed or ignored here, and are left for a separate sweep ("Found
     outside the gates", item 2).
 
-No index of the advisory records exists in this tree (`docs/security` has no
-README, and no document lists the `dependency-advisories-*` records), so there
-was none to add this record to.
+No index of the advisory records exists in this tree: `docs/security` has no
+README, and `.trivyignore` and `osv-scanner.toml` cite records only for their
+own entries. So there was no index to add this record to.
 
 ---
 
@@ -103,14 +111,14 @@ directories:
 
 -   the real app from `packages/api/src/index.ts` (`BLACKOUT_DB_MODE=memory`,
     `BLACKOUT_API_SKIP_LISTEN=1`, `NODE_ENV=test`), served by `serve()` from
-    each node-server version as `src/index.ts:512` does, driven with raw
+    each node-server version as `src/index.ts:513` does, driven with raw
     HTTP/1.1 over a socket (16 requests);
 -   a minimal Hono app with path-scoped middleware behind each node-server
     version (6 raw request-targets);
 -   the real app's router: which router SmartRouter picks, which routes
     RegExpRouter refuses, and which middleware runs for paths with an encoded
-    line terminator (10 requests through `app.request`), on each hono
-    version;
+    line terminator (10 requests through `app.request`: 7 with a terminator
+    and 3 controls without one), on each hono version;
 -   Go 1.24.7's `net/http/httputil.ReverseProxy` in front of a raw socket, to
     see what request line it forwards for a backslash path (item on
     GHSA-jpvv);
@@ -118,7 +126,15 @@ directories:
     the three WebSocket shims attached, sent one upgrade request that the
     client then resets, in a child process whose exit is observed (item on
     GHSA-qv5m, 18 runs), and a plain Node `http.Server` for the `upgrade`
-    hand-off.
+    hand-off;
+-   for the fix, the API started as `deploy/docker/backend/bin/start-app`
+    starts it (`node --import tsx src/index.ts` from `packages/api`, memory
+    store, a free port), sent one upgrade request that the client then
+    resets, a fresh process for each of 11 requests, before the fix and
+    again after it; one more process sent 600 unclaimed upgrades reset
+    after 0 to 3 ms; and a plain Node `http.Server` sent an HTTP CONNECT
+    and a malformed request, to see what Node does with them when nothing
+    listens for `connect` or `clientError`.
 
 **Scanners.** osv-scanner **v2.3.3**, the version `osv-scanner-action@v2.3.3`
 runs (release binary, checked against `osv-scanner_SHA256SUMS`: OK), run as
@@ -134,15 +150,15 @@ builds or deploys, on input an attacker controls.
 
 ## Summary
 
-| Advisory                              | Package           | GHSA severity | Was     | Now     | Reachable here                                                                                                                                                                                                                                                                                     |
-| ------------------------------------- | ----------------- | ------------- | ------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| GHSA-jpvv-r467-5p4w (CVE-2026-126210) | @hono/node-server | Moderate      | 2.1.3   | 2.1.6   | The parsing runs on every request; no front-proxy rule it gets past was found (Caddy's `/metrics*` block sits behind Go's proxy, which re-encodes `\`)                                                                                                                                             |
-| GHSA-qv5m-9pm6-hqp3 (CVE-2026-126343) | @hono/node-server | Moderate      | 2.1.3   | 2.1.6   | Its code, no: `serve()` is called without the `websocket` option, so node-server installs no upgrade handler. Its impact, yes, by another route and on 2.1.6 too: an unclaimed upgrade reset within about 1 s crashes the API through its own shims' listeners ("Found outside the gates", item 1) |
-| GHSA-3gg2-335m-rxc6 (CVE-2026-126359) | hono              | Low           | 4.13.11 | 4.13.16 | No: nothing imports `hono/css`                                                                                                                                                                                                                                                                     |
-| GHSA-46wx-v44x-9hh2 (CVE-2026-126355) | hono              | Moderate      | 4.13.11 | 4.13.16 | No: nothing imports `hono/csrf`                                                                                                                                                                                                                                                                    |
-| GHSA-4h7h-rv7c-7m2v (CVE-2026-126356) | hono              | Moderate      | 4.13.11 | 4.13.16 | No: nothing imports `hono/validator`; bodies are read as JSON                                                                                                                                                                                                                                      |
-| GHSA-4m76-xfj5-7975 (CVE-2026-126357) | hono              | Moderate      | 4.13.11 | 4.13.16 | No: no `mount()`; sub-apps are composed with `app.route()`                                                                                                                                                                                                                                         |
-| GHSA-h7mg-cq63-vhpq (CVE-2026-126358) | hono              | Moderate      | 4.13.11 | 4.13.16 | No: SmartRouter picks TrieRouter for this route table (measured), and the advisory names RegExpRouter only                                                                                                                                                                                         |
+| Advisory                              | Package           | GHSA severity | Was     | Now     | Reachable here                                                                                                                                                                                                                                                                                                                                                     |
+| ------------------------------------- | ----------------- | ------------- | ------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| GHSA-jpvv-r467-5p4w (CVE-2026-126210) | @hono/node-server | Moderate      | 2.1.3   | 2.1.6   | The parsing runs on every request; no front-proxy rule it gets past was found. For Caddy's `/metrics*` block, a probe of Go 1.24.7's `httputil.ReverseProxy` forwarded `\` as `%5C`; Caddy, the proxy that sits in front of the app there, was not run                                                                                                             |
+| GHSA-qv5m-9pm6-hqp3 (CVE-2026-126343) | @hono/node-server | Moderate      | 2.1.3   | 2.1.6   | Its code, no: `serve()` is called without the `websocket` option, so node-server installs no upgrade handler. Its impact, yes, by another route and on 2.1.6 too: an unclaimed upgrade reset within about 1 s crashed the API through its own shims' listeners. Fixed in this change by a guard ahead of them, not by the bump ("Found outside the gates", item 1) |
+| GHSA-3gg2-335m-rxc6 (CVE-2026-126359) | hono              | Low           | 4.13.11 | 4.13.16 | No: nothing imports `hono/css`                                                                                                                                                                                                                                                                                                                                     |
+| GHSA-46wx-v44x-9hh2 (CVE-2026-126355) | hono              | Moderate      | 4.13.11 | 4.13.16 | No: nothing imports `hono/csrf`                                                                                                                                                                                                                                                                                                                                    |
+| GHSA-4h7h-rv7c-7m2v (CVE-2026-126356) | hono              | Moderate      | 4.13.11 | 4.13.16 | No: nothing imports `hono/validator`; bodies are read as JSON or text, never as a form                                                                                                                                                                                                                                                                             |
+| GHSA-4m76-xfj5-7975 (CVE-2026-126357) | hono              | Moderate      | 4.13.11 | 4.13.16 | No: no `mount()`; sub-apps are composed with `app.route()`                                                                                                                                                                                                                                                                                                         |
+| GHSA-h7mg-cq63-vhpq (CVE-2026-126358) | hono              | Moderate      | 4.13.11 | 4.13.16 | No: SmartRouter picks TrieRouter for this route table (measured), and the advisory names RegExpRouter only                                                                                                                                                                                                                                                         |
 
 OSV `/v1/querybatch` at 23:46Z: hono 4.13.11 → the five hono IDs; 4.13.16,
 4.13.17 and 4.13.18 → none. @hono/node-server 2.1.3 → the two node-server IDs;
@@ -151,8 +167,11 @@ OSV `/v1/querybatch` at 23:46Z: hono 4.13.11 → the five hono IDs; 4.13.16,
 The API imports five hono specifiers and nothing else from either package:
 `hono` (110 files under `packages/api/src`), `hono/cors` and `hono/body-limit`
 (one each), `hono/streaming` (two), and `serve` from `@hono/node-server`
-(`src/index.ts:1`). Its tests import `hono` only. No other workspace package
-depends on either (the lockfile's only importer of both is `packages/api`).
+(`src/index.ts:1`). Its tests imported `hono` only. The upgrade fix adds a
+type-only import of `ServerType` from `@hono/node-server`
+(`src/webSocketUpgrades.ts`), and its test imports `serve`. No other workspace
+package depends on either (the lockfile's only importer of both is
+`packages/api`).
 
 ---
 
@@ -172,7 +191,7 @@ depends on either (the lockfile's only importer of both is `packages/api`).
     WebSocket upgrades); a percent-encoded backslash and one in the query are
     still accepted.
 -   **The code runs here.** Every API request goes through
-    `serve({ fetch: app.fetch, port: PORT })` (`packages/api/src/index.ts:512`).
+    `serve({ fetch: app.fetch, port: PORT })` (`packages/api/src/index.ts:513`).
     On the wire, against the real app with 2.1.3: `GET /v1/..\metrics`
     answered 200 with the Prometheus text of `/metrics`, `GET /ct\..\health`
     answered `/health`'s 200, and `GET /v1\no-such-route` the JSON 404. In the
@@ -194,7 +213,7 @@ depends on either (the lockfile's only importer of both is `packages/api`).
         node-server 2.1.3 does not rewrite it (wire probe: `/v1/no-such-route%5C`
         is a 404 on both versions). Caddy itself was not run, so this is
         Go's standard library, not a test of Caddy. Behind the block, the
-        app's own `/metrics` handler (`src/index.ts:345-367`) still requires
+        app's own `/metrics` handler (`src/index.ts:346-368`) still requires
         `INTERNAL_METRICS_TOKEN` and answers 503 in production when it is
         unset.
     -   **nginx** (`infra/nginx/sites-available/theblackout.app.conf` and
@@ -225,13 +244,14 @@ depends on either (the lockfile's only importer of both is `packages/api`).
 -   **The advisory's code is not reached.** node-server's upgrade handler
     (`setupWebSocket`) is installed only when `serve()` is given
     `websocket: { server }` (`createAdaptorServer` in `dist/index.mjs`,
-    read in 2.1.3 and unchanged in 2.1.6). `src/index.ts:512` passes no
+    read in 2.1.3 and unchanged in 2.1.6). `src/index.ts:513` passes no
     `websocket` option, and the minimal harness counted 0 `upgrade`
     listeners on the server `serve()` returns, with 2.1.3 and 2.1.6.
--   **Its impact is reached by another route, on both versions.** The API
-    attaches three `upgrade` listeners of its own to that server
-    (`src/index.ts:520-547`), and together they leave the same window open
-    for any upgrade none of them claims:
+-   **Its impact was reached by another route, on both versions, until the
+    fix in this change.** The API attaches three `upgrade` listeners of its
+    own to that server (at `src/index.ts:520-547` when this was measured, in
+    `src/webSocketUpgrades.ts` since the fix), and together they left the
+    same window open for any upgrade none of them claims:
     -   Node's HTTP server removes its own socket `'error'` listener before
         it emits `upgrade` (Node 22.22.0, measured: 1 listener on
         `connection`, 0 inside `upgrade`). Once any `upgrade` listener is
@@ -241,7 +261,7 @@ depends on either (the lockfile's only importer of both is `packages/api`).
         `http.Server`).
     -   The Twitch-IRC shim returns without touching the socket when the
         path is not exactly `/twitch-irc`
-        (`integrations/twitch-compat/ircServer.ts:216-217`), and the
+        (`integrations/twitch-compat/ircServer.ts:216-218`), and the
         OBS-WebSocket shim when it does not start with `/obs-ws/`
         (`integrations/obs-ws-compat/server.ts:299-301`). For the paths
         they claim, `ws`'s `handleUpgrade` or the shim's own 404 takes the
@@ -252,11 +272,11 @@ depends on either (the lockfile's only importer of both is `packages/api`).
         a timer, 1,000 ms later by default (`engine.io/build/server.js:693-710`;
         the shim sets no `destroyUpgrade` option,
         `integrations/se-overlay-compat/server.ts:93-101`).
-    -   So for about a second the socket has no `'error'` listener. A
-        client reset in that time is an unhandled `'error'` event, and
+    -   So for about a second the socket had no `'error'` listener. A
+        client reset in that time was an unhandled `'error'` event, and
         nothing in `packages/api/src` registers a process-level
         `uncaughtException` handler.
--   **Measured** on the real app (`src/index.ts`'s default export,
+-   **Measured before the fix** on the real app (`src/index.ts`'s default export,
     `BLACKOUT_DB_MODE=memory`, `NODE_ENV=test`, a throwaway JWT secret),
     served by `serve()` from 2.1.3 and from 2.1.6 with the three shims
     attached as `src/index.ts` attaches them (3 `upgrade` listeners): one
@@ -276,24 +296,106 @@ depends on either (the lockfile's only importer of both is `packages/api`).
         answered as a plain request and the process lives. With only the
         two `ws` shims it exits even after a 1,500 ms reset, since nothing
         ever takes the socket; with only the socket.io shim, after 200 ms.
--   **Exposure through this repository's proxies is not established.** The
-    nginx API locations (`infra/nginx`, `infra/single-server-baseline`) set
-    no `proxy_set_header Upgrade`. nginx does not pass the hop-by-hop
-    `Upgrade` header upstream unless told to, so through nginx the request
-    arrives as a plain request; the only nginx locations in the tree that
-    forward `Upgrade` go to LiveKit and maubot. In
-    `deploy/docker/production`, the app publishes no port and Caddy
-    (`reverse_proxy app:3000`, `Caddyfile:11`) forwards upgrades on every
-    path it proxies (all but `/metrics*`, which it answers 403); whether a
-    client's reset at Caddy reaches `app:3000` as a reset (a FIN would not
-    raise `'error'`) was not tested. The app service restarts after a crash
-    (`restart: unless-stopped`, `docker-compose.yml:18`), dropping its
-    in-flight requests. Any port where the API is reachable without a proxy
-    is exposed as measured. nginx and Caddy were not run.
+    -   Again before the fix, at `6378d7c6bb`, on the API started as
+        `deploy/docker/backend/bin/start-app` starts it
+        (`node --import tsx src/index.ts` from `packages/api`, memory store,
+        `NODE_ENV=development`, a free port), a fresh process for each
+        request (01:45Z to 02:01Z on 2026-11-15). `/v1/health` reset after
+        0, 20, 200 and 900 ms, and `/v1/anything`, `/obs-ws-nope` and
+        `/twitch-irc/x` reset after 200 ms: seven processes, and each
+        exited with code 1 without answering the upgrade, with
+        `throw er; // Unhandled 'error' event`, `Error: read ECONNRESET` at
+        `TCP.onStreamRead` and `Emitted 'error' event on Socket instance` on
+        stderr; `GET /health` was refused afterwards. `/v1/health` reset
+        after 1,500 ms (engine.io had ended it by then, with no bytes),
+        `/twitch-irc` (101), `/obs-ws/no-such-id` (the shim's 404) and
+        `/se-overlay/?EIO=4&transport=websocket` (101): alive, and
+        `/health` answered 200.
+-   **The fix, in this change** (`packages/api/src/webSocketUpgrades.ts`).
+    `attachWebSocketShims`, which `src/index.ts:521` calls straight after
+    `serve()`, is now the one place the three shims are attached, and it
+    installs a guard before them, synchronously, as the first `upgrade`
+    listener. No other entry point makes an HTTP server (`src/worker.ts`
+    runs the background loops without one).
+    -   The guard gives every upgraded socket an `'error'` listener before
+        it returns, and never removes it. Node drops its own listener and
+        emits `upgrade` in one synchronous step, and a stream emits
+        `'error'` on a later tick, so no error can be emitted while the
+        socket has none: whichever shims are attached, in whatever order
+        their dynamic imports resolve, and whether or not one takes the
+        socket.
+    -   One turn of the event loop later, when every listener has run, a
+        socket that no listener has written to, ended, destroyed or put an
+        `'error'` listener of its own on is answered
+        `HTTP/1.1 404 Not Found` (`Connection: close`, no body) and
+        destroyed, instead of being left to engine.io's timer. The three
+        shims take a socket before their listener returns: `ws`'s
+        `handleUpgrade` attaches its `'error'` listener on its first line
+        (`ws/lib/websocket-server.js`, 8.21.0), the OBS shim writes its 404
+        or destroys, and engine.io reaches `ws` synchronously with this
+        shim's options (a fixed CORS setting, no `allowRequest`). What they
+        accept is unchanged, and the test below holds each of them to it.
+    -   Each such upgrade is counted (`http_upgrades_unclaimed_total`), and
+        at most one `http_upgrade_unclaimed` line is logged per 10 s, with
+        the number since the previous line. Of the request, the line
+        carries the first path segment only, and that only when it is short
+        and plain (`/v1`): no header, no query string, nothing deeper in
+        the path.
+    -   `connect` and `clientError` are left to Node, and nothing here
+        listens for either: Node closes an HTTP CONNECT without an answer,
+        and answers a malformed request 400 before it destroys the socket
+        (measured on a plain `http.Server` and on the wired app; a client
+        reset after either raised nothing).
+-   **Measured after the fix**, at its commit `45383d249e`, the same eleven
+    requests, each to a fresh process started the same way (03:09Z): all
+    eleven processes stayed up, answered `GET /health` 200 and exited 0 on
+    SIGTERM. The eight on unclaimed paths (the seven above and the one
+    reset after 1,500 ms) got the guard's `404` and logged one
+    `http_upgrade_unclaimed` line; the three on claimed paths answered as
+    before (101, the OBS shim's 404, 101). One more process took 600
+    unclaimed upgrades reset after 0 to 3 ms, 293 of them before any answer
+    had reached the client: alive, `/health` 200,
+    `http_upgrades_unclaimed_total` 600, one log line, nothing unhandled,
+    exit 0 on SIGTERM.
+-   **Held by** `packages/api/test/websocket-upgrade-guard.integration.test.ts`
+    (12 tests, part of `pnpm test:integration`): the real app behind
+    `serve()`, wired by `attachWebSocketShims`; resets after 0, 20, 200 and
+    900 ms on six unclaimed paths; the guard's answer, counter and log
+    line; what the three shims answer themselves (101 on `/twitch-irc`, on
+    `/obs-ws/` with an active id and on `/se-overlay/`, a socket.io client
+    that gets to `connect`, and their own 400s and 404); CONNECT and a
+    malformed request; and the API process itself, started as `start-app`
+    starts it. With the guard taken out of `attachWebSocketShims`, which is
+    the wiring as it was, 7 of the 12 fail: the in-process reset test with
+    `uncaughtException`, `read ECONNRESET`, and the process test with exit
+    code 1 and the stack above. Fourteen other one-line changes to the
+    guard were tried the same way, and each fails at least one test.
+-   **Exposure through this repository's proxies was not established, and
+    this record does not say whether the crash could be triggered in
+    production.**
+    -   Known: the nginx API locations (`infra/nginx`,
+        `infra/single-server-baseline`) set no `proxy_set_header Upgrade`,
+        and nginx does not pass the hop-by-hop `Upgrade` header upstream
+        unless told to, so through nginx the request arrives as a plain
+        request (nginx's documented behaviour; nginx was not run). The only
+        nginx locations in the tree that forward `Upgrade` go to LiveKit
+        and maubot. In `deploy/docker/production` the app publishes no
+        port; Caddy (`reverse_proxy app:3000`, `Caddyfile:11`) is in front
+        of every path but `/metrics*`, which it answers 403, and its reverse
+        proxy performs an upgrade request and then tunnels the connection
+        (Caddy's documentation; Caddy was not run).
+    -   Not known: whether a client's reset at Caddy reaches `app:3000` as
+        a reset. A FIN would not raise `'error'`. This was not tested.
+    -   Any port where the API was reachable without a proxy was exposed
+        as measured. The app service restarts after a crash
+        (`restart: unless-stopped`, `docker-compose.yml:18`), dropping its
+        in-flight requests, and in Postgres mode a crash also loses the
+        writes still queued behind the requests that made them
+        (`src/db/writeBehindQueue.ts`).
 -   **Outcome:** the advisory's own code is not reached, and the bump does
-    not change the crash above, which is the API's own and is recorded
-    under "Found outside the gates", item 1, with the code fix left for a
-    separate change.
+    not change the crash above, which was the API's own. The guard in this
+    change fixes it; it is recorded under "Found outside the gates",
+    item 1.
 
 ### What else changed between 2.1.3 and 2.1.6
 
@@ -364,9 +466,11 @@ evidence for the adapter.
     `c.req.parseBody()` still parses the form. Range `introduced 4.5.1`,
     `fixed 4.13.16`.
 -   **Not reached.** Nothing imports `hono/validator` and no `validator(`
-    call exists; there is no `parseBody()` or `formData()` call either. The
-    API validates bodies with zod after `c.req.json()`
-    (`readJsonBody`, `src/middleware/validate.ts:13-20`).
+    call exists. Bodies are read as JSON or as text and never as a form:
+    there is no `parseBody()` or `formData()` call. Most are read through
+    `readJsonBody` (`src/middleware/validate.ts:13-20`; 205 calls in 62
+    files), which parses the JSON and checks it against a zod schema; 14
+    other calls read `c.req.json()` themselves and 8 read `c.req.text()`.
 
 ### GHSA-4m76-xfj5-7975: `mount()` forwards a path past prefix-scoped middleware
 
@@ -377,7 +481,7 @@ evidence for the adapter.
     outer app guards with sub-path middleware. Range `introduced 0`,
     `fixed 4.13.16`.
 -   **Not reached.** No `.mount(` call and no `hono/mount` import. The API
-    composes its routers with `app.route()` (`src/index.ts:178-322`), which
+    composes its routers with `app.route()` (`src/index.ts:179-323`), which
     copies each sub-router's routes into the parent's router at registration
     and strips nothing at request time.
 
@@ -392,8 +496,8 @@ evidence for the adapter.
     not-found handler with no wildcard middleware (since 4.4.0). TrieRouter,
     LinearRouter and PatternRouter are not affected. Range
     `introduced 4.1.4`, `fixed 4.13.16`.
--   **The API uses the default router**, `new Hono()` (`src/index.ts:131`), and
-    guards `/v1/*` with wildcard middleware (`:180`), so this needed
+-   **The API uses the default router**, `new Hono()` (`src/index.ts:132`), and
+    guards `/v1/*` with wildcard middleware (`:181`), so this needed
     measuring rather than a grep.
 -   **SmartRouter settles on TrieRouter.** After the first request,
     `app.router.name` is `SmartRouter + TrieRouter`, on 4.13.11 and on
@@ -489,25 +593,50 @@ Compared as parsed YAML, `7a9814ebc9`'s `pnpm-lock.yaml` against this change's:
 
 ---
 
-## Found outside the gates (not changed here)
+## Found outside the gates
 
-1. **One unauthenticated upgrade request can crash the API, and 2.1.6 does
-   not fix it.** An HTTP request with `Upgrade: websocket` on any path the
-   three WebSocket shims do not claim (anything but exactly `/twitch-irc`,
-   a path under `/obs-ws/` and `/se-overlay/`), reset by the client within
-   about 1 s, leaves the socket without an `'error'` listener; the reset is
-   an unhandled `'error'` event and the process exits 1. Measured on the real
-   app with node-server 2.1.3 and 2.1.6; the mechanism and the runs are in
-   the GHSA-qv5m section above. It matters wherever the API's port is
-   reachable directly. The nginx configs give it no way in: no API location
-   forwards `Upgrade`, so the API sees a plain request (nginx's documented
-   behaviour; nginx was not run). Through the production Caddy it depends
-   on whether a client's reset reaches `app:3000` as a reset, which was not
-   tested. Not fixed here: this change is a dependency bump, and the fix is
-   a code change for a separate PR, either attaching `socket.on('error', …)`
-   before each shim returns without claiming the socket, or registering one
-   `upgrade` listener ahead of the shims that destroys any upgrade none of
-   them claims.
+1. **One unauthenticated upgrade request could crash the API, and 2.1.6 did
+   not fix it. Fixed in this change.** An HTTP request with
+   `Upgrade: websocket` on any path the three WebSocket shims do not claim
+   (anything but exactly `/twitch-irc`, a path under `/obs-ws/` and
+   `/se-overlay/`), reset by the client within about 1 s, left the socket
+   without an `'error'` listener; the reset was an unhandled `'error'` event
+   and the process exited 1. Measured on the real app with node-server 2.1.3
+   and 2.1.6, and again on the API started as production starts it; the
+   mechanism and the runs are in the GHSA-qv5m section above.
+    - **The fix** is the third commit of this change:
+      `packages/api/src/webSocketUpgrades.ts`, called from
+      `src/index.ts:521`, with
+      `packages/api/test/websocket-upgrade-guard.integration.test.ts`. One
+      `upgrade` listener ahead of the shims gives every upgraded socket an
+      `'error'` listener as Node hands it over, and answers `404` and closes
+      any upgrade no shim has taken once the listeners have run. Of the two
+      fixes this item first proposed it is the second, and it does the
+      first one's job for every listener at once.
+    - **Before and after:** of eleven requests, each to a fresh API
+      process, seven ended the process before the fix (exit 1, unhandled
+      `ECONNRESET`) and none does after it. The other four, on claimed
+      paths or reset too late, are answered as before, except that the late
+      one now gets the `404` too.
+    - **Where it mattered** was never established for production, and the
+      fix does not change that: it mattered wherever the API's port was
+      reachable directly, as measured. The nginx configs gave it no way in:
+      no API location forwards `Upgrade`, so the API sees a plain request
+      (nginx's documented behaviour; nginx was not run). Through the
+      production Caddy it depended on whether a client's reset reaches
+      `app:3000` as a reset, which was not tested. This record does not
+      say the crash could, or could not, be triggered in production.
+    - **Left as it is:** an upgrade request for a path no shim takes is
+      still not served as the plain request it would be with no `upgrade`
+      listener at all. It gets the bare `404` (before the fix: no answer,
+      and the connection ended after 1 s). Node has had
+      `server.shouldUpgradeCallback` since 22.21.0 (its documentation),
+      which declines an upgrade before the socket is handed over, so that
+      the request handler answers it (measured on 22.22.0 with a plain
+      `http.Server`: 200 from the handler, and no `upgrade` event). It was
+      not used: each shim decides inside its own listener what it takes,
+      and `engines` allows Node from 22.11, where the callback does not
+      exist.
 2. **The other five lockfiles carry 40 advisories that no gate fails on.**
    osv-scanner v2.3.3 run on them at 23:46Z (no `osv-scanner.toml` applies
    there) exits 1: "24 packages affected by 40 known vulnerabilities (1
@@ -563,9 +692,10 @@ wrong or overstated. Each is corrected in place above:
    shims take the socket synchronously, "so the window the advisory
    describes does not exist there", and left the socket.io path unread.
    Only the narrow half held: node-server's own upgrade handler is not
-   installed. For a path no shim claims, the shims leave the socket without
-   an `'error'` listener, and a reset crashes the process on 2.1.3 and on
-   2.1.6 (the GHSA-qv5m section; "Found outside the gates", item 1).
+   installed. For a path no shim claims, the shims left the socket without
+   an `'error'` listener, and a reset crashed the process on 2.1.3 and on
+   2.1.6, until the fix recorded below (the GHSA-qv5m section; "Found
+   outside the gates", item 1).
 2. **GHSA-3gg2.** "The API renders no HTML with hono" was false: it returns
    string-template HTML through `c.html()`. The conclusion stands, since
    nothing imports `hono/css`, `hono/jsx` or `hono/html`.
@@ -578,6 +708,43 @@ wrong or overstated. Each is corrected in place above:
    dependency that osv-scanner resolved, and Trivy, which reads only the
    file's pins, never sees it at any severity.
 
+A second review asked for six more corrections of wording. Each is made in
+place above:
+
+5. **The line-terminator probe** sent 10 requests: 7 with a terminator and 3
+   controls without one. Method and the Verification table said "10 requests
+   with encoded line terminators", against a list of seven.
+6. **GHSA-qv5m** cited `ircServer.ts:216-217` for the Twitch-IRC shim's
+   return. The return is on line 218, so the citation is `216-218`.
+7. **Summary, GHSA-jpvv.** The row said Caddy's `/metrics*` block "sits
+   behind Go's proxy, which re-encodes `\`", as a fact about Caddy. What was
+   probed is Go's `httputil.ReverseProxy`; Caddy, the proxy in front of the
+   app, was not run, and the row now says so.
+8. **The index sentence.** "No document lists the `dependency-advisories-*`
+   records" was false: `.trivyignore` and `osv-scanner.toml` cite records,
+   each for its own entries. What holds is that no index of the records
+   exists.
+9. **The header's summary of the six unreached advisories** said their code
+   is code "the API does not load or configure". RegExpRouter is loaded and
+   is tried on the first request; only its matcher is never selected. The
+   header now says "never selects or calls", and says which is which.
+10. **GHSA-4h7h.** "Bodies are read as JSON" left out the eight
+    `c.req.text()` reads. Bodies are read as JSON or text, mostly through
+    `readJsonBody`'s zod check, and never as a form.
+
+**The upgrade crash was then fixed in this change.** Until its third commit
+this record said of "Found outside the gates", item 1, "Not fixed here: this
+change is a dependency bump, and the fix is a code change for a separate PR",
+the section's heading read "(not changed here)", and the header, the Summary
+row and the GHSA-qv5m section described the crash in the present tense
+("leaves an unhandled socket `'error'` and the API process exits 1"). Those
+places now say what was measured before the fix and what is measured after
+it; the mechanism and the earlier runs stand as they were written. The fix
+adds one import line to `src/index.ts`, so the lines this record cites below
+it moved by one and were updated (`:132`, `:179-323`, `:181`, `:346-368`,
+`:513`); `:520-547`, where the three listeners were attached, is kept as their
+place at `6378d7c6bb`.
+
 ---
 
 ## Verification
@@ -587,37 +754,54 @@ Runs are local, with Node 22.22.0 and pnpm 9.15.4 (the pinned
 2026-11-15. The review corrections (from 00:30Z) changed only this record; the
 rows marked "review" were run for them. API lint, typecheck and launch
 smoke were re-run on the final tree; the integration and post-merge suites
-were not, since no file they read changed. Commands are as in `ci.yml` and
-`security.yml` where those run them. Heavy suites started only when the
-1-minute load average was under 3.5, one at a time.
+were not, since no file they read changed. The upgrade fix (from 01:45Z)
+changed code under `packages/api`: the rows marked "fix" were run on the tree
+its commit `45383d249e` holds, the API suites in full (02:54Z to 03:08Z, just
+before the commit was made) and the after-fix requests on the commit itself.
+Commands are as in `ci.yml` and `security.yml` where those run them. Heavy
+suites started only when the 1-minute load average was under 3.5, one at a
+time.
 
-| Gate                             | Command                                                                                                                                                                                                                                            | Result                                                                                                                                                                                                                                                                                                                   |
-| -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| OSV, before                      | osv-scanner v2.3.3, `TZ=UTC`, `--lockfile=pnpm-lock.yaml`, on `7a9814ebc9`'s lockfile and toml, 23:46Z                                                                                                                                             | exit 1: 1,493 packages, 1 filtered (deepmerge), the 7 rows above                                                                                                                                                                                                                                                         |
-| OSV                              | the same on this change, `TZ` = `UTC`, `Etc/GMT-3`, `Pacific/Kiritimati`, 23:46Z                                                                                                                                                                   | exit 0 in all three: 1,493 packages, "No issues found", 1 filtered, no unused-ignore line                                                                                                                                                                                                                                |
-| OSV, other lockfiles             | the same binary on the five other lockfiles (informational; no workflow runs this)                                                                                                                                                                 | exit 1: 40 advisories in 24 packages (item 2 of "Found outside the gates"); unchanged by this change, which touches none of them                                                                                                                                                                                         |
-| Trivy                            | 0.69.3, `fs .` on a `git archive` extract of `7a9814ebc9` with this change's three manifest and lock files, `security.yml`'s flags (`--severity CRITICAL,HIGH --ignore-unfixed --scanners vuln --exit-code 1 --ignorefile .trivyignore`), fresh DB | exit 0 at 23:47Z: six targets, 0 findings each; `--show-suppressed` lists nothing suppressed. The same on `7a9814ebc9`'s own files: exit 0, six targets at 0                                                                                                                                                             |
-| Trivy, all severities            | `fs` on the lockfile alone, no severity or fixed-only filter (production paths, Trivy's default)                                                                                                                                                   | before: the 7 advisories as 6 MEDIUM and 1 LOW (below the gate); after: 0                                                                                                                                                                                                                                                |
-| pnpm audit                       | `pnpm audit --prod --audit-level high` (`security.yml`) and `--audit-level moderate` (`guard:audit-clean`)                                                                                                                                         | before: high exit 0, moderate exit 1 ("8 vulnerabilities", "2 low \| 6 moderate"); after: both exit 0, "1 vulnerabilities found", 1 low (deepmerge)                                                                                                                                                                      |
-| lockfile                         | `pnpm install --lockfile-only --ignore-scripts`, twice (exact override, then caret)                                                                                                                                                                | exit 0 both; diff as in Lockfile                                                                                                                                                                                                                                                                                         |
-| install                          | `pnpm install --frozen-lockfile --ignore-scripts`                                                                                                                                                                                                  | exit 0, "Lockfile is up to date, resolution step is skipped", 2 packages added                                                                                                                                                                                                                                           |
-| API lint                         | `pnpm --filter @blackout/api lint` (`eslint "src/**/*.ts" "test/**/*.ts" --max-warnings=0`)                                                                                                                                                        | exit 0, 9 s                                                                                                                                                                                                                                                                                                              |
-| API types                        | `pnpm --filter @blackout/api typecheck` (`tsc --noEmit -p tsconfig.json`)                                                                                                                                                                          | exit 0, 10 s                                                                                                                                                                                                                                                                                                             |
-| API integration                  | `pnpm --filter @blackout/api test:integration` with `BLACKOUT_DB_MODE=memory`, `BLACKOUT_API_SKIP_LISTEN=1`, `NODE_ENV=test` (`ci.yml`)                                                                                                            | exit 0: 2,033 tests, 2,033 pass, 0 fail, 0 cancelled, 0 skipped, 230 s                                                                                                                                                                                                                                                   |
-| API post-merge                   | `pnpm --filter @blackout/api test`, without the CI env above (`turborepo-ci.yml` runs it through `turbo run test` on pushes)                                                                                                                       | exit 0: 2,153 tests, 2,153 pass, 0 fail, 0 cancelled, 0 skipped, 515 s; every one of the 2,033 integration test names appears in it                                                                                                                                                                                      |
-| API launch smoke                 | `pnpm --filter @blackout/api test:launch-smoke` with the same env (`ci.yml`)                                                                                                                                                                       | exit 0: 14 tests, 14 pass, 0 fail, 4 s                                                                                                                                                                                                                                                                                   |
-| on the wire                      | the real app under `serve()` from 2.1.3 and from 2.1.6, 16 raw requests                                                                                                                                                                            | 13 identical; the 3 backslash paths reach the app on 2.1.3 and get 400 from 2.1.6                                                                                                                                                                                                                                        |
-| router                           | the real app on 4.13.11 and 4.13.16: router name, RegExpRouter build, 10 requests with encoded line terminators                                                                                                                                    | `SmartRouter + TrieRouter` on both; RegExpRouter refuses 48 of 755 routes on both; all 10 requests ran the wildcard middleware on both                                                                                                                                                                                   |
-| prettier                         | `prettier --check` on the changed files (`pnpm-lock.yaml` is in `.prettierignore`)                                                                                                                                                                 | pass on this record, `package.json` and `packages/api/package.json`                                                                                                                                                                                                                                                      |
-| duplicate paths                  | `node tools/ci/check-duplicate-paths.mjs`                                                                                                                                                                                                          | exit 0, five checks passed                                                                                                                                                                                                                                                                                               |
-| lint-staged, auth guard          | `npx lint-staged --concurrent false` and `node tools/ci/check-auth-secrets.mjs` before the commit                                                                                                                                                  | lint-staged: `prettier --write --ignore-unknown` on the four staged files, no change; guard: "Auth secret hardening check passed", exit 0                                                                                                                                                                                |
-| gitleaks                         | 8.21.2, `gitleaks dir --no-banner --redact` on each changed file before the commit                                                                                                                                                                 | "no leaks found" on each of the four changed files; the range scan over the branch's commit runs once the commit exists (reported with the PR)                                                                                                                                                                           |
-| gitleaks, range (review)         | `gitleaks git --no-banner --redact --log-opts="origin/develop..HEAD"` at 00:41Z, before the second commit                                                                                                                                          | "1 commits scanned", "no leaks found", exit 0                                                                                                                                                                                                                                                                            |
-| OSV (review)                     | osv-scanner v2.3.3, `TZ=UTC`, `--lockfile=pnpm-lock.yaml`, 00:41Z on 2026-11-15                                                                                                                                                                    | exit 0: "No issues found", 1 filtered (deepmerge)                                                                                                                                                                                                                                                                        |
-| upgrade reset (review)           | the real app under `serve()` from 2.1.3 and from 2.1.6 with the three shims attached; one raw `Upgrade: websocket` request, a client reset, then `GET /health` (GHSA-qv5m section)                                                                 | exit 1 with an unhandled `ECONNRESET` for `/v1/health`, `/v1/anything`, `/obs-ws-nope` reset after 200 ms on both versions, and on 2.1.6 for resets after 20 and 900 ms and for `/twitch-irc/x`; alive for a reset after 1,500 ms, for `/twitch-irc`, `/obs-ws/no-such-id` and `/se-overlay/`, and with no shim attached |
-| Node `upgrade` hand-off (review) | a plain `http.Server` on Node 22.22.0: the socket's `'error'` listener count on `connection` and inside `upgrade`; and an upgrade request to a server with no `upgrade` listener                                                                   | 1, then 0; with no listener, the request handler answers it (200)                                                                                                                                                                                                                                                        |
-| Trivy, perturbation (review)     | 0.69.3 `fs services/perturbation/requirements.txt --scanners vuln --list-all-pkgs`, no severity or fixed-only filter, DB of 2026-11-14 19:00Z                                                                                                      | 0 vulnerabilities; packages: the five pins only (no starlette)                                                                                                                                                                                                                                                           |
-| API lint, types, smoke (review)  | the three commands above, same env, 00:47Z to 00:49Z on 2026-11-15                                                                                                                                                                                 | lint exit 0 (9 s); typecheck exit 0 (17 s); launch smoke 14 tests, 14 pass, 0 fail (3 s)                                                                                                                                                                                                                                 |
+| Gate                             | Command                                                                                                                                                                                                                                                                          | Result                                                                                                                                                                                                                                                                                                                   |
+| -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| OSV, before                      | osv-scanner v2.3.3, `TZ=UTC`, `--lockfile=pnpm-lock.yaml`, on `7a9814ebc9`'s lockfile and toml, 23:46Z                                                                                                                                                                           | exit 1: 1,493 packages, 1 filtered (deepmerge), the 7 rows above                                                                                                                                                                                                                                                         |
+| OSV                              | the same on this change, `TZ` = `UTC`, `Etc/GMT-3`, `Pacific/Kiritimati`, 23:46Z                                                                                                                                                                                                 | exit 0 in all three: 1,493 packages, "No issues found", 1 filtered, no unused-ignore line                                                                                                                                                                                                                                |
+| OSV, other lockfiles             | the same binary on the five other lockfiles (informational; no workflow runs this)                                                                                                                                                                                               | exit 1: 40 advisories in 24 packages (item 2 of "Found outside the gates"); unchanged by this change, which touches none of them                                                                                                                                                                                         |
+| Trivy                            | 0.69.3, `fs .` on a `git archive` extract of `7a9814ebc9` with this change's three manifest and lock files, `security.yml`'s flags (`--severity CRITICAL,HIGH --ignore-unfixed --scanners vuln --exit-code 1 --ignorefile .trivyignore`), fresh DB                               | exit 0 at 23:47Z: six targets, 0 findings each; `--show-suppressed` lists nothing suppressed. The same on `7a9814ebc9`'s own files: exit 0, six targets at 0                                                                                                                                                             |
+| Trivy, all severities            | `fs` on the lockfile alone, no severity or fixed-only filter (production paths, Trivy's default)                                                                                                                                                                                 | before: the 7 advisories as 6 MEDIUM and 1 LOW (below the gate); after: 0                                                                                                                                                                                                                                                |
+| pnpm audit                       | `pnpm audit --prod --audit-level high` (`security.yml`) and `--audit-level moderate` (`guard:audit-clean`)                                                                                                                                                                       | before: high exit 0, moderate exit 1 ("8 vulnerabilities", "2 low \| 6 moderate"); after: both exit 0, "1 vulnerabilities found", 1 low (deepmerge)                                                                                                                                                                      |
+| lockfile                         | `pnpm install --lockfile-only --ignore-scripts`, twice (exact override, then caret)                                                                                                                                                                                              | exit 0 both; diff as in Lockfile                                                                                                                                                                                                                                                                                         |
+| install                          | `pnpm install --frozen-lockfile --ignore-scripts`                                                                                                                                                                                                                                | exit 0, "Lockfile is up to date, resolution step is skipped", 2 packages added                                                                                                                                                                                                                                           |
+| API lint                         | `pnpm --filter @blackout/api lint` (`eslint "src/**/*.ts" "test/**/*.ts" --max-warnings=0`)                                                                                                                                                                                      | exit 0, 9 s                                                                                                                                                                                                                                                                                                              |
+| API types                        | `pnpm --filter @blackout/api typecheck` (`tsc --noEmit -p tsconfig.json`)                                                                                                                                                                                                        | exit 0, 10 s                                                                                                                                                                                                                                                                                                             |
+| API integration                  | `pnpm --filter @blackout/api test:integration` with `BLACKOUT_DB_MODE=memory`, `BLACKOUT_API_SKIP_LISTEN=1`, `NODE_ENV=test` (`ci.yml`)                                                                                                                                          | exit 0: 2,033 tests, 2,033 pass, 0 fail, 0 cancelled, 0 skipped, 230 s                                                                                                                                                                                                                                                   |
+| API post-merge                   | `pnpm --filter @blackout/api test`, without the CI env above (`turborepo-ci.yml` runs it through `turbo run test` on pushes)                                                                                                                                                     | exit 0: 2,153 tests, 2,153 pass, 0 fail, 0 cancelled, 0 skipped, 515 s; every one of the 2,033 integration test names appears in it                                                                                                                                                                                      |
+| API launch smoke                 | `pnpm --filter @blackout/api test:launch-smoke` with the same env (`ci.yml`)                                                                                                                                                                                                     | exit 0: 14 tests, 14 pass, 0 fail, 4 s                                                                                                                                                                                                                                                                                   |
+| on the wire                      | the real app under `serve()` from 2.1.3 and from 2.1.6, 16 raw requests                                                                                                                                                                                                          | 13 identical; the 3 backslash paths reach the app on 2.1.3 and get 400 from 2.1.6                                                                                                                                                                                                                                        |
+| router                           | the real app on 4.13.11 and 4.13.16: router name, RegExpRouter build, 10 requests (7 with an encoded line terminator, 3 controls without one)                                                                                                                                    | `SmartRouter + TrieRouter` on both; RegExpRouter refuses 48 of 755 routes on both; all 10 requests ran the wildcard middleware on both                                                                                                                                                                                   |
+| prettier                         | `prettier --check` on the changed files (`pnpm-lock.yaml` is in `.prettierignore`)                                                                                                                                                                                               | pass on this record, `package.json` and `packages/api/package.json`                                                                                                                                                                                                                                                      |
+| duplicate paths                  | `node tools/ci/check-duplicate-paths.mjs`                                                                                                                                                                                                                                        | exit 0, five checks passed                                                                                                                                                                                                                                                                                               |
+| lint-staged, auth guard          | `npx lint-staged --concurrent false` and `node tools/ci/check-auth-secrets.mjs` before the commit                                                                                                                                                                                | lint-staged: `prettier --write --ignore-unknown` on the four staged files, no change; guard: "Auth secret hardening check passed", exit 0                                                                                                                                                                                |
+| gitleaks                         | 8.21.2, `gitleaks dir --no-banner --redact` on each changed file before the commit                                                                                                                                                                                               | "no leaks found" on each of the four changed files; the range scan over the branch's commit runs once the commit exists (reported with the PR)                                                                                                                                                                           |
+| gitleaks, range (review)         | `gitleaks git --no-banner --redact --log-opts="origin/develop..HEAD"` at 00:41Z, before the second commit                                                                                                                                                                        | "1 commits scanned", "no leaks found", exit 0                                                                                                                                                                                                                                                                            |
+| OSV (review)                     | osv-scanner v2.3.3, `TZ=UTC`, `--lockfile=pnpm-lock.yaml`, 00:41Z on 2026-11-15                                                                                                                                                                                                  | exit 0: "No issues found", 1 filtered (deepmerge)                                                                                                                                                                                                                                                                        |
+| upgrade reset (review)           | the real app under `serve()` from 2.1.3 and from 2.1.6 with the three shims attached; one raw `Upgrade: websocket` request, a client reset, then `GET /health` (GHSA-qv5m section)                                                                                               | exit 1 with an unhandled `ECONNRESET` for `/v1/health`, `/v1/anything`, `/obs-ws-nope` reset after 200 ms on both versions, and on 2.1.6 for resets after 20 and 900 ms and for `/twitch-irc/x`; alive for a reset after 1,500 ms, for `/twitch-irc`, `/obs-ws/no-such-id` and `/se-overlay/`, and with no shim attached |
+| Node `upgrade` hand-off (review) | a plain `http.Server` on Node 22.22.0: the socket's `'error'` listener count on `connection` and inside `upgrade`; and an upgrade request to a server with no `upgrade` listener                                                                                                 | 1, then 0; with no listener, the request handler answers it (200)                                                                                                                                                                                                                                                        |
+| Trivy, perturbation (review)     | 0.69.3 `fs services/perturbation/requirements.txt --scanners vuln --list-all-pkgs`, no severity or fixed-only filter, DB of 2026-11-14 19:00Z                                                                                                                                    | 0 vulnerabilities; packages: the five pins only (no starlette)                                                                                                                                                                                                                                                           |
+| API lint, types, smoke (review)  | the three commands above, same env, 00:47Z to 00:49Z on 2026-11-15                                                                                                                                                                                                               | lint exit 0 (9 s); typecheck exit 0 (17 s); launch smoke 14 tests, 14 pass, 0 fail (3 s)                                                                                                                                                                                                                                 |
+| upgrade reset, before (fix)      | at `6378d7c6bb`, the API started as `start-app` starts it (`node --import tsx src/index.ts`, memory store, a free port), a fresh process for each of 11 requests: one raw `Upgrade: websocket` request, a client reset after 0 to 1,500 ms, then `GET /health`; 01:45Z to 02:01Z | 7 processes exit 1 with an unhandled `ECONNRESET` (`/v1/health` after 0, 20, 200 and 900 ms; `/v1/anything`, `/obs-ws-nope` and `/twitch-irc/x` after 200 ms); 4 alive (`/v1/health` after 1,500 ms, `/twitch-irc`, `/obs-ws/no-such-id`, `/se-overlay/`)                                                                |
+| upgrade reset, after (fix)       | the same 11 at `45383d249e`, 03:09Z; then one process sent 600 unclaimed upgrades reset after 0 to 3 ms                                                                                                                                                                          | 11 alive, `/health` 200, exit 0 on SIGTERM; the guard's 404 for the 8 on unclaimed paths, 101, the OBS shim's 404 and 101 for the 3 claimed. The 600: alive, `http_upgrades_unclaimed_total` 600, 1 log line, nothing unhandled                                                                                          |
+| Node, other hand-offs (fix)      | a plain `http.Server` on Node 22.22.0 with no `connect` or `clientError` listener: an HTTP CONNECT and a malformed request, each also followed by a client reset; and a server whose `shouldUpgradeCallback` declines one path                                                   | CONNECT: closed with no bytes; malformed: 400, then closed; nothing uncaught after a reset. The declined upgrade: 200 from the request handler, no `upgrade` event                                                                                                                                                       |
+| upgrade guard test (fix)         | `tsx --test test/websocket-upgrade-guard.integration.test.ts` with CI's env; then with the guard taken out of `attachWebSocketShims`, and with 14 other one-line changes to the guard, one at a time, each restored afterwards                                                   | 12 tests, 12 pass. Guard taken out: 7 of 12 fail (in process, `uncaughtException`, `read ECONNRESET`; the API process, exit code 1). Each of the other 14: at least 1 fails                                                                                                                                              |
+| API lint (fix)                   | `pnpm --filter @blackout/api lint`                                                                                                                                                                                                                                               | exit 0, 8 s                                                                                                                                                                                                                                                                                                              |
+| API types (fix)                  | `pnpm --filter @blackout/api typecheck`                                                                                                                                                                                                                                          | exit 0, 9 s                                                                                                                                                                                                                                                                                                              |
+| API integration (fix)            | `pnpm --filter @blackout/api test:integration` with `BLACKOUT_DB_MODE=memory`, `BLACKOUT_API_SKIP_LISTEN=1`, `NODE_ENV=test`                                                                                                                                                     | exit 0: 2,045 tests (the 2,033 above and the 12 new), 2,045 pass, 0 fail, 0 cancelled, 0 skipped, 237 s                                                                                                                                                                                                                  |
+| API post-merge (fix)             | `pnpm --filter @blackout/api test`, without the CI env                                                                                                                                                                                                                           | exit 0: 2,165 tests, 2,165 pass, 0 fail, 0 cancelled, 0 skipped, 473 s; every one of the 2,045 integration test names appears in it                                                                                                                                                                                      |
+| API launch smoke (fix)           | `pnpm --filter @blackout/api test:launch-smoke` with the CI env                                                                                                                                                                                                                  | exit 0: 14 tests, 14 pass, 0 fail, 3 s                                                                                                                                                                                                                                                                                   |
+| prettier, duplicate paths (fix)  | `prettier --check` on the five changed files (this record and four under `packages/api`); `node tools/ci/check-duplicate-paths.mjs`                                                                                                                                              | pass; exit 0, five checks passed                                                                                                                                                                                                                                                                                         |
+| OSV (fix)                        | osv-scanner v2.3.3, `TZ=UTC`, `--lockfile=pnpm-lock.yaml`, 03:08Z                                                                                                                                                                                                                | exit 0: "No issues found", 1 filtered (deepmerge)                                                                                                                                                                                                                                                                        |
+| gitleaks (fix)                   | 8.21.2: `gitleaks dir --no-banner --redact` on each of the five changed files; `gitleaks git --no-banner --redact --log-opts="origin/develop..HEAD"` at 03:09Z, after the fix's commit and before this record's                                                                  | "no leaks found" on each file and over the range ("3 commits scanned"). A first file scan had flagged RFC 6455's sample handshake nonce, written as a literal in the new test (`generic-api-key`); the test now generates its nonce, and nothing was added to `.gitleaksignore`                                          |
+| lint-staged, auth guard (fix)    | `npx lint-staged --concurrent false` and `node tools/ci/check-auth-secrets.mjs` before each of the two commits                                                                                                                                                                   | lint-staged: `prettier --write --ignore-unknown` on the staged files, no change; guard: "Auth secret hardening check passed", exit 0                                                                                                                                                                                     |
 
 **Not verified:**
 
@@ -627,7 +811,11 @@ were not, since no file they read changed. Commands are as in `ci.yml` and
     tested, not Caddy. nginx was not run either; that nginx on Linux keeps the
     backslash is the advisory's statement.
 -   Whether a client's TCP reset at the production Caddy reaches `app:3000`
-    as a reset, which the crash in "Found outside the gates", item 1, needs;
+    as a reset, which the crash in "Found outside the gates", item 1, needed;
     Caddy was not run. That nginx does not forward `Upgrade` unless told to
-    is its documented behaviour; nginx was not run for this either.
+    is its documented behaviour; nginx was not run for this either. So
+    whether the crash could be triggered through either proxy is not known.
+-   The fix on any Node but 22.22.0. `engines` allows `>=22.11`, and the
+    backend image builds from `node:22-alpine`, whatever 22.x that is on
+    the day.
 -   CI had not run on this branch when this record was committed.
