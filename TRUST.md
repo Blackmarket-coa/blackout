@@ -136,11 +136,17 @@ all_ are not.
 
 ### Open, not hidden
 
-Some users see "unable to decrypt" on older messages when signing in on a new
-device without key backup set up. This is tracked as **BO-1** in
-[KNOWN_ISSUES.md](KNOWN_ISSUES.md) and is **not fixed**. We list it here rather
-than waiting until it is, because a trust page that only mentions solved problems
-is advertising.
+Some users see "unable to decrypt" on older messages when they sign in on a new
+device. Blackout doesn't yet have a screen that restores message keys from a key
+backup or receives them from your other sessions, so this happens even when a
+backup exists. A backup still lets another Matrix app with your recovery key
+restore the messages whose keys are in it, provided the backup's own key was
+stored with that recovery key (a Blackout setup that stopped right after
+creating its backup may not have stored it); a Blackout session you sign in to
+later, which Blackout can't verify, doesn't add its keys to it. This is tracked
+as **BO-1** in [KNOWN_ISSUES.md](KNOWN_ISSUES.md) and is **not fixed**. We list it
+here rather than waiting until it is, because a trust page that only mentions
+solved problems is advertising.
 
 ---
 

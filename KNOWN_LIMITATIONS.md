@@ -271,8 +271,8 @@ For the source-of-truth triage with tier/owner detail see
     Details: `docs/black-mask-chat-panel-and-account-link.md` section 3.
 -   **With that client switch on, the panel has its own session.** It never
     reuses a Blackout tab's session, so someone signed in to Blackout signs in
-    again in the panel, as a separate device; older encrypted messages may not
-    be readable there (BO-1). Signing out of Blackout in a tab does not sign
+    again in the panel, as a separate device; older encrypted messages are not
+    readable there (BO-1). Signing out of Blackout in a tab does not sign
     the panel out; the panel's own Sign out button does. With the switch off
     (the default) the panel uses the full app's storage names, as before B3,
     so whether it shares a tab's session depends on the browser's storage

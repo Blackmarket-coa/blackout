@@ -175,10 +175,19 @@ is what now says so on the member's screen.
 
 `KNOWN_ISSUES.md` BO-1 — key-backup `DecryptionError` / unable-to-decrypt
 history — remains open. The instrumentation added on 2026-08-31
-(`src/client/encryptionHealth.ts`) now classifies each report among the three
+(`src/client/encryptionHealth.ts`) classifies each report among three
 candidate causes (backup setup never completing, restore failing, cross-signing
-state) and the suppressed-log wrapper counts what it drops, but the underlying
-failure is undiagnosed and needs live-fleet numbers.
+state) and the suppressed-log wrapper counts what it drops.
+
+2026-11-08: the main cause is no longer undiagnosed. A new Blackout device has
+no way to get the keys of messages sent before it signed in: no mounted screen
+restores from a backup, verifies the device or receives keys from another
+session, and the SDK's room-key requests are off (matrix-js-sdk 40.2.0,
+`lib/rust-crypto/index.js`, `roomKeyRequestsEnabled = false`). "Restore
+failing" is therefore not a failure: there is no restore. See finding S9's
+record, `docs/security/key-backup-nudge-2026-11-02.md` ("What remains"). What
+live-fleet numbers can still tell is narrower: how often a device fails on
+messages sent after it signed in, whose keys should reach it from the sender.
 
 Everything in the strategy that routes trust through Blackout — encrypted
 customer messaging as a commerce differentiator, mutual-aid posts carrying
