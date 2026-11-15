@@ -78,8 +78,9 @@ holds ciphertext and no keys — it cannot read them, so it cannot put them in a
 file it generates. **A server-generated export that did contain your message
 history would be evidence against the encryption claim.**
 
-To export encrypted history, use a signed-in client, which has your keys:
-Settings → Encryption → Export room keys, or your client's room-export feature.
+To export encrypted history you need a signed-in client that holds your keys.
+Blackout has no key-export screen yet; use another Matrix app signed in to the
+same account (its export-room-keys or room-export feature).
 
 Synapse's own `admin_cmd export-data` is vendored in `apps/blackout-server`, but
 it is an operator CLI and for encrypted rooms it would only ever emit ciphertext.

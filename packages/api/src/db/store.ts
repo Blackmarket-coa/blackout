@@ -208,6 +208,7 @@ import { MUTATOR_SPECS, TABLE_DESCRIPTORS, type MutatorSpec } from './pgDescript
 import { WriteBehindQueue, type KeySet } from './writeBehindQueue';
 import { PgNotifyTransport, type StoreChangePayload, type StoreChangeTransport } from './pgNotify';
 import type { PgClient, PgPool } from './migrate';
+import { withPooledClient } from './pooledClient';
 import { log } from '../telemetry/logger';
 import { dbWriteBehindFailuresTotal } from '../telemetry/metrics';
 import { randomUUID } from 'node:crypto';
@@ -9579,6 +9580,9 @@ export class FileBackedDb extends InMemoryDb {
  */
 type MutableMap = Map<string, Record<string, unknown>>;
 
+/** How long a failed re-hydrate (after a dropped LISTEN connection) waits before trying again. */
+export const REHYDRATE_RETRY_MS = 5_000;
+
 const ABSENT: unique symbol = Symbol('absent');
 type Prior = Record<string, unknown> | typeof ABSENT;
 const activeCaptures = new WeakMap<MutableMap, Set<Map<string, Prior>>>();
@@ -9644,6 +9648,8 @@ export class PostgresBackedDb extends InMemoryDb {
     private queue: WriteBehindQueue | null = null;
     private pool: PgPool | null = null;
     private transport: StoreChangeTransport | null = null;
+    private rehydrateRetry: ReturnType<typeof setTimeout> | null = null;
+    private stopped = false;
     /** Identifies this replica so it can ignore its own change notifications. */
     private readonly instanceId = randomUUID();
     /**
@@ -9912,8 +9918,7 @@ export class PostgresBackedDb extends InMemoryDb {
      */
     async init(pool: PgPool, transport?: StoreChangeTransport): Promise<void> {
         this.pool = pool;
-        const client = await pool.connect();
-        try {
+        await withPooledClient(pool, async (client) => {
             for (const descriptor of TABLE_DESCRIPTORS) {
                 const columns = await introspectColumns(client, descriptor.tableName);
                 if (columns.length === 0) {
@@ -9929,9 +9934,7 @@ export class PostgresBackedDb extends InMemoryDb {
                 await hydrateMap(client, plan, this.mapByName(descriptor.mapName));
             }
             await this.compileTargetedSpecs(client);
-        } finally {
-            client.release?.();
-        }
+        });
         this.transport = transport ?? null;
         this.queue = new WriteBehindQueue(
             pool,
@@ -9956,9 +9959,7 @@ export class PostgresBackedDb extends InMemoryDb {
             await transport.subscribe((payload) => this.applyPeerChange(payload));
             // After a dropped LISTEN connection we may have missed notifications;
             // re-hydrate everything to recover.
-            transport.onReconnect(() => {
-                this.onApplyChain('rehydrate', () => this.rehydrateAll());
-            });
+            transport.onReconnect(() => this.queueRehydrate());
         }
     }
 
@@ -9971,18 +9972,50 @@ export class PostgresBackedDb extends InMemoryDb {
                     ...(map ? { map } : {}),
                     what,
                     error: err instanceof Error ? err.message : String(err),
+                    ...(what === 'rehydrate' ? { retryInMs: REHYDRATE_RETRY_MS } : {}),
                 }
             );
         });
     }
 
+    /**
+     * Queue a re-hydrate on the apply chain. Peers' changes may have been
+     * missed while the listener was down, so a failed one (a connection that
+     * cannot be opened included) is tried again REHYDRATE_RETRY_MS later, one
+     * retry pending at a time, until one succeeds or the store shuts down. A
+     * re-hydrate that succeeds (a later reconnect's) cancels a retry still
+     * pending. One already on the chain when shutdown() begins still runs:
+     * drain() finishes the refreshes queued so far.
+     */
+    private queueRehydrate(): void {
+        if (this.stopped) return;
+        this.onApplyChain('rehydrate', async () => {
+            try {
+                await this.rehydrateAll();
+            } catch (err) {
+                if (!this.rehydrateRetry) {
+                    this.rehydrateRetry = setTimeout(() => {
+                        this.rehydrateRetry = null;
+                        this.queueRehydrate();
+                    }, REHYDRATE_RETRY_MS);
+                    this.rehydrateRetry.unref?.();
+                }
+                throw err;
+            }
+            if (this.rehydrateRetry) {
+                clearTimeout(this.rehydrateRetry);
+                this.rehydrateRetry = null;
+            }
+        });
+    }
+
+    /**
+     * A connection checked out for a refresh goes back with the error the
+     * refresh failed with, if it failed, so that the pool destroys it rather
+     * than hand a dead connection to the next checkout (db/pooledClient.ts).
+     */
     private async withClient<T>(fn: (client: PgClient) => Promise<T>): Promise<T> {
-        const client = await this.pool!.connect();
-        try {
-            return await fn(client);
-        } finally {
-            client.release?.();
-        }
+        return withPooledClient(this.pool!, fn);
     }
 
     private markDirty(mapName: string, key: string, kv: unknown[] | undefined): void {
@@ -12925,6 +12958,8 @@ export class PostgresBackedDb extends InMemoryDb {
      * answers does.
      */
     async shutdown(): Promise<void> {
+        // A re-hydrate retry still pending does nothing once stopped.
+        this.stopped = true;
         this.carryStopped = true;
         if (this.carryRetryTimer) clearTimeout(this.carryRetryTimer);
         this.carryRetryTimer = null;

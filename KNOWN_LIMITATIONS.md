@@ -271,8 +271,8 @@ For the source-of-truth triage with tier/owner detail see
     Details: `docs/black-mask-chat-panel-and-account-link.md` section 3.
 -   **With that client switch on, the panel has its own session.** It never
     reuses a Blackout tab's session, so someone signed in to Blackout signs in
-    again in the panel, as a separate device; older encrypted messages may not
-    be readable there (BO-1). Signing out of Blackout in a tab does not sign
+    again in the panel, as a separate device; older encrypted messages are not
+    readable there (BO-1). Signing out of Blackout in a tab does not sign
     the panel out; the panel's own Sign out button does. With the switch off
     (the default) the panel uses the full app's storage names, as before B3,
     so whether it shares a tab's session depends on the browser's storage
@@ -1347,6 +1347,227 @@ recorded, so the inviter sees the use but gets no follower. With the setting on
 or off, an invitation the server no longer accepts (not recognized, used up,
 expired or revoked) stops the anonymous sign-up in the tab that holds it, and
 the form says why.
+
+### Dropped Postgres connections (2026-11-08)
+
+In postgres mode each API and worker process uses one shared connection pool
+(`packages/api/src/config/postgres.ts`). Before 2026-11-08 a pooled connection
+that the server dropped (a Postgres restart, a failover, an idle-session
+timeout, a network reset) ended the process with nothing drained. Since then
+the process stays up, and the dead connection is not handed out again: the
+pool discards an idle one, and the store gives a connection whose query failed
+back with that error, so the pool closes it and the next checkout gets another
+connection (a new one only when none is idle).
+
+A drop is logged (`pg_pool_client_error`) and counted
+(`db_pool_client_errors_total`) when the connection itself reports it: sitting
+in the pool (`state` `idle`), or checked out (`held`). A drop that lands on a
+statement in flight goes to that statement first, as the server's error, and
+the connection reports it only when its socket closes, a moment later. Code
+that gives the connection back with that error at once has the pool close it
+before then, and such a drop is that statement's error and nothing more: no
+`pg_pool_client_error` line and no count. A write-behind write that is a
+single statement goes that way. So do a lock check on the background-leader
+lock's connection (the loss is logged as `background_leader_lost`,
+`lock_check_failed`) and the LISTEN connection's LISTEN. Where the connection
+is still checked out when its socket closes, the drop is also logged and
+counted, as `held`:
+
+-   where the code sends another statement on the connection before giving it
+    back, since that statement waits until the socket closes, as the store
+    does with the ROLLBACK after a statement inside a targeted write's
+    transaction (or inside the boot check of its statements) fails, and as a
+    migration does with its ROLLBACK and the unlock of the migration lock;
+-   where the code passes the failure over and keeps the connection, as the
+    leader lock's holder does with the statement it sends about the
+    idle-session timeout (below), and the LISTEN connection with its
+    `SET idle_session_timeout = 0`.
+
+Two connections stay checked out for as long as the process uses them: the
+LISTEN connection and the leader lock's. A restart, a failover or a reset
+finds the first between statements always, once it listens, and the second
+nearly always (it sends a lock check every 10 s). Such a drop is logged and
+counted once, as `held`, with the server's code (`57P01`) where the server
+said why, beside the line of the connection's own: `pg_notify_listen_error`
+and a reconnect 2 s later for the LISTEN connection, `background_leader_lost`
+(`connection_error`) for the lock's.
+
+What remains:
+
+-   A connection the server drops while an API or a worker is still starting
+    (during the migrations, the checksum audit, the load of the tables and
+    the check of the store's statements, or LISTEN) fails that statement and
+    with it the start, and the process exits 1, as it did before 2026-11-08.
+    Nothing has been queued by then, so no write is lost, and the restart
+    policy brings the process back. The API ends on node's own report of the
+    error; the worker logs `blackout_worker_boot_failed` first.
+
+-   An API that runs the background loops itself holds the background-leader
+    lock on a pooled connection, and every Postgres restart drops it. That API
+    stops its loops, stays up and serving, and tries for the lock again every
+    15 s (not while a tick it started before the loss is still running, nor
+    while its previous try is still under way); it runs the loops again once
+    it has the lock. So the loops (scheduled messages, the dead-man sweep, the
+    sweepers) pause after every Postgres restart, until up to 15 s after
+    Postgres takes connections again and any tick it started before the loss
+    has finished. The wait for such a tick has no bound of its own: it lasts
+    as long as the tick does. The deployments with no separate worker run the
+    API that way (started without `BLACKOUT_BACKGROUND_WORKERS_DISABLED=1`):
+    `infra/single-server-baseline/docker-compose.yml`,
+    `deploy/kubernetes/phase4/blackout-api.yaml` and the Helm chart
+    (`deploy/helm/blackout`). The production compose files set that variable
+    on the app replicas and leave the loops to the worker, which exits 1 on the
+    loss and comes back through its restart policy.
+-   A role's or database's `idle_session_timeout` (PostgreSQL 14 and later)
+    still ends the pool's ordinary connections where it is 10 s or shorter.
+    The pool closes its own idle connections after 10 s (pg-pool's default
+    `idleTimeoutMillis`, which `config/postgres.ts` leaves in place), so a
+    server timeout longer than that finds none left to end, and none of what
+    follows appears. At exactly 10 s the two come due together; in each of
+    three runs here the server's came first. Under a timeout of 10 s or less
+    the server ends a connection that sits idle that long; the pool drops it,
+    the drop is logged and counted as above (`state` `idle`, code `57P05`),
+    and the pool opens another when it next needs one. Those lines and counts
+    keep coming while nothing is wrong.
+-   The LISTEN connection sends nothing after LISTEN. Since 2026-11-15 it
+    turns the server's `idle_session_timeout` off for its own session
+    (`SET idle_session_timeout = 0`, before it listens) and puts it back
+    before it returns to the pool. Before that the server ended it once every
+    timeout period, each time costing a reconnect, a re-hydrate of every
+    table and about 2 s without change notifications. Two things went with
+    those drops. Each re-read every table from Postgres, so where such a
+    timeout was set, a replica that had missed another's change was put right
+    within one timeout period. That no longer happens: with the timeout or
+    without it, such a replica keeps its old copy for as long as "Several API
+    processes on one database" says (a sign-out it missed stays accepted
+    there until the access token expires, up to 24 hours). And the timeout
+    ended a LISTEN session whose process was gone without the server seeing
+    it go (a network reset that never reached the server, a lost host). Such
+    a session now holds one of the server's connections until the server
+    finds the connection dead or restarts, or someone ends the session
+    (`pg_terminate_backend`), as it always did where no timeout was set. How
+    long the server takes to find it was not measured, and the server finds
+    it only where nothing between the API and the server still answers for
+    the connection. There, by the defaults of the PostgreSQL 16 on Linux run
+    here, the server's TCP keepalive gives up on a connection that carries
+    nothing after about 2 h 11 min (`tcp_keepalives_idle` 7200 s, then 9
+    probes 75 s apart); the server's `tcp_keepalives_*` settings shorten
+    that, and a change notification the server sends down a dead connection
+    can show it dead sooner. Behind a proxy or a pooler that keeps the
+    server's side of the connection open, the probes are answered and what
+    the server sends is taken: the server does not find the connection dead,
+    and the session stays until the server restarts or someone ends it. A
+    server older than 14 has no such timeout. It refuses the statement, and the
+    connection is used as it is. On a newer server, a connection on which
+    the statement fails and which is still up stays under the timeout.
+    Whatever the cause, only the first failure of the statement in a process
+    is logged (`pg_idle_session_timeout_not_exempted`), a connection the
+    server ended under the statement included.
+-   The background-leader lock's connection sends a lock check every 10 s.
+    An `idle_session_timeout` shorter than that ends the session of a live
+    leader between two checks, and one not much longer does when a check
+    comes late. The same timeout is also what ends a lock session whose
+    process is gone without the server seeing it go. While the server keeps
+    such a session, the session keeps the lock, and no process runs the
+    loops (scheduled messages, the dead-man sweep, the sweepers): the API
+    and the worker take the same lock. So this session is not exempted from
+    the timeout as the LISTEN connection is. Since 2026-11-15 the lock's
+    holder sends one statement once it watches the lock, and the server
+    acts on the session's timeout:
+
+    -   None set: nothing is changed. The server never ends the session for
+        sitting idle, and nothing in the API bounds how long an orphaned one
+        keeps the lock, before 2026-11-15 or since: it stays until the
+        server finds the connection dead or restarts, or someone ends the
+        session. The server finds it dead only by the same TCP keepalive
+        (about 2 h 11 min by those defaults; the server sends nothing of its
+        own down this connection), and only where nothing between the API
+        and the server still answers for the connection. Behind a proxy or a
+        pooler that keeps the server's side open there is no bound at all.
+        Setting an `idle_session_timeout` for the API's role or database is
+        what bounds it.
+    -   Shorter than 30 s (three lock checks): it is raised to 30 s for that
+        session (`pg_idle_session_timeout_raised`), and put back before the
+        connection returns to the pool. The server ends an orphaned session
+        30 s after its last lock check. Before, a timeout shorter than the
+        10 s between lock checks ended the lock's connection soon after
+        every acquisition, so an API that runs the loops itself ran them for
+        a few seconds in every 15 or more, and the worker exited 1 a few
+        seconds after every start. A longer one, up to 30 s, was left as it
+        was, kept from running out by the lock checks with less than two
+        checks to spare, and it ended an orphaned session after its own
+        length: such a session now keeps the lock up to 20 s longer than it
+        did.
+    -   30 s or longer: nothing is changed. The server ends an orphaned
+        session that long after its last lock check, as before.
+    -   A server older than 14, which has no such setting: nothing is set,
+        and an orphaned session keeps the lock as where none is set.
+
+    The statement is sent as soon as the lock is taken and watched, and the
+    server reads and raises in that one step. Until the server has it, the
+    session is under the server's own timeout like any other: if more than
+    that timeout passes between the server's answer to the lock statement
+    and this statement reaching it (the process or the network stalled for
+    that long), the server ends the session, and the holder loses the lock
+    as it did before 2026-11-15. The shorter the timeout, the shorter the
+    stall that does it.
+
+    The last lock check came up to 10 s before the process went. Once the
+    server has ended the session, a process that is trying for the lock
+    takes it at its next try: a worker on standby, or the API that held the
+    lock, if it is still running. Each tries every 15 s, but not while its
+    previous try is still under way, and the API not while a tick it started
+    before the loss is still running (second item), so the next try can come
+    later than 15 s. An API that did not get the lock when it started does
+    not try again, before 2026-11-15 or since, so where no such process is
+    left the loops stay stopped until an API or a worker next starts. A
+    statement the server refuses leaves the session as it was; the first
+    refusal in a process, the missing setting included, is logged
+    (`pg_idle_session_timeout_not_raised`). A statement that fails because
+    the server ended the session under it is not a refusal, and is not
+    logged as one: the process asks the connection for one more answer
+    before it logs, and a session the server has ended gives none. That
+    drop is logged as any drop of this connection is (above). The answer of
+    a server older than 14 is not taken from such a server; the only server
+    run here was PostgreSQL 16. For this connection it is tested on PGlite
+    (PostgreSQL 17.5 inside the test process) behind a view that hides the
+    setting, and against a stand-in; for the LISTEN connection, against a
+    stand-in.
+
+-   A write-behind write gets one immediate retry, on another connection than
+    the one it failed on (a new one only when none is idle). A write whose own
+    connection was dropped under it lands on that retry; one attempted while
+    Postgres cannot be reached or is restarting fails twice
+    (`db_write_behind_failed`, `db_write_behind_failures_total`), though the
+    request that made it was answered 2xx, and the queue does not try it again.
+    The change is then only in that process's memory, and it is lost unless the
+    same process writes that row again first, which only a later write that
+    saves the whole row does (most writes save the one row their call
+    returned, whole: see "Several API processes on one database"). A delete,
+    revocation, consume or sweep writes only what its own call changed, so it
+    never writes the lost change. The change leaves memory unwritten when the
+    process restarts, when a re-hydrate (or a table reload asked for by a
+    process still on the previous release) reloads that table from Postgres, or
+    when that row is read back from Postgres: after another process's change to
+    it, or after a later delete, revocation, consume or sweep of it from this
+    process that Postgres could not apply as the copy did (consuming a reset
+    token Postgres never received removes the token from the copy). A Postgres
+    restart always drops the LISTEN connection, and the re-hydrate after the
+    reconnect reloads every table, so after a restart the change is gone once
+    that re-hydrate has reloaded its table (the reconnect is tried again 2 s
+    after each failure, and the reload takes as long as the tables do to
+    read): an account created during the outage can no longer sign in, even
+    on the replica that created it.
+-   A peer replica's change that this replica cannot read back at that moment
+    (no connection to be had) is logged (`pg_store_peer_refresh_failed`) and
+    leaves that row stale in this replica's mirror until it changes again or
+    the mirror is re-hydrated. A re-hydrate after a dropped LISTEN connection
+    that fails (`pg_store_rehydrate_failed`) is retried 5 s later, one retry
+    pending at a time, until one succeeds or the process shuts down.
+-   The one-shot command-line tools (`migrate`, `db:import-json`,
+    `db:verify-import`, `db:clean-demo-seed`) make their own pools without
+    these listeners, so a dropped connection still ends them. They hold no
+    write-behind queue.
 
 ### Release signoff
 

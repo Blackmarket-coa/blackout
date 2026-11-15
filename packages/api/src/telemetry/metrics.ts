@@ -229,6 +229,11 @@ export const httpRequestsTotal = new Counter('http_requests_total', 'Total HTTP 
     'status',
 ]);
 
+export const httpUpgradesUnclaimedTotal = new Counter(
+    'http_upgrades_unclaimed_total',
+    'HTTP Upgrade requests that no WebSocket endpoint took and the guard closed: answered 404, unless the connection had already failed or the client was not reading (webSocketUpgrades.ts).'
+);
+
 export const authFailuresTotal = new Counter(
     'auth_failures_total',
     'Authentication failures by reason',
@@ -298,6 +303,12 @@ export const dbWriteBehindFailuresTotal = new Counter(
     'db_write_behind_failures_total',
     'Write-behind Postgres persistence ops that permanently failed after retry (a potential data-loss event). Alert on any increase.',
     ['map', 'kind']
+);
+
+export const dbPoolClientErrorsTotal = new Counter(
+    'db_pool_client_errors_total',
+    'Error events from pooled Postgres connections (backend terminated, network reset), by whether the client was idle in the pool or checked out. A failure seen only by the query in flight is reported by that query and not counted here.',
+    ['state']
 );
 
 export const dbTargetedWriteConflictsTotal = new Counter(

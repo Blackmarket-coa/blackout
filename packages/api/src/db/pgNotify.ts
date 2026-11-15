@@ -20,6 +20,11 @@
 // be swapped for an in-process one in tests (two stores sharing one database).
 
 import { log } from '../telemetry/logger';
+import {
+    exemptFromIdleSessionTimeout,
+    restoreIdleSessionTimeout,
+    withPooledClient,
+} from './pooledClient';
 
 export interface StoreChangePayload {
     /** Originating instance id — used to skip self-notifications. */
@@ -127,15 +132,11 @@ export class PgNotifyTransport implements StoreChangeTransport {
         // the write-behind queue calls this, so peers will see it on refresh.
         void (async () => {
             try {
-                const client = await this.pool.connect();
-                try {
-                    await client.query('SELECT pg_notify($1, $2)', [
-                        CHANNEL,
-                        JSON.stringify(payload),
-                    ]);
-                } finally {
-                    client.release?.();
-                }
+                // A failed send gives its connection back with the error, so
+                // the pool destroys it rather than hand it out again.
+                await withPooledClient(this.pool, (client) =>
+                    client.query('SELECT pg_notify($1, $2)', [CHANNEL, JSON.stringify(payload)])
+                );
             } catch (err) {
                 log.warn('pg_notify_publish_failed', {
                     error: err instanceof Error ? err.message : String(err),
@@ -202,6 +203,12 @@ export class PgNotifyTransport implements StoreChangeTransport {
             this.scheduleReconnect();
         });
         try {
+            // Nothing is sent on this connection after LISTEN, so it would sit
+            // idle past any idle-session timeout the server has.
+            await exemptFromIdleSessionTimeout(client);
+            // close() came while that statement was out. It gives this
+            // connection back to the pool, so nothing more is sent on it.
+            if (this.closed) return;
             await client.query(`LISTEN ${CHANNEL}`);
         } catch (err) {
             giveUp(err);
@@ -217,9 +224,11 @@ export class PgNotifyTransport implements StoreChangeTransport {
             void (async () => {
                 try {
                     await this.openListenConnection();
-                    // Closed meanwhile, or this connection already dropped again
+                    // Closed meanwhile (close() may not have given the
+                    // connection back yet, and may have come before LISTEN was
+                    // sent on it), or this connection already dropped again
                     // (that drop scheduled the next attempt, which refreshes).
-                    if (!this.listenClient) return;
+                    if (this.closed || !this.listenClient) return;
                     // We may have missed notifications while disconnected — force a full refresh.
                     this.reconnectHandler?.();
                     log.info('pg_notify_listen_reconnected');
@@ -237,13 +246,25 @@ export class PgNotifyTransport implements StoreChangeTransport {
         this.closed = true;
         if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
         this.reconnectTimer = null;
+        const client = this.listenClient;
+        if (!client) return;
         try {
-            await this.listenClient?.query(`UNLISTEN ${CHANNEL}`);
+            await client.query(`UNLISTEN ${CHANNEL}`);
         } catch {
             // best effort
         }
-        this.listenClient?.release?.();
+        // Back to the pool as an ordinary connection, under the server's
+        // idle-session timeout again; destroyed if that cannot be put back.
+        let failure: Error | undefined;
+        try {
+            await restoreIdleSessionTimeout(client);
+        } catch (err) {
+            failure = err instanceof Error ? err : new Error(String(err));
+        }
+        // A connection error during those statements gave it back already.
+        if (this.listenClient !== client) return;
         this.listenClient = null;
+        client.release?.(failure);
     }
 }
 

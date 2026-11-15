@@ -30,11 +30,17 @@ ToS, the production-like E2E + load run) are tracked in that report's Appendix B
 rather than newly discovered defects.
 
 1. **BO-1 — Key-backup `DecryptionError` / unable-to-decrypt history.** Users on
-   a new device see "unable to decrypt" for historical messages when no
-   server-side key backup exists or it fails to restore. Severity: high — it
-   directly undercuts the encryption claim on the trust page. Workaround: set up
-   recovery (Settings → Encryption); `MessageBadEncryptedContent` surfaces a
-   "Set up backup" action on the affected events. **Not yet fixed**; see the note
+   a new device see "unable to decrypt" for historical messages, because
+   Blackout can't yet restore keys from a backup or receive them from the
+   account's other sessions, whether or not a backup exists. Severity: high — it
+   directly undercuts the encryption claim on the trust page. Workaround: none
+   in Blackout yet. Another Matrix app with the account's recovery key may
+   restore backed-up keys there. For an account with no backup and no
+   cross-signing, the key-backup nudge's "Set up backup" starts one, which other
+   Matrix apps can restore from once the setup finishes; Blackout can't restore
+   from it after you sign in on a new device. It holds the keys of the
+   device that set it up (and of other sessions that trust it); a Blackout
+   session signed in later doesn't add to it. **Not yet fixed**; see the note
    below.
 2.
 3.
@@ -43,14 +49,47 @@ rather than newly discovered defects.
 
 ## Full list
 
-|   ID | First seen | Surface | Severity | Status        | Workaround                               | ETA |
-| ---: | ---------- | ------- | -------- | ------------- | ---------------------------------------- | --- |
-| BO-1 | 2026-08-10 | Client  | high     | Instrumenting | Set up recovery in Settings → Encryption | TBD |
+|   ID | First seen | Surface | Severity | Status        | Workaround                                                     | ETA |
+| ---: | ---------- | ------- | -------- | ------------- | -------------------------------------------------------------- | --- |
+| BO-1 | 2026-08-10 | Client  | high     | Instrumenting | None in Blackout yet (another Matrix app can restore a backup) | TBD |
 
 ### BO-1 notes
 
 Filed by the 2026-08-10 encryption audit
 ([`docs/audits/2026-08-10-encryption-audit.md`](docs/audits/2026-08-10-encryption-audit.md)).
+
+2026-11-08 (finding S9 of 2026-11-02): the earlier workaround here pointed to
+a "Settings → Encryption" that never existed, and to the "Set up backup"
+action, which on a new device of an account that already had a backup replaced
+the account's secret storage and cross-signing and deleted that backup
+([`docs/security/key-backup-nudge-2026-11-02.md`](docs/security/key-backup-nudge-2026-11-02.md)).
+The nudge and the undecryptable-message chip now ask the homeserver what the
+account has, again at every click, and offer the from-scratch setup only when
+it answered that there is neither a backup nor cross-signing, and the warned
+reset only when this device already trusts the account's cross-signing and no
+backup exists; the chip explains first, and the setup form checks once more
+before its first write. Otherwise they say what is true and offer nothing.
+Closing the setup or reset window before that write stops it with nothing
+changed; from that write until the attempt ends the window's close button is
+off and Android's back press is held. An attempt that stops after its first
+write (a failed step, a cancelled account confirmation, or a confirmation
+Blackout can't do) keeps its new recovery key on screen and says how far it
+got, since the account's secret storage may by then open only with that key
+(or the passphrase entered with it); where it may have created a backup, it
+offers no way on (sixth and seventh reviews of the same record). The window
+can still go away mid-attempt: a browser's Back leaves the screen, and the
+chip, which the app shows only in message-search results, takes its window
+with it when the results under it change or the message becomes readable
+(while that window is up it covers the search panel, so the panel's close
+and a result's Open can't be reached). The attempt then goes on until it
+ends or a step fails, or stops at the account confirmation (your password or
+single sign-on) if one is asked and has not gone through yet; either way its
+recovery key is shown in a window of its own, with how far the attempt got
+if it stopped partway (eighth and ninth reviews). The key is still lost if
+the page reloads or closes during the attempt (the page asks the browser to
+confirm first; whether a prompt appears is up to the browser or app), if the
+session is signed out before the key shows, or if a request never answers.
+The restore path itself is still missing.
 
 What BO-1 gates is anything that routes trust through Blackout
 (`TRANSMUTATION_NOTES.md` §5). It does not gate coalition external sync:
@@ -86,6 +125,24 @@ field. Triage rule of thumb: `backup=no` → setup never completed;
 failing; `trusted=no` or `cross_signing=no` → cross-signing state. The rate
 question still needs live-fleet reports; this only makes each report answer
 the "which cause" question by itself.
+
+2026-11-08 (finding S9): the main cause is no longer undiagnosed. A new
+Blackout device has no way to get the keys of messages sent before it signed
+in: no mounted screen restores from a backup, verifies the device or receives
+keys from another session, and the SDK's room-key requests are off
+(matrix-js-sdk 40.2.0, `lib/rust-crypto/index.js`,
+`roomKeyRequestsEnabled = false`). On such a device "restore failing" is not a
+restore that fails: there is no restore. A new device of an account that has a
+backup reports `active=no` for that reason alone, so the rule's
+`backup=yes` with `active=no` names a path that does not exist there.
+`failures` counts the SDK's `KeyBackupFailed` events, which it emits when this
+device's upload to its active backup is refused because that version was
+replaced or deleted on the server (`lib/rust-crypto/backup.js`, the upload
+loop): a backup this device was writing to, not a restore. What live numbers
+can still tell is narrower: how often a device fails on messages sent after it
+signed in, whose keys should reach it from the sender. See
+[`docs/security/key-backup-nudge-2026-11-02.md`](docs/security/key-backup-nudge-2026-11-02.md)
+("What remains") and `TRANSMUTATION_NOTES.md` §5.
 
 ## How this list is maintained
 

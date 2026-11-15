@@ -99,8 +99,11 @@ import {
     startLegacyApiAliasWeeklyReporter,
 } from './telemetry/api-alias-usage';
 import { log } from './telemetry/logger';
-import { startBackgroundLoops } from './backgroundLoops';
-import { tryBecomeBackgroundLeader, releaseBackgroundLeader } from './services/backgroundLeader';
+import {
+    runBackgroundLoopsWhileLeader,
+    type InProcessBackgroundLoops,
+} from './inProcessBackgroundLoops';
+import { releaseBackgroundLeader } from './services/backgroundLeader';
 import { httpMetricsMiddleware } from './telemetry/http-metrics';
 import { registry as metricsRegistry } from './telemetry/metrics';
 import { initErrorReporter, errorReporter } from './telemetry/errors';
@@ -113,6 +116,7 @@ import { matrixClient } from './integrations/matrix-client';
 import { drainRuntimeStore, RUNTIME_DB_MODE } from './db/store';
 import { bootPostgresRuntimeStore } from './db/runtimeStoreBoot';
 import { assertEnvAtBoot } from './config/env';
+import { attachWebSocketShims } from './webSocketUpgrades';
 
 // Central boot-time env validation (M6): aggregate every critical-config
 // problem into one report and fail fast in production before anything else
@@ -497,54 +501,23 @@ if (shouldListen) {
     // entirely; among the rest, a Postgres advisory-lock leader election ensures
     // only one actually runs the loops even if the env var is misconfigured
     // across replicas (in file/memory mode there is a single process anyway).
-    if (process.env.BLACKOUT_BACKGROUND_WORKERS_DISABLED !== '1') {
-        void (async () => {
-            const isLeader = await tryBecomeBackgroundLeader();
-            if (isLeader) {
-                startBackgroundLoops();
-                log.info('background_loops_started', {});
-            } else {
-                log.info('background_loops_skipped_not_leader', {});
-            }
-        })();
-    }
+    // In postgres mode the lock lives on a held pool connection; if that
+    // connection fails or the lock is gone, the loops stop, the API stays up,
+    // and it tries for the lock again (inProcessBackgroundLoops.ts).
+    const inProcessLoops: InProcessBackgroundLoops | null =
+        process.env.BLACKOUT_BACKGROUND_WORKERS_DISABLED !== '1'
+            ? runBackgroundLoopsWhileLeader()
+            : null;
 
     const httpServer = serve({ fetch: app.fetch, port: PORT }, (info) => {
         log.info('blackout-server listening', { port: info.port });
     });
 
-    // Twitch-IRC-compatible bot shim. External chat bots (Nightbot etc.)
-    // upgrade to ws on /twitch-irc, authenticate with the bot tokens minted
-    // at /v1/integrations/twitch-compat/bot-tokens, and run unmodified.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    void import('./integrations/twitch-compat/ircServer').then(({ attachTwitchIrcShim }) => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        attachTwitchIrcShim(httpServer as any);
-        log.info('twitch_irc_shim_attached', { path: '/twitch-irc' });
-    });
-
-    // OBS-WebSocket v5 compatibility shim. External control surfaces
-    // (Bitfocus Companion, Stream Deck, Touch Portal) upgrade to ws on
-    // /obs-ws/<password-id>, complete the OBS-WS challenge/response auth,
-    // and issue OBS-WS requests we dispatch via the protocol layer's
-    // request matrix.
-    void import('./integrations/obs-ws-compat/server').then(({ attachObsWsShim }) => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        attachObsWsShim(httpServer as any);
-        log.info('obs_ws_shim_attached', { pathPrefix: '/obs-ws/' });
-    });
-
-    // StreamElements OverlayWS-compatible socket.io shim. Off-the-shelf
-    // SE browser-source overlay HTML connects to /se-overlay/, emits
-    // `authenticate` with a widgetAlertToken, and receives the same
-    // alerts as the SSE feed at /v1/widget-alerts/stream — but in the
-    // SE-shaped `event` frame so existing SE overlay HTML works
-    // unmodified.
-    void import('./integrations/se-overlay-compat/server').then(({ attachSeOverlayShim }) => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        attachSeOverlayShim(httpServer as any);
-        log.info('se_overlay_shim_attached', { path: '/se-overlay/' });
-    });
+    // The WebSocket endpoints: the Twitch-IRC, OBS-WebSocket and StreamElements
+    // shims, behind the guard that answers and closes an upgrade none of them
+    // takes (webSocketUpgrades.ts). Called straight after serve(), so the
+    // guard is in place before the server accepts its first connection.
+    void attachWebSocketShims(httpServer);
 
     // Graceful shutdown for every runtime mode (not just postgres). Stop
     // accepting new connections, let in-flight requests drain, flush the
@@ -560,10 +533,13 @@ if (shouldListen) {
             process.exit(0);
         }, SHUTDOWN_TIMEOUT_MS);
         if (typeof forceTimer.unref === 'function') forceTimer.unref();
+        // No new tick, and no retry for the leader lock, from here on.
+        const loopsStopped = inProcessLoops?.stop();
 
         httpServer.close(() => {
             void (async () => {
                 try {
+                    await loopsStopped;
                     await releaseBackgroundLeader();
                     await drainRuntimeStore();
                     log.info('runtime_store_drained', { signal });
