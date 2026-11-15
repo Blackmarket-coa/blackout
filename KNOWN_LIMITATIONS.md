@@ -818,8 +818,14 @@ the drop is logged (`pg_pool_client_error`) and counted
 again: the pool discards an idle one, and the store gives a connection whose
 query failed back with that error, so the pool closes it and the next checkout
 gets another connection (a new one only when none is idle). A drop the server
-reports to a query in flight reaches only that query, so it is that query's
-error and is not counted. What remains:
+reports to a query in flight is that query's error. It is not counted unless
+the code then sends another statement on that connection before giving it
+back, as the store does with the ROLLBACK after a statement inside a targeted
+write's transaction (or inside the boot check of its statements) fails, and as
+a migration does with its ROLLBACK and the unlock of the migration lock: that
+statement waits until the socket closes, the connection reports the drop while
+it is still checked out, and the drop is also logged and counted, as `held`.
+What remains:
 
 -   An API that runs the background loops itself holds the background-leader
     lock on a pooled connection, and every Postgres restart drops it. That API

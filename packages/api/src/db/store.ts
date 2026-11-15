@@ -8792,7 +8792,10 @@ export class PostgresBackedDb extends InMemoryDb {
      * Queue a re-hydrate on the apply chain. Peers' changes may have been
      * missed while the listener was down, so a failed one (a connection that
      * cannot be opened included) is tried again REHYDRATE_RETRY_MS later, one
-     * retry pending at a time, until one succeeds or the store shuts down.
+     * retry pending at a time, until one succeeds or the store shuts down. A
+     * re-hydrate that succeeds (a later reconnect's) cancels a retry still
+     * pending. One already on the chain when shutdown() begins still runs:
+     * drain() finishes the refreshes queued so far.
      */
     private queueRehydrate(): void {
         if (this.stopped) return;
@@ -8808,6 +8811,10 @@ export class PostgresBackedDb extends InMemoryDb {
                     this.rehydrateRetry.unref?.();
                 }
                 throw err;
+            }
+            if (this.rehydrateRetry) {
+                clearTimeout(this.rehydrateRetry);
+                this.rehydrateRetry = null;
             }
         });
     }

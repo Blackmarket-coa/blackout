@@ -708,15 +708,48 @@ test('shutdown() stops a pending re-hydrate retry', async (t) => {
     assert.equal(logged(lines, 'pg_store_rehydrate_failed').length, 1);
 });
 
+test('a re-hydrate that succeeds cancels a retry still pending from an earlier failure', async (t) => {
+    const lines = captureLogs(t);
+    const { pool, state } = storePool();
+    const transport = stubTransport();
+    const store = new PostgresBackedDb();
+    await store.init(pool as never, transport as never);
+    t.after(() => store.shutdown());
+
+    // The first reconnect's re-hydrate fails, which leaves a retry pending.
+    state.refuse = true;
+    transport.reconnect();
+    await waitFor(
+        () => logged(lines, 'pg_store_rehydrate_failed').length > 0,
+        'the re-hydrate to fail'
+    );
+    // The next reconnect's re-hydrate succeeds before the retry falls due.
+    state.refuse = false;
+    state.users = [{ id: 'u-back', username: 'back' }];
+    transport.reconnect();
+    await waitFor(() => store.getUserById('u-back') !== undefined, 'the re-hydrate to succeed');
+    const connectsAfterSuccess = state.connects;
+
+    await sleep(REHYDRATE_RETRY_MS + 500);
+    assert.equal(state.connects, connectsAfterSuccess, 'no second re-hydrate after the success');
+    assert.equal(logged(lines, 'pg_store_rehydrate_failed').length, 1);
+});
+
 /**
- * The other checkouts in the running app give their client back the same way as
- * the write-behind queue (db/pooledClient.ts): the store's load at boot (and
- * the check of its targeted statements that ends it), a change notification
- * and migrate.ts's four functions here, and the store's checkouts after boot
- * in the block after this one. Each case starts with one healthy connection
- * idle in the pool, as after any earlier query, and the server ends that
- * backend under the case's first query (or the one it names); the socket has
- * not closed yet when the next checkout comes.
+ * The other checkouts that go through db/pooledClient.ts, as the write-behind
+ * queue's do: the store's load at boot (and the check of its targeted
+ * statements that ends it), a change notification and migrate.ts's four
+ * functions here, and the store's checkouts after boot in the block after this
+ * one. Of migrate.ts's four, migrateUp and verifyMigrationChecksums run in the
+ * app at boot (db/runtimeStoreBoot.ts); migrateDown and status run only in the
+ * migrate command-line tool, on a pool of its own. The app's other two
+ * checkouts give their connection back by hand: the LISTEN connection
+ * (PgNotifyTransport; the LISTEN tests above) and the leader-lock connection
+ * (services/backgroundLeader.ts; the leader tests at the end of this file).
+ * Each case starts with one healthy connection idle in the pool, as after any
+ * earlier query, and the server ends that backend under the case's first
+ * query (or the one it names); the socket has not closed yet when the next
+ * checkout comes.
  */
 const checkoutCases: Array<[string, (pool: SharedPool, lines: string[]) => Promise<void>]> = [
     [
