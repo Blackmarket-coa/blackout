@@ -119,7 +119,17 @@ for a read each time: the label is now refused, the arm is one statement
 that leaves nothing where it does not land, and a statement the database
 itself refuses is an answer and no longer an unknown outcome (decision 37,
 new); the lows are pinned or made true; the model names are recorded with
-no action.
+no action. Round 22, the same day, read round 21's fixes: nothing from the
+attack replay, and seven low from the other two verifiers. Three are fixed
+in code: the read of the switch after a refused carry was skipped where the
+process had meanwhile taken a later refused attempt another process wrote;
+a refusal the database answers after the statement's bound was logged as a
+timeout only; and "or its deadline" did not end round 21's stated limit in
+the deployed layout, where the process that sent the cancel runs no sweep,
+so the sweep's pass now announces a cancelled switch when it blanks the
+copies still held on it. The rest are made true or pinned (what arming the
+same message again must still pass, and two wordings), and the model names
+are recorded with no action.
 
 **State read:** the PR 2 branch at `6ae33bc2e2` (#991), on `develop` at
 `8a20ad6a0b`; PR 2 then merged as `e1d4cec964`, which this branch merged. **Read** means a claim rests on the code or a standard; **Run**
@@ -701,8 +711,10 @@ follow from §1–§9 and from the design's §3, which accepted the first three.
     copy (cancel removes them from an honest server's database on one API
     process, a cancel the database confirms after the route answered 503
     when it lands, while the process that sent it runs, and otherwise when
-    the sweep's process next writes the switch or a check-in or second
-    cancel finds it cancelled; across replicas a re-seal on another replica in the
+    the sweep's process comes to the switch (its pass blanks the copies of
+    a switch it holds cancelled, and its move at the former deadline of one
+    it holds armed is refused, which shows it cancelled) or a check-in or
+    second cancel finds it cancelled; across replicas a re-seal on another replica in the
     refresh window can leave a copy on a cancelled switch until the next
     sweep pass blanks it, §15; backups keep them until they expire). Only the named
     recipients can read it, and, until PR 4 keeps the device-side record of
@@ -1362,25 +1374,44 @@ message, and nothing here makes a release happen on time (§10, R12).
     no process's mirror, so nothing lists it and no bound counts it, and
     each such arm lets one more past a bound; the next arm of the envelope
     that reaches the store finds it as `release_id_taken` and takes it into
-    the mirror, but the route checks the bounds before the store is asked,
-    so an owner who has reached one since is refused by it first, until
-    there is room under it again, which cancelling a release makes for the
-    two bounds on releases held, only time for the arms in 24 hours, and
-    nothing the owner can do for the bound of 50 owners; with no such arm,
+    the mirror, but every check the route makes comes before the store is
+    asked, so that arm reaches it only where it still passes them all
+    (round 22 of the review: this named the bounds alone). An owner who has
+    reached a bound since is refused by it first, until
+    there is room under it again, which cancelling a release that has not
+    fired makes for the
+    two bounds on releases held (a fired one counts toward both until its
+    removal and cannot be cancelled), only time for the arms in 24 hours,
+    and nothing the owner can do for the bound of 50 owners. And an owner
+    whose release identity, or that of a person the envelope names, has
+    been replaced since, or whose envelope names an account since deleted,
+    is refused for that (409 `owner_identity_changed` or
+    `recipient_identity_superseded`, 400 `unknown_recipient`) every time,
+    since an identity the directory has seen replaced is never made current
+    again: that switch stays armed in Postgres, and nothing its owner can
+    do lists it, checks in on it or cancels it (test 93 of the switch-writes
+    file pins this as the stated limit it is, for a person named who
+    replaced their keys; the other two answers are the route's, pinned by
+    the memory-mode releases file and not run behind a hidden arm). With no
+    arm that reaches the store,
     nothing announces it, so no process has it until one reads every table
     again, which it does when it starts and when its change subscription
     reconnects (`rehydrateAll`: round 21, this said only a restart; a
     running process whose `LISTEN` connection dropped and reopened then
     lists, counts and fires it), and its sweep then treats it as any switch,
-    an overdue one by the backlog rule; the same holds for an arm past its
+    an overdue one by the backlog rule, whether or not the process that
+    answers the owner has read it too; the same holds for an arm past its
     bound, answered 503, whose statement then rejects and is read back
     before the database commits it (round 21: this named only the 500); how
     long such a statement can run on after its
     client is lost was not measured; test 80 of the switch-writes file pins
     this as the stated limit it is); where that read fails too, or does not
-    answer within what is left of the statement's 30 seconds, 503, and the
-    switch is read again on a connection of its own until a read answers
-    (`retrySettleReads`, as after a late statement's failed read back), no
+    answer within what is left of the statement's 30 seconds, 503: a read
+    that failed is made again on a connection of its own until one answers
+    (`retrySettleReads`, as after a late statement's failed read back), and
+    one not yet answered is waited for, with nothing bounding it (round 22
+    of the review: this still said both were read again, which round 21
+    had corrected for the conditional write below and not here), no
     switch statement being sent by the process meanwhile, so a switch the
     database did record is then taken into the mirror, announced and
     counted (round 20 of the review: nothing read it again, so it stayed
@@ -1500,7 +1531,10 @@ message, and nothing here makes a release happen on time (§10, R12).
     (`removeExpiredReleases`), blank any copy a cancelled release switch
     still holds (round 11 of the review: until then a cancel that landed
     after its bound left every copy held, the mirror armed and no process
-    told, until the owner cancelled again, which nothing told them to). A
+    told, until the owner cancelled again, which nothing told them to); a
+    pass that blanks one announces the switch with the copies, so a process
+    that still holds it armed reads it cancelled (round 22: it announced
+    the copies alone). A
     second cancel blanks what a switch cancelled before this code still
     holds, by a conditional write of the content column alone, as the
     365-day removal now writes the content (round 11: both were full-row
@@ -1719,16 +1753,43 @@ message, and nothing here makes a release happen on time (§10, R12).
     nothing looked again, so a cancel applied right after the read back
     left the process that sent it, its list and its export holding the
     switch armed with its content, and every sealed copy held in Postgres;
-    test 82 of the switch-writes file). What that does not reach is a
+    test 82 of the switch-writes file). The read is made whether or not the
+    mirror has meanwhile taken a later refused attempt that another process
+    carried (round 22: it was skipped there, the later attempt taken to
+    explain the refusal, though the refused statement is not conditional on
+    that column; with two API processes a cancel applied after the other
+    one's carry landed, and before this one's own carry reached the
+    database, was so left unread; test 90). What that does not reach is a
     statement the database begins only after the carry has landed: the
     carry finds the row as the attempt read it, and the process then holds
     the switch as before, a cancelled one armed with its content and with a
     refused attempt Postgres no longer holds, its copies held in Postgres,
-    until the owner's next check-in or cancel of the switch, whose
-    statement Postgres refuses and whose row is then taken, a refresh of
-    the switch from another process's announcement, a restart, or the
-    sweep's move at the deadline (test 83 pins it as the stated limit it
-    is). A move of the sweep's has no carry behind it: one the database
+    until the owner's next check-in or cancel of the switch there, whose
+    statement Postgres refuses and whose row is then taken, a restart, or a
+    refresh of the switch from another process's announcement (test 83 pins
+    it as the stated limit it is). The process that runs the sweep makes
+    such an announcement when it moves the switch or is refused a move of
+    it, which for a switch it still holds armed is at the deadline, and,
+    since round 22, when its pass blanks the copies still held on a switch
+    it has read cancelled (`blankCopiesOfCancelledSwitch`), which is its
+    first pass after it read it so. Until then this said "or the sweep's
+    move at the deadline", which holds only where the process that sent the
+    cancel runs the sweep itself or the sweep's process still holds the
+    switch armed: in `deploy/docker/production` the API process runs no
+    sweep, and where the worker had read the switch cancelled before the
+    deadline (the carry's announcement reaching it after the cancel
+    applied, its restart, or its change subscription reconnecting) its pass
+    blanked the copies, announced them and not the switch, and made no move
+    at the deadline, so the API process went on showing the switch armed,
+    with its content, in its list and export, for good but for the owner's
+    next check-in or cancel there or its own restart or reconnect (the
+    claims verifier's
+    probe A: armed 400 days past the deadline; test 92 has both ends, the
+    pass before the deadline and the refused move at it). A refresh is one
+    read of the row and is not tried again if it fails, and an announcement
+    reaches only a process whose change subscription is up (one that
+    reconnects reads every table again).
+    A move of the sweep's has no carry behind it: one the database
     applies after its read back is found at the next pass, whose statement
     is refused over it and takes the row. A statement the database itself
     refuses, with an error it answers for the statement, is no unknown
@@ -3158,7 +3219,16 @@ records what the API sends.
     pass's to make again, so a switch whose move the database refuses every
     time stays unmoved and unfired, logged at each pass
     (`deadman_switch_write_refused`), where until now it was logged as a
-    failure and read back each time. The reason for the rule: since round
+    failure and read back each time. Each refusal is logged with its
+    SQLSTATE, an arm's as `deadman_switch_arm_refused`. One the database
+    answers only after the statement's 30 seconds was answered at the bound
+    as any statement that has not answered is (503, a timeout logged, the
+    stall standing until the answer comes), and is logged as refused when
+    its answer comes, on the same line, marked `afterBound` (round 22 of
+    the review: such a refusal ended the stall without a line, so the logs
+    showed a timeout and a settle, as for a statement that landed late or
+    was never run, and its code was dropped; test 91 of the switch-writes
+    file). The reason for the rule: since round
     20 every rejection was an unknown outcome, and one request any account
     could send, an arm whose label held U+0000, made the database refuse
     the statement each time, which held every owner's switch statements on
@@ -10273,8 +10343,11 @@ branch made untrue in `develop`'s text, is under "Claims" below.
     two trailer lines are the session's harness's and stay, and nothing
     is rebased or amended. The tracked files that carry a model name,
     under `docs/`, `MARKETPLACE_AUDIT.md` at the repository's root (a branch
-    name, twice; round 21 of the review: this list left it out) and the
-    working notes at the repository's root, are inherited
+    name, twice; round 21 of the review: this list left it out), one report
+    under `apps/blackout-server/docs/reports/`
+    (`deployment_go_no_go_checklist_2026-03-15.md`, an evaluator's name;
+    round 22: this list left it out, saying only the root's `docs/`) and
+    the working notes at the repository's root, are inherited
     from `develop` and belong to a separate change there; no line this
     branch adds carries one.
 
@@ -10623,7 +10696,10 @@ below.
     apply after it. The verifier's suggestion is built, with one condition:
     a carry of the refused attempt that Postgres refuses, although the
     mirror still holds the switch as the attempt read it (not fired or
-    cancelled, the same last check-in, no later attempt), says the mirror
+    cancelled, the same last check-in, no later attempt; round 22 of the
+    review: the last of the three is gone, since a later attempt another
+    process carried does not show that the refused statement did not
+    apply), says the mirror
     is behind, and the switch is then read back in its lane and taken as
     after a failed statement (`readBackAfterRefusedCarry`, through
     `settleSwitchStatement`, so the row goes into the mirror where the
@@ -10638,7 +10714,10 @@ below.
     a carry sent while the cancel's transaction held the row was not
     answered, changed no row once the cancel committed and one row once it
     rolled back (`fix/r21b/probes/pg16-store.log`), so a cancel that has
-    reached the row is always seen by the carry that follows it. The same
+    reached the row is always seen by the carry that follows it (seen, and
+    refused over; as built in this round the switch was then read only
+    where the mirror held no later attempt, which round 22 found and
+    removed). The same
     read brings in a trigger, a check-in or a cancel another process made
     that this one was never told of, when a refused carry meets it (test
     31, which asserted the opposite: "the landed check-in is not in this
@@ -10852,6 +10931,280 @@ the qualifier on the sentence before it. Prettier and the search of the
 branch's added lines for a model name were run on the record with this
 paragraph in it before the commit: clean, no match.
 
+### Round 22: what the verifiers found in round 21's fixes
+
+A twenty-second pass read round 21's head (`4b2f8bbe16`) with three
+verifiers. The attack replay found nothing. The other two found seven Low
+and nothing above. The fix quality verifier found the read that round 21
+added after a refused carry skipped in one case (Low;
+`fix/r21v-fixquality/r21v-fq6.append.ts`, `probes/r21v-fq6-head.log`): the
+read was decided on whether the carry would have applied to the mirror's
+entry, one condition of which is that the entry hold no later attempt, and a
+later attempt that another API process carried says nothing about whether
+the refused statement applied. With the owner's cancel lost on one process
+and not yet begun by the database, their retry on a second process refused
+unanswered too and carried, the first told of that carry, the database then
+applying the first cancel, and the first's own carry reaching it only after
+that, the carry was refused over the cancelled row and nothing was read: the
+sender and the other replica showed the switch armed with its content, the
+list and the export said armed, and both sealed copies stayed held in
+Postgres, through a removal pass and a sweep before the deadline, until the
+owner's second cancel; with the read decided on status and last check-in
+alone the same probe ended cancelled everywhere, and no test told the two
+apart (89 of 89 passed under that change). It also found a refusal the
+database answers after the statement's bound logged as a timeout only, its
+SQLSTATE dropped (Low; `r21v-fq.append.ts` FQ-1, `probes/r21v-fq.log`),
+where decision 37 said a refused move is logged at each pass. The claims
+verifier found five (Low each; `fix/r21v-claims/r21v-claims.append.ts`).
+"Or its deadline" does not end round 21's stated limit in the deployed
+layout, where the API process runs no sweep and the worker, once it has read
+the switch cancelled, makes no move at the deadline (probe A: the API
+process armed, with its content and the refused attempt, at worker passes
+up to 400 days past the deadline). The remedy "arming the same message
+again" must pass the identity checks as well as the bounds before it
+reaches the store (probe E: 409 `recipient_identity_superseded`, the switch
+unlisted and armed in Postgres), and a fired release cannot be cancelled to
+make room. §15's arm paragraph and five comments still said an unanswered
+read back is read again (probe F: one read, waited for). The comment on
+`retrySettleReads` said the stall stands while a settle waits there, which
+is not so for the settle after a refused carry (probe G). And this record's
+list of the tracked files that carry a model name lacked a third file, with
+the commit trailers as before. Each finding is fixed in code, pinned or
+made true here, except the trailers, recorded with no action.
+`origin/develop` is still at `898d466cb5`, which the branch has merged;
+nothing was merged this round.
+
+-   **The read after a refused carry was skipped where the mirror held a
+    later attempt (Low, fix quality; fixed in code).** `takeCarryAnswer`
+    decides the read on the mirror's status and last check-in alone
+    (`stillAsAttemptRead`): a mirror that shows the switch fired or
+    cancelled, or at another check-in, proves the refused statement cannot
+    have applied unseen, since those are what that statement is conditional
+    on; a later refused attempt proves nothing of the kind. The clause
+    stays where it belongs, on taking a landed carry's column onto an entry
+    that is not the one the carry read (`takeCarriedColumn`,
+    `carryWouldApplyTo`; test 49 pins it there). What the read costs where
+    nothing had applied: one read of the row and one announcement of what
+    the mirror already held, in a case that needs two API processes and
+    the owner refused on both. Test 90 (the verifier's probe as a test,
+    this process and a second on one PGlite, the second's announcement
+    delivered by hand: the carry is refused by the database, one read
+    follows, nothing is held, and the switch is cancelled in Postgres with
+    every copy blanked, in this process's mirror, list and export,
+    announced, and the second process agrees once told). Q01 (the clause
+    put back: test 90 fails and the other 92 pass, as the verifier found of
+    the 89), Q02 to Q07.
+-   **A refusal answered after the statement's bound was logged as a
+    timeout only (Low, fix quality; fixed in code).** The timeout path of
+    `awaitSwitchStatement` logs a late answer that is a refusal before the
+    hold ends, on the line the caller logs one answered in time on,
+    `deadman_switch_arm_refused` for an arm and
+    `deadman_switch_write_refused` for a conditional update, with the
+    SQLSTATE and `afterBound: true`. The caller had been answered at the
+    bound and a timeout logged then; nothing else changes (503 at the
+    bound, nothing read, nothing written, the stall ending at the refusal).
+    Decision 37 and the comments on `awaitSwitchStatement`,
+    `armDeadmanSwitch` and `writeDeadmanSwitchIf` say what is logged in
+    each case. Test 91 (an arm and a check-in each refused by a constraint
+    450 ms into a 200 ms bound: 503 and one timeout line at the bound, no
+    refusal line yet, then one with 23514 and the mark when the answer
+    comes, on the arm's line for the arm and the update's for the check-in,
+    nothing read back, nothing written; within the bound the same two
+    lines carry the code and no mark). Q08 to Q11.
+-   **"Or its deadline" (Low, claims; closed in code for a cancel, the
+    sentences made true).** The claims verifier's second suggestion is
+    built: the pass of the sweep's process that blanks the copies still
+    held on a switch it has read cancelled announces the switch with them
+    (`blankCopiesOfCancelledSwitch`), so a process that still holds the
+    switch armed reads the row. Judged small and safe: one announcement
+    more, once per such switch (after it the copies are blank and the pass
+    sends no statement for that switch; a pass whose statement blanked
+    nothing announces nothing, Q13), whose receiver makes one read by key
+    and takes what Postgres
+    holds, behind the fence of its own queued writes as for any
+    announcement. Copies still held on a switch Postgres has cancelled are
+    exactly what a cancel leaves that no process blanked after it, which is
+    the stated limit's case, so the announcement is made where it is
+    needed and nowhere else. What it changes: in the deployed layout the
+    API process that sent the cancel reads the switch cancelled at the
+    worker's first pass after the worker read it so, where it showed it
+    armed for good; a worker that still held it armed announces it when
+    its move at the deadline is refused, as before. What it leaves: until
+    the sweep's process has learnt of the cancel nothing tells the sender,
+    so the sender can show the switch armed up to the deadline (it cannot
+    fire, and the owner's next check-in or cancel there ends it); a refresh
+    is one read and is not tried again if it fails; and a late check-in,
+    which leaves no copies to blank, reaches the sender with the sweep's
+    next move of the switch or refused move of it. §15, Still open,
+    `KNOWN_LIMITATIONS.md` (Retention and the check-ins item), the
+    changelog, the threat model's row and header, and the comment on the
+    503 in `deadman.ts` say this, and no longer "or its deadline". Test 92
+    (the verifier's probe A as a test, a second store as the API process
+    and this one as the worker: of two cancels the database began after
+    the carry, the worker is told of one; its next pass, 50 minutes before
+    the deadline, blanks that switch's copies and announces the switch
+    once, the API process then holds it cancelled, emptied, with no
+    refused attempt and no sealed copy, and a second pass announces
+    nothing; the other is announced when the worker's move at the deadline
+    is refused, and the API process holds it cancelled then; nothing is
+    released). Q12, Q13.
+-   **The remedy "arm the same message again" named the bounds alone (Low,
+    claims; made true, and pinned as the stated limit it is).** Every check
+    of `armReleaseSwitch` comes before the store is asked: the bounds, and
+    the owner's and every named person's current release identity, and
+    every named account's existence. The sentences now say so, and what is
+    true where an identity was replaced or an account deleted since: that
+    arm is refused every time (an identity the directory has seen replaced
+    is never made current again, `publishReleaseIdentity`), the switch
+    stays armed in Postgres and unlisted, the owner can neither check in
+    on it nor cancel it, and it comes in only when a process reads every
+    table again, from when that process lists it or, if it runs the sweep,
+    fires it at its deadline, whether or not the process that answers the
+    owner has read it too. They also say that only a release that has not
+    fired can be cancelled to make room under the two bounds on releases
+    held. `KNOWN_LIMITATIONS.md` (Durability), the changelog, the threat
+    model's row, §15, Still open, and the comments on the 500 in
+    `deadman.ts` and on `armDeadmanSwitch` in `store.ts`. Test 93 (the
+    verifier's probe E as a test: the arm 500, its insert then committed;
+    the person named publishes a new identity; the same message again is
+    409 `recipient_identity_superseded` twice with no statement naming the
+    switch sent, the switch unlisted and armed in Postgres, a check-in and
+    a cancel of it 404; a process that starts holds it, this one lists it
+    once it has read every table again, and its sweep fires it at the
+    deadline). The other two refusals are pinned by the memory-mode
+    releases file as answers of the route (`owner_identity_changed` 409,
+    `unknown_recipient` 400 for a deleted account), not run here behind a
+    hidden arm. Not built, for whoever takes this up: looking the
+    envelope's id up in Postgres before the route's other checks, for an
+    arm one of them refuses, would let the owner bring such a switch in
+    whatever has changed since, at one read per refused arm and with
+    `release_id_taken` then answered ahead of the bounds and the
+    identities.
+-   **An unanswered read back is waited for, in the places round 21 left
+    (Low, claims; made true).** §15's arm paragraph, `SwitchReadBack`,
+    `readBackAfterFailure`, `armDeadmanSwitch` (its comment and the note in
+    its body) and the 503's comment in `deadman.ts` now say a read that
+    failed is made again on a connection of its own until one answers, and
+    one not yet answered is waited for, with nothing bounding it.
+-   **The comment on `retrySettleReads` (Low, claims; made true).** The
+    stall stands while a settle waits there whose caller holds this
+    process's switch statements back; a settle after a refused carry waits
+    there with nothing held, and statements are sent meanwhile, as the
+    record already said of `readBackAfterRefusedCarry`.
+-   **Model names (Low, claims).** Round 20's list of the tracked files
+    that carry one now names the report under
+    `apps/blackout-server/docs/reports/`, inherited from `develop` like the
+    others; no line this branch adds carries one. The two trailer lines
+    are the session's harness's and stay, and nothing is rebased or
+    amended, as in rounds 5 to 21.
+
+Claims that were not true, and what they say now (this round's): §15's
+"the route checks the bounds before the store is asked" (now every check,
+the identities among them, with what is true where one refuses for good),
+"which cancelling a release makes" (one that has not fired), its arm
+paragraph's "the switch is read again on a connection of its own until a
+read answers" for a read back that has not answered (waited for), and "or
+the sweep's move at the deadline" (what the sweep's process announces and
+when, and the layout in which the deadline brought nothing); Still open's
+"a restart or its deadline" and "the route checks the bounds before the
+store"; decision 37's "logged at each pass" (true now also of a refusal
+answered after the bound, with what is logged when); round 21's "no later
+attempt" among the conditions of the read after a refused carry, and its "a
+cancel that has reached the row is always seen by the carry that follows
+it", each corrected where it stands; round 20's list of tracked files;
+`KNOWN_LIMITATIONS.md`'s Retention item ("or the server's background work
+next writes that switch, at the switch's former deadline"), its Durability
+item ("the bounds are checked first, though", "cancelling a release that
+counts toward it makes room") and its check-ins item ("a notice of it from
+another process, a restart, or its deadline"); the changelog's "unless one
+of those limits, which are checked first, refuses that arm" and "until the
+process that runs the sweep learns the switch is cancelled or you cancel it
+again" (now with what that process then does); the threat model's row
+("the sweep's process next writes the switch", "and no bound refuses that
+first") and header; §10's and §15's sentences on what blanks a cancelled
+switch's copies where the sending process stopped; and the comments in
+`store.ts` (`carryWouldApplyTo`, `takeCarryAnswer`,
+`readBackAfterRefusedCarry`, `SwitchReadBack`, `awaitSwitchStatement`,
+`readBackAfterFailure`, `retrySettleReads`, `armDeadmanSwitch`,
+`writeDeadmanSwitchIf`, `blankCopiesOfCancelledSwitch`) and `deadman.ts`
+(the 503's and the 500's).
+
+Raised and refuted: nothing this round; every finding stood. Of the fixes
+the verifiers offered: the read after a refused carry is decided as the fix
+quality verifier suggested, the clause kept for `takeCarriedColumn`; a late
+refusal is logged on the callers' two lines with a mark, not on a line of
+its own; and of the claims verifier's two ways with "or its deadline", the
+code one is built and the sentences then say what it does and does not
+reach.
+
+Decisions: none new. Decision 37 gains what is logged for a refusal
+answered after the bound. Not done this round, unchanged: the
+recipient-side refusal (decision 19), the legacy retention decision (20),
+the rows of cancelled switches (24) and the alias's key (25, 26) are the
+operator's, as written; decisions 32, 33, 35, 36 and 37 stay open; the
+"aside found while probing round 6" stays as it is in Still open. PR 4 is
+not built here, and `BLACKOUT_DEADMAN_RELEASES` stays off everywhere. The
+shared pool's `'error'` listener is still `develop`'s and `-v62`'s (pull
+request #1011), not merged; `src/config/postgres.ts` is unchanged here.
+
+Round 22's mutants (`fix/r22/mut/spec-round22.json`, written by
+`spec-round22.py`; run with `fix/r22/mutrun.py`, which is `fix/mut/run2.py`
+made to change a scratch copy of the worktree's tracked packages and never
+the worktree, on the round's code commit `6c47f2e2f9`, one test command at
+a time, the file compared with the worktree's before each mutant, equal;
+`fix/r22/mutfinal/run-round22.log`). Thirteen mutants: all caught. A first
+run on the working tree before the commit, without test 93 and before test
+34 asserted what a pass that blanked nothing announces, caught twelve and
+let Q13 through (`fix/r22/mut/run-round22.log`); the assertion was added
+for it.
+
+| Check removed                                                                            | Test           | What failed                                                    |
+| ---------------------------------------------------------------------------------------- | -------------- | -------------------------------------------------------------- |
+| Q01: the read is skipped where the mirror holds a later attempt (round 21's clause back) | 90             | the cancel never reached the sender (the other 92 pass)        |
+| Q02: a refused carry is not followed by a read of the switch                             | 31, 54, 82, 90 | no read after a refusal the mirror could not explain           |
+| Q03: every refused carry is followed by a read, whatever the mirror holds                | 2, 10, 71      | a read and an announcement more than the settle's              |
+| Q04: a fired switch in the mirror is not asked (`stillAsAttemptRead`)                    | 2, 52          | an announcement more; a refused attempt put on a fired row     |
+| Q05: a cancelled switch in the mirror is not asked                                       | 10, 45, 51, 71 | an announcement more; a refused attempt Postgres does not hold |
+| Q06: the mirror's last check-in is not asked                                             | 45             | a refused attempt Postgres does not hold                       |
+| Q07: a landed carry's column goes onto an entry holding a later attempt                  | 49             | the later attempt written over                                 |
+| Q08: a refusal answered after the bound is not logged                                    | 91             | no refusal line when the answer came                           |
+| Q09: a late refusal is logged on the update's line, an arm's too                         | 91             | the arm's refusal on the wrong line                            |
+| Q10: a late refusal is logged without its code                                           | 91             | the line without the SQLSTATE                                  |
+| Q11: a late refusal is logged unmarked                                                   | 91             | the line without `afterBound`                                  |
+| Q12: the pass does not announce a cancelled switch whose copies it blanked               | 92             | the switch not announced with its copies                       |
+| Q13: the pass announces a cancelled switch though it blanked nothing                     | 34             | an announcement where Postgres had no copy left to blank       |
+
+All tests named by number are in
+`deadman-switch-writes-postgres.integration.test.ts`, which now has 93
+tests; run whole, three times, 93 of 93 pass each time. Q04 to Q06 change
+the helper the read's decision shares with the taking of a carried column
+(`stillAsAttemptRead`, through `carryWouldApplyTo`), which is where test 45
+catches Q06. Not counted as checks: the comments and the documents. Not
+mutated: test 93 pins a stated limit, which no line of this round's makes.
+
+The verifiers' probes, run against the final code (`fix/r22/snap-probes`,
+a copy of this worktree's tracked packages at `6c47f2e2f9`, `src` compared
+with the worktree's, equal, each probe file appended to a copy of the
+switch-writes file as it stood at round 21's head, as the verifiers ran
+them; `fix/r22/probes/fq-on-final.log` and `claims-on-final.log`). The fix
+quality verifier's six pass. Its probe 6 no longer ends as it did: one read
+follows the refused carry, and the sender is then cancelled with its
+content gone, its list and export cancelled and no copy held in Postgres,
+where it was armed with two held. Its probe 1 now logs
+`deadman_switch_arm_refused` once with `23514` and the mark, beside the
+timeout and the settle, where it logged no refusal and no code. The claims
+verifier's eight pass. A no longer ends as it did: at the worker's first
+pass the switch it had read cancelled is announced once and the API
+process holds it cancelled, its content and the refused attempt gone, where
+it held it armed at every pass up to 400 days past the deadline; the switch
+the worker still held armed is announced at the same pass, as before. E
+(409 `recipient_identity_superseded`, unlisted, then listed once the
+process has read every table again), F (one read of the switch, waited
+for, none queued to be read again) and G (the settle after a refused carry
+waiting with nothing held, another owner's check-in made meanwhile) show
+what they showed, which the documents and the comments now say; B, C, D
+and H as before.
+
 ### Still open
 
 -   **A recipient-side refusal of an owner** (decision 19), which the
@@ -10988,8 +11341,20 @@ paragraph in it before the commit: clean, no match.
     (a cancelled one armed, with its content, a refused attempt Postgres
     no longer holds and every sealed copy held in Postgres, though it can
     no longer fire), and so do its list and its export, until the owner's
-    next check-in or cancel of the switch, a refresh of it from another
-    process's announcement, a restart or its deadline. Reading the switch
+    next check-in or cancel of the switch there, a restart, or a refresh
+    of it from another process's announcement. The sweep's process makes
+    one when it moves the switch or is refused a move of it (at the
+    deadline, for a switch it still holds armed) and, since round 22, when
+    its pass blanks the copies still held on a switch it has read
+    cancelled, at its first pass after reading it so (until then this said
+    "or its deadline", which in the deployed layout, where the process that
+    sent the cancel runs no sweep, brought nothing in once the worker had
+    read the switch cancelled: test 92). For a late check-in no such pass
+    comes: the process that sent it shows the switch's earlier check-in
+    and deadline, the sooner of the two, until the owner's next check-in
+    or cancel there, a restart, or the sweep's process moving the switch
+    or being refused a move of it, which is no later than its first pass
+    after the deadline Postgres holds for the switch. Reading the switch
     again on a timer after any failed statement would narrow it further
     and not close it, since nothing bounds how long such a statement runs
     on; not built. Stated in §15, `KNOWN_LIMITATIONS.md`, the changelog and
@@ -11005,14 +11370,25 @@ paragraph in it before the commit: clean, no match.
     when it starts and when its change subscription reconnects (round 21:
     this said only a restart), or the owner arms
     the same envelope again and that arm reaches the store, which takes
-    the switch into the mirror; the route checks the bounds before the
-    store, so an owner who has reached one since is refused by it first
-    and has to make room under it, which cancelling a release does for
+    the switch into the mirror; every check of the route comes before the
+    store (round 22: this named the bounds alone), so an owner who has
+    reached a bound since is refused by it first
+    and has to make room under it, which cancelling a release that has not
+    fired does for
     the bounds on releases held, only time for the arms in 24 hours, and
-    nothing the owner can do for the bound of 50 owners. Counting an arm of unknown outcome
+    nothing the owner can do for the bound of 50 owners; and an owner whose
+    release identity, or that of a person the envelope names, was replaced
+    since, or whose envelope names an account since deleted, is refused
+    for that every time, so that switch is brought in by nothing but a
+    process reading every table again, and is fired at its deadline by the
+    sweep's process once that one has (test 93). Counting an arm of unknown outcome
     toward the bounds for a time, or reading it once more later, would
     narrow this and not close it, since nothing bounds how long such a
-    statement runs on; not built. Stated in §15, `KNOWN_LIMITATIONS.md`,
+    statement runs on; not built. Looking the envelope's id up in Postgres
+    ahead of the route's other checks, for an arm one of them refuses,
+    would let the owner bring such a switch in whatever has changed since,
+    at one read per refused arm and with `release_id_taken` answered ahead
+    of the bounds and the identities; not built either. Stated in §15, `KNOWN_LIMITATIONS.md`,
     the changelog and the threat model's row; test 80 of the switch-writes
     file pins it (round 20).
 -   **A refused check-in's note is its process's own until its carry
