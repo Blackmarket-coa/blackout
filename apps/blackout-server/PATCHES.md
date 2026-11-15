@@ -1695,3 +1695,49 @@ Error during startup`), under either Twisted; a configured key pair never
   A host key authenticates the server; the keys that encrypt a session come
   from the SSH key exchange. The fork's line says that instead. A fork change
   to upstream's text, so keep it through a reconciliation.
+
+## 2026-11-15 tornado 6.6.1, sentry-sdk 1.45.1, pygments 2.20.0 (three Low advisories)
+
+Edits outside `blackout_runtime/` for three Low advisories against packages in
+`poetry.lock` that no gate reports (Trivy's gate is CRITICAL/HIGH, and nothing
+runs osv-scanner on this lock). Recorded in
+`docs/security/dependency-advisories-server-desktop-2026-11-14.md` (repository
+root). Upstream element-hq/synapse `develop` at `e5ac865` locks tornado 6.6,
+sentry-sdk 2.57.0 and pygments 2.20.0, so only the pygments entry matches
+upstream's; re-check the other two lines during any reconciliation.
+
+- `pyproject.toml`: `tornado = "^6.6.1"` (was `>=6.5.9`). 6.6.1 (PyPI,
+  2026-11-09) fixes GHSA-5cjw-f85j-cv6r, an open redirect in
+  `tornado.web.RedirectHandler`. tornado is here for jaeger-client, which
+  imports its `ioloop`, `gen`, `queues`, `concurrent`, `httpclient` and
+  `httputil` modules and never `tornado.web`; nothing under `synapse/` or
+  `blackout_runtime/` imports tornado. Caret-bound below 7, which has not been
+  released or checked.
+- `pyproject.toml`: `sentry-sdk = "^1.45.1"` (was `>=0.7.2`). 1.45.1 (PyPI,
+  2024-07-26), the last 1.x release, fixes GHSA-g92j-qhmh-64v2: with the SDK's
+  stdlib integration on, a child process started with `env={}` received the
+  whole parent environment. Capped below 2 on purpose: 2.x deprecates
+  `sentry_sdk.configure_scope()`, which `synapse/app/_base.py` (`setup_sentry`)
+  still uses for its three tags. Upstream's file calls
+  `sentry_sdk.Scope.get_global_scope()` instead; port that change before
+  lifting the cap, and then take upstream's 2.x lock entry.
+- `poetry.lock`: `poetry lock --no-update` under poetry 1.3.2. tornado 6.6 to
+  6.6.1 and sentry-sdk 1.35.0 to 1.45.1, then pygments 2.15.1 to 2.20.0 (dev
+  only: twine's rich and readme-renderer, sphinx and furo), which fixes
+  GHSA-5239-wwwm-4pmq. pygments has no line in `pyproject.toml`; the lock was
+  moved with a temporary `pygments = "2.20.0"` constraint that was removed
+  again, so `content-hash` corresponds to the committed `pyproject.toml`
+  (`poetry lock --check` passes). All three entries' file hashes match PyPI's,
+  and the pygments entry is the one upstream's lock carries. 151 packages
+  before and after; nothing else moves. The image's export
+  (`poetry export --extras all`) changes in two requirements, `sentry-sdk` and
+  `tornado`.
+- No fork code changed. No shipped homeserver template has a `sentry` or an
+  `opentracing` section, so neither package is imported in a deployment as
+  shipped; both are installed in the image by `--extras all`.
+- Not bumped, with the reason beside the constraint or in the record:
+  soupsieve 2.10 (optional `dev-docs` group; the fixed releases, 3.0.2 and
+  4.0, require Python >=3.11.5 and the fork's floor is 3.11.0, so poetry
+  refuses them; the `pyproject.toml` comment over `soupsieve` says so) and
+  black 23.10.1 (dev; as the 2026-10-25 entry above left it: on this tree
+  26.10.1 would reformat 212 of 966 files, 23.10.1 27).

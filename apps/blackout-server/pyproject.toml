@@ -301,14 +301,25 @@ authlib = { version = ">=1.9.1,<1.10", optional = true }
 systemd-python = { version = ">=231", optional = true }
 # 6.1.0 fixes GHSA-vfmq-68hx-4jfw (High).
 lxml = { version = ">=6.1.0", optional = true }
-sentry-sdk = { version = ">=0.7.2", optional = true }
+# 1.45.1 (PyPI 2024-07-26) fixes GHSA-g92j-qhmh-64v2 / CVE-2024-40647 (Low): with
+# the stdlib integration on, a subprocess started with env={} was handed the
+# whole parent environment. It is the last 1.x release. Capped below 2: the
+# 2.x line deprecates configure_scope(), which synapse/app/_base.py
+# setup_sentry() still uses for its tags (upstream moved to
+# Scope.get_global_scope() and locks 2.x; port that before lifting the cap).
+# See docs/security/dependency-advisories-server-desktop-2026-11-14.md
+# (repository root).
+sentry-sdk = { version = "^1.45.1", optional = true }
 opentracing = { version = ">=2.2.0", optional = true }
 jaeger-client = { version = ">=4.0.0", optional = true }
 # thrift and tornado are jaeger-client's dependencies, pinned for the same
 # reason as the transitive floors above: 0.24.0 fixes GHSA-6pjx-3pjc-mrj8 and
-# GHSA-8wv5-x4w7-5gww, 6.5.9 fixes all ten High advisories against tornado 6.2.
+# GHSA-8wv5-x4w7-5gww, 6.5.9 fixes all ten High advisories against tornado 6.2,
+# and 6.6.1 (PyPI 2026-11-09) fixes GHSA-5cjw-f85j-cv6r (Low, an open redirect
+# in tornado.web, which Synapse does not serve with). Caret-bound: tornado 7
+# has not been released or checked.
 thrift = { version = ">=0.24.0", optional = true }
-tornado = { version = ">=6.5.9", optional = true }
+tornado = { version = "^6.6.1", optional = true }
 txredisapi = { version = ">=1.4.7", optional = true }
 hiredis = { version = "*", optional = true }
 # Pympler 1.1 depends on pywin32 on Windows, which ships no sdist, and
@@ -446,7 +457,15 @@ sphinx-autodoc2 = ">=0.4.2,<0.6.0"
 myst-parser = "^1.0.0"
 furo = ">=2022.12.7,<2024.0.0"
 # soupsieve is beautifulsoup4's dependency (via furo); 2.8.4 fixes
-# GHSA-2wc2-fm75-p42x and GHSA-836r-79rf-4m37 (both High).
+# GHSA-2wc2-fm75-p42x and GHSA-836r-79rf-4m37 (both High). The lock holds 2.10,
+# which GHSA-6655-6qjp-jx7x and GHSA-7g44-g9rc-x53w (fixed in 3.0.2) and
+# GHSA-mmhr-3c5m-f64f (fixed in 4.0) are filed against. Every release from
+# 3.0.2 on requires Python >=3.11.5 and this project's floor is 3.11.0, so
+# poetry refuses to lock one for the whole range. Not raised: it is installed
+# only with this optional docs group, never in the image, and furo 2023.9.10
+# calls BeautifulSoup's find_all() and find(), never a CSS selector. See
+# docs/security/dependency-advisories-server-desktop-2026-11-14.md (repository
+# root).
 soupsieve = ">=2.8.4"
 
 
