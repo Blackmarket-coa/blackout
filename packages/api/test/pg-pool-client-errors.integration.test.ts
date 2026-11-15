@@ -641,6 +641,52 @@ test('a LISTEN connection whose idle-session timeout cannot be put back is destr
     assert.ok(c.released[0] instanceof Error, 'with the error: the pool destroys it');
 });
 
+test("a LISTEN connection dropped under close()'s UNLISTEN is given back once, and close() resolves", async (t) => {
+    const lines = captureLogs(t);
+    const c = new FakeListenClient();
+    // A Postgres restart during a drain. The socket drops under UNLISTEN: pg
+    // emits 'error' on the client, then rejects that statement and every
+    // later one.
+    c.query = async (sql: string) => {
+        c.queries.push(sql);
+        if (sql === UNLISTEN) {
+            c.emit('error', terminated());
+            throw terminated();
+        }
+        if (c.ending) {
+            throw new Error('Client has encountered a connection error and is not queryable');
+        }
+        return {};
+    };
+    // pg-pool throws when a client is given back a second time.
+    const release = c.release.bind(c);
+    c.release = (err?: Error) => {
+        release(err);
+        if (c.released.length > 1) {
+            throw new Error(
+                'Release called on client which has already been released to the pool.'
+            );
+        }
+    };
+    let connects = 0;
+    const transport = new PgNotifyTransport({
+        connect: async () => {
+            connects += 1;
+            return c;
+        },
+    });
+    await transport.subscribe(() => undefined);
+
+    // The 'error' listener gives the connection back with its error. close()
+    // must not give it back again.
+    await transport.close();
+    assert.equal(c.released.length, 1, 'given back once');
+    assert.ok(c.released[0] instanceof Error, 'with its error: the pool destroys it');
+    assert.equal(logged(lines, 'pg_notify_listen_error').length, 1);
+    await sleep(50);
+    assert.equal(connects, 1, 'a closed transport opens no replacement');
+});
+
 test('a LISTEN connection dropped while the idle-session statement is out fails as one dropped under LISTEN does: given back once, replaced once', async (t) => {
     captureLogs(t);
     const clients: FakeListenClient[] = [];

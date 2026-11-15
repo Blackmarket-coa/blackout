@@ -844,11 +844,16 @@ What remains:
     on the app replicas and leave the loops to the worker, which exits 1 on the
     loss and comes back through its restart policy.
 -   A role's or database's `idle_session_timeout` (PostgreSQL 14 and later)
-    still ends the pool's ordinary connections. The server ends one that sits
-    idle that long; the pool drops it, the drop is logged and counted as above
-    (`state` `idle`, code `57P05`), and the pool opens another when it next
-    needs one. With a short timeout those lines and counts keep coming while
-    nothing is wrong.
+    still ends the pool's ordinary connections where it is 10 s or shorter.
+    The pool closes its own idle connections after 10 s (pg-pool's default
+    `idleTimeoutMillis`, which `config/postgres.ts` leaves in place), so a
+    server timeout longer than that finds none left to end, and none of what
+    follows appears. At exactly 10 s the two come due together; in each of
+    three runs here the server's came first. Under a timeout of 10 s or less
+    the server ends a connection that sits idle that long; the pool drops it,
+    the drop is logged and counted as above (`state` `idle`, code `57P05`),
+    and the pool opens another when it next needs one. Those lines and counts
+    keep coming while nothing is wrong.
 -   The LISTEN connection sends nothing after LISTEN. Since 2026-11-15 it
     turns the server's `idle_session_timeout` off for its own session
     (`SET idle_session_timeout = 0`, before it listens) and puts it back
