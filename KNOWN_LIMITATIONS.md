@@ -747,12 +747,14 @@ For the source-of-truth triage with tier/owner detail see
     the database from then: the switch can no longer fire, and nothing is
     released from it. That server shows it cancelled, removes its sealed
     copies and tells the server's other processes once the switch has been
-    read back, as above. If that server process stops before then, the
+    read back, as above. If that server process stops before then, or
+    before the removal it then queues has been written, the
     copies stay in the database, sealed and given to nobody, until the
     process that runs the server's sweep learns that the switch is
     cancelled (when it restarts, or when its sweep reaches the switch's
-    check-in deadline and finds it so), and a process not yet told shows
-    the switch as armed meanwhile. A check-in confirmed late counts. The server's own move of a switch
+    check-in deadline and finds it so) or you cancel the switch again,
+    which removes them, and a process not yet told shows the switch as
+    armed meanwhile. A check-in confirmed late counts. The server's own move of a switch
     (into grace, or firing it) is checked the same way and reaches the
     process's memory only once the database has it, so nothing is served or
     sent for a firing the database refused; one the database does not

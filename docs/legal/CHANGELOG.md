@@ -139,7 +139,7 @@ each correction.
     back, which it tries again until the database answers it; if that
     process stops first, the copies stay in the database, sealed and given
     to nobody, until the process that runs the sweep learns the switch is
-    cancelled. While the database
+    cancelled or you cancel it again. While the database
     does not answer, check-ins are refused, and the server treats that time
     as an outage of its own for the switches it kept from moving: one due
     then gets the 72-hour grace window instead of firing; such a stall counts
