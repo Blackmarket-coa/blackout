@@ -360,16 +360,17 @@ package depends on either (the lockfile's only importer of both is
 -   **Held by** `packages/api/test/websocket-upgrade-guard.integration.test.ts`
     (12 tests, part of `pnpm test:integration`): the real app behind
     `serve()`, wired by `attachWebSocketShims`; resets after 0, 20, 200 and
-    900 ms on six unclaimed paths; the guard's answer, counter and log
-    line; what the three shims answer themselves (101 on `/twitch-irc`, on
-    `/obs-ws/` with an active id and on `/se-overlay/`, a socket.io client
-    that gets to `connect`, and their own 400s and 404); CONNECT and a
-    malformed request; and the API process itself, started as `start-app`
-    starts it. With the guard taken out of `attachWebSocketShims`, which is
-    the wiring as it was, 7 of the 12 fail: the in-process reset test with
-    `uncaughtException`, `read ECONNRESET`, and the process test with exit
-    code 1 and the stack above. Fourteen other one-line changes to the
-    guard were tried the same way, and each fails at least one test.
+    900 ms on `/v1/health` and after 20 ms on five other unclaimed paths;
+    the guard's answer, counter and log line; what the three shims answer
+    themselves (101 on `/twitch-irc`, on `/obs-ws/` with an active id and
+    on `/se-overlay/`, a socket.io client that gets to `connect`, and their
+    own 400s and 404); CONNECT and a malformed request; and the API process
+    itself, started as `start-app` starts it. With the guard taken out of
+    `attachWebSocketShims`, which is the wiring as it was, 7 of the 12
+    fail, among them the in-process reset test (`uncaughtException`,
+    `read ECONNRESET`) and the process test (exit code 1, with the stack
+    above). Fourteen other one-line changes to the guard were tried the
+    same way, and each fails at least one test.
 -   **Exposure through this repository's proxies was not established, and
     this record does not say whether the crash could be triggered in
     production.**
@@ -801,7 +802,7 @@ time.
 | prettier, duplicate paths (fix)  | `prettier --check` on the five changed files (this record and four under `packages/api`); `node tools/ci/check-duplicate-paths.mjs`                                                                                                                                              | pass; exit 0, five checks passed                                                                                                                                                                                                                                                                                         |
 | OSV (fix)                        | osv-scanner v2.3.3, `TZ=UTC`, `--lockfile=pnpm-lock.yaml`, 03:08Z                                                                                                                                                                                                                | exit 0: "No issues found", 1 filtered (deepmerge)                                                                                                                                                                                                                                                                        |
 | gitleaks (fix)                   | 8.21.2: `gitleaks dir --no-banner --redact` on each of the five changed files; `gitleaks git --no-banner --redact --log-opts="origin/develop..HEAD"` at 03:09Z, after the fix's commit and before this record's                                                                  | "no leaks found" on each file and over the range ("3 commits scanned"). A first file scan had flagged RFC 6455's sample handshake nonce, written as a literal in the new test (`generic-api-key`); the test now generates its nonce, and nothing was added to `.gitleaksignore`                                          |
-| lint-staged, auth guard (fix)    | `npx lint-staged --concurrent false` and `node tools/ci/check-auth-secrets.mjs` before each of the two commits                                                                                                                                                                   | lint-staged: `prettier --write --ignore-unknown` on the staged files, no change; guard: "Auth secret hardening check passed", exit 0                                                                                                                                                                                     |
+| lint-staged, auth guard (fix)    | `npx lint-staged --concurrent false` and `node tools/ci/check-auth-secrets.mjs` before the fix's commit and before each commit of this record                                                                                                                                    | lint-staged: `prettier --write --ignore-unknown` on the staged files, no change; guard: "Auth secret hardening check passed", exit 0                                                                                                                                                                                     |
 
 **Not verified:**
 
