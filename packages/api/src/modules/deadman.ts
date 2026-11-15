@@ -132,16 +132,23 @@ const switchChanged = (c: Context) =>
     );
 
 /**
- * The database did not answer a check-in, a cancel or an arm in time
- * (`updateDeadmanSwitchIf`, `armDeadmanSwitch`): one that was sent may or may
- * not have been recorded, and nothing of it is in this process's memory until
- * it is; one refused at once because another switch statement already stood
- * unanswered was not sent, so it was not recorded. Doing a check-in or a
- * cancel again is safe, since each is conditional on the switch as it is
- * read; an arm done again with the same envelope is refused
- * `release_id_taken` if the first landed after all, and the switch is then
- * in the owner's list. Also an arm whose statement failed and whose switch
- * could not be read afterwards either.
+ * The database did not answer a check-in, a cancel or an arm in time, or
+ * failed it (`updateDeadmanSwitchIf`, `armDeadmanSwitch`): one that was sent
+ * may or may not have been recorded. After one that failed, the switch has
+ * been read back where the database answered that read within the bound, so
+ * this process then holds what the database holds (a cancel it had recorded
+ * shows cancelled); one not yet read back, and one that lands or fails
+ * later, is read until a read answers, and nothing of it is in this
+ * process's memory until then (round 20 of part 2's review: a failed one
+ * was read back by nothing). One refused at once because another switch
+ * statement stood unanswered, or a failed one's switch unread, was not sent,
+ * so it was not recorded. Doing a check-in or a cancel again is safe, since
+ * each is conditional on the switch as it is read; an arm done again with
+ * the same envelope is refused if the first landed after all
+ * (`release_id_taken`, or a bound the switch itself fills, which is checked
+ * first), and the switch is in the owner's list once it has been read. Also
+ * an arm whose statement failed and whose switch could not be read
+ * afterwards within the bound.
  */
 const switchWriteUnanswered = (c: Context, what: 'check-in' | 'cancel' | 'arm') =>
     c.json(
@@ -155,9 +162,12 @@ const switchWriteUnanswered = (c: Context, what: 'check-in' | 'cancel' | 'arm') 
 /**
  * The arm's statement failed, and the switch read again afterwards was not
  * there: nothing is armed (a statement the database was still running when
- * its client was lost can commit after that read; the next arm of the same
- * envelope then finds it and answers `release_id_taken`, with the switch in
- * the owner's list).
+ * its client was lost can commit after that read; no process then knows of
+ * the switch, and no bound counts it, until the next arm of the same
+ * envelope that reaches the store finds it and answers `release_id_taken`,
+ * with the switch in the owner's list, or a process restarts; the bounds are
+ * checked before the store is asked, so an owner who has reached one since
+ * is refused by it first).
  */
 const switchWriteFailed = (c: Context) =>
     c.json(
@@ -279,7 +289,9 @@ const ownedSwitch = (id: string, subject: string): DeadmanSwitchRecord | undefin
  * A stall of the database's statements is an outage of this sweep for the
  * switches it kept from moving, and of every owner's check-in on this
  * process: a switch due at any moment while they stood (the store keeps
- * when they began and settled), or whose owner's check-in or cancel was
+ * when they began and settled; since round 20 a statement that fails, and
+ * whose switch then cannot be read back within its bound, counts from then
+ * until a read back has answered), or whose owner's check-in or cancel was
  * refused unanswered here and has not checked in since, gets the backlog
  * window instead of firing, within the tolerance or not, as after an outage
  * of the sweep's own (round 11 of part 2's review: a stall an hour before a

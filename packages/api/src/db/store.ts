@@ -391,26 +391,58 @@ const eraseSwitchUnlessFiredOn = async (
     return { row, copies, restored };
 };
 
-/** How waiting for one switch statement ended (`PostgresBackedDb.awaitSwitchStatement`). */
+/**
+ * What a switch's read back in its lane found (`settleSwitchStatement`): the
+ * switch and, where asked, its copies as Postgres holds them; `undefined`
+ * where Postgres has no such switch; `'unread'` where the read failed or had
+ * not answered when its caller stopped waiting (the switch is then read
+ * again until a read answers, `retrySettleReads`).
+ */
+type SwitchReadBack =
+    | { row: Record<string, unknown>; copies: Array<Record<string, unknown>> }
+    | undefined
+    | 'unread';
+
+/**
+ * How waiting for one switch statement ended
+ * (`PostgresBackedDb.awaitSwitchStatement`). `failed`: the statement
+ * rejected within its bound, an unknown outcome, and `readBack` is what
+ * reading the switch back within what was left of the bound found.
+ */
 type SwitchStatementWait<T> =
     | { kind: 'answered'; answer: T }
-    | { kind: 'failed' }
+    | { kind: 'failed'; readBack: SwitchReadBack }
     | { kind: 'timeout' };
 
 /**
- * A late statement's settle (`settleSwitchStatement`): the switch, the
- * mirror's entry for it when the settle began, whether its copies are read
- * too (the arm), the switch's entry in `carriesBehindSettle`, and, once its
- * read back has failed and it waits to be read again (`retrySettleReads`),
- * what ends it.
+ * The settle of a statement that answered late or failed
+ * (`settleSwitchStatement`): the switch, the mirror's entry for it when the
+ * settle began, whether its copies are read too (the arm), the switch's
+ * entry in `carriesBehindSettle`, which of the two it follows (what its take
+ * is logged as), and, once its read back has failed and it waits to be read
+ * again (`retrySettleReads`), what ends it.
  */
 type PendingSettle = {
     id: string;
     seen: Record<string, unknown> | undefined;
     withCopies: boolean;
     reading: { reading: number; notes: Array<{ at: string; lastCheckInAt: string }> };
+    after: 'answer' | 'failure';
     done?: () => void;
 };
+
+/**
+ * Whether a switch statement that answered after its bound was not run at all
+ * (its caller had stopped waiting before its turn came, so it sent nothing):
+ * there is then nothing in Postgres for a settle to read back. Every other
+ * late answer is read back, an arm's that found the id taken included: the
+ * switch it found is one this mirror lacked when the arm was sent, and the
+ * arm's caller, answered at the bound, took nothing of it (round 20 of part
+ * 2's review: such an answer was dropped, so the switch stayed out of this
+ * mirror, its owner's list and the bounds).
+ */
+const wasNotRun = (landed: unknown): boolean =>
+    !landed || typeof landed !== 'object' || 'skipped' in landed;
 
 /** Coalition demo seed rows, or none when demo seeding is off (default in production). */
 const demoSeedRows = <T>(rows: T[]): T[] => (shouldSeedCoalitionDemoData() ? rows : []);
@@ -10196,18 +10228,25 @@ export class PostgresBackedDb extends InMemoryDb {
 
     /**
      * The conditional statements of switches that did not answer in time and
-     * have not settled since (`stalledSwitchStatement`: the stall). While one
-     * is here no other conditional write of a
+     * have not settled since, and (round 20) those that failed, within their
+     * bound or after it, whose switch has not yet been read back
+     * (`stalledSwitchStatement`: the stall). While one is here no other
+     * conditional write of a
      * switch is sent (each is `unanswered` at once), on any switch: one
      * statement the database did not answer says the database is not
      * answering, and a stalled database then costs a pass one bound, not one
-     * per switch, and the owner's routes answer 503 at once. It is
+     * per switch, and the owner's routes answer 503 at once; and one that
+     * failed is an unknown outcome until the switch has been read. It is
      * process-wide on purpose, and since round 11 a statement waits only for
      * this process's earlier writes to the same switch, so a backlog of
      * writes to other tables no longer sets it. It stands until each such
-     * statement answers or fails and, where it landed, until the switch's
-     * read back has been taken (`settleSwitchStatement`), which nothing here
-     * bounds: the shared pool sets no connection or statement timeout and no
+     * statement answers or fails and, unless it was never run, until the
+     * switch's read back has been taken (`settleSwitchStatement`); for the
+     * sweep it is a stall (`switchStalls`) from the moment a statement passes
+     * its bound, or a failed one's read back fails or passes what was left of
+     * that bound, and not while a failed statement's read back answers
+     * within it. Nothing here
+     * bounds it: the shared pool sets no connection or statement timeout and no
      * TCP keepalive, so a statement whose bytes the database's host
      * acknowledged before it went silent is never given up on here (the
      * operating system runs no timer on a connection waiting for an answer)
@@ -10247,7 +10286,7 @@ export class PostgresBackedDb extends InMemoryDb {
      */
     private readonly stalledSwitchStatements = new Set<Promise<unknown>>();
 
-    /** A statement that passed its bound and has not settled, while any stands: the stall. */
+    /** A statement that passed its bound, or failed, and has not settled, while any stands: the stall. */
     private get stalledSwitchStatement(): Promise<unknown> | null {
         return this.stalledSwitchStatements.values().next().value ?? null;
     }
@@ -10366,6 +10405,15 @@ export class PostgresBackedDb extends InMemoryDb {
 
     /** The read again of failed settles under way (`runSettleRetryPass`), if one is. */
     private settleRetryPass: Promise<void> | null = null;
+
+    /**
+     * The read backs in a switch's lane not yet answered
+     * (`settleSwitchStatement`), so `drainWrites` waits for one queued while
+     * it waited (round 20 of part 2's review: a shutdown begun while a
+     * cancel stood unanswered returned as soon as the cancel landed, with
+     * its read back still out, since that read is queued only then).
+     */
+    private readonly settleLaneReads = new Set<Promise<unknown>>();
 
     /** The timer of the next read again of failed settles, after one that failed. */
     private settleRetryTimer: ReturnType<typeof setTimeout> | null = null;
@@ -10833,6 +10881,29 @@ export class PostgresBackedDb extends InMemoryDb {
         this.carryRetryTimer = null;
     }
 
+    /**
+     * Mark a conditional write of the switch in flight
+     * (`switchWritesInFlight`): its note of what this process's own plain
+     * writes of the switch change meanwhile, and what ends the mark. Ending
+     * it twice is safe: a mark another write has made since is not this
+     * one's to remove.
+     */
+    private beginSwitchWrite(id: string): { note: Map<string, unknown>; end: () => void } {
+        const note = new Map<string, unknown>();
+        const notes = this.switchWritesInFlight.get(id) ?? new Set<Map<string, unknown>>();
+        notes.add(note);
+        this.switchWritesInFlight.set(id, notes);
+        return {
+            note,
+            end: () => {
+                notes.delete(note);
+                if (notes.size === 0 && this.switchWritesInFlight.get(id) === notes) {
+                    this.switchWritesInFlight.delete(id);
+                }
+            },
+        };
+    }
+
     private noteOwnSwitchWrite(
         id: string,
         prior: Record<string, unknown>,
@@ -10848,11 +10919,10 @@ export class PostgresBackedDb extends InMemoryDb {
 
     /**
      * Wait for a switch statement up to `switchStatementTimeoutMs`. One that
-     * answers in time is the caller's to apply; one that throws is logged
-     * (`deadman_switch_write_failed`) and `failed`; one that does not answer
-     * is `timeout`: it is marked abandoned, so it is not run if its turn in
-     * the queue has not yet come, the process's switch statements are
-     * stalled until it settles, and when it settles having landed,
+     * answers in time is the caller's to apply. One that does not answer is
+     * `timeout`: it is marked abandoned, so it is not run if its turn in the
+     * queue has not yet come, the process's switch statements are stalled
+     * until it settles, and when it settles having landed,
      * `settleSwitchStatement` takes what it did into the mirror and
      * announces it (round 11 of part 2's review: a cancel answered 503 that
      * landed left the mirror armed, every copy held, and told no process).
@@ -10862,14 +10932,41 @@ export class PostgresBackedDb extends InMemoryDb {
      * the re-read fails, until a read again on a connection of its own has
      * (round 19: the stall ended with the failure, and nothing read the
      * switch again).
+     *
+     * One that rejects is an unknown outcome, within its bound or after it:
+     * the connection can be lost after the database applied the statement
+     * (a failover, a reset, a pooler dropping its client). It is logged
+     * (`deadman_switch_write_failed`) and the switch is read back and taken
+     * exactly as after a statement that landed late, with no switch
+     * statement sent by this process until a read back has been taken
+     * (round 20 of part 2's review: a rejected statement was read back by
+     * nothing, so a cancel the database had applied left this process, its
+     * list and its export holding the switch armed and every sealed copy
+     * held in Postgres, and an arm whose insert had committed was in no
+     * mirror, counted toward no bound, until the owner's next write of the
+     * switch, a restart or the deadline). Within its bound the wait goes on
+     * for that read, up to what is left of the bound, and the answer is
+     * `failed` with what it found; where it did not answer in that time, or
+     * failed, the hold becomes a stall in the sweep's sense too
+     * (`switchStalls`), until a read has been taken. A read back that
+     * answers at once opens no stall, so a statement that failed without
+     * landing is still the next pass's to make (round 10).
+     *
+     * `endInFlight` ends the caller's mark of a conditional write of the
+     * switch in flight (`beginSwitchWrite`) before a failed statement is
+     * read back: that read must not take the failed statement for a write
+     * still in flight, whose answer would bring the row.
      */
     private async awaitSwitchStatement<T>(
         id: string,
         statement: Promise<T>,
         call: { abandoned: boolean },
-        withCopies: boolean
+        withCopies: boolean,
+        endInFlight?: () => void
     ): Promise<SwitchStatementWait<T>> {
+        const deadline = Date.now() + this.switchStatementTimeoutMs;
         let timer: ReturnType<typeof setTimeout> | undefined;
+        let outcome: { answer: T } | { error: unknown } | 'timeout';
         try {
             const answer = await Promise.race([
                 statement,
@@ -10877,44 +10974,111 @@ export class PostgresBackedDb extends InMemoryDb {
                     timer = setTimeout(() => resolve('timeout'), this.switchStatementTimeoutMs);
                 }),
             ]);
-            if (answer !== 'timeout') {
-                // The database answers: a refused attempt noted here whose
-                // carry has not landed is tried now (decision 31).
-                this.carryRefusedOwnerWrites();
-                return { kind: 'answered', answer: answer as T };
-            }
-        } catch (err) {
-            log.error('deadman_switch_write_failed', {
-                error: err instanceof Error ? err.message : String(err),
-            });
-            return { kind: 'failed' };
+            outcome = answer === 'timeout' ? 'timeout' : { answer: answer as T };
+        } catch (error) {
+            outcome = { error };
         } finally {
             clearTimeout(timer);
         }
-        call.abandoned = true;
-        const stall = this.openSwitchStall();
-        const stalled: Promise<unknown> = statement
-            .then(
-                (landed) => this.settleSwitchStatement(id, landed, withCopies),
-                () => undefined
-            )
-            .finally(() => {
-                this.stalledSwitchStatements.delete(stalled);
-                // The stall stands while any statement that passed its bound
-                // has not settled, not only the one that passed it last.
-                if (this.stalledSwitchStatements.size > 0) return;
-                stall.endedAt = Date.now();
-                log.info('deadman_switch_write_settled', {});
-                // The database answers again: a note whose carry has
-                // not landed is tried now (decision 31).
-                this.carryRefusedOwnerWrites();
+        if (outcome !== 'timeout' && 'answer' in outcome) {
+            // The database answers: a refused attempt noted here whose
+            // carry has not landed is tried now (decision 31).
+            this.carryRefusedOwnerWrites();
+            return { kind: 'answered', answer: outcome.answer };
+        }
+        if (outcome !== 'timeout') {
+            log.error('deadman_switch_write_failed', {
+                error:
+                    outcome.error instanceof Error ? outcome.error.message : String(outcome.error),
             });
-        this.stalledSwitchStatements.add(stalled);
+            endInFlight?.();
+            return {
+                kind: 'failed',
+                readBack: await this.readBackAfterFailure(id, withCopies, deadline),
+            };
+        }
+        call.abandoned = true;
+        this.openSwitchStall();
+        this.holdSwitchStatements(
+            statement.then(
+                (landed) =>
+                    wasNotRun(landed)
+                        ? undefined
+                        : this.settleSwitchStatement(id, withCopies, 'answer').taken,
+                // Rejected after its bound: an unknown outcome, read back too.
+                () => this.settleSwitchStatement(id, withCopies, 'failure').taken
+            )
+        );
         log.error('deadman_switch_write_failed', {
             error: 'timeout',
             timeoutMs: this.switchStatementTimeoutMs,
         });
         return { kind: 'timeout' };
+    }
+
+    /**
+     * No switch statement is sent by this process until `work` has ended
+     * (`stalledSwitchStatement`). When the last such work ends, a stall in
+     * the sweep's sense that was standing ends with it, and a refused
+     * attempt whose carry has not landed is tried (decision 31): the
+     * database answers again.
+     */
+    private holdSwitchStatements(work: Promise<unknown>): Promise<unknown> {
+        const held: Promise<unknown> = work
+            .then(
+                () => undefined,
+                () => undefined
+            )
+            .finally(() => {
+                this.stalledSwitchStatements.delete(held);
+                // The stall stands while any statement that passed its bound
+                // or failed has not settled, not only the one that did last.
+                if (this.stalledSwitchStatements.size > 0) return;
+                const stall = this.switchStalls[this.switchStalls.length - 1];
+                if (stall && stall.endedAt === null) {
+                    stall.endedAt = Date.now();
+                    log.info('deadman_switch_write_settled', {});
+                }
+                this.carryRefusedOwnerWrites();
+            });
+        this.stalledSwitchStatements.add(held);
+        return held;
+    }
+
+    /**
+     * A statement that rejected within its bound: the switch is read back
+     * in its lane and taken (`settleSwitchStatement`), no switch statement
+     * being sent meanwhile, and this waits for that read until `deadline`
+     * (the statement's own bound). Where the read has not answered by then,
+     * or failed, the answer is `'unread'`, the hold is a stall from then on
+     * (`openSwitchStall`), and the switch is read until a read answers.
+     * Where it answered, the hold has ended by the time this returns (it
+     * ends a few turns of the microtask queue after the row was taken), so
+     * the caller's next statement, the sweep's move of the next switch in
+     * the same pass, is sent and not refused over a hold that is already
+     * over.
+     */
+    private async readBackAfterFailure(
+        id: string,
+        withCopies: boolean,
+        deadline: number
+    ): Promise<SwitchReadBack> {
+        const settle = this.settleSwitchStatement(id, withCopies, 'failure');
+        const held = this.holdSwitchStatements(settle.taken);
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const read = await Promise.race([
+            settle.read,
+            new Promise<'unread'>((resolve) => {
+                timer = setTimeout(() => resolve('unread'), Math.max(0, deadline - Date.now()));
+            }),
+        ]);
+        clearTimeout(timer);
+        if (read === 'unread') {
+            if (this.stalledSwitchStatements.has(held)) this.openSwitchStall();
+            return read;
+        }
+        await held;
+        return read;
     }
 
     /** The stall now standing, or a new one begun now. */
@@ -10928,31 +11092,30 @@ export class PostgresBackedDb extends InMemoryDb {
     }
 
     /**
-     * A statement that answered after its bound and landed: the switch is
-     * read again from Postgres, in the row's lane, so after any write of it
-     * this process queued meanwhile, and the row taken (`takeSettledRow`);
-     * where that read fails, the switch is read again on a connection of its
-     * own (`retrySettleReads`), each try within `carryTimeoutMs` and, after
-     * one that failed or passed its bound, another `carryRetryMs` later,
-     * until one answers, and that row is taken the same way (round 19 of
-     * part 2's review: a failed read took nothing, announced nothing and
-     * blanked nothing). Nothing of a statement that was not run, or that
-     * found the id taken, is here to take. Resolves once a read back has
-     * been taken: the stall the statement opened stands until then, so
-     * after a failed read until the database answers a new connection from
-     * this process with the row, and while the lane's read is out, which
-     * nothing bounds, for as long as it is.
+     * A statement that answered after its bound and landed, or one that
+     * rejected, within its bound or after it (an unknown outcome): the
+     * switch is read again from Postgres, in the row's lane, so after any
+     * write of it this process queued meanwhile, and the row taken
+     * (`takeSettledRow`); where that read fails, the switch is read again on
+     * a connection of its own (`retrySettleReads`), each try within
+     * `carryTimeoutMs` and, after one that failed or passed its bound,
+     * another `carryRetryMs` later, until one answers, and that row is taken
+     * the same way (round 19 of part 2's review: a failed read took nothing,
+     * announced nothing and blanked nothing; round 20: a statement that
+     * rejected was not read back at all). `read` answers with what the
+     * lane's read found, once it has been taken, or `'unread'` where it
+     * failed; `taken` resolves once a read back has been taken: the hold
+     * on this process's switch statements stands until then, so after a
+     * failed read until the database answers a new connection from this
+     * process with the row, and while the lane's read is out, which nothing
+     * bounds, for as long as it is.
      */
-    private settleSwitchStatement(id: string, landed: unknown, withCopies: boolean): Promise<void> {
-        if (
-            !landed ||
-            typeof landed !== 'object' ||
-            'skipped' in landed ||
-            'taken' in landed ||
-            !this.queue
-        ) {
-            return Promise.resolve();
-        }
+    private settleSwitchStatement(
+        id: string,
+        withCopies: boolean,
+        after: 'answer' | 'failure'
+    ): { read: Promise<SwitchReadBack>; taken: Promise<void> } {
+        if (!this.queue) return { read: Promise.resolve('unread'), taken: Promise.resolve() };
         // While the read is out, and until a read again has answered, a
         // carry's answer for the switch leaves the mirror alone but for its
         // column once Postgres is read to hold it (`takeCarryAnswer`,
@@ -10962,42 +11125,68 @@ export class PostgresBackedDb extends InMemoryDb {
             reading = { reading: 0, notes: [] };
             this.carriesBehindSettle.set(id, reading);
         }
-        reading.reading += 1;
+        const behind = reading;
+        behind.reading += 1;
         const settle: PendingSettle = {
             id,
             seen: this.mapByName('deadmanSwitches').get(id),
             withCopies,
-            reading,
+            reading: behind,
+            after,
         };
-        return this.readSwitchAndCopiesInLane(id, withCopies)
-            .then((found) => this.takeSettledRow(settle, found))
+        let answerRead!: (found: SwitchReadBack) => void;
+        const read = new Promise<SwitchReadBack>((resolve) => {
+            answerRead = resolve;
+        });
+        // The lane's read, for `drainWrites`: it is queued only now, after a
+        // drain that began while the statement stood may have taken its
+        // snapshot of the queue.
+        this.settleLaneReads.add(read);
+        void read.then(() => this.settleLaneReads.delete(read));
+        const taken = this.readSwitchAndCopiesInLane(id, withCopies)
+            .then((found) => {
+                this.takeSettledRow(settle, found);
+                answerRead(found);
+            })
             .catch((err) => {
                 log.warn('deadman_switch_settle_read_failed', {
                     error: err instanceof Error ? err.message : String(err),
                 });
+                answerRead('unread');
                 return this.retrySettleRead(settle);
             })
             .finally(() => {
-                reading.reading -= 1;
-                if (reading.reading === 0 && this.carriesBehindSettle.get(id) === reading) {
+                behind.reading -= 1;
+                if (behind.reading === 0 && this.carriesBehindSettle.get(id) === behind) {
                     this.carriesBehindSettle.delete(id);
                 }
             });
+        return { read, taken };
     }
 
     /**
      * A settle's read back of its switch, as Postgres holds it: the row goes
      * into the mirror unless the mirror's entry changed since the settle
      * began other than by a carried column (a write of this process's or a
-     * refresh, each at least as new; a carry's answer, whose row can be
+     * refresh; a carry's answer, whose row can be
      * older, does not change it while the settle is out but for its column
      * once Postgres is read to hold it: rounds 17 and 18 of part 2's review)
      * or a conditional write of the switch is in flight (its own merge takes
      * the row); with `withCopies` (the arm), the switch's copies the mirror
      * lacks go in too; the switch and each such copy are announced to the
-     * other processes; and a switch found cancelled has its held copies
+     * other processes; and a switch found cancelled, in the row read or in
+     * the mirror, has its held copies
      * blanked (a cancel landing this way blanks nothing itself: the route
-     * does that, after an answer it did not get). Where the row went in, the
+     * does that, after an answer it did not get). Where the row is kept
+     * out, the switch is read once more by key, behind the fence of this
+     * process's queued writes (`refreshKeys`): the change that kept it out
+     * is usually newer than the row read, but a refresh's row is not
+     * always, since its read can have run before the statement landed and
+     * its answer reached this process after the settle began (round 20 of
+     * part 2's review: the mirror then kept the row from before a landed
+     * cancel, armed with its content, and, the copies being blanked only
+     * where the mirror said cancelled, every sealed copy stayed held in
+     * Postgres). Where the row went in, the
      * column of each carry whose answer came while the switch was being
      * settled goes on after it, with `takeCarriedColumn`'s conditions: the
      * row may have been read before that carry landed, and Postgres holds
@@ -11020,9 +11209,21 @@ export class PostgresBackedDb extends InMemoryDb {
             ) && !this.switchWritesInFlight.has(id);
         this.takeSwitchFromPostgres(id, found, tookRow);
         const current = this.getDeadmanSwitch(id);
-        log.info('deadman_switch_write_landed', { status: current?.status });
-        if (current?.status === 'cancelled') this.blankHeldCopiesOf(id);
-        if (!tookRow) return;
+        log.info(
+            settle.after === 'answer'
+                ? 'deadman_switch_write_landed'
+                : 'deadman_switch_read_back_after_failure',
+            { status: current?.status }
+        );
+        // Cancelled is final, so a row read cancelled is cancelled now,
+        // whatever this mirror holds.
+        if (current?.status === 'cancelled' || found.row.status === 'cancelled') {
+            this.blankHeldCopiesOf(id);
+        }
+        if (!tookRow) {
+            this.rereadSwitch(id);
+            return;
+        }
         const waiting = this.carriedColumnsToConfirm.get(id);
         for (const note of settle.reading.notes) {
             this.takeCarriedColumn(id, note);
@@ -11030,6 +11231,21 @@ export class PostgresBackedDb extends InMemoryDb {
         }
         if (waiting?.length === 0) this.carriedColumnsToConfirm.delete(id);
         if (this.carriedColumnsToConfirm.size === 0) this.clearColumnConfirmTimer();
+    }
+
+    /**
+     * Read a switch's row once more by key, on the chain of mirror refreshes
+     * (`refreshKeys`: the row Postgres holds goes into the mirror, behind the
+     * fence of this process's queued writes of it, and is read again where
+     * the mirror changed meanwhile). For a settle whose row was kept out. A
+     * read that fails is logged and not tried again, as any refresh
+     * (`onApplyChain`): the mirror then keeps the change that kept the row
+     * out until the switch is next refreshed or written.
+     */
+    private rereadSwitch(id: string): void {
+        const plan = this.plans.get('deadmanSwitches');
+        if (!plan || !this.pool) return;
+        this.onApplyChain('reread', () => this.refreshKeys(plan, [[id]]), 'deadmanSwitches');
     }
 
     /**
@@ -11058,7 +11274,8 @@ export class PostgresBackedDb extends InMemoryDb {
      * lane it is ordered after nothing this process queued since the
      * settle's own read ran; the mirror's entry tells: a write of the switch
      * this process made since, or a refresh, changed it, and the row read is
-     * then kept out (`takeSettledRow`). While a settle waits here the stall
+     * then kept out and the switch read once more by key (`takeSettledRow`).
+     * While a settle waits here the stall
      * stands, so no conditional write of a switch is sent by this process.
      */
     private retrySettleReads(): void {
@@ -11276,16 +11493,27 @@ export class PostgresBackedDb extends InMemoryDb {
      * answered with that owner's view; round 13: so was a cancelled switch
      * of the same owner's with the id); not found, `failed` (the route
      * answers 500, nothing in the mirror; a statement the database was still
-     * running when its client was lost can commit after that read, and is
-     * then found as `id_taken` by the next arm of the envelope and taken into
-     * the mirror then); where that read fails too, `unanswered`. One that does not
-     * answer in time is `unanswered` (the route answers 503) with nothing in
-     * the mirror; if it lands later, the switch and its copies go into the
-     * mirror then and are announced (`settleSwitchStatement`), so the owner's
-     * list shows it, and arming the same envelope again is refused
-     * `release_id_taken`. One sent while another switch statement already
-     * stands unanswered is `unanswered` at once and was not sent, so it
-     * cannot land.
+     * running when its client was lost can commit after that read: the
+     * switch is then in Postgres and in no running process's mirror, so no
+     * list shows it and no bound counts it, until an arm of the same
+     * envelope reaches the store, finds it and takes it into the mirror, or
+     * a process restarts and reads it; the route's bounds are checked before
+     * the store is asked, so an owner who has since filled one is refused by
+     * it first); where that read fails too, or does not answer within what
+     * is left of the statement's bound, `unanswered`, and the switch is read
+     * again until a read answers, no switch statement being sent by this
+     * process meanwhile, so no arm reads the bounds without it (round 20:
+     * nothing read it again, and the next arm passed a bound the hidden
+     * switch had filled). One that does not answer in time is `unanswered`
+     * (the route answers 503) with nothing in the mirror; when it answers
+     * later, or fails later (an unknown outcome again), the switch is read
+     * back and, where Postgres holds it, it and its copies go into the
+     * mirror then and are announced (`settleSwitchStatement`), so the
+     * owner's list shows it and the bounds count it, and arming the same
+     * envelope again is refused (`release_id_taken`, or a bound the switch
+     * itself now fills, which the route checks first). One sent while
+     * another switch statement already stands unsettled is `unanswered` at
+     * once and was not sent, so it cannot land.
      */
     override async armDeadmanSwitch(
         input: Omit<DeadmanSwitchRecord, 'createdAt' | 'updatedAt'>,
@@ -11343,19 +11571,21 @@ export class PostgresBackedDb extends InMemoryDb {
         const waited = await this.awaitSwitchStatement(input.id, statement, call, true);
         const map = this.mapByName('deadmanSwitches');
         if (waited.kind === 'failed') {
-            // Unknown outcome: the insert may have committed. Read before answering.
-            let found: Found | undefined;
-            try {
-                found = await this.readSwitchAndCopiesInLane(input.id, true);
-            } catch (err) {
-                log.warn('deadman_switch_arm_read_failed', {
-                    error: err instanceof Error ? err.message : String(err),
-                });
+            // Unknown outcome: the insert may have committed. The switch has
+            // been read back in its lane, and where Postgres holds it, it and
+            // its copies are in the mirror and announced (`takeSettledRow`).
+            // Where that read failed, or did not answer within what was left
+            // of the bound, the switch is read until a read answers, and no
+            // arm reads the bounds without it meanwhile: the stall stands
+            // (round 20 of part 2's review: nothing read it again, and the
+            // next arm passed a bound the hidden switch had filled).
+            const found = waited.readBack;
+            if (found === 'unread') {
+                log.warn('deadman_switch_arm_read_failed', {});
                 return { kind: 'unanswered' };
             }
             if (!found) return { kind: 'failed' };
             log.info('deadman_switch_arm_found_after_failure', {});
-            this.takeSwitchFromPostgres(input.id, found, !map.has(input.id));
             // Only this arm's own insert is answered as armed: the owner's,
             // written at this call's moment. Another owner's switch with this
             // id is not this arm's, and its owner's view is not this caller's
@@ -11369,10 +11599,11 @@ export class PostgresBackedDb extends InMemoryDb {
             // within its read-back) and was dropped in round 14: the answer
             // carries the row as Postgres has it.
             const foundRecord = rowToRecord(plan, found.row);
-            if (foundRecord.ownerId !== input.ownerId || foundRecord.createdAt !== ts) {
+            const taken = this.getDeadmanSwitch(input.id);
+            if (!taken || foundRecord.ownerId !== input.ownerId || foundRecord.createdAt !== ts) {
                 return { kind: 'id_taken' };
             }
-            return { kind: 'armed', record: this.getDeadmanSwitch(input.id)! };
+            return { kind: 'armed', record: taken };
         }
         if (waited.kind === 'timeout') return { kind: 'unanswered' };
         const answer = waited.answer;
@@ -11451,17 +11682,27 @@ export class PostgresBackedDb extends InMemoryDb {
      * Since round 11 arming awaits its own insert (`armDeadmanSwitch`), so
      * this reaches only rows dropped before that.
      *
-     * A statement that fails is logged and `unanswered`: nothing of it is in
-     * the mirror, it is safe to repeat, and the sweep's next pass does (round
-     * 10: one failure kept the move in the mirror only, and no pass tried it
-     * again). One that does not answer within `switchStatementTimeoutMs` is
-     * the same, and is not run if its turn in the queue has not yet come;
-     * one already sent can still land later, and when it does the switch is
-     * read again, taken into the mirror and announced, and a landed cancel's
-     * copies are blanked (`settleSwitchStatement`; round 11: nothing was,
-     * so the mirror said armed, every copy stayed held and no process was
-     * told until the next pass happened to refresh the row). Its domain
-     * event is still not emitted.
+     * A statement that fails is logged and `unanswered`, and is an unknown
+     * outcome (the connection can be lost after the database applied it):
+     * the switch is read back in its lane before the answer, within what is
+     * left of the statement's bound, and the row Postgres holds is taken
+     * into the mirror and announced, a cancelled switch's copies blanked
+     * (`awaitSwitchStatement`; round 20 of part 2's review: nothing read it,
+     * so a cancel the database had applied left this mirror armed and every
+     * copy held). Where it had not landed, the row read is the one the
+     * mirror had: the write is safe to repeat, and the sweep's next pass
+     * does (round 10: one failure kept the move in the mirror only, and no
+     * pass tried it again). Where that read fails or does not answer in
+     * time, no switch statement is sent by this process until a read again
+     * has answered, and the sweep counts that time as a stall. One that
+     * does not answer within `switchStatementTimeoutMs` is `unanswered` too,
+     * and is not run if its turn in the queue has not yet come; one already
+     * sent can still land later, or fail later, and when it does the switch
+     * is read again, taken into the mirror and announced, and a landed
+     * cancel's copies are blanked (`settleSwitchStatement`; round 11:
+     * nothing was, so the mirror said armed, every copy stayed held and no
+     * process was told until the next pass happened to refresh the row).
+     * The domain event of a move taken this way is still not emitted.
      */
     private async writeDeadmanSwitchIf(
         id: string,
@@ -11502,10 +11743,8 @@ export class PostgresBackedDb extends InMemoryDb {
                   'OR owner_attempt_refused_at <= last_check_in_at ' +
                   'OR backlog_grace_started_at IS NOT NULL) '
                 : '';
-        const note = new Map<string, unknown>();
-        const notes = this.switchWritesInFlight.get(id) ?? new Set<Map<string, unknown>>();
-        notes.add(note);
-        this.switchWritesInFlight.set(id, notes);
+        const inFlight = this.beginSwitchWrite(id);
+        const note = inFlight.note;
         const call = { abandoned: false };
         const statement = queue.enqueueCall(
             async (client) => {
@@ -11549,11 +11788,14 @@ export class PostgresBackedDb extends InMemoryDb {
         );
         let waited: SwitchStatementWait<Awaited<typeof statement>>;
         try {
-            waited = await this.awaitSwitchStatement(id, statement, call, false);
+            waited = await this.awaitSwitchStatement(id, statement, call, false, inFlight.end);
         } finally {
-            notes.delete(note);
-            if (notes.size === 0) this.switchWritesInFlight.delete(id);
+            inFlight.end();
         }
+        // Failed or not answered in time: an unknown outcome either way. One
+        // that failed has been read back (or is being read until a read
+        // answers), and one that lands late is when it does; what Postgres
+        // holds is in the mirror, announced, once it has been.
         if (waited.kind !== 'answered') return { kind: 'unanswered' };
         const answer = waited.answer;
         if ('skipped' in answer) return { kind: 'unanswered' };
@@ -11655,10 +11897,8 @@ export class PostgresBackedDb extends InMemoryDb {
         // What Postgres is given where it has no row for the switch.
         const restore = erasedSwitchRecord(before);
         if (!this.stalledSwitchStatement) {
-            const note = new Map<string, unknown>();
-            const notes = this.switchWritesInFlight.get(id) ?? new Set<Map<string, unknown>>();
-            notes.add(note);
-            this.switchWritesInFlight.set(id, notes);
+            const inFlight = this.beginSwitchWrite(id);
+            const note = inFlight.note;
             const call = { abandoned: false };
             const statement = queue.enqueueCall(
                 async (client) => {
@@ -11671,10 +11911,9 @@ export class PostgresBackedDb extends InMemoryDb {
             );
             let waited: SwitchStatementWait<Awaited<typeof statement>>;
             try {
-                waited = await this.awaitSwitchStatement(id, statement, call, false);
+                waited = await this.awaitSwitchStatement(id, statement, call, false, inFlight.end);
             } finally {
-                notes.delete(note);
-                if (notes.size === 0) this.switchWritesInFlight.delete(id);
+                inFlight.end();
             }
             if (waited.kind === 'answered' && !('skipped' in waited.answer)) {
                 const erased = waited.answer.erased;
@@ -12236,7 +12475,9 @@ export class PostgresBackedDb extends InMemoryDb {
      * Await this process's writes only: every op queued so far has run
      * (committed, or failed after its retry and been counted), the switch
      * statements in their lanes included, and so have a queued erase's retry
-     * and read-back, a try of the carry and the reads that follow one. Mirror
+     * and read-back, a try of the carry and the reads that follow one, and
+     * the read back of a switch statement that landed or failed while this
+     * waited, with the writes its take queued. Mirror
      * refreshes still on the apply chain (a peer's change, a table reload,
      * the rehydrate after a reconnect) are not waited for; they are reads,
      * not durability. flushRuntimeStoreWrites uses this, and so do the
@@ -12257,6 +12498,13 @@ export class PostgresBackedDb extends InMemoryDb {
         // 16), and one it started again on its way out; each is bounded.
         while (this.carryPass) await this.carryPass;
         while (this.columnConfirmPass) await this.columnConfirmPass;
+        // A statement that landed or failed while this waited has its read
+        // back queued in its lane only then (round 20): that read, and the
+        // writes its take queued. One that fails is read again below.
+        while (this.settleLaneReads.size > 0) {
+            await Promise.allSettled([...this.settleLaneReads]);
+            await this.queue?.drain();
+        }
         // A read again of a failed settle under way (round 19), each try
         // bounded, and the writes its take queued (a cancelled switch's
         // copies blanked).
@@ -12282,8 +12530,15 @@ export class PostgresBackedDb extends InMemoryDb {
     /**
      * Flush queued writes and tear down the change subscription — graceful
      * shutdown only. Refused owner writes not yet carried, and settles whose
-     * read back failed, get one last try, waited for; no retry timer is set
-     * after it.
+     * read back had failed and were waiting to be read again when this
+     * began, get one last try, waited for; a switch statement that lands or
+     * fails while this drains has its read back in the switch's lane waited
+     * for too, with the writes its take queues, and where that read fails,
+     * one read again (`drainWrites`; round 20 of part 2's review: this
+     * returned as soon as such a statement had landed, its read back still
+     * out). No retry timer is set after it. A lane read that never answers
+     * holds this until the process's forced exit, as a statement that never
+     * answers does.
      */
     async shutdown(): Promise<void> {
         this.carryStopped = true;

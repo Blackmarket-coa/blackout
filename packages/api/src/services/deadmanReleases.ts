@@ -533,11 +533,15 @@ export type ArmReleaseOutcome =
  * or deleted during the awaits. Nothing yields between the second check and
  * the moment the arm is counted as one this process is writing
  * (`armsInFlight`), which counts toward every bound until the store has
- * answered, and a database stall refuses every arm until a landed row is in
- * the mirror, so on one process exactly the bound passes and every copy
- * written is sealed to a current key (rounds 2, 3, 11 and 12 of part 2's
- * review); across replicas the store is eventually consistent and a bound can
- * be exceeded within its refresh window. Once the store has answered, the
+ * answered, and a database stall, or a failed arm whose switch has not yet
+ * been read back, refuses every arm until the row Postgres holds is in the
+ * mirror, so on one process exactly the bound passes, but for an arm whose
+ * insert the database commits only after its failed statement's switch was
+ * read back and not found (no process counts it until one reads it), and
+ * every copy written is sealed to a current key (rounds 2, 3, 11, 12 and 20
+ * of part 2's review); across replicas the store is eventually consistent
+ * and a bound can be exceeded within its refresh window. Once the store has
+ * answered, the
  * owner's account is looked at once more: where the owner's deletion ran
  * while the rows were written, the switch is erased again before the answer
  * and the arm is refused `no_account` (round 13: such an arm was answered 201
