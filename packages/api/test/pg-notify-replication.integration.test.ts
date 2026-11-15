@@ -188,7 +188,10 @@ test('a dropped LISTEN connection that raises error twice is replaced once, and 
     t.mock.timers.tick(2000);
     await settle();
     assert.equal(clients.length, 2, 'one new LISTEN connection, not two');
-    assert.deepEqual(clients[1].sql, ['LISTEN blackout_store_change']);
+    assert.deepEqual(clients[1].sql, [
+        'SET idle_session_timeout = 0',
+        'LISTEN blackout_store_change',
+    ]);
     assert.equal(rehydrates, 1, 'one rehydrate');
     assert.equal(clients[0].released.length, 1, 'the dead connection is released once');
     assert.ok(clients[0].released[0] instanceof Error, 'and destroyed, not returned to the pool');

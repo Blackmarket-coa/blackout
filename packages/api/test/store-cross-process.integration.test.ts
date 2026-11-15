@@ -122,6 +122,19 @@ async function pgliteDatabase(): Promise<Database> {
                         }
                         return { rows: [] };
                     }
+                    // The listening connection turns the server's idle-session
+                    // timeout off for itself before LISTEN, and puts it back
+                    // before it is pooled. Like LISTEN, that is no reason to
+                    // hold the session: a lease kept from here would never be
+                    // given back, and every other client would wait for it.
+                    if (/^(SET|RESET)\s+idle_session_timeout\b/i.test(sql.trim())) {
+                        const free = held ? null : await lease.acquire();
+                        try {
+                            return await run(sql, params);
+                        } finally {
+                            free?.();
+                        }
+                    }
                     if (!held) held = await lease.acquire();
                     return run(sql, params);
                 },
