@@ -111,9 +111,10 @@ packages) and the legacy API's `requirements.txt` (8) have no finding.
 
 Commits, on top of `7a9814ebc9`: `8da7864591` (the desktop lock), `77b21a72b1`
 (the fork's lock, with the `PATCHES.md` entry), `02edf2a48b` (the sidecar's
-pins), `dd3bd88a30` (mio 1.2.4 instead of 1.2.5), then this record, with
-dated notes in the three earlier records it follows and a correction to the
-new `PATCHES.md` entry ([Corrections](#corrections)).
+pins), `dd3bd88a30` (mio 1.2.4 instead of 1.2.5), then `0b26cf1f67`, this
+record, with dated notes in the three earlier records it follows and a
+correction to the new `PATCHES.md` entry, and a last commit that only extends
+[Corrections](#corrections).
 
 ---
 
@@ -644,19 +645,23 @@ for a reconciliation with upstream's formatter.
 
 ## Corrections
 
-Three statements in this change's own commits are wrong or loose, and the
-commits are not rewritten:
+Statements in this change's own commits that are wrong or loose. The commits
+are not rewritten, so this is where they are put right:
 
 -   **`PATCHES.md`, as `77b21a72b1` wrote it, said neither tornado nor
     sentry-sdk is imported in a deployment as shipped.** True of sentry-sdk.
     tornado is loaded at startup wherever jaeger-client is installed, the
     image included ([tornado](#tornado-66--661)); what is never loaded is
-    `tornado.web`. The entry is corrected in the commit that adds this
-    record.
+    `tornado.web`. The entry was corrected in `0b26cf1f67`.
 -   **`8da7864591`'s message says "no crate in the Linux tree names
     VariantStrIter".** glib itself does; no other crate does.
--   **`dd3bd88a30`'s title calls mio 1.2.5 "day-old".** It was published
-    about 31 hours before that commit.
+-   **`02edf2a48b`'s message says "two function routes with a JSON body".**
+    Only `POST /perturb` takes a body; `GET /health` takes none.
+-   **`dd3bd88a30`'s title calls mio 1.2.5 "day-old", and its body says it
+    was published "the day before this change".** It was published about 31
+    hours before that commit.
+-   **`0b26cf1f67`'s message places the `PATCHES.md` entry "two commits
+    ago".** The entry is in `77b21a72b1`, three commits before it.
 
 ## Not verified
 
