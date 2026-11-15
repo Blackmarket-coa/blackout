@@ -697,6 +697,63 @@ test('close() while the idle-session statement is out sends no LISTEN on the con
     assert.deepEqual(c.released, ['pooled'], 'given back once');
 });
 
+test('close() while a reconnect is under way reports no reconnect', async (t) => {
+    captureLogs(t);
+    const info = captureInfo(t);
+    const clients: FakeListenClient[] = [];
+    let answerExempt: () => void = () => undefined;
+    const exemptAnswered = new Promise<void>((r) => (answerExempt = r));
+    const transport = new PgNotifyTransport({
+        connect: async () => {
+            const c = new FakeListenClient();
+            if (clients.length === 1) {
+                // The reconnect's connection: one statement at a time, answered
+                // in the order sent, the idle-session statement when the test
+                // says and each later one a turn of the event loop after it.
+                let last: Promise<unknown> = Promise.resolve();
+                c.query = (sql: string) => {
+                    c.queries.push(sql);
+                    const answer = last
+                        .then(() =>
+                            sql === EXEMPT
+                                ? exemptAnswered
+                                : new Promise<void>((r) => setImmediate(r))
+                        )
+                        .then(() => ({}));
+                    last = answer;
+                    return answer;
+                };
+            }
+            clients.push(c);
+            return c;
+        },
+    });
+    let reconnects = 0;
+    transport.onReconnect(() => (reconnects += 1));
+    await transport.subscribe(() => undefined);
+    clients[0].emit('error', terminated());
+    await waitFor(
+        () => clients[1]?.queries.length === 1,
+        'the reconnect to send its first statement'
+    );
+
+    // The transport is closed before the reconnect has listened. The
+    // reconnect's connection is still the transport's while close() waits for
+    // its own statements on it.
+    const closed = transport.close();
+    answerExempt();
+    await closed;
+    await sleep(50);
+    assert.deepEqual(clients[1].queries, [EXEMPT, UNLISTEN, RESTORE], 'no LISTEN was sent');
+    assert.deepEqual(clients[1].released, ['pooled'], 'given back once');
+    assert.equal(reconnects, 0, 'no re-hydrate is asked for');
+    assert.deepEqual(
+        logged(info, 'pg_notify_listen_reconnected'),
+        [],
+        'and no reconnect is logged'
+    );
+});
+
 const probePlan = {
     descriptor: {
         mapName: 'probe',

@@ -224,9 +224,11 @@ export class PgNotifyTransport implements StoreChangeTransport {
             void (async () => {
                 try {
                     await this.openListenConnection();
-                    // Closed meanwhile, or this connection already dropped again
+                    // Closed meanwhile (close() may not have given the
+                    // connection back yet, and may have come before LISTEN was
+                    // sent on it), or this connection already dropped again
                     // (that drop scheduled the next attempt, which refreshes).
-                    if (!this.listenClient) return;
+                    if (this.closed || !this.listenClient) return;
                     // We may have missed notifications while disconnected — force a full refresh.
                     this.reconnectHandler?.();
                     log.info('pg_notify_listen_reconnected');
