@@ -6,9 +6,19 @@
  * pool connection is covered by pg-pool-client-errors.integration.test.ts
  * (stand-in connections) and pg-pool-client-errors-postgres.integration.test.ts
  * (the API process against PostgreSQL).
+ *
+ * The last test here starts the API process itself (src/index.ts), in memory
+ * mode, and sends it SIGTERM: its shutdown stops the loops before it waits
+ * for anything.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { spawn } from 'node:child_process';
+import { once } from 'node:events';
+import { createServer as createHttpServer } from 'node:http';
+import net from 'node:net';
+import { fileURLToPath } from 'node:url';
+import { generateTestJwtSecret } from './_fixtures/secrets';
 
 process.env.NODE_ENV = process.env.NODE_ENV ?? 'test';
 process.env.BLACKOUT_DB_MODE = 'memory';
@@ -213,3 +223,135 @@ test('stop() during a lock attempt waits for it and starts nothing', async () =>
     assert.equal(watches, 0, 'nothing watched');
     assert.equal(loops.started, 0, 'no loop started');
 });
+
+/** A port nothing listens on right now (the API's env check refuses PORT=0). */
+const freePort = async (): Promise<number> => {
+    const probe = net.createServer();
+    probe.listen(0, '127.0.0.1');
+    await once(probe, 'listening');
+    const { port } = probe.address() as net.AddressInfo;
+    probe.close();
+    await once(probe, 'close');
+    return port;
+};
+
+test(
+    'the API process stops its loops when SIGTERM arrives, before it waits for anything: no tick starts while a request in flight holds the shutdown open',
+    { skip: process.platform === 'win32' ? 'POSIX signals' : false, timeout: 120_000 },
+    async (t) => {
+        // A loop whose ticks show from outside: the Owncast metrics poll asks
+        // the origin for /api/status once per tick. With no analytics
+        // warehouse configured it does nothing more.
+        const polls: number[] = [];
+        const owncast = createHttpServer((req, res) => {
+            if (req.url === '/api/status') polls.push(Date.now());
+            res.writeHead(200, { 'content-type': 'application/json' });
+            res.end('{"online":false,"viewerCount":0}');
+        });
+        owncast.listen(0, '127.0.0.1');
+        await once(owncast, 'listening');
+        t.after(() => {
+            owncast.closeAllConnections();
+            owncast.close();
+        });
+
+        const port = await freePort();
+        const env: NodeJS.ProcessEnv = {
+            ...process.env,
+            // Not `test`, or the API does not listen (src/index.ts shouldListen).
+            NODE_ENV: 'development',
+            // In memory mode the one process is always the leader.
+            BLACKOUT_DB_MODE: 'memory',
+            PORT: String(port),
+            JWT_SECRET_PRIMARY: generateTestJwtSecret(),
+            BLACKOUT_OWNCAST_METRICS: '1',
+            BLACKOUT_OWNCAST_METRICS_INTERVAL_SECONDS: '1',
+            OWNCAST_BASE_URL: `http://127.0.0.1:${(owncast.address() as net.AddressInfo).port}`,
+            // Past this the shutdown exits whatever it is waiting for.
+            SHUTDOWN_TIMEOUT_MS: '60000',
+        };
+        for (const key of [
+            // Set, the API leaves the loops to a worker and runs none.
+            'BLACKOUT_BACKGROUND_WORKERS_DISABLED',
+            'BLACKOUT_API_SKIP_LISTEN',
+            'DATABASE_URL',
+            'REDIS_URL',
+        ]) {
+            delete env[key];
+        }
+        const child = spawn(process.execPath, ['--import', 'tsx', 'src/index.ts'], {
+            cwd: fileURLToPath(new URL('../', import.meta.url)),
+            env,
+            stdio: ['ignore', 'pipe', 'pipe'],
+        });
+        t.after(() => {
+            if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+        });
+        let output = '';
+        child.stdout.on('data', (d) => (output += d));
+        child.stderr.on('data', (d) => (output += d));
+        const exited = new Promise<number | null>((r) => child.once('exit', (code) => r(code)));
+        const logged = (msg: string): boolean => output.includes(`"msg":"${msg}"`);
+
+        await waitFor(
+            () =>
+                (logged('blackout-server listening') &&
+                    logged('background_loops_started') &&
+                    polls.length >= 2) ||
+                child.exitCode !== null,
+            'the API to listen and its Owncast loop to tick twice',
+            90_000
+        );
+        assert.equal(child.exitCode, null, `the API exited early:\n${output}`);
+
+        // A request in flight: its headers have arrived, its body has not.
+        // The server's close() waits for it, so the shutdown stays where it
+        // waits for the server to close, and the process stays up. Without
+        // that the process would be gone before the next tick came due, and
+        // this test would pass whatever the shutdown did about the loops.
+        const pending = net.connect(port, '127.0.0.1');
+        t.after(() => pending.destroy());
+        pending.on('error', () => undefined);
+        await once(pending, 'connect');
+        pending.write(
+            'POST /v1/auth/register HTTP/1.1\r\nHost: 127.0.0.1\r\n' +
+                'Content-Type: application/json\r\nContent-Length: 64\r\n\r\n{'
+        );
+        await sleep(300);
+
+        child.kill('SIGTERM');
+        await waitFor(
+            () => logged('shutdown_signal_received') || child.exitCode !== null,
+            'the API to take the signal',
+            10_000
+        );
+        const atSignal = polls.length;
+        // Five of the loop's intervals.
+        await sleep(5_000);
+        assert.equal(
+            child.exitCode,
+            null,
+            `the request in flight no longer holds the shutdown open:\n${output}`
+        );
+        // One poll may still arrive: a tick that came due just before the
+        // signal. Loops left running would have polled about five times.
+        const afterSignal = polls.length - atSignal;
+        assert.ok(
+            afterSignal <= 1,
+            `no tick started after SIGTERM, with the process still up (${afterSignal} polls)`
+        );
+
+        // The request ends, the server closes, and the shutdown finishes.
+        pending.destroy();
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const code = await Promise.race([
+            exited,
+            new Promise<'still running'>(
+                (r) => (timer = setTimeout(() => r('still running'), 30_000))
+            ),
+        ]);
+        clearTimeout(timer);
+        assert.equal(code, 0, output);
+        assert.ok(logged('runtime_store_drained'), 'the store was drained before the exit');
+    }
+);
