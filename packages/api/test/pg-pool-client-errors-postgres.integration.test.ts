@@ -2,14 +2,17 @@
 // process. Needs a server: set BLACKOUT_TEST_PG_URL to one (a role that may
 // create databases, alter the ones it owns and terminate backends); each test
 // gets its own database. Without it these tests are skipped, and no CI workflow
-// sets it yet (checked 2026-11-14), so they run only where someone points them
-// at a server. pg-pool-client-errors.integration.test.ts runs everywhere with
-// stand-in connections that fail in the orders pg 8.20.0 uses; it has no
-// stand-in for three things only this file checks: pg's own ordering of a real
-// drop, the API staying up and taking the lock again when its leader-lock
-// connection drops (src/inProcessBackgroundLoops.ts), and the API draining to
-// exit 0 on SIGTERM when the connection it held the lock on drops during the
-// drain.
+// sets it yet (checked 2026-11-15), so they run only where someone points them
+// at a server. pg-pool-client-errors.integration.test.ts runs everywhere: it
+// runs the same source (the pool's listeners, the LISTEN transport, the leader
+// lock and its watch, src/inProcessBackgroundLoops.ts) against stand-in
+// connections that fail in the orders pg 8.20.0 uses. What only this file
+// checks:
+//   - pg's own ordering of a real drop;
+//   - the API process itself (src/index.ts, spawned in postgres mode) against
+//     a real server: staying up, stopping its loops and taking the lock again
+//     when its leader-lock connection drops, and draining to exit 0 on SIGTERM
+//     when the connection it held the lock on drops during the drain.
 //
 // A backend is dropped the ways production sees it: pg_terminate_backend (what
 // a restart, a failover or idle_session_timeout does to a session) and a TCP
@@ -17,7 +20,7 @@
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import net from 'node:net';
 import { fileURLToPath } from 'node:url';
 import { generateTestJwtSecret } from './_fixtures/secrets';
@@ -213,7 +216,10 @@ const startApi = async (
             child.exitCode !== null,
         'the API to listen and start its loops',
         60_000
-    );
+    ).catch((err: Error) => {
+        // Say what the API did instead.
+        throw new Error(`${err.message}:\n${out.stdout}\n${out.stderr}`);
+    });
     assert.equal(child.exitCode, null, `the API exited early:\n${out.stdout}\n${out.stderr}`);
 
     /** The exit code, or 'still running' after `ms`. */
@@ -387,9 +393,38 @@ test(
     { skip, timeout: 120_000 },
     async (t) => {
         const database = await newDatabase();
-        const api = await startApi(t, database);
+        // The auth-rows prune is one of the loops. Every pass deletes the rows
+        // Postgres finds expired, so with a pass every second an expired row
+        // put there shows whether the loops are running.
+        const api = await startApi(t, database, {
+            BLACKOUT_AUTH_ROWS_PRUNE_INTERVAL_SECONDS: '1',
+        });
         const a = await admin(urlFor(database));
         t.after(() => a.end());
+        const plantExpiredRow = async (): Promise<string> => {
+            const stateHash = randomBytes(32).toString('hex');
+            await a.query(
+                `INSERT INTO pending_oidc_logins
+                   (state_hash, code_verifier_ciphertext, nonce_hash, redirect_uri,
+                    encryption_key_id, expires_at)
+                 VALUES ($1, 'x', $1, 'https://example.invalid/callback', 'k',
+                         now() - interval '1 hour')`,
+                [stateHash]
+            );
+            return stateHash;
+        };
+        const isThere = async (stateHash: string): Promise<boolean> =>
+            (await a.query('SELECT 1 FROM pending_oidc_logins WHERE state_hash = $1', [stateHash]))
+                .rows.length === 1;
+        const untilPruned = async (stateHash: string, label: string): Promise<void> => {
+            const deadline = Date.now() + 10_000;
+            while (await isThere(stateHash)) {
+                if (Date.now() > deadline) throw new Error(`timed out waiting for ${label}`);
+                await sleep(100);
+            }
+        };
+        const loopStarts = (): number =>
+            api.lines().filter((e) => e.msg === 'background_loops_started').length;
         const holders = async (): Promise<number[]> =>
             (
                 await a.query(
@@ -399,6 +434,8 @@ test(
                     [BACKGROUND_LEADER_LOCK_KEY]
                 )
             ).rows.map((r) => r.pid as number);
+
+        await untilPruned(await plantExpiredRow(), 'the running loops to prune an expired row');
 
         const before = await holders();
         assert.equal(before.length, 1, 'the leader lock was held on one connection');
@@ -410,6 +447,14 @@ test(
                 api.child.exitCode !== null,
             'the loops to stop'
         );
+        // Stopped: five prune intervals later an expired row is still there.
+        // (The API tries for the lock again only 15 s after the loss.)
+        const leftAlone = await plantExpiredRow();
+        await sleep(5_000);
+        const stillThere = await isThere(leftAlone);
+        assert.equal(loopStarts(), 1, 'the loops have not been started again yet');
+        assert.equal(stillThere, true, 'no prune pass ran while the lock was lost');
+
         // The retry comes every 15 s (the worker's standby interval).
         let after: number[] = [];
         const deadline = Date.now() + 40_000;
@@ -420,10 +465,8 @@ test(
         assert.equal(api.child.exitCode, null, `${api.out.stdout}\n${api.out.stderr}`);
         assert.equal(after.length, 1, 'the API took the lock again');
         assert.notEqual(after[0], before[0], 'on a new connection');
-        await waitFor(
-            () => api.lines().filter((e) => e.msg === 'background_loops_started').length === 2,
-            'the loops to start again'
-        );
+        await waitFor(() => loopStarts() === 2, 'the loops to start again');
+        await untilPruned(leftAlone, 'the loops that started again to prune the row');
 
         const health = await fetch(`http://127.0.0.1:${api.port}/health`);
         await health.arrayBuffer();

@@ -830,12 +830,14 @@ What remains:
 -   An API that runs the background loops itself holds the background-leader
     lock on a pooled connection, and every Postgres restart drops it. That API
     stops its loops, stays up and serving, and tries for the lock again every
-    15 s (not while a tick it started before the loss is still running); it
-    runs the loops again once it has the lock. So the loops (scheduled
-    messages, the dead-man sweep, the sweepers) pause after every Postgres
-    restart, until up to 15 s after Postgres takes connections again. The
-    deployments with no separate worker run the API that way (started without
-    `BLACKOUT_BACKGROUND_WORKERS_DISABLED=1`):
+    15 s (not while a tick it started before the loss is still running, nor
+    while its previous try is still under way); it runs the loops again once
+    it has the lock. So the loops (scheduled messages, the dead-man sweep, the
+    sweepers) pause after every Postgres restart, until up to 15 s after
+    Postgres takes connections again and any tick it started before the loss
+    has finished. The wait for such a tick has no bound of its own: it lasts
+    as long as the tick does. The deployments with no separate worker run the
+    API that way (started without `BLACKOUT_BACKGROUND_WORKERS_DISABLED=1`):
     `infra/single-server-baseline/docker-compose.yml`,
     `deploy/kubernetes/phase4/blackout-api.yaml` and the Helm chart
     (`deploy/helm/blackout`). The production compose files set that variable
