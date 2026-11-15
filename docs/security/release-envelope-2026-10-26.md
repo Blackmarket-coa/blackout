@@ -107,6 +107,18 @@ where the documents said it then appears in the owner's list), fixed in
 code: a statement that rejects, within its bound or after it, is now read
 back as one that answers late is; the lows are fixed in code, pinned or
 made true, with what is left stated; and the model names are recorded with
+no action. Round 21, the same day, read round 20's fixes: one medium (a
+cancel the database applied only after the read back that followed its
+failed write was seen by nothing, where five documents said the read back
+closed it), narrowed in code, the switch read once more when the database
+refuses to note the refused attempt on it, with what is left stated and
+pinned; and one request two verifiers found from two sides, an arm whose
+label held U+0000, which the database refused every time, which left its
+copies as rows no switch named and held every owner's switch statements
+for a read each time: the label is now refused, the arm is one statement
+that leaves nothing where it does not land, and a statement the database
+itself refuses is an answer and no longer an unknown outcome (decision 37,
+new); the lows are pinned or made true; the model names are recorded with
 no action.
 
 **State read:** the PR 2 branch at `6ae33bc2e2` (#991), on `develop` at
@@ -1284,38 +1296,59 @@ message, and nothing here makes a release happen on time (§10, R12).
     recipient who rotated during the verification got a held copy sealed to
     a replaced key, and one who deleted their account a held copy their
     deletion's blanking pass had already run past); then the rows are written
-    in one store call (`armDeadmanSwitch`): the copies first, one row per
-    account, and then the switch, id = release id, no room, `release-v1`,
-    the recipients' account ids, the label. In memory and in the file store
+    in one store call (`armDeadmanSwitch`): the switch, id = release id, no
+    room, `release-v1`, the recipients' account ids, the label, and its
+    copies, one row per account. The label is the one free text of the
+    request: every field of the envelope and of a copy has its own pattern
+    (§8), and a label holding U+0000, which PostgreSQL stores in no text
+    value, is refused 400 with the timer's checks (round 21 of the review:
+    it reached the insert, which the database refused every time). In
+    memory and in the file store
     the call writes the mirror. In Postgres it is one awaited call on one
     connection, in the switch's lane of the write-behind queue (after this
     process's earlier writes of that switch, of which a fresh id has none,
-    not after its writes to other tables): no switch has the id, the copies
-    as upserts (over any row of the same key: what an earlier arm of the id
-    left when it failed), then the switch insert-only `RETURNING` the row;
+    not after its writes to other tables): no switch has the id, then one
+    statement (`buildArmSql`): the switch insert-only `RETURNING` the row,
+    and the copies written only where that insert returned it (a
+    data-modifying `WITH`), over any row of the same key;
     the mirror takes the rows only once Postgres has them, they are announced
     to the other processes, and only then is the owner answered 201 (round
     11 of the review: the rows were write-behind upserts committed after the
     201, so one dropped left a switch only that process listed, which in the
     deployed layout, where the sweep runs in another process, never fired).
-    Nothing deletes a copy row. A stop between the copies and the switch, a
-    statement that fails, and one that finds the id taken after writing its
-    copies all leave copies no switch names, which nothing lists, serves or
-    counts, which the named account's deletion blanks like any other (the
-    owner's deletion blanks only the owner's own copy among them, since no
-    switch row ties the rest to the owner: they stay, sealed, until each
-    named account's deletion), and which the next arm of the same envelope
-    writes over; and never a switch without copies, which would fire and
-    release to nobody (round 12 of the
+    One statement applies whole or not at all, so Postgres holds the switch
+    with every copy of it or nothing of the arm: never a switch without
+    copies, which would fire and release to nobody, and never copies no
+    switch names (round 21: the copies were upserted first, one statement
+    each, and the switch last, so a stop between them, a statement that
+    failed and an arm that found the id taken after writing its copies all
+    left copy rows no switch named, which no bound counted and no pass
+    removed; a request could make them at will, a label holding U+0000, 14
+    arms leaving 28 rows in the verifier's run, where this record said only
+    a database failure or a race between replicas did). An arm that finds
+    the id taken writes nothing and deletes nothing, so the copies of the
+    switch that has the id are the ones its own arm wrote (round 12 of the
     review: a call that found the id taken deleted "its own" copies by their
     `created_at`, which were the rows the winning arm's switch relied on, so
     two replicas arming one envelope could leave Postgres an armed switch
-    with no copies, while the winner's mirror showed them to the owner).
-    Where a switch with the id exists, before the writes or by the time of
-    the insert, the owner is answered 409 `release_id_taken`, and that switch
+    with no copies, while the winner's mirror showed them to the owner). On
+    PostgreSQL 16, two processes arming one fresh id at the same moment
+    with different copies, forty times: one armed each time, never both or
+    neither, and every copy row was the winner's
+    (`fix/r21b/probes/pg16-store.log`); with the first arm's transaction
+    held open, the second waited, and returned no row and wrote nothing
+    once the first committed, or armed once it rolled back
+    (`fix/r21/probes/cte.log`). A statement the database itself refuses,
+    with an error it answers for the statement (decision 37), did not
+    apply: the owner is answered 500 `switch_write_refused`, nothing was
+    written, nothing is read back and no other owner's statement is held
+    back.
+    Where a switch with the id exists, before the statement or by the time
+    of its insert, the owner is answered 409 `release_id_taken`, and that switch
     and its copies, read in the same call, are taken into the mirror where it
     lacked them and announced, so the owner's list, check-in and cancel on
-    this process know it. A statement that fails is an unknown outcome (the
+    this process know it. A statement that fails any other way is an unknown
+    outcome (the
     connection can die after the server committed the insert; round 12: it
     was answered 500 "nothing was armed" while Postgres held the switch,
     which the owner could neither see nor cancel on that process and a fresh
@@ -1331,10 +1364,18 @@ message, and nothing here makes a release happen on time (§10, R12).
     that reaches the store finds it as `release_id_taken` and takes it into
     the mirror, but the route checks the bounds before the store is asked,
     so an owner who has reached one since is refused by it first, until
-    there is room under it again; with no such arm,
-    nothing announces it, so no process has it until one restarts and
-    hydrates it, and its sweep then treats it as any switch, an overdue one
-    by the backlog rule; how long such a statement can run on after its
+    there is room under it again, which cancelling a release makes for the
+    two bounds on releases held, only time for the arms in 24 hours, and
+    nothing the owner can do for the bound of 50 owners; with no such arm,
+    nothing announces it, so no process has it until one reads every table
+    again, which it does when it starts and when its change subscription
+    reconnects (`rehydrateAll`: round 21, this said only a restart; a
+    running process whose `LISTEN` connection dropped and reopened then
+    lists, counts and fires it), and its sweep then treats it as any switch,
+    an overdue one by the backlog rule; the same holds for an arm past its
+    bound, answered 503, whose statement then rejects and is read back
+    before the database commits it (round 21: this named only the 500); how
+    long such a statement can run on after its
     client is lost was not measured; test 80 of the switch-writes file pins
     this as the stated limit it is); where that read fails too, or does not
     answer within what is left of the statement's 30 seconds, 503, and the
@@ -1658,8 +1699,46 @@ message, and nothing here makes a release happen on time (§10, R12).
     content, every sealed copy held in Postgres and nobody told, until the
     owner's next write of the switch, a restart or the deadline); where
     that read fails, or has not answered when the bound runs out, the
-    answer is given then, the switch is read again until a read answers,
-    and the time until then is a stall, below. One whose turn has not
+    answer is given then, a read that failed is made again until one
+    answers and one not yet answered is waited for (round 21: this said
+    both were read again), and the time until then is a stall, below. The
+    read back sees what Postgres held when it ran, so a statement the
+    database applies only afterwards, because it was still running it when
+    its client was lost, is not seen by it. For an owner's check-in or
+    cancel the carry of the refused attempt (below) follows at once, an
+    update of the same row: one sent while the statement holds the row
+    waits for it (on PostgreSQL 16, with the cancel's transaction held open
+    the carry was not answered, changed no row once the cancel committed,
+    and one row once it rolled back: `fix/r21b/probes/pg16-store.log`), and
+    one sent after it applied is refused by its own conditions. A carry
+    refused although the mirror still holds the switch as the refused
+    attempt read it says the mirror is behind, and the switch is then read
+    once more in its lane and taken as a settle's row is, announced, a
+    cancelled switch's held copies blanked, with no switch statement held
+    back for it (`readBackAfterRefusedCarry`; round 21 of the review:
+    nothing looked again, so a cancel applied right after the read back
+    left the process that sent it, its list and its export holding the
+    switch armed with its content, and every sealed copy held in Postgres;
+    test 82 of the switch-writes file). What that does not reach is a
+    statement the database begins only after the carry has landed: the
+    carry finds the row as the attempt read it, and the process then holds
+    the switch as before, a cancelled one armed with its content and with a
+    refused attempt Postgres no longer holds, its copies held in Postgres,
+    until the owner's next check-in or cancel of the switch, whose
+    statement Postgres refuses and whose row is then taken, a refresh of
+    the switch from another process's announcement, a restart, or the
+    sweep's move at the deadline (test 83 pins it as the stated limit it
+    is). A move of the sweep's has no carry behind it: one the database
+    applies after its read back is found at the next pass, whose statement
+    is refused over it and takes the row. A statement the database itself
+    refuses, with an error it answers for the statement, is no unknown
+    outcome: it did not apply, so it is answered as not made, with nothing
+    read back and nothing held (`sqlstateOfStatementRefusal`, decision 37;
+    round 21: every rejection was read back with every owner's switch
+    statements held meanwhile, so an account that could make the database
+    refuse a statement, as a label holding U+0000 did every time, could have
+    an unrelated owner's check-in refused 503, unsent, and that refusal
+    carried onto their switch). One whose turn has not
     come when the bound runs out is not run when it comes; one already sent
     can still land, or fail after it landed, and when it settles either way
     the switch is read again, in its
@@ -1680,7 +1759,10 @@ message, and nothing here makes a release happen on time (§10, R12).
     landed trigger's notice rows, and only its event is not emitted. While
     such a statement has not settled, or a failed one's switch has not been
     read back, no other conditional write of a switch
-    is sent on this process, on any switch (each is unanswered at once; the
+    is sent on this process, on any switch and whoever's request the
+    statement was, so a write of unknown outcome made for one account holds
+    every account's arms, check-ins and cancels there for the length of
+    that read (each is unanswered at once; the
     flag is process-wide on purpose, since one statement the database did
     not answer says the database is not answering, and since round 11 a
     statement waits only for this process's earlier writes of the same
@@ -2272,10 +2354,16 @@ owner_attempt_refused_at <= <the attempt's moment>) RETURNING *`
     account that arms and cancels at the rate adds up to 10 switch rows and
     650 blanked copy rows a day for good, about 230 KB a day as JSON in the
     mirror at 64 recipients and a full label (about 11 KB at one recipient),
-    which decision 24 asks about; and an arm whose statement failed or found
-    the id taken after writing its copies leaves up to 65 held copy rows that
-    no switch names (round 12), which only a database failure or a race
-    between replicas produces, not a request. The per-recipient bounds are read twice
+    which decision 24 asks about. An arm that fails, is refused or finds the
+    id taken leaves no row: its switch and copies are one statement (round
+    21 of the review: written copies first, such an arm left up to 65 held
+    copy rows no switch named, and this said only a database failure or a
+    race between replicas produced them, not a request, where a label
+    holding U+0000 did every time it was sent, with no bound counting the
+    attempt). An arm the route refuses writes nothing, and one the database
+    refuses is counted by no bound either, so the same request can be sent
+    again without end, under the global limiter alone; it stores nothing.
+    The per-recipient bounds are read twice
     per copy per arm (before the signatures and again before the writes),
     each time through the store's by-recipient index (round 2: as first
     fixed, a scan of every copy row per copy), and the owner's two bounds
@@ -3007,7 +3095,9 @@ records what the API sends.
     still commit), which is what the stall waits to learn before more
     switch statements are sent (round 12; since round 20 a statement that
     ends in an error is read back before any is, though one the database
-    is still running can commit after that read, as §15 says of an arm);
+    is still running can commit after that read, as §15 says of an arm
+    and, since round 21, of a check-in, a cancel and a move, with what then
+    brings each in);
     or (d) end the stall from a
     fresh connection that finds the row as Postgres holds it, after
     terminating the stalled statement's backend (`pg_terminate_backend`
@@ -3015,13 +3105,20 @@ records what the API sends.
     needs that id kept per statement and the role's right to signal it.
     Confirm (a) and the 5 s bound, or choose.
 36. (Part 2, after its review's round 19. Built as the default; confirm or
-    veto.) A switch statement the database fails is an unknown outcome, so
-    the switch is read back before anything else is sent (round 20). Where
+    veto.) A switch statement that fails with its outcome unknown (a lost
+    connection; not one the database itself refuses, decision 37) is read
+    back before anything else is sent (round 20). Where
     that read back answers within what is left of the statement's 30
-    seconds, nothing more follows. Where it fails too, or does not answer
-    in that time (a database that refuses or drops connections for a
-    while, not one that stays silent), the process sends no switch
-    statement until a read back has answered, tried again every 10 s, and
+    seconds, nothing more follows. Where it fails too (a database that
+    refuses or drops connections for a while), it is made again on a
+    connection of its own, at once and then 10 s after each try that
+    failed, each try given up after 5 s, until one answers; where it has
+    not answered in that time (a database that stays silent), that same
+    read is waited for and nothing bounds it, as nothing bounds a statement
+    that does not answer (decision 35; round 21 of the review: this said an
+    unanswered read back was tried again every 10 s too, which the code
+    does only for one that failed). Either way the process sends no switch
+    statement until a read back has answered, and
     the sweep counts that time as it counts a stall: a switch due in it
     gets the backlog window (72 h) at the first pass afterwards, within the
     15-minute tolerance or not. Before round 20 a failing database was no
@@ -3038,6 +3135,43 @@ records what the API sends.
     was refused gets the window, as before; an owner who could not reach
     the server at all during the outage then has the switch fire at the
     first pass after it. Confirm (a), or choose.
+37. (Part 2, after its review's round 20. Built as the default; confirm or
+    veto.) Which rejections of a switch statement are the database's own
+    refusal of it, and so an answer that the statement did not apply, with
+    nothing read back and no other owner's statement held back (round 21).
+    As built: an error that carries the server's five-character code and
+    the severity `ERROR`, in class 22 (data exception; 22021 is a U+0000 in
+    a text value), 23 (integrity constraint violation) or 42 (syntax error
+    or access rule violation). Everything else stays an unknown outcome and
+    is read back with the statements held (decision 36): a lost connection,
+    an administrator's shutdown (57P01, `FATAL`), a statement timeout or a
+    query cancel (57014; PostgreSQL had rolled the statement back in the
+    run, and it is kept unknown as an intervention from outside the
+    statement), a lock timeout, a read-only transaction, serialization
+    failures and deadlocks, resource and system errors, every connection
+    exception, and a refusal class under a `FATAL` or localized severity. A
+    refused arm is answered 500 `switch_write_refused`. A refused check-in
+    or cancel is answered 503 as before (the route has one answer for "not
+    recorded") and is carried as a refused attempt (decision 31), so a
+    switch whose owner's check-in the database refuses gets its backlog
+    window rather than firing at the deadline. A refused move is the next
+    pass's to make again, so a switch whose move the database refuses every
+    time stays unmoved and unfired, logged at each pass
+    (`deadman_switch_write_refused`), where until now it was logged as a
+    failure and read back each time. The reason for the rule: since round
+    20 every rejection was an unknown outcome, and one request any account
+    could send, an arm whose label held U+0000, made the database refuse
+    the statement each time, which held every owner's switch statements on
+    that process for one read per request. That request is now a 400; this
+    rule keeps the next statement a request can get refused, if there is
+    one, from being the same lever. The cost: a connection pooler in front
+    of the database that answered `ERROR` in one of the three classes for a
+    statement the database went on to apply would be taken for a refusal
+    (none is in this repository's deployments, and none was run here). The
+    options: (a) as built; (b) every rejection an unknown outcome, as in
+    round 20, with the route's validation alone between a request and the
+    hold; (c) class 22 only, the one class a request's data is known to
+    have reached. Confirm (a), or choose.
 
 ## Not verified here
 
@@ -3058,6 +3192,12 @@ records what the API sends.
     independent review below, which rebuilt the vectors and read the
     construction against this record, and did not re-prove the arguments
     either.
+-   What a connection pooler in front of the database answers of its own
+    for a statement it could not deliver or lost the answer to. Decision 37
+    takes an error of severity `ERROR` in SQLSTATE class 22, 23 or 42 for
+    the database's own refusal of a statement; the shapes it rests on were
+    run with node-postgres 8.20 against PostgreSQL 16 directly (round 21 of
+    part 2's review), and no pooler is in this repository's deployments.
 
 ## Independent review, 2026-10-29
 
@@ -9981,7 +10121,11 @@ branch made untrue in `develop`'s text, is under "Claims" below.
     copy blanked, in the mirror, the owner's list and the export, announced
     and a store told of it agreeing, and no refused attempt left), 70 (the
     same after a 200 ms bound: the stall stands while the statement is
-    out and ends only once the switch has been read back), 71 (the read
+    out, and once it has ended the switch has been read back; round 21 of
+    the review: this said the test showed the stall ending only once the
+    switch had been read, which it did not, since it polls for the stall's
+    end and then looks at the mirror, which holds whether or not the stall
+    waited for the read; tests 84 and 85 hold that read and pin it), 71 (the read
     back failing too: the stall stands, a check-in meanwhile is refused
     at once, unsent, and the third read answers), 74 (a check-in whose
     statement fails and whose read back is held: 503 at the 300 ms bound,
@@ -10008,13 +10152,15 @@ branch made untrue in `develop`'s text, is under "Claims" below.
     fifth is read back, listed, announced and counted, the sixth is 409
     `recipient_limit`, Postgres holds five; the fifth envelope again is
     refused by the bound it fills and, with room under the bound, as
-    taken) and 73 (within the bound, the read back failing twice: 503
+    taken; like test 70 it does not show that the stall waits for the read
+    back, which test 84 does: round 21) and 73 (within the bound, the read back failing twice: 503
     with the stall standing, the next arm refused at once, unsent, then
     the fifth in the mirror with its copies and the sixth refused by the
     bound); N02, N03, N11. The third path stands, and is now stated
     wherever the bound is: an arm whose insert the database commits only
     after the failed statement's switch was read back and not found (the
-    owner was answered 500) is in no process's mirror, so nothing lists
+    owner was answered 500, or 503 where the statement failed after its
+    bound: round 21, this said 500 alone) is in no process's mirror, so nothing lists
     or counts it and the next arm passes the bound; and arming the same
     message again, which takes it into the mirror, is refused by a bound
     the owner has reached since, which the route checks before the store
@@ -10109,7 +10255,10 @@ branch made untrue in `develop`'s text, is under "Claims" below.
     cancel the database applied whose write then fails is now read back,
     so it leaves the state the documents give for a cancel confirmed
     late, with the same two remainders (the process stopping before the
-    read back, or before the blanking it queues is written).
+    read back, or before the blanking it queues is written) and a third
+    this entry left out, which round 21 of the review found: a cancel the
+    database applies only after that read back, which the read back
+    answers as armed (round 21 narrows it and states what is left).
     `KNOWN_LIMITATIONS.md`, the changelog, the threat model's row, §15
     and Still open name it beside the late cancel.
 -   **"While neither holds" (Low, claims; made true).** Round 19's "What
@@ -10123,7 +10272,9 @@ branch made untrue in `develop`'s text, is under "Claims" below.
 -   **Model names (Low, claims).** No action, as in rounds 5 to 19: the
     two trailer lines are the session's harness's and stay, and nothing
     is rebased or amended. The tracked files that carry a model name,
-    under `docs/` and the working notes at the repository's root, are inherited
+    under `docs/`, `MARKETPLACE_AUDIT.md` at the repository's root (a branch
+    name, twice; round 21 of the review: this list left it out) and the
+    working notes at the repository's root, are inherited
     from `develop` and belong to a separate change there; no line this
     branch adds carries one.
 
@@ -10258,7 +10409,10 @@ call alone.
 
 All tests named by number are in
 `deadman-switch-writes-postgres.integration.test.ts`, which now has 81 tests; run whole, 81 of 81 pass. Not counted as checks: the comments and
-the documents.
+the documents. (Round 21 of the review: N02 removes the late rejection's
+read back altogether. The mutant that keeps the read and ends the hold at
+once, the verifier's V11, passed all 81 tests as they stood here; it is in
+round 21's table, caught by tests 84 and 85.)
 
 The verifiers' probes, run against the final code (`fix/r20/snap/`, a
 copy of this worktree's tracked files, its `src` compared with the
@@ -10305,6 +10459,370 @@ this section that named the root's working-notes file by its file name,
 which is a model's name, reworded. Prettier, gitleaks and the search of
 the branch's added lines for a model name were run again on the last of
 them: clean, 108 commits, no match.
+
+### Round 21: what the verifiers found in round 20's fixes
+
+A twenty-first pass read round 20's head (`d21a372423`) with three
+verifiers, who found one Medium and eight Low. Two of them found the same
+request from two sides: an arm whose label holds U+0000. The route checked
+the label's length only; PostgreSQL stores no such character in a text
+value, so the arm's switch insert was refused every time. The attack replay
+found what that left (Low; `fix/r20v-attack-replay/probes/r20v-a.log`): 14
+such arms were each answered 500 `switch_write_failed`, left no switch row
+and 28 copy rows no switch named (46,592 bytes), which a removal pass 400
+days on did not touch, and six clean arms afterwards went 201 five times
+and then 409 `recipient_limit`, so the failed arms had counted toward no
+bound; where §15 said such rows come only from a database failure or a race
+between replicas, not a request. The fix quality verifier found what it did
+to others (Low; `fix/r20v-fixquality/r20v-fq.append.ts` D1 and D2,
+`probes/head-D.log`): since round 20 every rejected statement is read back
+with every owner's switch statements held meanwhile, so with that read held
+an unrelated owner's check-in was 503 `switch_write_unanswered`, unsent,
+and carried onto their switch as a refused attempt; unaided on PGlite, 24
+failing arms beside 48 honest check-ins refused none, so the window is one
+read wide. It also found the hold a late rejection leaves pinned by no test
+(Low; its mutant V11, the hold ended at once with the read back still out,
+passed all 81 tests, and its probe J then had a sixth release naming one
+person answered 201 with six held), where this record said tests 70 and 72
+showed the stall ending only once the switch had been read. The claims
+verifier found the Medium (`fix/r20v-claims/r20v-claims.append.ts` A,
+`probe-A.log`): a cancel the database applies only after the read back that
+followed its failed write is answered by that read back as armed, and
+nothing looked again, so the process that sent it, its list and its export
+held the switch armed with its content while Postgres had it cancelled with
+both sealed copies held, unchanged by a removal pass and a sweep before the
+deadline, until the owner cancelled again; five documents said the read
+back closed that case, which was stated and pinned for an arm only. Its
+five Low: the remedy the documents give for an arm recorded after its look
+does not work where the limit reached since is the 24-hour one, or the
+bound of 50 accounts (probe B); a running process reads such an arm when
+its change subscription reconnects, not only when it restarts (probe C);
+decision 36 and two documents said an unanswered read back is tried again,
+where it is waited for (probe D); the same hidden arm follows a 503, not
+only a 500 (probe E); and the model names in the commit trailers, with
+`MARKETPLACE_AUDIT.md` missing from this record's list of the tracked files
+that carry one. Each finding is fixed in code, pinned or made true here,
+except the model names, recorded with no action. `origin/develop` is still
+at `898d466cb5`, which the branch has merged; nothing was merged this
+round.
+
+The round was done in two sittings. The first ended a quarter of an hour
+in and left one uncommitted edit of `store.ts`, a first form of the one
+statement and of the classes below, with the two runs against PostgreSQL
+16 they rest on (`fix/r21/probes/`). The second read that edit against
+every finding before keeping any of it, and kept it with two changes (the
+insert that restores a switch row dropped before round 11 is not turned
+into a refusal, since no test could reach it there; the copies' columns are
+taken from every copy and not from the first), then did everything else
+below.
+
+-   **A label holding U+0000 reached the database, which refused the arm
+    every time (Low, attack replay; Low, fix quality; fixed in code in
+    three places).** (a) The route refuses it: `validateReleaseTimer`
+    answers 400 `invalid_request`, "label must not contain the character
+    U+0000", before the store is asked, in every store mode. The label is
+    the only free text that reaches a switch, copy or notice statement from
+    this branch's routes; the rest was read field by field. On
+    `POST /v1/deadman/switches`: the two timer integers, bounded; the
+    release id, a lowercase version-4 UUID by pattern, which is the switch's
+    id and each copy's; the owner's account id, by pattern and equal to the
+    session's; both fingerprints, 64 hex digits; the nonce, the ciphertext,
+    the commitment, each sealed key and each signature, canonical base64 of
+    exact lengths (`parseReleaseEnvelope`, `parseReleaseCopy`); each
+    recipient's account id, by pattern, and it must have a current identity
+    in the directory. On `/reseal`, the copy as above, and the `:id` of the
+    path, which, as on `/check-in` and `/cancel`, is looked up in the
+    mirror and must name the caller's own switch before any statement is
+    made. No route writes a notice row: the sweep and the notifier do, from
+    the switch's and the copies' ids, fixed reason codes and the room id the
+    deployment's own homeserver returned (a homeserver that returned a
+    U+0000 there would have that notice's write-behind write dropped after
+    two tries, which holds no switch statement: read, not run). Of `develop`'s own
+    dead-man fields: its switch routes take no caller's string that reaches
+    a statement (its arm route answers 409 before the body is read, its
+    check-in and cancel take the id alone), and every field of a release
+    identity that part 1 stores is checked by `verifyReleaseIdentity` (the
+    account id by pattern and equal to the session's, the keys and the
+    signature canonical base64 of exact lengths); none has the hole. Other
+    control characters and characters outside the basic plane are stored as
+    sent (test 88), and a lone surrogate is stored as U+FFFD by
+    node-postgres, not refused (`fix/r21/probes/sqlstate.log`). (b) An arm
+    that does not land leaves nothing: the switch and its copies are one
+    statement (`buildArmSql`: the switch insert-only, the copies written
+    only where that insert returned the row, a data-modifying `WITH`), not
+    copies first and the switch after. One statement applies whole or not
+    at all, which is stronger than the transaction the round's brief asked
+    for first, and leaves the queue's lanes as they were. Round 12's
+    finding stays closed, since an arm that finds the id taken now writes
+    nothing at all, where it used to write its copies over the winner's
+    rows (identical, for one envelope) before finding the id taken: test 15
+    gives the winner's copies a mark and finds every copy still marked
+    after the other arm has lost, and
+    on PostgreSQL 16 two processes arming one fresh id at once with
+    different copies, forty times, left one switch each time with the
+    winner's copies only (`fix/r21b/probes/pg16-store.log`); with the first
+    arm's transaction held open the second waited, wrote nothing after the
+    commit and armed after a rollback (`fix/r21/probes/cte.log`). A copy
+    row an arm left without a switch under the earlier order is written
+    over by the next arm of that envelope (test 87). (c) A statement the
+    database itself refuses is an answer, not an unknown outcome
+    (`sqlstateOfStatementRefusal`, decision 37, new): an error with the
+    server's five-character code and severity `ERROR` in class 22, 23 or 42
+    did not apply, so the arm and the conditional update turn it into an
+    answer, with nothing read back and no other owner's statement held. A
+    refused arm is 500 `switch_write_refused`; a refused check-in or cancel
+    is 503 as before and is carried (decision 31); one refused after its
+    bound ends the stall with nothing to read. Everything else stays
+    unknown and is read back as in round 20. The classes were chosen from a
+    run, node-postgres 8.20 against PostgreSQL 16
+    (`fix/r21/probes/sqlstate.log`):
+
+    | What ended the statement                       | What node-postgres gave                                                    | The statement                             |
+    | ---------------------------------------------- | -------------------------------------------------------------------------- | ----------------------------------------- |
+    | a U+0000 in a text parameter                   | `22021`, `ERROR`                                                           | not applied: refused                      |
+    | a unique, a not-null violation, a bad integer  | `23505`, `23502`, `22P02`, `ERROR`                                         | not applied: refused                      |
+    | a deferred constraint, raised at `COMMIT`      | `23505`, `ERROR`                                                           | nothing left: refused                     |
+    | `statement_timeout`, and `pg_cancel_backend`   | `57014`, `ERROR`                                                           | not applied in the run; kept unknown      |
+    | `pg_terminate_backend`                         | `57P01`, `FATAL`                                                           | not applied in the run; unknown           |
+    | the socket destroyed under a running statement | a plain `Error`, "Connection terminated unexpectedly", no code or severity | applied afterwards by the server; unknown |
+    | a write in a read-only transaction             | `25006`, `ERROR`                                                           | unknown                                   |
+    | a lock timeout                                 | `55P03`, `ERROR`                                                           | unknown                                   |
+    | nothing listening                              | an `Error` whose code is `ECONNREFUSED`                                    | unknown                                   |
+
+    PGlite gives its own errors the same code and severity (22021 and 23514
+    in the tests). On PostgreSQL 16 with every migration applied, through
+    the store (`fix/r21b/probes/pg16-store.log`): 14 arms whose label held
+    U+0000 were each `refused` with 22021, no failure logged, nothing read
+    back, nothing held, and no switch or copy row left; a check-in refused
+    by a constraint was `unanswered` with 23514, nothing read back, nothing
+    held, and carried. Tests 86 (the classes, and each unknown shape), 87
+    (the store asked directly: three refused arms, one statement each, no
+    statement of a copy's own, no read back, no stall, no row; then a copy
+    row without a switch written over), 88 (through the route: the 400 with
+    no statement naming the release sent, and other control characters
+    stored; a refusal the database gives of its own, a constraint the route
+    knows nothing of, answered 500 `switch_write_refused` with nothing
+    written, no read back, and another owner's check-in made meanwhile, its
+    statement sent; and the twin, the arm's connection lost, with the read
+    back held: every owner's statement refused, unsent, until it answers,
+    then 500 `switch_write_failed`) and 89 (a check-in refused by a
+    constraint: 503, logged as refused and not as a failure, no read back,
+    no stall, another owner's check-in made, the attempt carried; the same
+    after a 200 ms bound, the stall ending at the refusal with nothing
+    read); test 7 and the memory-mode releases file's test 5 are extended.
+    What remains true, and is now said in `KNOWN_LIMITATIONS.md`, the
+    changelog, the threat model's row and §15: a write whose outcome is
+    unknown, whoever's request caused it, holds every owner's switch
+    statements on that process for the length of one read, or until a read
+    answers where it does not. P01 to P05, P08 to P11.
+
+-   **A cancel the database applies only after the read back that followed
+    its failed write (Medium, claims; narrowed in code, the rest stated and
+    pinned).** The read back sees what Postgres held when it ran; a
+    statement the database was still running when its client was lost can
+    apply after it. The verifier's suggestion is built, with one condition:
+    a carry of the refused attempt that Postgres refuses, although the
+    mirror still holds the switch as the attempt read it (not fired or
+    cancelled, the same last check-in, no later attempt), says the mirror
+    is behind, and the switch is then read back in its lane and taken as
+    after a failed statement (`readBackAfterRefusedCarry`, through
+    `settleSwitchStatement`, so the row goes into the mirror where the
+    mirror has not changed meanwhile, the switch is announced and a
+    cancelled switch's held copies are blanked, which a refresh by key
+    alone would not have done), with no switch statement held back for it,
+    since the mirror already has the switch and no arm reads a bound
+    without it. Where the mirror already explains the refusal nothing is
+    read (P07: with a read after every refused carry, tests 2, 10 and 71
+    count a read or an announcement more than the settle's own). It
+    works because the carry is an update of the same row: on PostgreSQL 16
+    a carry sent while the cancel's transaction held the row was not
+    answered, changed no row once the cancel committed and one row once it
+    rolled back (`fix/r21b/probes/pg16-store.log`), so a cancel that has
+    reached the row is always seen by the carry that follows it. The same
+    read brings in a trigger, a check-in or a cancel another process made
+    that this one was never told of, when a refused carry meets it (test
+    31, which asserted the opposite: "the landed check-in is not in this
+    mirror yet"). What is left is a check-in or cancel the database begins
+    only after the carry has landed, and a move, which no carry follows and
+    the next pass's refused statement brings in: stated in §15, Still open,
+    `KNOWN_LIMITATIONS.md` (Retention, and twice under the check-ins), the
+    changelog and the threat model's row, with what the owner does (cancel
+    again, as the 503 says). Tests 82 (the verifier's probe A: the cancel
+    applied right after the look; the carry is refused, the switch read
+    once more with that read held, no statement held meanwhile and another
+    owner's check-in made; then cancelled in Postgres with every copy
+    blanked, in the mirror, the list and the export, announced, no stall
+    recorded) and 83 (the stated limit: the cancel begun after the carry
+    landed; Postgres cancelled with both copies held, the sender, its list
+    and its export armed with the content and a refused attempt Postgres no
+    longer holds, a removal pass and a sweep before the deadline changing
+    nothing, a process told of it reading it cancelled, and the second
+    cancel 200 with the copies removed). P06, P07, P12.
+-   **The hold a late rejection leaves was pinned by no test (Low, fix
+    quality; pinned, and the record's account of tests 70 and 72
+    corrected).** Tests 84 (the verifier's probe J: an arm past its bound,
+    committed, then rejected, its read back held: the hold and the stall
+    stand, the sixth arm at the bound is 503, unsent, and once the fifth is
+    read it is 409 `recipient_limit` with five held in Postgres) and 85
+    (its cancel twin: another owner's check-in is 503, unsent, while the
+    read back is out, and the cancel is everywhere once it answers). V11,
+    run against the round's tests and against the whole file: tests 84 and
+    85 fail, and the other 87 pass, as the verifier found of the 81. Round
+    20's sentences on tests 70 and 72, and a note under its table, now say
+    what those tests show.
+-   **The remedy for an arm recorded after its look, per limit (Low,
+    claims; made true).** `KNOWN_LIMITATIONS.md` and the changelog now say
+    it per limit: cancelling a release that counts toward it makes room
+    under the 20 held and the 5 naming one person; only waiting does under
+    the 10 arms in 24 hours, which counts cancelled arms (the answer's
+    Retry-After says how long); and nothing the owner can do makes room
+    where 50 other accounts name the person. §15 and Still open say the
+    same.
+-   **"Until one of them restarts" (Low, claims; made true).** A process
+    reads every table again when it starts and when its change subscription
+    reconnects (`rehydrateAll`), and from then lists, counts and fires such
+    an arm: `KNOWN_LIMITATIONS.md`, the changelog, §15, Still open, the
+    threat model's row and the comments in `deadman.ts` and `store.ts` say
+    so.
+-   **An unanswered read back is waited for, not tried again (Low, claims;
+    made true).** Decision 36, the threat model's row, the changelog and
+    §15 now say a read back that failed is made again and one not yet
+    answered is waited for, with nothing bounding it;
+    `KNOWN_LIMITATIONS.md` already did.
+-   **"The owner was answered 500" (Low, claims; made true).** Round 20's
+    entry, Still open, §15 and the changelog now say 500, or 503 where the
+    statement failed after its bound.
+-   **Model names (Low, claims).** No action, as in rounds 5 to 20: the
+    two trailer lines are the session's harness's and stay, and nothing is
+    rebased or amended. Round 20's list of the tracked files that carry one
+    now names `MARKETPLACE_AUDIT.md`; no line this branch adds carries one.
+
+Claims that were not true, and what they say now (this round's): §15's
+"which only a database failure or a race between replicas produces, not a
+request" (now: an arm that fails, is refused or finds the id taken leaves
+no row, and what did so before), its account of the arm's writes ("the
+copies first ... then the switch", "Nothing deletes a copy row. A stop
+between the copies and the switch ... all leave copies no switch names":
+now one statement), its "the switch is read again until a read answers"
+and decision 36's "tried again every 10 s" for a read back that has not
+answered (now: waited for), its "no process has it until one restarts and
+hydrates it" (now also when its change subscription reconnects), its
+account of a failed statement's read back, which gave no case in which the
+statement applies afterwards for a check-in, a cancel or a move (now given,
+with what brings each in), and "A statement that fails is an unknown
+outcome" for the arm and the conditional write (now: unless the database
+itself refused it); `KNOWN_LIMITATIONS.md`'s Durability item ("written in
+one call in that order and never deleted ... leave at most copies no switch
+names", "until one of them restarts and reads it", "by cancelling a release
+that counts toward it", "a switch the database holds appears in your
+list"), its account-deletion item's "(not the copies an arm that failed
+left behind, which no switch names)" (removed: none are left), its
+Retention item's and its check-ins item's account of a cancel recorded
+while its answer was lost ("removes the copies once that server process has
+read the switch back", "so that server then shows what the database holds",
+"once the switch has been read back, as above": each now with the case in
+which the database carries the cancel out after the server's reads), and
+"every further check-in and cancel on that process" (now: every arm,
+check-in and cancel, from any account, with what a refused write does
+not hold); the changelog's "the server finds nothing armed, or as
+unconfirmed" paragraph (the label, the refused arm, "(the error then says
+nothing is armed)", "it can fire after the server restarts and reads it",
+"cancelling a release that counts toward the limit ... lists it" and
+"otherwise tries again until the database answers it"); the threat model's
+row (the cancel's read back, "which no process counts until one reads it",
+and what counts as a stall) and header; decision 35 (c)'s "as §15 says of
+an arm"; round 20's entries on tests 70 and 72, on the cancel's two
+remainders, on "the owner was answered 500" and on the tracked files with a
+model name, each corrected where it stands; Still open's item on the arm
+recorded after its look; and the
+comments in `store.ts` (`DeadmanSwitchArmOutcome`, `armDeadmanSwitch` in
+both stores, `awaitSwitchStatement`, `settleSwitchStatement`,
+`stalledSwitchStatements`, `writeDeadmanSwitchIf`), `deadmanReleases.ts`
+(the arm's order and its two accounts of the writes) and `deadman.ts` (the
+503's and the 500's). The wire type's comment on the label now states its
+two bounds.
+
+Raised and refuted: nothing this round; every finding stood. Of the fixes
+the verifiers offered: the label is refused for U+0000 alone, not for
+every control character, since the others can be stored and a label is the
+owner's own text; the arm's rows are one statement rather than a
+transaction; the refused carry reads the switch through the settle rather
+than a refresh by key, and only where the mirror does not already explain
+the refusal; and an error the database answers is told from an unknown
+outcome by a short list of classes and the severity, everything else
+staying unknown.
+
+Decisions: decision 37 is new (which rejections are the database's own
+refusal; built as the default, confirm or veto), and decision 36 is
+reworded (a failed read back is tried again, an unanswered one waited
+for). Not done this round, unchanged: the recipient-side refusal (decision
+19), the legacy retention decision (20), the rows of cancelled switches
+(24) and the alias's key (25, 26) are the operator's, as written;
+decisions 32, 33, 35 and 36 stay open; the "aside found while probing
+round 6" stays as it is in Still open. PR 4 is not built here, and
+`BLACKOUT_DEADMAN_RELEASES` stays off everywhere. The shared pool's
+`'error'` listener is still `develop`'s and `-v62`'s, not merged;
+`src/config/postgres.ts` is unchanged here.
+
+Round 21's mutants (`fix/mut/spec-round21.json`, written by
+`spec-round21.py`; run with `fix/mut/run2.py` against this worktree on the
+round's code commit `19d7bbf3f7`, one test command at a time, the two
+mutated files compared afterwards with copies taken before the run, equal;
+`fix/mut/run-round21.log`). Thirteen mutants, two of them run twice against
+a second set of tests: all caught.
+
+| Check removed                                                                   | Test           | What failed                                                     |
+| ------------------------------------------------------------------------------- | -------------- | --------------------------------------------------------------- |
+| P01: a label holding U+0000 is not refused by the route                         | 88; releases 5 | 500 where the 400 was expected; 201 in memory mode              |
+| P02: no rejection is a refusal                                                  | 86, 87, 88, 89 | 22021 not a refusal; the arms read back, the check-in a failure |
+| P03: an error of any class the database answers is a refusal                    | 86             | a statement timeout taken for a refusal                         |
+| P04: the severity is not asked                                                  | 86             | a class that ends the session taken for a refusal               |
+| P05: the arm's copies are written whether or not its switch insert took         | 15             | the winner's copies written over by the arm that lost           |
+| P06: a refused carry is not followed by a read of the switch                    | 31, 54, 82     | the cancel applied after its look never reached the sender      |
+| P07: every refused carry is followed by a read, whatever the mirror holds       | 2, 10, 71      | a read and an announcement more than the settle's               |
+| P08: a refusal answered after the bound is read back as a statement that landed | 89             | the stall waiting on a read of a statement that did not apply   |
+| P09: a refused conditional update is thrown on as an unknown outcome            | 89             | logged as a failure and read back                               |
+| P10: a refused arm is thrown on as an unknown outcome                           | 87, 88         | `failed` where `refused`; the switch read back                  |
+| P11: a refused arm is answered as a failed one                                  | 88             | 500 `switch_write_failed` where `switch_write_refused`          |
+| P12: the read after a refused carry holds every switch statement back           | 82             | statements held while that read was out                         |
+| V11: the hold a late rejection leaves ends at once, its read back still out     | 84, 85         | the hold over while the read back was out (the other 87 pass)   |
+
+All tests named by number are in
+`deadman-switch-writes-postgres.integration.test.ts`, which now has 89
+tests, but for the memory-mode `deadman-releases.integration.test.ts`'s
+test 5; run whole, three times, 89 of 89 pass each time. Not counted as
+checks: the comments and the documents. Not mutated, and why: that an arm
+which does not land leaves no copy is the shape of the one statement, which
+no single line removes; test 87 asserts it, and the verifier's run on round
+20's head is what it looked like before (28 rows).
+
+The verifiers' probes, run against the final code (`fix/r21b/snap-*`,
+copies of this worktree's tracked packages at `19d7bbf3f7`, `src` compared
+with the worktree's, equal, each probe file appended to a copy of the
+switch-writes file; `fix/r21b/probes/attack-on-final.log`,
+`claims-on-final.log`, `fq-on-final.log` and `fq-IJK-on-final.log`). The
+attack replay's 14 arms are each 400 `invalid_request`, with nothing held
+after any, no switch row, no copy row added and none without a switch, and
+the six clean arms after them go 201 five times and then 409. Of the
+claims verifier's five, A no longer ends as it did: the route is 503 with
+one look, and the sender, its list and its export are then cancelled with
+no copy held in Postgres, so the probe's own assertions of the old end
+state fail; B (429 before and after cancelling a release), C (the worker
+and the answering process hold the arm once their subscription reconnects,
+and it fires at its deadline), D (one read, waited for) and E (503, then
+the sixth arm 201 with six held) show what they showed, which the
+documents now say. Of the fix quality verifier's eleven: A, A2, B1, B3,
+C1, C2, I, J and K pass, J with the hold standing while the read back is
+out, the sixth arm 503 and five held; D1's arm is now 400, so the read
+back it waits for is never made and the probe times out there; and D2 did
+not finish and was stopped after ten minutes at full processor: its four
+loops of failing arms no longer reach the database, and under the test
+harness's in-process requests such a loop never yields to the timers and
+the check-ins the probe makes beside it (`fix/r21b/probes/d2-yield.log`:
+60,000 such requests in 39.9 s, 120 answered 400 and the rest 429 by the
+global limiter, and a 300 ms timer set before them did not fire); a request
+that arrives over a socket yields. On round 20's head its unaided run
+refused none of 48 check-ins beside 24 failing arms.
 
 ### Still open
 
@@ -10429,16 +10947,41 @@ them: clean, 108 commits, no match.
     landed cancel's copies stay held in Postgres, given to nobody, until
     the process that runs the sweep holds the switch cancelled or the
     owner's next cancel or check-in finds it so.
+-   **A check-in, a cancel or a move the database applies only after the
+    read back that followed its failed statement** (it was still running
+    it when its client was lost) is answered by that read back as not
+    made. For a check-in or a cancel the carry of the refused attempt,
+    which follows at once and is an update of the same row, waits for a
+    statement that holds the row and is refused over one that has applied,
+    and the switch is then read once more (round 21; test 82); for a move,
+    the next pass's statement is refused over it and takes the row. What
+    is left is a check-in or cancel the database begins only after that
+    carry has landed: the process that sent it holds the switch as before
+    (a cancelled one armed, with its content, a refused attempt Postgres
+    no longer holds and every sealed copy held in Postgres, though it can
+    no longer fire), and so do its list and its export, until the owner's
+    next check-in or cancel of the switch, a refresh of it from another
+    process's announcement, a restart or its deadline. Reading the switch
+    again on a timer after any failed statement would narrow it further
+    and not close it, since nothing bounds how long such a statement runs
+    on; not built. Stated in §15, `KNOWN_LIMITATIONS.md`, the changelog and
+    the threat model's row; test 83 of the switch-writes file pins it
+    (round 21).
 -   **An arm the database commits after its failed statement's switch was
-    read back and not found** (the owner was answered 500; a statement the
+    read back and not found** (the owner was answered 500, or 503 where the
+    statement failed after its bound; a statement the
     database was still running when it lost its client) is in Postgres and
     in no process's mirror: nothing lists it, no bound counts it, so each
     such arm lets one more release past a bound on that process, and no
-    process fires it, until one restarts and hydrates it or the owner arms
+    process fires it, until one reads every table again, which it does
+    when it starts and when its change subscription reconnects (round 21:
+    this said only a restart), or the owner arms
     the same envelope again and that arm reaches the store, which takes
     the switch into the mirror; the route checks the bounds before the
     store, so an owner who has reached one since is refused by it first
-    and has to make room under it. Counting an arm of unknown outcome
+    and has to make room under it, which cancelling a release does for
+    the bounds on releases held, only time for the arms in 24 hours, and
+    nothing the owner can do for the bound of 50 owners. Counting an arm of unknown outcome
     toward the bounds for a time, or reading it once more later, would
     narrow this and not close it, since nothing bounds how long such a
     statement runs on; not built. Stated in §15, `KNOWN_LIMITATIONS.md`,
