@@ -284,7 +284,11 @@ export class WriteBehindQueue {
      * retried, logged, fenced or announced here, and a failure is the
      * caller's (the conditional writes of a switch, `writeDeadmanSwitchIf`,
      * which put nothing in the mirror until Postgres has answered, so there
-     * is no local value for a refresh to take back).
+     * is no local value for a refresh to take back). Where `fn` fails, its
+     * connection goes back with the error, so the pool closes it rather
+     * than hand it to the next checkout (`withPooledClient`): a statement
+     * the server ended the backend under leaves a connection that is dead
+     * and not yet marked so.
      */
     enqueueCall<T>(fn: (client: PgClient) => Promise<T>, scope?: CallScope): Promise<T> {
         this.pending += 1;
@@ -292,12 +296,7 @@ export class WriteBehindQueue {
         const after = scope ? this.before(scope) : this.tail;
         const result = after.then(async () => {
             try {
-                const client = await this.pool.connect();
-                try {
-                    return await fn(client);
-                } finally {
-                    client.release?.();
-                }
+                return await withPooledClient(this.pool, fn);
             } finally {
                 this.pending -= 1;
                 dbWriteBehindDepth.set(this.pending);

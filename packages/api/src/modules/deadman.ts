@@ -288,6 +288,24 @@ const envelope = (event: string, record: DeadmanSwitchRecord, senderId: string) 
     payload: recordToOwnerView(record),
 });
 
+/**
+ * A release switch this process holds cancelled, found so by a check-in or
+ * a second cancel: any sealed copy still held on it is removed, and where
+ * one was, the switch is announced to the server's other processes
+ * (`announceDeadmanSwitch`). Copies still held on a cancelled switch are
+ * what a cancel leaves that the database carried out with nobody removing
+ * them after it, and the process that sent that cancel can still hold the
+ * switch armed (the record's section 15); the copies' own announcements say
+ * nothing of the switch's row, and once they are gone the sweep's pass has
+ * nothing left to remove and announces nothing either (round 23 of part 2's
+ * review: the owner's second cancel, answered by another process than the
+ * sender, left the sender showing the switch armed for good).
+ */
+const removeHeldCopiesOfCancelled = (record: DeadmanSwitchRecord): void => {
+    if (!isReleaseSwitch(record)) return;
+    if (blankReleaseWraps(record.id) > 0) db.announceDeadmanSwitch(record.id);
+};
+
 /** The switch, if `subject` owns it; otherwise nothing, whether or not it exists. */
 const ownedSwitch = (id: string, subject: string): DeadmanSwitchRecord | undefined => {
     const existing = db.getDeadmanSwitch(id);
@@ -395,8 +413,13 @@ export async function sweepOverdueDeadmanSwitches(
             continue;
         }
         let refused = db.ownerWriteUnansweredAt(record.id);
-        if (refused && refused.lastCheckInAt !== record.lastCheckInAt) {
-            // A check-in landed since, here or elsewhere: the refusal is moot.
+        if (refused && Date.parse(refused.at) <= Date.parse(record.lastCheckInAt)) {
+            // The switch holds a check-in at or after the refused attempt's
+            // moment, here or elsewhere, that attempt's own included: the
+            // refusal is moot. An earlier check-in this process had not
+            // heard of when it refused the attempt leaves the note (round 23
+            // of part 2's review: any other check-in than the one the
+            // attempt had read ended it).
             db.clearOwnerWriteUnanswered(record.id);
             refused = undefined;
         }
@@ -751,8 +774,9 @@ function createDeadmanRouter() {
             if (existing.status === 'cancelled') {
                 // A cancel this process has just learned of (one answered 503
                 // that landed, or one made elsewhere): any copy still held on
-                // it goes now, as the cancel itself would have taken it.
-                if (isReleaseSwitch(existing)) blankReleaseWraps(id);
+                // it goes now, as the cancel itself would have taken it, and
+                // the switch is announced with them (`removeHeldCopiesOfCancelled`).
+                removeHeldCopiesOfCancelled(existing);
                 return c.json(
                     { code: 'switch_cancelled', message: 'Switch has been cancelled' },
                     409
@@ -836,7 +860,7 @@ function createDeadmanRouter() {
                     cleared =
                         outcome.kind === 'applied' ? outcome.record : outcome.current ?? existing;
                 }
-                if (isReleaseSwitch(existing)) blankReleaseWraps(id);
+                removeHeldCopiesOfCancelled(existing);
                 return c.json(envelope(DEADMAN_EVENT_NAMES.cancelled, cleared, subject));
             }
             if (attempt >= SWITCH_WRITE_ATTEMPTS) return switchChanged(c);
@@ -874,7 +898,7 @@ function createDeadmanRouter() {
         return c.json(envelope(DEADMAN_EVENT_NAMES.cancelled, updated, subject));
     });
 
-    deadman.get('/switches', (c) => {
+    deadman.get('/switches', async (c) => {
         const denied = requireDomainCapability(c, 'deadman', 'read');
         if (denied) return denied;
 
@@ -895,12 +919,17 @@ function createDeadmanRouter() {
             return c.json({ switches: released });
         }
 
+        // A switch of the caller's that this process holds with a refused
+        // attempt is read from the database first: a check-in or cancel
+        // answered 503 can have been carried out since
+        // (`rereadDeadmanSwitchesWithRefusedAttempt`).
+        await db.rereadDeadmanSwitchesWithRefusedAttempt(subject);
         return c.json({
             switches: db.listDeadmanSwitchesForOwner(subject).map(recordToOwnerView),
         });
     });
 
-    deadman.get('/switches/:id', (c) => {
+    deadman.get('/switches/:id', async (c) => {
         const denied = requireDomainCapability(c, 'deadman', 'read');
         if (denied) return denied;
 
@@ -909,8 +938,12 @@ function createDeadmanRouter() {
             return c.json({ code: 'unauthorized', message: 'Unauthorized' }, 401);
         }
 
-        const existing = db.getDeadmanSwitch(c.req.param('id'));
+        const id = c.req.param('id');
+        let existing = db.getDeadmanSwitch(id);
         if (existing && existing.ownerId === subject) {
+            // As for the list: read first where a refused attempt stands.
+            await db.rereadDeadmanSwitchesWithRefusedAttempt(subject);
+            existing = db.getDeadmanSwitch(id) ?? existing;
             return c.json(recordToOwnerView(existing));
         }
         if (

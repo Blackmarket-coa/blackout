@@ -53,6 +53,7 @@
  * store moves off the in-memory mirror, revisit this.
  */
 
+import { db } from '../../db/store';
 import { exportUserData, type AccountExport } from '../accountLifecycle';
 import { collectLedgerExport, type LedgerExport } from './ledgerExport';
 import { collectSocialGraphExport, type SocialGraphExport } from './socialGraphExport';
@@ -108,6 +109,8 @@ export async function buildDataExport(
     userId: string,
     username: string
 ): Promise<DataExport | null> {
+    // As `GET /account/export` does before the same call (routes/auth.ts).
+    await db.rereadDeadmanSwitchesWithRefusedAttempt(userId);
     const account = exportUserData(userId);
     if (!account) return null;
 

@@ -1062,11 +1062,14 @@ auth.post('/password/reset/confirm', async (c) => {
 
 // --- Account lifecycle: data export + deletion ---
 
-auth.get('/account/export', (c) => {
+auth.get('/account/export', async (c) => {
     const userOrResp = requireUser(c, 'Sign in required to export account data');
     if (userOrResp instanceof Response) return userOrResp;
     const user = userOrResp;
 
+    // A dead-man switch this process holds with a refused attempt is read
+    // from the database first, as for the owner's list (modules/deadman.ts).
+    await db.rereadDeadmanSwitchesWithRefusedAttempt(user.sub);
     const data = exportUserData(user.sub);
     if (!data) return c.json({ code: 'unauthorized', message: 'Unauthorized' }, 401);
     // Use a stable filename hint so the client can save it directly.
