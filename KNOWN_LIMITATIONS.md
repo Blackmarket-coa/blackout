@@ -835,13 +835,12 @@ socket closes, the drop is also logged and counted, as `held`:
     back, since that statement waits until the socket closes. The
     write-behind queue does so after every failed attempt at a write: since
     2026-11-15 it asks the connection for one more answer (the write-behind
-    item under "What remains").
-    Before then a write that was a single statement gave its connection back
-    at once, and a drop under it was that statement's error and nothing
-    more. The store does so with the ROLLBACK after a statement inside a
-    targeted write's transaction (or inside the boot check of its
-    statements) fails, and a migration with its ROLLBACK and the unlock of
-    the migration lock;
+    item under "What remains"). Before then a write that was a single
+    statement gave its connection back at once, and a drop under it was
+    that statement's error and nothing more. The store does so with the
+    ROLLBACK after a statement inside a targeted write's transaction (or
+    inside the boot check of its statements) fails, and a migration with
+    its ROLLBACK and the unlock of the migration lock;
 -   where the code passes the failure over and keeps the connection, as the
     leader lock's holder does with the statement it sends about the
     idle-session timeout (below), and the LISTEN connection with its
@@ -1026,10 +1025,10 @@ What remains:
     Before 2026-11-15 the one retry could be handed an idle connection that
     the server had ended in the same instant as the write's own, and the
     write was dropped with Postgres up. In the runs here (one write in
-    flight, one idle pooled connection, every session of the API ended by one
-    statement) that lost 32 of 160 writes before the change and none of 280
-    after it, 16 of which were handed a second ended connection before they
-    landed.
+    flight; one idle pooled connection, or two in 4 of the tries; every
+    session of the API ended by one statement) that lost 32 of 160 writes
+    before the change and none of 280 after it, 16 of which were handed a
+    second ended connection before they landed.
 
     What still loses a write:
 
