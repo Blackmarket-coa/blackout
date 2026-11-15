@@ -89,7 +89,12 @@ is fixed in code, the read back now tried again on a connection of its
 own; of the lows, a carried column lost when two settles of one switch
 overlapped is fixed in code, the unpinned branches of round 18's read back
 are pinned, and the sentences that were not true are made true; the model
-names are recorded with no action.
+names are recorded with no action. The round's fixes were read again
+before its gates were recorded, which found the stall following only the
+statement that passed its bound last, so that with two out it ended while
+one still stood or had not been read back (fixed in code: it stands while
+any is out), and five branches of the round's own fix that no test pinned
+(pinned).
 
 **State read:** the PR 2 branch at `6ae33bc2e2` (#991), on `develop` at
 `8a20ad6a0b`; PR 2 then merged as `e1d4cec964`, which this branch merged. **Read** means a claim rests on the code or a standard; **Run**
@@ -1623,7 +1628,12 @@ message, and nothing here makes a release happen on time (§10, R12).
     flag is process-wide on purpose, since one statement the database did
     not answer says the database is not answering, and since round 11 a
     statement waits only for this process's earlier writes of the same
-    switch, so a backlog of its other writes no longer sets it), and a
+    switch, so a backlog of its other writes no longer sets it; with more
+    than one such statement out, while any of them has not settled: round
+    19 of the review, on reading its own fix again, found the flag followed
+    the one that passed its bound last, so that one's settling ended the
+    stall with an earlier one still unanswered or its landed row not yet
+    read back), and a
     stalled database ends a pass after about one bound. Nothing bounds how
     long such a statement stands: the shared pool sets no connection or
     statement timeout and no TCP keepalive (node-postgres's `keepAlive` is
@@ -1676,11 +1686,15 @@ message, and nothing here makes a release happen on time (§10, R12).
     before the statement, except a carried refused attempt, whose column is
     read back on a connection of its own and taken once Postgres holds it
     (round 18; below). Where the process stops before the read back is
-    answered (a crash; a graceful shutdown gives it one last try), a
+    answered (a crash; a graceful shutdown gives it one last try), or
+    before the blanking its take queued has been written (a write-behind
+    write, as the route's own blanking is), a
     landed cancel's copies stay held in Postgres, given to nobody, until
     the process that runs the sweep holds the switch cancelled (it restarts,
     or its move at the switch's deadline is refused and takes the row) and
-    its removal pass blanks them; a process not yet told shows it armed
+    its removal pass blanks them, or the owner's next cancel or check-in,
+    on any process, finds the switch cancelled and blanks them; a process
+    not yet told shows it armed
     meanwhile. Every check-in and cancel on that process is refused 503 at once
     meanwhile; the carry of each such refusal is not held back by it
     (below), and holds a switch that falls due back for one backlog window
@@ -2879,7 +2893,10 @@ records what the API sends.
     `connectionTimeoutMillis`); and what the process then does with the
     connection's error is the shared pool's error handling, which is
     `develop`'s and is being fixed in a separate change (`-v62`). For that
-    time every check-in and cancel on that process is refused 503 at once;
+    time every check-in and cancel on that process is refused 503 at once
+    (round 19: where a second statement had passed its bound after that
+    one and then settled, they were sent again from then; the stall now
+    stands while any statement past its bound has not settled);
     each is carried, which holds a switch that falls due back for one
     backlog window (72 h, a constant, `DEADMAN_BACKLOG_GRACE_SECONDS`) per
     missed check-in, after which the switch fires with its owner still
@@ -9226,7 +9243,22 @@ host (`fix/r18v-claims/frozen-db.mjs`, `frozen-db-keepalive.log`), and
 decision 35 (b) offering keepalive on the strength of "exactly" that case.
 Both lenses again noted the model names in the commit trailers. Each
 finding is fixed in code or made true here, except the model names,
-recorded with no action. `origin/develop` had not moved past `97756ff4ec`.
+recorded with no action. `origin/develop` has moved past the branch's base
+`97756ff4ec`, to `7a9814ebc9`, 104 commits on, among them #1003 (the
+store's targeted writes, merged as `25d7129c0c`), which rewrote
+`store.ts`, `pgWriter.ts`, `pgNotify.ts` and `writeBehindQueue.ts`, the
+files this branch changes most. It is not merged in this round: that merge
+is the next round's whole work, and this round's gates run against the
+base the branch has.
+
+The round was done in two passes. The first built the fixes below (commits
+`687b4242f5`, `6e6ae7e965` and `07092f1551`) and ran its mutants and the
+gates on them. Before any of it was recorded as done, the three commits
+were read again against every finding, and that reading found one thing
+more in the round's own fix, the stall's extent with more than one
+statement out, and five branches of the fix that no test pinned. Both are
+below, marked "second read"; the mutants and the gates recorded at the end
+of this section are those run after it, on the final code.
 
 -   **A late statement whose read back failed was never read again
     (Medium, claims; Low, attack replay; fixed in code).** A failed settle
@@ -9254,7 +9286,9 @@ recorded with no action. `origin/develop` had not moved past `97756ff4ec`.
     read back has been taken, so while the switch is read again every
     check-in and cancel on that process is still refused 503 at once and an
     arm cannot read the bounds without the landed row (round 12's reason
-    for the stall). The other choice, ending the stall at the failure and
+    for the stall; as first built this held only where that statement was
+    the last to pass its bound: the second read, below). The other choice,
+    ending the stall at the failure and
     reading again behind it, was not built: it would let a statement be
     sent, and an arm read the bounds, while the process's view still lacked
     a row Postgres holds. While the read again is outside the lane it is
@@ -9272,8 +9306,9 @@ recorded with no action. `origin/develop` had not moved past `97756ff4ec`.
     (a crash; a graceful shutdown gives it one last try), a landed cancel's
     copies stay held in Postgres, given to nobody, until the process that
     runs the sweep holds the switch cancelled (it restarts, or its move at
-    the switch's deadline is refused and takes the row), and a process not
-    yet told shows the switch armed. A lane read that never answers is
+    the switch's deadline is refused and takes the row) or the owner's next
+    cancel or check-in finds it cancelled, and a process not yet told shows
+    the switch armed. A lane read that never answers is
     still unbounded, as the stall is (decision 35). Test 54 (the usual
     order: the owner's cancel through the route answered 503, its carry
     answered with its row in the mirror, then the cancel lands, its read
@@ -9359,6 +9394,115 @@ recorded with no action. `origin/develop` had not moved past `97756ff4ec`.
     and nothing is rebased or amended. The tracked files under `docs/` that
     carry a model name are inherited from `develop` and belong to a
     separate change there; no line this branch adds carries one.
+-   **The stall followed only the statement that passed its bound last
+    (second read; fixed in code).** The stall was one slot,
+    `stalledSwitchStatement`, set by each statement that passed its bound
+    and cleared only when the statement it held at that moment settled.
+    Two statements out at once (two owners' check-ins or cancels on the
+    API process sent within one bound, 30 s, of each other, or the sweep's
+    move and an owner's write) both pass their bounds; the slot holds the
+    later one, and when that one settled the stall ended, with the earlier
+    one still unanswered, or landed with its row not yet read back. This
+    round's first finding made the second case last longer: a failed read
+    back now keeps its settle waiting, and "the stall stands until then"
+    held only where that statement was the last to pass its bound. Run on
+    the round's first code (`fix/r19b/probes/p1-stall-identity.append.ts`,
+    two probes appended to a scratch copy of the switch-writes file at
+    `07092f1551`, `fix/r19b/probes/p1.log`): with a cancel of one switch
+    and a check-in of another both past their bounds, the check-in's
+    settling ended the stall while the cancel still stood unanswered, and a
+    check-in of a third switch was sent and applied; and with the cancel
+    landed, its read back failed and its read again held, the same, with
+    Postgres holding the switch cancelled and 2 copies, the mirror holding
+    it armed, no stall, and the third switch's check-in applied. So three
+    sentences were untrue with two statements out:
+    `KNOWN_LIMITATIONS.md`'s "While such a write stands unconfirmed, every
+    further check-in and cancel on that process is answered 503 at once",
+    §15's "with a stall standing until a landed statement's row is in the
+    mirror ... so on one replica exactly the bound passes a burst of arms"
+    (since round 12: an arm sent in that window read the bounds without the
+    landed row, that round's own finding again, with no read failing at
+    all; run on `07092f1551`'s store, `fix/r19b/probes/p4-arm-bound.append.ts`
+    and `p4-on-07092f1551.log`: with four releases naming one person from
+    one owner held, the fifth arm's insert past its bound and landed, its
+    read back held, and another owner's check-in past its bound after it
+    and settled, a sixth arm was armed, six held in Postgres where the
+    bound is five; on the final code, `p4-on-final.log`, the sixth is
+    refused and five are held), and this round's "the stall stands until
+    a read back has been taken". Now every statement
+    that passes its bound is kept (`stalledSwitchStatements`) until it has
+    settled, and the stall stands while any is; the span the sweep reads
+    (`switchStatementsStalledBetween`) ends with the last, and the carry
+    made when a stall ends is made then. What it costs is what decision 35
+    already states, no longer depending on the order: a statement that
+    never answers keeps the stall, and with it the refusal of every
+    check-in and cancel on that process, until the process restarts,
+    whichever statement passed its bound last (before, only where it was
+    the last to). Test 63: a cancel of one switch and a check-in of
+    another, sent 50 ms apart, both pass
+    their bounds; the check-in lands and is read back, and the stall
+    stands, a third switch's check-in refused unsent; the cancel lands, its
+    read back fails and its read again is held, and the stall stands, a
+    check-in and an arm refused unsent, Postgres holding the switch
+    cancelled and the mirror armed; the read again answers, the switch is
+    taken cancelled, the stall ends, and the check-in and the arm are
+    sent. Test 68 is the bound itself, test 17's rule with a second
+    statement out: the fifth arm naming one person from one owner passes
+    its bound, another owner's check-in passes its own after it, lands and
+    settles, and with the fifth arm's row landed and not yet read back the
+    stall stands and a sixth arm is refused; then five are held, in the
+    mirror and in Postgres, and the sixth is refused by the bound. Run on
+    `07092f1551`'s store both fail at their first "the stall stands"
+    (`fix/r19b/t63-t68-on-07092f1551-store.log`). V1, V2.
+-   **Five branches of this round's fix unpinned (second read; pinned).**
+    Each, removed alone, passed all 63 tests the file then had
+    (`fix/mut/run-round19b-first.log`, with V1 and V2, which test 63
+    fails; test 68 was written after that run). The read again's copies:
+    it reads the switch's copies where the lane's read would have, for an
+    arm; without them a landed arm whose
+    read back failed reached the mirror as a switch with no copies, counted
+    toward no person's bound. Test 64 (an arm answered 503, its insert
+    landing, its read back failing): read again, the switch and both
+    copies are in the mirror and announced, the person's bound counts it
+    and the owner's list shows it (M4). The guard against a second read
+    again beside one under way: two at once read the same settle, and the
+    slower then drops another from the head of the list unread, whose stall
+    would stand for good. And the read again made at once after one that
+    ended whole: a settle that joins the list between a read again's last
+    read and its end finds one under way, so only that one's end can start
+    the next, and with no timer set it would wait for good; the window is a
+    few microtasks, and no sequence of database answers was found that
+    reaches it. Test 65: two switches' read backs fail, the second while
+    the first's read again is held, and it is read by that read again on
+    its one connection (M1); and a settle joined to the list from the
+    connection's release, which the read again makes after its last read,
+    by calling the store's own `retrySettleRead` there, is read at once by
+    a read again of its own, on no timer (M2). Drain's second
+    wait: after a read again under way, the queue once more, for the
+    blanking its take queued. Test 66: a late cancel's read again held
+    while `drain` waits; released, the copies' blanking is held, and
+    `drain` still waits; released, the copies are blank in Postgres when
+    it returns (M10). What is not claimed: a read again that ends while
+    `drain` is still in its first wait for the queue (behind an unrelated
+    write of the process, say) queues its blanking after what that wait
+    covers, and that call of `drain` returns without it
+    (`fix/r19b/probes/p3-drain-first-wait.append.ts`, run on
+    the final code, `fix/r19b/probes/r18v-and-p3-on-final.log`: `drain`
+    settled with the blanking still held and 2 copies held in Postgres,
+    none once the queue had run). The queue writes it all the same; it is
+    lost only if the process stops first, and the copies then stay as
+    where the read back was never answered, which `KNOWN_LIMITATIONS.md`
+    and §15 now say (a stop "before the removal it then queues has been
+    written"). `drain` is left as it is: it answers for the writes queued
+    before it was called, which the deletion route and the notifier's
+    claim rest on, and waiting for whatever is queued meanwhile would let
+    a busy process hold those back. The end of a switch's mark as being
+    settled (`carriesBehindSettle`, round 17's line, which
+    this round rewrote): left standing, every later carry of the switch
+    took its column alone, read back from Postgres, and dropped the rest of
+    the row it returned. Test 67: after a late statement has settled, a
+    check-in refused and carried takes the row Postgres returned, a change
+    made elsewhere included (M13).
 
 Claims that were not true, and what they say now (this round's):
 `KNOWN_LIMITATIONS.md`'s "A cancel the database confirms late takes effect
@@ -9368,7 +9512,9 @@ nothing is released from it; shown cancelled, its copies removed and the
 other processes told once the switch has been read back, which is tried
 again until the database answers; where that process stops first, the
 copies stay, sealed and given to nobody, until the process that runs the
-sweep learns the switch is cancelled), its "until that write is answered
+sweep learns the switch is cancelled; the second read added a stop before
+the removal it queues has been written, and the owner's next cancel, which
+removes them), its "until that write is answered
 and the switch read back into that server's memory, or the write or that
 read fails" and "The switch's read back has the same lack of bound. Until
 it ends" (now: a failed read back is tried again, and the refusals and the
@@ -9385,7 +9531,9 @@ settles the switch is read again ... and a landed cancel's held copies are
 blanked then", "The read back ... has the same lack of bound, and the stall
 stands until it ends", the restart cases and "with a stall standing until a
 landed statement's row is in the mirror ... exactly the bound" (true now
-that a failed read back keeps the stall; it says since when); Still open's
+that a failed read back keeps the stall and, since the second read, that
+the stall stands while any statement past its bound has not settled; it
+says since when); Still open's
 "is read again, taken into the mirror and announced to the other processes
 when it settles" and its restart clause; decision 31's and decision 35's
 restart cases and (b)'s "bounds exactly the case (a) leaves standing until
@@ -9397,91 +9545,132 @@ store's comments on `stalledSwitchStatement`, `carryTimeoutMs`,
 `awaitSwitchStatement` and `settleSwitchStatement`; the sweep's comment in
 `deadman.ts`; and the title of test 51 ("a failed read back takes nothing",
 now also "the switch read again is taken cancelled with its copies
-blanked"), with the comments of tests 40 and 50.
+blanked"), with the comments of tests 40 and 50. From the second read, made
+true by the code rather than reworded: `KNOWN_LIMITATIONS.md`'s "While such
+a write stands unconfirmed, every further check-in and cancel on that
+process is answered 503 at once", §15's "While such a statement has not
+settled, no other conditional write of a switch is sent on this process"
+and "Every check-in and cancel on that process is refused 503 at once
+meanwhile", and this section's "the stall ... ends only once a read back
+has been taken", each untrue while a statement that passed its bound
+earlier than another had not settled and the other had (§15, decision 35
+and the store's comment on `stalledSwitchStatements` now say so); and,
+reworded, where a landed cancel's copies stay after the process stops
+(`KNOWN_LIMITATIONS.md`, the changelog, §15 and Still open named only the
+sweep's process learning of the cancel, and only a stop before the read
+back).
 
 Raised and refuted: nothing this round; every finding stood. Of the fixes
 offered for the medium, the read again was built rather than a statement
 of the gap; of those for the overlapping settles, the take after each
 settle that takes its row, rather than handing the notes back to the read
-back after the last.
+back after the last. On the second read, two things were looked at and
+left: U5, which survives as an equivalent (above), and `drain`'s first
+wait (above), stated rather than changed.
 
 Decisions: no new decision. Not done this round, unchanged: the
 recipient-side refusal (decision 19), the legacy retention decision (20),
 the rows of cancelled switches (24) and the alias's key (25, 26) are the
 operator's, as written; decisions 32, 33 and 35 stay open (decision 35's
-text now names the third case and corrects (b), its options unchanged);
+text now names the third case, corrects (b) and says how far the stall
+reaches with more than one statement out, its options unchanged: the
+stall it asks about is now the same whichever statement passed its bound
+last);
 the "aside found while probing round 6" stays as it is in Still open. PR 4
 is not built here, and `BLACKOUT_DEADMAN_RELEASES` stays off everywhere.
 The shared pool's `'error'` listener is still `develop`'s and `-v62`'s, not
 merged; `src/config/postgres.ts` is unchanged here.
 
-Round 19's mutants (`fix/mut/spec-round19.json`, written by
-`spec-round19.py`, run with the round-7 runner `mut/run.py` against this
-worktree at the round's code, `store.ts` compared with a copy taken before
-the run afterwards, equal; one test command at a time; R01 to R16 and the
-round-18 rows each against the test named through `--test-name-pattern`,
-U1 to U8 against the whole switch-writes file, as the verifier ran them;
-`fix/mut/run-round19.log`; each one's failing assertion read again with
-the test named, `fix/mut/why-round19.log`). Thirty mutants: twenty-eight
-caught at once.
-T03 survived the first run: with the failed read back now read again, the
-column it wrongly takes is replaced by the cancelled row a moment later, so
-test 51's end state no longer showed it; test 51 now also asserts that
-while the read is out the refusing process holds no refused attempt, and
-T03 run again against it is caught (`run-round19-T03.log`). U5 survives, as
-it did for the verifier, who did not list it among those to pin (above).
+Round 19's mutants, as run after the second read on the final code
+(`fix/mut/spec-round19-final.json`: the first pass's thirty,
+`spec-round19.json`, written by `spec-round19.py`, and the second read's
+seven, `spec-round19b.py`; run with `fix/mut/run2.py`, the round-7 runner
+`mut/run.py` with each failing assertion's message kept, against this
+worktree, `store.ts` compared afterwards with a copy taken before the run,
+equal; one test command at a time; R01 to R16, the round-18 rows and the
+second read's seven each against the test named through
+`--test-name-pattern`, U1 to U8 against the whole switch-writes file, as
+the verifier ran them; `fix/mut/run-round19-final.log`, with M10 run once
+more after test 66's title was made exact, `run-round19-final-M10.log`,
+and V1 and V2 once more against tests 63 and 68 together,
+`run-round19-final-V.log`).
+Thirty-seven mutants: thirty-six caught, U5 surviving, as it did for the
+verifier, who did not list it among those to pin (above). The first
+pass's own run of its thirty (`run-round19.log`, `why-round19.log`) caught
+twenty-eight at once; T03 survived there, since with the failed read back
+now read again the column it wrongly takes is replaced by the cancelled
+row a moment later and test 51's end state no longer showed it, so test 51
+now also asserts that while the read is out the refusing process holds no
+refused attempt, which fails it (`run-round19-T03.log`, and this run). The
+second read's seven were first run against the 63 tests the file then had
+(`run-round19b-first.log`): V1 and V2 failed test 63, and M1, M2, M4, M10
+and M13 passed every test, which is why tests 64 to 67 were written.
 
-| Check removed                                                                | Test   | What failed                                                    |
-| ---------------------------------------------------------------------------- | ------ | -------------------------------------------------------------- |
-| R01: a failed settle read back is not read again                             | 51, 54 | the switch never read again                                    |
-| R02: the read again's read has no bound                                      | 54     | the hung read never given up; the test cannot finish           |
-| R03: the read again's connection has no bound                                | 54     | the connection not handed over waited for; no read again       |
-| R04: a read again past its bound gives its connection back without the error | 54     | the connection went back without the error                     |
-| R05: a connection handed over after the bound is not given back              | 54     | the late connection never given back                           |
-| R06: the stall ends at the failure, the read again runs behind it            | 54     | no stall while the switch is read again                        |
-| R07: a read again that failed is not tried again on a timer                  | 54     | no further try after the first failed                          |
-| R08: a read again that fails after shutdown sets a timer                     | 60     | a timer set after shutdown                                     |
-| R09: shutdown gives a waiting settle no last try                             | 60     | no last try, so the timer left set                             |
-| R10: drain does not wait for a read again under way                          | 60     | drain settled while the try was out                            |
-| R11: a read again that starts leaves the timer set after a failed one        | 60     | the timer still set after shutdown's last try began            |
-| R12: a take of the row read again that throws is not caught                  | 62     | the throw escaped the try, unhandled                           |
-| R13: round 18's rule, the columns taken again only after the last settle     | 55     | no refused attempt in the refusing process (the verifiers' O1) |
-| R14: round 17's rule, the columns taken again after a settle that kept out   | 59     | the column no longer waiting for its read back                 |
-| R15: a settle that empties the waiting columns leaves the read back's timer  | 58     | the timer left set                                             |
-| R16: a read back that starts leaves the timer set after a failed one         | 61     | the timer left set                                             |
-| U1: the read back not run again after one that answered                      | 57     | the second column never in the mirror                          |
-| U2: the read back's read has no bound                                        | 56     | the hung read never given up; the test cannot finish           |
-| U3: the read back's connection has no bound                                  | 56     | the connection not handed over waited for; no column           |
-| U4: the read back gives a timed-out connection back without the error        | 56     | the connection went back without the error                     |
-| U5: the read back applies a note a settle took meanwhile                     | none   | survives: the same column under the same conditions            |
-| U6: drain does not wait for the read back                                    | 59     | drain settled while the read back was out                      |
-| U7: a read back that fails after shutdown sets a timer                       | 59     | a timer set after shutdown                                     |
-| U8: a settle takes its row over any change of the entry                      | 59     | the settle's older row (grace) taken over the refresh          |
-| T02: a carry answered while a settle reads is not read back from Postgres    | 53     | the column not in the mirror while the read stands             |
-| T03: the read back takes the column whatever Postgres holds                  | 51     | a refused attempt while the read is out (second run)           |
-| T04: the settle keeps its row out over a carried column (identity only)      | 53     | the settle's row not taken                                     |
-| T05: a read back that failed is not tried again                              | 53     | the column not in the mirror while the read stands             |
-| T06: `takeCarriedColumn`'s fired half removed                                | 52     | a refused attempt on the fired row                             |
-| T07: a settle that took its row does not take the carried columns after it   | 48     | the column absent after the settle's row                       |
+| Check removed                                                                | Test   | What failed                                                         |
+| ---------------------------------------------------------------------------- | ------ | ------------------------------------------------------------------- |
+| R01: a failed settle read back is not read again                             | 51, 54 | the switch never read again                                         |
+| R02: the read again's read has no bound                                      | 54     | the hung read never given up; the test cannot finish                |
+| R03: the read again's connection has no bound                                | 54     | the connection not handed over waited for; no read again            |
+| R04: a read again past its bound gives its connection back without the error | 54     | the connection went back without the error                          |
+| R05: a connection handed over after the bound is not given back              | 54     | the late connection never given back                                |
+| R06: the stall ends at the failure, the read again runs behind it            | 54     | no stall while the switch is read again                             |
+| R07: a read again that failed is not tried again on a timer                  | 54     | no further try after the first failed                               |
+| R08: a read again that fails after shutdown sets a timer                     | 60     | a timer set after shutdown                                          |
+| R09: shutdown gives a waiting settle no last try                             | 60     | no last try, so the timer left set                                  |
+| R10: drain does not wait for a read again under way                          | 60     | drain settled while the try was out                                 |
+| R11: a read again that starts leaves the timer set after a failed one        | 60     | the timer still set after shutdown's last try began                 |
+| R12: a take of the row read again that throws is not caught                  | 62     | the throw escaped the try, unhandled                                |
+| R13: round 18's rule, the columns taken again only after the last settle     | 55     | no refused attempt in the refusing process (the verifiers' O1)      |
+| R14: round 17's rule, the columns taken again after a settle that kept out   | 59     | the column no longer waiting for its read back                      |
+| R15: a settle that empties the waiting columns leaves the read back's timer  | 58     | the timer left set                                                  |
+| R16: a read back that starts leaves the timer set after a failed one         | 61     | the timer left set                                                  |
+| U1: the read back not run again after one that answered                      | 57     | the second column never in the mirror                               |
+| U2: the read back's read has no bound                                        | 56     | the hung read never given up; the test cannot finish                |
+| U3: the read back's connection has no bound                                  | 56     | the connection not handed over waited for; no column                |
+| U4: the read back gives a timed-out connection back without the error        | 56     | the connection went back without the error                          |
+| U5: the read back applies a note a settle took meanwhile                     | none   | survives: the same column under the same conditions                 |
+| U6: drain does not wait for the read back                                    | 59     | drain settled while the read back was out                           |
+| U7: a read back that fails after shutdown sets a timer                       | 59     | a timer set after shutdown                                          |
+| U8: a settle takes its row over any change of the entry                      | 59     | the settle's older row (grace) taken over the refresh               |
+| T02: a carry answered while a settle reads is not read back from Postgres    | 53     | the column not in the mirror while the read stands                  |
+| T03: the read back takes the column whatever Postgres holds                  | 51     | a refused attempt while the read is out                             |
+| T04: the settle keeps its row out over a carried column (identity only)      | 53     | the settle's row not taken                                          |
+| T05: a read back that failed is not tried again                              | 53     | the column not in the mirror while the read stands                  |
+| T06: `takeCarriedColumn`'s fired half removed                                | 52     | a refused attempt on the fired row                                  |
+| T07: a settle that took its row does not take the carried columns after it   | 48     | the column absent after the settle's row                            |
+| V1: the stall ends when any statement past its bound settles                 | 63, 68 | no stall with the cancel unanswered; none with the fifth arm unread |
+| V2: the stall follows the statement that passed its bound last (as before)   | 63, 68 | no stall with the cancel unanswered; none with the fifth arm unread |
+| M1: a second read again starts beside one under way                          | 65     | the second settle never left waiting: a second read again took it   |
+| M2: no read again at once after one that ended whole                         | 65     | the settle that joined at its end left waiting, on no timer         |
+| M4: the read again never reads the switch's copies                           | 64     | the landed arm in the mirror with no copies                         |
+| M10: drain does not wait for the queue after a read again                    | 66     | drain settled with the blanking still held                          |
+| M13: a switch's mark as being settled is never removed                       | 67     | the later carry's column taken alone, the row's change dropped      |
 
 Round 18's T01 is R14 in this round's code. All tests named here are in
-`deadman-switch-writes-postgres.integration.test.ts`, which now has 62
-tests; run whole, 62 of 62 pass. Tests 54 and 55, run on round 18's store,
+`deadman-switch-writes-postgres.integration.test.ts`, which now has 68
+tests; run whole, 68 of 68 pass. Tests 54 and 55, run on round 18's store,
 fail (`fix/r19/on-round18-store.log`: 54 times out waiting for the read
-again; 55 finds no refused attempt in the refusing process). Not counted as
-checks: the comments and the documents.
+again; 55 finds no refused attempt in the refusing process), and tests 63
+and 68, run on the first pass's store, fail
+(`fix/r19b/t63-t68-on-07092f1551-store.log`).
+Not counted as checks: the comments and the documents.
 
-The verifiers' probes, run against this round's code (`fix/r19/snap/`, a
-`git archive` of `6e6ae7e965` with both probes appended to a copy of the
-switch-writes file, `--test-name-pattern R18V-PROBE`;
-`fix/r19/r18v-probes-on-r19.log`): the attack replay's
-`r18v-cancel-order.test-append.final2.ts`, read failing and read answering,
-and the claims verifier's late-cancel probe, in the order
+The verifiers' probes, run against the final code (`fix/r19b/snap/`, a
+`git archive` of `07092f1551` with `store.ts` and the switch-writes file
+replaced by this worktree's and the probes appended to a copy of that
+file, `--test-name-pattern 'R18V-PROBE|R19B-PROBE'`;
+`fix/r19b/probes/r18v-and-p3-on-final.log`; the first pass ran the same
+four against `6e6ae7e965`, `fix/r19/r18v-probes-on-r19.log`): the attack
+replay's `r18v-cancel-order.test-append.final2.ts`, read failing and read
+answering, and the claims verifier's late-cancel probe, in the order
 `carry-answer-first` and `carry-answer-behind-settle`, all four pass, and
 each ends with the switch cancelled and no copy held in Postgres, in the
 refusing process's mirror, its list and its export; in the claims probe a
 fresh process reads it cancelled and the removal pass and the sweeps after
 it change nothing. The fix quality verifier's O1 to O3 are tests 55 to 57.
+The second read's own probes are the two of the stall, which are test 63,
+the one of an arm at a bound, which is test 68, and the one of `drain`'s
+first wait (each above).
 
 ### Still open
 
@@ -9585,14 +9774,20 @@ it change nothing. The fix quality verifier's O1 to O3 are tests 55 to 57.
     a failed read back took nothing, announced nothing and blanked nothing,
     so a late cancel left that process, its export and the worker holding
     the switch armed and its copies held in Postgres until the owner
-    cancelled again, a process restarted or the switch's deadline passed);
+    cancelled again, a process restarted or the switch's deadline passed;
+    and with a second statement past its bound after that one, the stall
+    ended when the second settled, whatever the first had done);
     until then the process's mirror and the owner's export from it hold the
     switch as before the statement, except a carried refused attempt,
     whose column is read back on a connection of its own (round 18: it too
     was kept out until the read ended). Where the process stops before the
     read back is answered (a crash; a graceful shutdown gives it one last
-    try), a landed cancel's copies stay held in Postgres, given to nobody,
-    until the process that runs the sweep holds the switch cancelled.
+    try), or before the blanking its take queued has been written (a
+    write-behind write, which one call of `drain` does not wait for where
+    the read again ended during that call's first wait for the queue), a
+    landed cancel's copies stay held in Postgres, given to nobody, until
+    the process that runs the sweep holds the switch cancelled or the
+    owner's next cancel or check-in finds it so.
 -   **A refused check-in's note is its process's own until its carry
     lands** (decision 31, built in round 14): a check-in or cancel refused
     unanswered is noted in the refusing process and carried into the
