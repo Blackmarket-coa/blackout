@@ -25,6 +25,7 @@ process.env.BLACKOUT_DB_MODE = 'memory';
 const { clearSharedPgPool, getSharedPgPool } = await import('../src/config/postgres');
 const { dbPoolClientErrorsTotal } = await import('../src/telemetry/metrics');
 const { PgNotifyTransport } = await import('../src/db/pgNotify');
+const { forgetIdleSessionExemptionFailureForTests } = await import('../src/db/pooledClient');
 const { WriteBehindQueue } = await import('../src/db/writeBehindQueue');
 const { PostgresBackedDb, REHYDRATE_RETRY_MS } = await import('../src/db/store');
 const {
@@ -45,6 +46,12 @@ class FakeConnection extends EventEmitter {
     static made: FakeConnection[] = [];
     /** Statements that reached the server, by connection. */
     static executed: Array<{ connection: number; sql: string }> = [];
+    /**
+     * The server's answer to a statement, where a test needs another than the
+     * default: rows, or an error the statement is refused with while the
+     * connection stays up.
+     */
+    static respond: ((sql: string) => { rows: unknown[] } | Error | undefined) | null = null;
     _queryable = true;
     _ending = false;
     ended = false;
@@ -92,6 +99,9 @@ class FakeConnection extends EventEmitter {
             throw fatal;
         }
         FakeConnection.executed.push({ connection: FakeConnection.made.indexOf(this), sql });
+        const answer = FakeConnection.respond?.(sql);
+        if (answer instanceof Error) throw answer;
+        if (answer) return answer;
         if (sql.includes('pg_try_advisory_lock')) return { rows: [{ locked: true }] };
         // One store table, users, so PostgresBackedDb has a table to load and read back.
         if (sql.includes('information_schema.columns') && params?.[0] === 'users') {
@@ -189,6 +199,7 @@ const sharedPoolOfFakes = async (): Promise<SharedPool> => {
     clearSharedPgPool();
     FakeConnection.made = [];
     FakeConnection.executed = [];
+    FakeConnection.respond = null;
     const pool = (await getSharedPgPool()) as unknown as SharedPool;
     pool.Client = FakeConnection;
     return pool;
@@ -344,6 +355,32 @@ test('a checked-out connection carries the listener only while it is held', asyn
     assert.equal(counted('idle'), idleBefore + 1);
 });
 
+// The two connections a process holds idle on purpose (the LISTEN connection
+// and the background-leader lock's) turn the server's idle_session_timeout off
+// for their own session, and put it back before they return to the pool.
+const EXEMPT = 'SET idle_session_timeout = 0';
+const RESTORE = 'RESET idle_session_timeout';
+const LISTEN = 'LISTEN blackout_store_change';
+const UNLISTEN = 'UNLISTEN blackout_store_change';
+
+/** What a server older than PostgreSQL 14, which has no such setting, answers. */
+const unrecognized = (): Error =>
+    Object.assign(new Error('unrecognized configuration parameter "idle_session_timeout"'), {
+        code: '42704',
+        severity: 'ERROR',
+    });
+
+/** console.info lines until the test ends. */
+const captureInfo = (t: { after(fn: () => void): void }): string[] => {
+    const lines: string[] = [];
+    const { info } = console;
+    console.info = (line: unknown) => lines.push(String(line));
+    t.after(() => {
+        console.info = info;
+    });
+    return lines;
+};
+
 /** The LISTEN connection PgNotifyTransport holds. */
 class FakeListenClient extends EventEmitter {
     queries: string[] = [];
@@ -395,7 +432,7 @@ test('a dropped LISTEN connection is destroyed and replaced once, not leaked and
     while (clients.length < 2 && Date.now() < deadline) await sleep(50);
     await sleep(300);
     assert.equal(clients.length, 2, 'one new LISTEN connection, not one per error event');
-    assert.deepEqual(clients[1].queries, ['LISTEN blackout_store_change']);
+    assert.deepEqual(clients[1].queries, [EXEMPT, LISTEN]);
     assert.equal(reconnects, 1);
 
     await transport.close();
@@ -413,6 +450,7 @@ test('a reconnect whose LISTEN fails on a dropped connection is retried once, no
                 // 'error' on the client, then rejects the query.
                 c.query = async (sql: string) => {
                     c.queries.push(sql);
+                    if (sql !== LISTEN) return {};
                     c.emit('error', terminated());
                     throw terminated();
                 };
@@ -447,6 +485,7 @@ test('a reconnect whose LISTEN the server ends gives the dead client back once, 
                 // which ends it, so no 'error' follows.
                 c.query = async (sql: string) => {
                     c.queries.push(sql);
+                    if (sql !== LISTEN) return {};
                     setTimeout(() => c.socketClosed(), 30);
                     throw terminated();
                 };
@@ -482,6 +521,7 @@ test('a reconnect whose LISTEN fails with no connection error after it still giv
                 // timeout, say): no 'error' event follows to give it back.
                 c.query = async (sql: string) => {
                     c.queries.push(sql);
+                    if (sql !== LISTEN) return {};
                     throw Object.assign(new Error('canceling statement due to statement timeout'), {
                         code: '57014',
                     });
@@ -501,6 +541,160 @@ test('a reconnect whose LISTEN fails with no connection error after it still giv
     assert.equal(clients[1].released.length, 1, 'the refused client is given back, once');
     assert.ok(clients[1].released[0] instanceof Error);
     await transport.close();
+});
+
+test('the LISTEN connection turns the idle-session timeout off for itself before LISTEN, on every connection it opens, and puts it back before returning to the pool', async (t) => {
+    captureLogs(t);
+    const clients: FakeListenClient[] = [];
+    const transport = new PgNotifyTransport({
+        connect: async () => {
+            const c = new FakeListenClient();
+            clients.push(c);
+            return c;
+        },
+    });
+    let reconnects = 0;
+    transport.onReconnect(() => (reconnects += 1));
+    await transport.subscribe(() => undefined);
+    assert.deepEqual(clients[0].queries, [EXEMPT, LISTEN]);
+
+    clients[0].emit('error', terminated());
+    await waitFor(() => reconnects === 1, 'the reconnect');
+    assert.deepEqual(clients[1].queries, [EXEMPT, LISTEN], 'the replacement too');
+    assert.deepEqual(clients[0].queries, [EXEMPT, LISTEN], 'nothing more on the dropped one');
+
+    await transport.close();
+    assert.deepEqual(clients[1].queries, [EXEMPT, LISTEN, UNLISTEN, RESTORE]);
+    assert.deepEqual(clients[1].released, ['pooled'], 'pooled once the timeout is back');
+});
+
+test('a server that refuses the idle-session statement still gets its LISTEN connection, and the refusal is logged once', async (t) => {
+    captureLogs(t);
+    const info = captureInfo(t);
+    forgetIdleSessionExemptionFailureForTests();
+    const clients: FakeListenClient[] = [];
+    const transport = new PgNotifyTransport({
+        connect: async () => {
+            const c = new FakeListenClient();
+            c.query = async (sql: string) => {
+                c.queries.push(sql);
+                if (sql === EXEMPT) throw unrecognized();
+                return {};
+            };
+            clients.push(c);
+            return c;
+        },
+    });
+    let reconnects = 0;
+    transport.onReconnect(() => (reconnects += 1));
+    await transport.subscribe(() => undefined);
+    assert.deepEqual(clients[0].queries, [EXEMPT, LISTEN], 'LISTEN is still sent');
+    assert.deepEqual(clients[0].released, [], 'the connection is kept');
+
+    clients[0].emit('error', terminated());
+    await waitFor(() => reconnects === 1, 'the reconnect');
+    assert.deepEqual(clients[1].queries, [EXEMPT, LISTEN], 'refused again on the replacement');
+    assert.deepEqual(clients[1].released, []);
+
+    const refusals = logged(info, 'pg_idle_session_timeout_not_exempted');
+    assert.equal(refusals.length, 1, 'two refusals, one line');
+    assert.equal(refusals[0].level, 'info');
+    assert.equal(refusals[0].code, '42704');
+    assert.match(String(refusals[0].error), /unrecognized configuration parameter/);
+
+    await transport.close();
+    assert.deepEqual(
+        clients[1].queries,
+        [EXEMPT, LISTEN, UNLISTEN],
+        'nothing to put back where the statement never took effect'
+    );
+    assert.deepEqual(clients[1].released, ['pooled']);
+});
+
+test('a LISTEN connection whose idle-session timeout cannot be put back is destroyed, not pooled', async (t) => {
+    captureLogs(t);
+    const c = new FakeListenClient();
+    c.query = async (sql: string) => {
+        c.queries.push(sql);
+        if (sql === RESTORE) {
+            throw Object.assign(new Error('canceling statement due to statement timeout'), {
+                code: '57014',
+            });
+        }
+        return {};
+    };
+    const transport = new PgNotifyTransport({ connect: async () => c });
+    await transport.subscribe(() => undefined);
+    await transport.close();
+    assert.deepEqual(c.queries, [EXEMPT, LISTEN, UNLISTEN, RESTORE]);
+    assert.equal(c.released.length, 1, 'given back once');
+    assert.ok(c.released[0] instanceof Error, 'with the error: the pool destroys it');
+});
+
+test('a LISTEN connection dropped while the idle-session statement is out fails as one dropped under LISTEN does: given back once, replaced once', async (t) => {
+    captureLogs(t);
+    const clients: FakeListenClient[] = [];
+    const transport = new PgNotifyTransport({
+        connect: async () => {
+            const c = new FakeListenClient();
+            if (clients.length === 0) {
+                // A socket reset under the idle-session statement: pg emits
+                // 'error' on the client, then rejects that statement and every
+                // later one.
+                c.query = async (sql: string) => {
+                    c.queries.push(sql);
+                    if (sql === EXEMPT) c.emit('error', terminated());
+                    throw sql === EXEMPT
+                        ? terminated()
+                        : new Error(
+                              'Client has encountered a connection error and is not queryable'
+                          );
+                };
+            }
+            clients.push(c);
+            return c;
+        },
+    });
+    let reconnects = 0;
+    transport.onReconnect(() => (reconnects += 1));
+    // The failed idle-session statement is passed over; the LISTEN after it
+    // fails, and that fails the open as it always did.
+    await assert.rejects(
+        transport.subscribe(() => undefined),
+        /not queryable/
+    );
+    assert.equal(clients[0].released.length, 1, 'given back once');
+    assert.ok(clients[0].released[0] instanceof Error, 'with its error: destroyed');
+
+    await waitFor(() => reconnects === 1, 'the reconnect');
+    await sleep(300);
+    assert.equal(clients.length, 2, 'one replacement');
+    assert.deepEqual(clients[1].queries, [EXEMPT, LISTEN]);
+    await transport.close();
+});
+
+test('close() while the idle-session statement is out sends no LISTEN on the connection it gives back', async () => {
+    const c = new FakeListenClient();
+    let answerExempt: () => void = () => undefined;
+    const exemptAnswered = new Promise<void>((r) => (answerExempt = r));
+    // One statement at a time, answered in the order sent, as on a real connection.
+    let last: Promise<unknown> = Promise.resolve();
+    c.query = (sql: string) => {
+        c.queries.push(sql);
+        const answer = last
+            .then(() => (sql === EXEMPT ? exemptAnswered : undefined))
+            .then(() => ({}));
+        last = answer;
+        return answer;
+    };
+    const transport = new PgNotifyTransport({ connect: async () => c });
+    const subscribed = transport.subscribe(() => undefined);
+    await waitFor(() => c.queries.length === 1, 'the idle-session statement to be sent');
+    const closed = transport.close();
+    answerExempt();
+    await Promise.all([subscribed, closed]);
+    assert.deepEqual(c.queries, [EXEMPT, UNLISTEN, RESTORE], 'no LISTEN, and the timeout is back');
+    assert.deepEqual(c.released, ['pooled'], 'given back once');
 });
 
 const probePlan = {
@@ -960,6 +1154,107 @@ test('giving the leader lock back stops its watch: no lock check destroys that c
     await next.query('SELECT 1');
     next.release();
     assert.equal(pool.totalCount, 1, 'pooled again');
+});
+
+/** What the stand-in connections were sent: the lock statements by name, the rest as text. */
+const sentToFakes = (): string[] =>
+    FakeConnection.executed.map(
+        ({ connection, sql }) =>
+            `${connection}: ${
+                sql.includes('pg_try_advisory_lock')
+                    ? 'lock'
+                    : sql.includes('pg_advisory_unlock')
+                    ? 'unlock'
+                    : sql
+            }`
+    );
+
+test('the leader-lock connection turns the idle-session timeout off once it holds the lock, and puts it back when the lock is given up', async (t) => {
+    captureLogs(t);
+    const pool = (openPool = await sharedPoolOfFakes());
+    t.after(() => releaseBackgroundLeader());
+    assert.equal(await acquireBackgroundLeaderLock(pool as never), true);
+    assert.deepEqual(sentToFakes(), ['0: lock', `0: ${EXEMPT}`]);
+
+    await releaseBackgroundLeader();
+    assert.deepEqual(sentToFakes().slice(2), ['0: unlock', `0: ${RESTORE}`]);
+    assert.equal(FakeConnection.made[0].ended, false, 'pooled once the timeout is back');
+    assert.equal(pool.totalCount, 1);
+});
+
+test('a connection that does not get the leader lock goes back to the pool as it came', async (t) => {
+    captureLogs(t);
+    const pool = (openPool = await sharedPoolOfFakes());
+    FakeConnection.respond = (sql) =>
+        sql.includes('pg_try_advisory_lock') ? { rows: [{ locked: false }] } : undefined;
+    assert.equal(await acquireBackgroundLeaderLock(pool as never), false);
+    assert.equal(isBackgroundLeader(), false);
+    assert.deepEqual(sentToFakes(), ['0: lock'], 'the idle-session timeout was left alone');
+    assert.equal(FakeConnection.made[0].ended, false, 'pooled');
+});
+
+test('a server that refuses the idle-session statement still gives the leader lock, and nothing is put back when the lock is given up', async (t) => {
+    captureLogs(t);
+    const info = captureInfo(t);
+    forgetIdleSessionExemptionFailureForTests();
+    const pool = (openPool = await sharedPoolOfFakes());
+    t.after(() => releaseBackgroundLeader());
+    FakeConnection.respond = (sql) => (sql === EXEMPT ? unrecognized() : undefined);
+    assert.equal(await acquireBackgroundLeaderLock(pool as never), true);
+    assert.equal(isBackgroundLeader(), true);
+    let lost = 0;
+    watchBackgroundLeadership(() => (lost += 1));
+    assert.equal(FakeConnection.made[0].ended, false, 'the connection is kept');
+    const refusals = logged(info, 'pg_idle_session_timeout_not_exempted');
+    assert.equal(refusals.length, 1);
+    assert.equal(refusals[0].code, '42704');
+    assertSecretFree(JSON.stringify(refusals[0]));
+
+    await releaseBackgroundLeader();
+    assert.deepEqual(sentToFakes(), ['0: lock', `0: ${EXEMPT}`, '0: unlock']);
+    assert.equal(FakeConnection.made[0].ended, false, 'pooled');
+    assert.equal(lost, 0, 'the lock was never reported lost');
+});
+
+test('a leader-lock connection dropped while the idle-session statement is out is reported lost by the watch', async (t) => {
+    const lines = captureLogs(t);
+    const pool = (openPool = await sharedPoolOfFakes());
+    t.after(() => releaseBackgroundLeader());
+    // The pool's one idle connection, so the lock attempt checks it out.
+    (await pool.connect()).release();
+    const conn = FakeConnection.made[0];
+    // The server ends the backend under the idle-session statement: pg rejects
+    // that statement, and reports the drop when the socket closes.
+    conn.terminateUnderQuery(/idle_session_timeout/, terminated());
+
+    // The failed statement is passed over, so the lock counts as taken...
+    assert.equal(await acquireBackgroundLeaderLock(pool as never), true);
+    const lost: string[] = [];
+    watchBackgroundLeadership((reason) => lost.push(reason));
+    // ...until the watch, on from the moment the lock is reported taken, hears
+    // of the drop.
+    await waitFor(() => lost.length === 1, 'the watch to report the loss');
+    assert.deepEqual(lost, ['connection_error']);
+    assert.equal(isBackgroundLeader(), false);
+    assert.equal(conn.ended, true, 'the dead connection was destroyed');
+    assert.equal(logged(lines, 'pg_pool_client_error')[0]?.state, 'held');
+});
+
+test('a leader-lock connection whose idle-session timeout cannot be put back is destroyed, not pooled', async (t) => {
+    captureLogs(t);
+    const pool = (openPool = await sharedPoolOfFakes());
+    t.after(() => releaseBackgroundLeader());
+    FakeConnection.respond = (sql) =>
+        sql === RESTORE
+            ? Object.assign(new Error('canceling statement due to statement timeout'), {
+                  code: '57014',
+              })
+            : undefined;
+    assert.equal(await acquireBackgroundLeaderLock(pool as never), true);
+    await releaseBackgroundLeader();
+    assert.deepEqual(sentToFakes(), ['0: lock', `0: ${EXEMPT}`, '0: unlock', `0: ${RESTORE}`]);
+    assert.equal(FakeConnection.made[0].ended, true, 'destroyed');
+    assert.equal(pool.totalCount, 0);
 });
 
 test('an API that runs the loops itself stays up when its leader-lock connection fails, stops the loops, and takes the lock again on a new connection', async (t) => {

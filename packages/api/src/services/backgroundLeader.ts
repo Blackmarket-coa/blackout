@@ -1,4 +1,5 @@
 import type { PgClient, PgPool } from '../db/migrate';
+import { exemptFromIdleSessionTimeout, restoreIdleSessionTimeout } from '../db/pooledClient';
 import { getSharedPgPool } from '../config/postgres';
 import { RUNTIME_DB_MODE } from '../db/store';
 import { log } from '../telemetry/logger';
@@ -86,6 +87,10 @@ export const acquireBackgroundLeaderLock = async (pool: PgPool): Promise<boolean
         return false;
     }
     leaderClient = client;
+    // Held idle between lock checks, so it would sit idle past an idle-session
+    // timeout shorter than the check interval. Only once the lock is held: a
+    // connection that did not get it has gone back to the pool as it came.
+    await exemptFromIdleSessionTimeout(client);
     log.info('background_leader_acquired', {});
     return true;
 };
@@ -191,9 +196,13 @@ export const releaseBackgroundLeader = async (): Promise<void> => {
     for (const stop of [...leaderWatches]) stop();
     try {
         await client.query('SELECT pg_advisory_unlock($1)', [BACKGROUND_LEADER_LOCK_KEY]);
+        // An ordinary pooled connection from here on, under the server's
+        // idle-session timeout again.
+        await restoreIdleSessionTimeout(client);
     } catch (err) {
         // The lock goes when the connection drops, so a connection whose unlock
-        // failed is destroyed, never pooled with the lock possibly still held.
+        // failed is destroyed, never pooled with the lock possibly still held;
+        // nor is one pooled that is still exempt from the timeout.
         client.release?.(asError(err));
         return;
     }

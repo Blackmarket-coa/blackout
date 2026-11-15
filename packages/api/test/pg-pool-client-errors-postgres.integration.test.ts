@@ -12,11 +12,14 @@
 //   - the API process itself (src/index.ts, spawned in postgres mode) against
 //     a real server: staying up, stopping its loops and taking the lock again
 //     when its leader-lock connection drops, and draining to exit 0 on SIGTERM
-//     when the connection it held the lock on drops during the drain.
+//     when the connection it held the lock on drops during the drain;
+//   - a real server's idle_session_timeout: sparing the two connections that
+//     turn it off for themselves, and ending the pool's other idle ones.
 //
 // A backend is dropped the ways production sees it: pg_terminate_backend (what
-// a restart, a failover or idle_session_timeout does to a session) and a TCP
-// reset from a proxy in front of the server (a network fault).
+// a restart or a failover does to a session), the server's own
+// idle_session_timeout, and a TCP reset from a proxy in front of the server (a
+// network fault).
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
@@ -33,7 +36,12 @@ const skip = PG_URL ? false : 'set BLACKOUT_TEST_PG_URL to run against PostgreSQ
 
 const { clearSharedPgPool, getSharedPgPool } = await import('../src/config/postgres');
 const { PgNotifyTransport } = await import('../src/db/pgNotify');
-const { BACKGROUND_LEADER_LOCK_KEY } = await import('../src/services/backgroundLeader');
+const {
+    BACKGROUND_LEADER_LOCK_KEY,
+    acquireBackgroundLeaderLock,
+    releaseBackgroundLeader,
+    watchBackgroundLeadership,
+} = await import('../src/services/backgroundLeader');
 const { WriteBehindQueue } = await import('../src/db/writeBehindQueue');
 const { introspectColumns } = await import('../src/db/pgWriter');
 const { migrateUp, MIGRATIONS_DIR } = await import('../src/db/migrate');
@@ -114,10 +122,21 @@ const terminate = async (database: string, where: string, params: unknown[] = []
 };
 
 /** The shared pool, as the app makes it, on a database of its own. */
-const sharedPool = async (database: string): Promise<SharedPool> => {
+const sharedPool = async (database: string, url = urlFor(database)): Promise<SharedPool> => {
     clearSharedPgPool();
-    process.env.DATABASE_URL = urlFor(database);
+    process.env.DATABASE_URL = url;
     return (await getSharedPgPool()) as unknown as SharedPool;
+};
+
+/**
+ * `url` with an idle_session_timeout for the sessions opened through it and
+ * no others: a startup option, so no role's or database's default changes and
+ * the admin sessions these tests open are not under it.
+ */
+const withIdleSessionTimeout = (url: string, timeout: string): string => {
+    const u = new URL(url);
+    u.searchParams.set('options', `-c idle_session_timeout=${timeout}`);
+    return u.toString();
 };
 
 /** console.warn and console.error lines while the test runs. */
@@ -385,6 +404,94 @@ test(
         assert.equal(reconnects, 1);
         assert.equal(await listening(), 1, 'one LISTEN session, not one per error event');
         assert.equal(pool.totalCount, 1, 'the dead LISTEN client no longer holds a pool slot');
+    }
+);
+
+test(
+    "the LISTEN connection and the leader-lock connection outlive an idle_session_timeout that ends the pool's other idle connections, and are under it again once given back",
+    { skip, timeout: 60_000 },
+    async (t) => {
+        const lines = captureWarnings(t);
+        const database = await newDatabase();
+        const pool = await sharedPool(database, withIdleSessionTimeout(urlFor(database), '1s'));
+        const transport = new PgNotifyTransport(pool as never);
+        t.after(async () => {
+            await transport.close();
+            await releaseBackgroundLeader();
+            await endPool(pool);
+        });
+        const a = await admin(urlFor(database));
+        t.after(() => a.end());
+        const connected = async (pids: number[]): Promise<number[]> =>
+            (
+                await a.query(
+                    'SELECT pid FROM pg_stat_activity WHERE pid = ANY($1::int[]) ORDER BY pid',
+                    [pids]
+                )
+            ).rows.map((r) => r.pid as number);
+        /** Connections the server ended for sitting idle, as the pool logged them. */
+        const endedIdle = (): Row[] =>
+            logged(lines, 'pg_pool_client_error').filter((e) => e.code === '57P05');
+
+        // The timeout is in force on this pool's sessions: the server ends an
+        // ordinary connection left idle, and the pool drops it.
+        const ordinary = await pool.connect();
+        const ordinaryPid = await pidOf(ordinary);
+        assert.equal(
+            (await ordinary.query('SHOW idle_session_timeout')).rows[0].idle_session_timeout,
+            '1s'
+        );
+        ordinary.release();
+        await waitFor(() => endedIdle().length === 1, 'the server to end an idle connection');
+        assert.equal(endedIdle()[0].state, 'idle');
+        assert.deepEqual(await connected([ordinaryPid]), []);
+
+        let reconnects = 0;
+        transport.onReconnect(() => (reconnects += 1));
+        await transport.subscribe(() => undefined);
+        assert.equal(await acquireBackgroundLeaderLock(pool as never), true);
+        const lost: string[] = [];
+        watchBackgroundLeadership((reason) => lost.push(reason));
+        const held = (
+            await a.query(
+                `SELECT pid FROM pg_stat_activity
+                  WHERE datname = current_database() AND query ILIKE 'LISTEN%'
+                 UNION
+                 SELECT pid FROM pg_locks
+                  WHERE locktype = 'advisory' AND granted AND objid = $1::bigint::oid
+                    AND database = (SELECT oid FROM pg_database WHERE datname = current_database())
+                 ORDER BY pid`,
+                [BACKGROUND_LEADER_LOCK_KEY]
+            )
+        ).rows.map((r) => r.pid as number);
+        assert.equal(held.length, 2, 'the LISTEN session and the lock session');
+
+        // Four timeout periods. Nothing is sent on either meanwhile: LISTEN is
+        // the last statement on one, and the first lock check is 10 s away.
+        await sleep(4_000);
+        assert.deepEqual(await connected(held), held, 'both sessions are still connected');
+        const idle = await a.query(
+            `SELECT pid FROM pg_stat_activity
+              WHERE pid = ANY($1::int[]) AND state = 'idle'
+                AND now() - state_change > interval '3 seconds'`,
+            [held]
+        );
+        assert.equal(idle.rows.length, 2, 'and sat idle for more than three periods');
+        assert.equal(reconnects, 0, 'no LISTEN reconnect, so no re-hydrate');
+        assert.deepEqual(logged(lines, 'pg_notify_listen_error'), []);
+        assert.deepEqual(lost, [], 'the lock was not lost');
+        assert.equal(endedIdle().length, 1, 'no connection but the ordinary one was ended');
+
+        // Given back, each is an ordinary pooled connection, under the timeout
+        // again: the server ends both.
+        await transport.close();
+        await releaseBackgroundLeader();
+        await waitFor(() => endedIdle().length === 3, 'the server to end both once pooled');
+        assert.deepEqual(
+            endedIdle().map((e) => e.state),
+            ['idle', 'idle', 'idle']
+        );
+        assert.deepEqual(await connected(held), []);
     }
 );
 

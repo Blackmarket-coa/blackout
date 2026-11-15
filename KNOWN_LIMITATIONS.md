@@ -843,6 +843,27 @@ What remains:
     (`deploy/helm/blackout`). The production compose files set that variable
     on the app replicas and leave the loops to the worker, which exits 1 on the
     loss and comes back through its restart policy.
+-   A role's or database's `idle_session_timeout` (PostgreSQL 14 and later)
+    still ends the pool's ordinary connections. The server ends one that sits
+    idle that long; the pool drops it, the drop is logged and counted as above
+    (`state` `idle`, code `57P05`), and the pool opens another when it next
+    needs one. With a short timeout those lines and counts keep coming while
+    nothing is wrong. Since 2026-11-15 the timeout no longer ends the two
+    connections a process holds idle on purpose, the LISTEN connection and the
+    background-leader lock's: each turns it off for its own session
+    (`SET idle_session_timeout = 0`; the LISTEN connection before it listens,
+    the lock's once the lock is held) and puts it back before it returns to
+    the pool. Before that the server ended the LISTEN connection once every
+    timeout period, each time costing a reconnect, a re-hydrate of every table
+    and about 2 s without change notifications; and with a timeout under the
+    10 s between lock checks it ended the lock's connection soon after every
+    acquisition, so an API that runs the loops itself ran them for a few
+    seconds in every 15 or more, and the worker exited 1 a few seconds after
+    every start. A server older than 14 has no such timeout. It refuses the
+    statement, which is logged once per process
+    (`pg_idle_session_timeout_not_exempted`) and changes nothing else. The same
+    line is logged if the statement fails on a newer server, and that
+    connection then stays under the timeout.
 -   A write-behind write gets one immediate retry, on another connection than
     the one it failed on (a new one only when none is idle). A write whose own
     connection was dropped under it lands on that retry; one attempted while

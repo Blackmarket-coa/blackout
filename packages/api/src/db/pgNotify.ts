@@ -20,7 +20,11 @@
 // be swapped for an in-process one in tests (two stores sharing one database).
 
 import { log } from '../telemetry/logger';
-import { withPooledClient } from './pooledClient';
+import {
+    exemptFromIdleSessionTimeout,
+    restoreIdleSessionTimeout,
+    withPooledClient,
+} from './pooledClient';
 
 export interface StoreChangePayload {
     /** Originating instance id — used to skip self-notifications. */
@@ -199,6 +203,12 @@ export class PgNotifyTransport implements StoreChangeTransport {
             this.scheduleReconnect();
         });
         try {
+            // Nothing is sent on this connection after LISTEN, so it would sit
+            // idle past any idle-session timeout the server has.
+            await exemptFromIdleSessionTimeout(client);
+            // close() came while that statement was out. It gives this
+            // connection back to the pool, so nothing more is sent on it.
+            if (this.closed) return;
             await client.query(`LISTEN ${CHANNEL}`);
         } catch (err) {
             giveUp(err);
@@ -234,13 +244,25 @@ export class PgNotifyTransport implements StoreChangeTransport {
         this.closed = true;
         if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
         this.reconnectTimer = null;
+        const client = this.listenClient;
+        if (!client) return;
         try {
-            await this.listenClient?.query(`UNLISTEN ${CHANNEL}`);
+            await client.query(`UNLISTEN ${CHANNEL}`);
         } catch {
             // best effort
         }
-        this.listenClient?.release?.();
+        // Back to the pool as an ordinary connection, under the server's
+        // idle-session timeout again; destroyed if that cannot be put back.
+        let failure: Error | undefined;
+        try {
+            await restoreIdleSessionTimeout(client);
+        } catch (err) {
+            failure = err instanceof Error ? err : new Error(String(err));
+        }
+        // A connection error during those statements gave it back already.
+        if (this.listenClient !== client) return;
         this.listenClient = null;
+        client.release?.(failure);
     }
 }
 
