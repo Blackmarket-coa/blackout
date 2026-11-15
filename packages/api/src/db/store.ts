@@ -9709,15 +9709,16 @@ export class PostgresBackedDb extends InMemoryDb {
     private readonly switchWritesInFlight = new Map<string, Set<Map<string, unknown>>>();
 
     /**
-     * A conditional statement of a switch's that did not answer in time and
-     * has not settled since. While it is set no other conditional write of a
+     * The conditional statements of switches that did not answer in time and
+     * have not settled since (`stalledSwitchStatement`: the stall). While one
+     * is here no other conditional write of a
      * switch is sent (each is `unanswered` at once), on any switch: one
      * statement the database did not answer says the database is not
      * answering, and a stalled database then costs a pass one bound, not one
      * per switch, and the owner's routes answer 503 at once. It is
      * process-wide on purpose, and since round 11 a statement waits only for
      * this process's earlier writes to the same switch, so a backlog of
-     * writes to other tables no longer sets it. It stands until the
+     * writes to other tables no longer sets it. It stands until each such
      * statement answers or fails and, where it landed, until the switch's
      * read back has been taken (`settleSwitchStatement`), which nothing here
      * bounds: the shared pool sets no connection or statement timeout and no
@@ -9749,8 +9750,21 @@ export class PostgresBackedDb extends InMemoryDb {
      * the stall; round 18: they named a network fault as standing until
      * restart without the condition; round 19: they left out a database
      * that stops answering on a live host).
+     *
+     * Every such statement is kept here until it has settled, and the stall
+     * stands while any is (round 19 of part 2's review: one slot held the
+     * statement that passed its bound last, so with two out, two owners'
+     * check-ins sent within one bound of each other, the stall ended when
+     * that one settled, with the other still unanswered or its landed row
+     * not yet read back into this mirror; statements were sent again and an
+     * arm read the bounds without that row).
      */
-    private stalledSwitchStatement: Promise<unknown> | null = null;
+    private readonly stalledSwitchStatements = new Set<Promise<unknown>>();
+
+    /** A statement that passed its bound and has not settled, while any stands: the stall. */
+    private get stalledSwitchStatement(): Promise<unknown> | null {
+        return this.stalledSwitchStatements.values().next().value ?? null;
+    }
 
     /**
      * The spans of time `stalledSwitchStatement` has stood, newest last
@@ -10399,16 +10413,17 @@ export class PostgresBackedDb extends InMemoryDb {
                 () => undefined
             )
             .finally(() => {
-                if (this.stalledSwitchStatement === stalled) {
-                    this.stalledSwitchStatement = null;
-                    stall.endedAt = Date.now();
-                    log.info('deadman_switch_write_settled', {});
-                    // The database answers again: a note whose carry has
-                    // not landed is tried now (decision 31).
-                    this.carryRefusedOwnerWrites();
-                }
+                this.stalledSwitchStatements.delete(stalled);
+                // The stall stands while any statement that passed its bound
+                // has not settled, not only the one that passed it last.
+                if (this.stalledSwitchStatements.size > 0) return;
+                stall.endedAt = Date.now();
+                log.info('deadman_switch_write_settled', {});
+                // The database answers again: a note whose carry has
+                // not landed is tried now (decision 31).
+                this.carryRefusedOwnerWrites();
             });
-        this.stalledSwitchStatement = stalled;
+        this.stalledSwitchStatements.add(stalled);
         log.error('deadman_switch_write_failed', {
             error: 'timeout',
             timeoutMs: this.switchStatementTimeoutMs,
