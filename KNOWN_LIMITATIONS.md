@@ -1080,9 +1080,16 @@ What remains:
     write was dropped with Postgres up. In the runs here (one write in
     flight; one idle pooled connection, or two in a few of the tries; every
     session of the API ended by one statement) that lost 32 of 160 writes
-    before the change and none of @@MT_TRIES@@ on the code as it is now,
-    @@MT_SECOND@@ of which were handed a second ended connection before
-    they landed.
+    before the change and none of 280 on its first version, 16 of which
+    were handed a second ended connection before they landed. Run again end
+    to end through the API on the code as it is now (one API on its own
+    database, 40 writes a run, every request answered 201), it lost none
+    of 80, where develop's code lost 8 of 40 in the same session: 8 of the
+    31 tries that had an idle pooled connection when the sessions were
+    ended, none of the 9 that had none. None of the 80 was handed a second
+    ended connection; that case is reached in the real-PostgreSQL tests
+    through a proxy that keeps the server's FATAL from idle connections
+    until they are used.
 
     What still loses a write. It is given up at its second failure of the
     kind that gets one retry, whichever two those are, or when its attempts
