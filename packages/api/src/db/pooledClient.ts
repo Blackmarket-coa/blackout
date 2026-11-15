@@ -42,7 +42,10 @@ export async function withPooledClient<C extends ReleasableClient, T>(
     }
 }
 
-/** Whether the connection still answers a statement. */
+/**
+ * Whether the connection still answers a statement. For a caller that nothing
+ * waits on (raiseIdleSessionTimeoutTo below): the wait has no bound.
+ */
 const stillAnswers = async (client: { query(sql: string): Promise<unknown> }): Promise<boolean> => {
     try {
         await client.query('SELECT 1');
@@ -52,11 +55,132 @@ const stillAnswers = async (client: { query(sql: string): Promise<unknown> }): P
     }
 };
 
+/**
+ * How long a statement sent on a connection after its work failed is waited
+ * for (sendAfterFailure), in milliseconds.
+ */
+export const AFTER_FAILURE_WAIT_MS = 5_000;
+
+/**
+ * What came of a statement sent on a connection after its work failed:
+ * - `answered`: the server answered it, so the connection is up;
+ * - `failed`: it failed;
+ * - `held`: it was not sent, because pg would not have sent it either (see
+ *   holdsAStatement);
+ * - `silent`: it neither was answered nor failed within the wait, or an
+ *   earlier one on the same connection did not.
+ */
+export type AfterFailure = 'answered' | 'failed' | 'held' | 'silent';
+
+/**
+ * Whether pg still holds a statement as this client's active query: one it
+ * has started to send and has had no ReadyForQuery for. pg (8.20.0,
+ * lib/client.js _pulseQueryQueue) sends the next statement only once it has
+ * that ReadyForQuery, so a statement given to such a client waits until the
+ * server has finished the held one, or the socket closes.
+ *
+ * After work that waited for each of its statements has failed, pg holds one
+ * in two cases, and in both the connection is up as far as pg knows:
+ * - pg failed the statement itself before it was complete on the wire: a
+ *   parameter it could not serialize (lib/utils.js prepareValue: an object
+ *   that JSON.stringify refuses, such as one that holds a BigInt or a cycle,
+ *   or one whose toPostgres or toJSON throws). lib/query.js prepare() has
+ *   written Parse by then, hands the error to the caller, and sends neither
+ *   Bind nor Sync. The server answers a Sync, and none is coming: pg sends
+ *   nothing on that connection again;
+ * - pg's read timeout failed it (`query_timeout`, which a connection string
+ *   can carry) while the server is still at it. The ReadyForQuery comes when
+ *   the server is done, however long that is.
+ * A statement the server answered with an error is no longer held (pg clears
+ * it in _handleErrorMessage), nor is one that failed with its connection
+ * (_errorAllQueries).
+ *
+ * Read from pg's own `_getActiveQuery()` (8.20.0, lib/client.js). A client
+ * without that method (a test's stand-in, or a pg that has dropped it) reads
+ * as holding none, and is then sent the statement, under the wait that
+ * bounds it (sendAfterFailure).
+ */
+const holdsAStatement = (client: object): boolean => {
+    const activeQuery = (client as { _getActiveQuery?: unknown })._getActiveQuery;
+    return typeof activeQuery === 'function' && Boolean(activeQuery.call(client));
+};
+
+/** Connections that left a statement of sendAfterFailure's unanswered. */
+const silentConnections = new WeakSet<object>();
+
+/**
+ * Send `sql` on a connection whose work has just failed, and say what came of
+ * it. Never rejects, and never waits longer than `withinMs`.
+ *
+ * Nothing is sent on a client that pg will not send on (holdsAStatement),
+ * and nothing more on one that has left such a statement unanswered before.
+ * Otherwise the statement is sent, and what the connection gives first is
+ * the result: the server's answer, a failure, or neither within `withinMs`.
+ * That last connection is logged (`pg_connection_unanswered`) and remembered.
+ * The statement is still pg's then: pg fails it when the client is ended,
+ * which the caller does by giving the connection back with its error, and
+ * that failure is taken here.
+ */
+export async function sendAfterFailure(
+    client: { query(sql: string): Promise<unknown> },
+    sql: string,
+    withinMs: number = AFTER_FAILURE_WAIT_MS
+): Promise<AfterFailure> {
+    if (holdsAStatement(client)) return 'held';
+    if (silentConnections.has(client)) return 'silent';
+    const sent = (async (): Promise<AfterFailure> => {
+        try {
+            await client.query(sql);
+            return 'answered';
+        } catch {
+            return 'failed';
+        }
+    })();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const waited = new Promise<AfterFailure>((resolve) => {
+        timer = setTimeout(() => resolve('silent'), withinMs);
+    });
+    const outcome = await Promise.race([sent, waited]);
+    clearTimeout(timer);
+    if (outcome === 'silent') {
+        silentConnections.add(client);
+        log.warn('pg_connection_unanswered', { statement: sql, waitedMs: withinMs });
+    }
+    return outcome;
+}
+
+/**
+ * How many connections `pool` holds: pg-pool's `totalCount`, which counts the
+ * idle ones, the ones checked out and the ones still connecting. Zero for a
+ * pool that does not say.
+ */
+const connectionsHeldBy = (pool: object): number => {
+    const held = (pool as { totalCount?: unknown }).totalCount;
+    return typeof held === 'number' && Number.isInteger(held) && held > 0 ? held : 0;
+};
+
 /** What became of one piece of work on a pooled connection. */
 export type PooledAttempt<T> =
     | { ok: true; value: T }
-    /** `connectionEnded`: the pool gave a connection, and it had ended when the work failed. */
-    | { ok: false; error: unknown; connectionEnded: boolean };
+    | {
+          ok: false;
+          error: unknown;
+          /** The pool gave a connection, and it had ended when the work failed. */
+          connectionEnded: boolean;
+          /**
+           * Set where the connection gave no answer after the failure, and
+           * so is not known to have ended: `held`, it was not asked, because
+           * pg holds the failed statement and sends nothing more on it;
+           * `silent`, it neither answered nor closed within the wait.
+           */
+          unanswered?: 'held' | 'silent';
+          /**
+           * Connections the pool held besides this one when the failure was
+           * found, counted before this one was given back. Zero where
+           * `pool.connect()` failed, and for a pool that does not say.
+           */
+          othersHeld: number;
+      };
 
 /**
  * As withPooledClient, for a caller that tries failed work again and has to
@@ -69,19 +193,35 @@ export type PooledAttempt<T> =
  * ("Connection terminated unexpectedly", "Client has encountered a connection
  * error and is not queryable") or as the socket's (ECONNRESET), and of a
  * server error's severity pg-protocol (1.13.0) passes on only the wording.
- * So the connection is asked for one more answer before it goes back, and it
- * had ended if it gives none. From pg 8.20.0's lib/client.js:
+ * So the connection is sent one more statement before it goes back
+ * (sendAfterFailure, SELECT 1), and it had ended if that statement fails.
+ * From pg 8.20.0's lib/client.js and lib/query.js, what the statement meets:
  * - after a FATAL the server sends no ReadyForQuery, so pg holds the
  *   statement back and fails it when the socket closes (_errorAllQueries);
  * - a client whose socket failed or closed is marked unqueryable
  *   (_handleErrorEvent), and pg fails the statement on the next tick;
- * - a connection that is up answers. The work must not leave a failed
- *   transaction open on it: there the server refuses SELECT 1, which would
- *   read as ended (a targeted write rolls its transaction back first).
- * The wait is for the server's answer or for the socket to close, whichever
- * the connection gives; no timer is involved, and a connection that gives
- * neither holds the caller there, as a statement of the work's own would. A
- * connection still checked out when its socket closes reports the drop
+ * - a connection that is up, with nothing of the work's still held by pg,
+ *   answers. The work must not leave a failed transaction open on it: there
+ *   the server refuses SELECT 1, which would read as ended (a targeted write
+ *   rolls its transaction back first);
+ * - a client on which pg still holds the failed statement is sent nothing
+ *   (holdsAStatement): pg would keep SELECT 1 back behind that statement,
+ *   for good where pg failed the statement itself. Not asked, it is not
+ *   known to have ended: `connectionEnded` is false and `unanswered` is
+ *   `held`.
+ * So the wait is for the server's answer or for the socket to close, and it
+ * is bounded: a connection that gives neither within `afterFailureWaitMs`
+ * (a FATAL that arrived with no close after it; a proxy that keeps the
+ * socket open and passes nothing on) is logged, and is not known to have
+ * ended either: `connectionEnded` is false and `unanswered` is `silent`. The
+ * bound decides nothing else. One that would have closed a moment later is
+ * taken for one that had not ended, which costs the caller only what a
+ * failure of that kind costs. Where the connection string carries
+ * `query_timeout`, pg's read timeout is a second timer on SELECT 1: if it
+ * is the shorter one and runs out first, SELECT 1 fails on a connection that
+ * may be up, and that reads as ended.
+ *
+ * A connection still checked out when its socket closes reports the drop
  * itself, as an 'error' event: the shared pool's listener for a checked-out
  * connection takes it, logs it and counts it (`held`, config/postgres.ts).
  * On a pool with no such listener that event would end the process, as it
@@ -92,24 +232,40 @@ export type PooledAttempt<T> =
  * connection that ended: nothing was handed out.
  *
  * The connection is given back with the error either way, as in
- * withPooledClient, so the pool destroys it.
+ * withPooledClient, so the pool destroys it. `othersHeld` is read just
+ * before that. Giving a connection back can make the pool open another in
+ * the same call, for a caller that was waiting for one (pg-pool 3.13.0
+ * _remove: pg's end() calls back at once where the socket has already
+ * closed, and the callback serves that caller), and that one was not there
+ * when the failure was found.
  */
 export async function attemptOnPooledClient<
     C extends ReleasableClient & { query(sql: string): Promise<unknown> },
     T
->(pool: { connect(): Promise<C> }, fn: (client: C) => Promise<T>): Promise<PooledAttempt<T>> {
+>(
+    pool: { connect(): Promise<C> },
+    fn: (client: C) => Promise<T>,
+    afterFailureWaitMs: number = AFTER_FAILURE_WAIT_MS
+): Promise<PooledAttempt<T>> {
     let client: C;
     try {
         client = await pool.connect();
     } catch (error) {
-        return { ok: false, error, connectionEnded: false };
+        return { ok: false, error, connectionEnded: false, othersHeld: 0 };
     }
     let failure: Error | undefined;
     try {
         return { ok: true, value: await fn(client) };
     } catch (error) {
         failure = asError(error);
-        return { ok: false, error, connectionEnded: !(await stillAnswers(client)) };
+        const asked = await sendAfterFailure(client, 'SELECT 1', afterFailureWaitMs);
+        return {
+            ok: false,
+            error,
+            connectionEnded: asked === 'failed',
+            ...(asked === 'held' || asked === 'silent' ? { unanswered: asked } : {}),
+            othersHeld: Math.max(0, connectionsHeldBy(pool) - 1),
+        };
     } finally {
         client.release?.(failure);
     }

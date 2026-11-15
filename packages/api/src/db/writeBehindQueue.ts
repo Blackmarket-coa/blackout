@@ -34,7 +34,7 @@ import {
 } from '../telemetry/metrics';
 import type { PgClient, PgPool } from './migrate';
 import { keyChangePayloads, type StoreChangePayload, type StoreChangeTransport } from './pgNotify';
-import { attemptOnPooledClient } from './pooledClient';
+import { AFTER_FAILURE_WAIT_MS, attemptOnPooledClient, sendAfterFailure } from './pooledClient';
 import {
     keyOfTuple,
     snakeToCamel,
@@ -99,16 +99,6 @@ function minus(a: KeySet, b: KeySet): KeySet {
 
 const sizeOf = (set: KeySet) => [...set.values()].reduce((n, keys) => n + keys.size, 0);
 
-/**
- * How many connections `pool` holds: pg-pool's `totalCount`, which counts the
- * idle ones, the ones checked out and the ones still connecting. Zero for a
- * pool that does not say.
- */
-const connectionsHeldBy = (pool: PgPool): number => {
-    const held = (pool as { totalCount?: unknown }).totalCount;
-    return typeof held === 'number' && Number.isInteger(held) && held > 0 ? held : 0;
-};
-
 type WriteOp = (
     | { kind: 'upsert'; mapName: string; record: Record<string, unknown> }
     | { kind: 'targeted'; mapName: string; write: TargetedWrite }
@@ -130,7 +120,12 @@ export class WriteBehindQueue {
         private readonly plans: Map<string, TablePlan>,
         /** Cross-replica change publisher + this instance's id. Omit for single-instance. */
         private readonly transport?: StoreChangeTransport,
-        private readonly instanceId = ''
+        private readonly instanceId = '',
+        /**
+         * How long a connection is waited for after an attempt on it failed
+         * (pooledClient's sendAfterFailure), in milliseconds.
+         */
+        private readonly afterFailureWaitMs = AFTER_FAILURE_WAIT_MS
     ) {}
 
     /** Approximate number of ops not yet flushed (diagnostics / backpressure). */
@@ -339,9 +334,14 @@ export class WriteBehindQueue {
 
     /**
      * One attempt at a targeted op, on `client`. A failed attempt leaves no
-     * transaction open on a connection that is still up: a failure inside the
-     * transaction is rolled back here, and a COMMIT the server refuses has
-     * ended it.
+     * transaction open on a connection that will be asked whether it still
+     * answers (attemptOnPooledClient): a failure inside the transaction is
+     * rolled back here, and a COMMIT the server refuses has ended it. The
+     * ROLLBACK goes the way that question does (sendAfterFailure): it is not
+     * sent on a client that pg will send nothing on, and it is waited for no
+     * longer than the question is. A connection it was not sent on, or that
+     * left it unanswered, is not asked the question either, and goes back to
+     * be destroyed with its transaction open, which the server then ends.
      */
     private async attemptTargeted(
         client: PgClient,
@@ -387,7 +387,7 @@ export class WriteBehindQueue {
             }
             return { outcome: 'committed', returned, merged };
         } catch (err) {
-            if (open) await client.query('ROLLBACK').catch(() => undefined);
+            if (open) await sendAfterFailure(client, 'ROLLBACK', this.afterFailureWaitMs);
             throw err;
         }
     }
@@ -404,15 +404,20 @@ export class WriteBehindQueue {
      * Run `fn` on a pooled connection, and again at once after a failure.
      * How often depends on what failed:
      * - the attempt's connection had ended (attemptOnPooledClient asks it):
-     *   again on another connection, once for every connection the pool
-     *   still held when the first one was found ended, and once more;
-     * - anything else (no connection to be had; a statement that failed on a
-     *   connection that still answers): once, whatever else the write's
-     *   attempts fail with.
+     *   again on another connection, once for every other connection the
+     *   pool held when the first one was found ended, and once more;
+     * - anything else: once, whatever else the write's attempts fail with.
+     *   That is no connection to be had; a statement that failed on a
+     *   connection that still answers; a statement pg failed itself and
+     *   still holds, so that the connection was not asked; and a connection
+     *   that neither answered nor closed within `afterFailureWaitMs`.
      * So a write is attempted at most once for every connection the pool held
      * when the first one was found ended, that one included, once more, and
      * once again for a failure of the second kind: twelve times at most with
-     * pg-pool's default of ten connections.
+     * pg-pool's default of ten connections. The count is taken before the
+     * ended connection is given back (PooledAttempt.othersHeld), so a
+     * connection the pool opens in giving it back, for another caller that
+     * was waiting, is not in it.
      *
      * Why more than once. The server can end several of the process's
      * sessions together (a failover, every backend of the role terminated)
@@ -426,14 +431,14 @@ export class WriteBehindQueue {
      *
      * Why that many. A failed attempt gives its connection back with the
      * error, so the pool destroys it and never hands it out again. Any of the
-     * connections the pool holds when the first one is found ended may have
-     * ended with it. Once each of those has been handed out and destroyed,
-     * an attempt can only be on a connection opened since, so of that many
-     * attempts and one more, at least one is. If every one of them finds its
-     * connection ended, the server has ended a session it took after the
-     * first failure as well, and the write is given up. A pool that does not
-     * say how many connections it holds (a test's stand-in) is taken to hold
-     * no others: one further attempt.
+     * other connections the pool holds when the first one is found ended may
+     * have ended with it. Once each of those has been handed out and
+     * destroyed, an attempt can only be on a connection opened since, so of
+     * that many attempts and one more, at least one is. If every one of them
+     * finds its connection ended, the server has ended a session it took
+     * after the first failure as well, and the write is given up. A pool that
+     * does not say how many connections it holds (a test's stand-in) is taken
+     * to hold no others: one further attempt.
      *
      * What an attempt on an ended connection can have done. Nothing, where
      * the server had ended the session before the attempt's first statement
@@ -451,10 +456,10 @@ export class WriteBehindQueue {
         let endedLeft: number | null = null;
         let retried = false;
         for (let attempt = 1; ; attempt += 1) {
-            const result = await attemptOnPooledClient(this.pool, fn);
+            const result = await attemptOnPooledClient(this.pool, fn, this.afterFailureWaitMs);
             if (result.ok) return result.value;
             if (result.connectionEnded) {
-                endedLeft = endedLeft === null ? connectionsHeldBy(this.pool) + 1 : endedLeft - 1;
+                endedLeft = endedLeft === null ? result.othersHeld + 1 : endedLeft - 1;
                 if (endedLeft === 0) throw result.error;
             } else {
                 if (retried) throw result.error;
@@ -463,6 +468,7 @@ export class WriteBehindQueue {
             log.warn('db_write_behind_retry', {
                 attempt,
                 connectionEnded: result.connectionEnded,
+                ...(result.unanswered ? { unanswered: result.unanswered } : {}),
                 error: result.error instanceof Error ? result.error.message : String(result.error),
             });
         }
