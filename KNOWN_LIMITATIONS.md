@@ -853,6 +853,14 @@ and a reconnect 2 s later for the LISTEN connection, `background_leader_lost`
 
 What remains:
 
+-   A connection the server drops while an API or a worker is still starting
+    (during the migrations, the checksum audit, the load of the tables and
+    the check of the store's statements, or LISTEN) fails that statement and
+    with it the start, and the process exits 1, as it did before 2026-11-08.
+    Nothing has been queued by then, so no write is lost, and the restart
+    policy brings the process back. The API ends on node's own report of the
+    error; the worker logs `blackout_worker_boot_failed` first.
+
 -   An API that runs the background loops itself holds the background-leader
     lock on a pooled connection, and every Postgres restart drops it. That API
     stops its loops, stays up and serving, and tries for the lock again every
@@ -897,13 +905,18 @@ What remains:
     a session now holds one of the server's connections until the server
     finds the connection dead or restarts, or someone ends the session
     (`pg_terminate_backend`), as it always did where no timeout was set. How
-    long the server takes to find it was not measured. By the defaults of
-    the PostgreSQL 16 on Linux run here, the server's TCP keepalive gives up
-    on a connection that carries nothing after about 2 h 11 min
-    (`tcp_keepalives_idle` 7200 s, then 9 probes 75 s apart); the server's
-    `tcp_keepalives_*` settings shorten that, and a change notification the
-    server sends down a dead connection can show it dead sooner. A server
-    older than 14 has no such timeout. It refuses the statement, and the
+    long the server takes to find it was not measured, and the server finds
+    it only where nothing between the API and the server still answers for
+    the connection. There, by the defaults of the PostgreSQL 16 on Linux run
+    here, the server's TCP keepalive gives up on a connection that carries
+    nothing after about 2 h 11 min (`tcp_keepalives_idle` 7200 s, then 9
+    probes 75 s apart); the server's `tcp_keepalives_*` settings shorten
+    that, and a change notification the server sends down a dead connection
+    can show it dead sooner. Behind a proxy or a pooler that keeps the
+    server's side of the connection open, the probes are answered and what
+    the server sends is taken: the server does not find the connection dead,
+    and the session stays until the server restarts or someone ends it. A
+    server older than 14 has no such timeout. It refuses the statement, and the
     connection is used as it is. On a newer server, a connection on which
     the statement fails and which is still up stays under the timeout.
     Whatever the cause, only the first failure of the statement in a process
@@ -924,9 +937,12 @@ What remains:
     -   None set: nothing is changed. The server never ends the session for
         sitting idle, and nothing in the API bounds how long an orphaned one
         keeps the lock, before 2026-11-15 or since: it stays until the
-        server finds the connection dead (the same TCP keepalive, about
-        2 h 11 min by those defaults; the server sends nothing of its own
-        down this connection) or restarts, or someone ends the session.
+        server finds the connection dead or restarts, or someone ends the
+        session. The server finds it dead only by the same TCP keepalive
+        (about 2 h 11 min by those defaults; the server sends nothing of its
+        own down this connection), and only where nothing between the API
+        and the server still answers for the connection. Behind a proxy or a
+        pooler that keeps the server's side open there is no bound at all.
         Setting an `idle_session_timeout` for the API's role or database is
         what bounds it.
     -   Shorter than 30 s (three lock checks): it is raised to 30 s for that
@@ -957,13 +973,15 @@ What remains:
 
     The last lock check came up to 10 s before the process went. Once the
     server has ended the session, a process that is trying for the lock
-    takes it at its next try, up to 15 s later: the API that held the lock,
-    if it is still running (first item), or a worker on standby. An API that
-    did not get the lock when it started does not try again, before
-    2026-11-15 or since, so where no such process is left the loops stay
-    stopped until an API or a worker next starts. A statement the server
-    refuses leaves the session as it was; the first refusal in a process,
-    the missing setting included, is logged
+    takes it at its next try: a worker on standby, or the API that held the
+    lock, if it is still running. Each tries every 15 s, but not while its
+    previous try is still under way, and the API not while a tick it started
+    before the loss is still running (second item), so the next try can come
+    later than 15 s. An API that did not get the lock when it started does
+    not try again, before 2026-11-15 or since, so where no such process is
+    left the loops stay stopped until an API or a worker next starts. A
+    statement the server refuses leaves the session as it was; the first
+    refusal in a process, the missing setting included, is logged
     (`pg_idle_session_timeout_not_raised`). A statement that fails because
     the server ended the session under it is not a refusal, and is not
     logged as one: the process asks the connection for one more answer
@@ -994,9 +1012,11 @@ What remains:
     process that Postgres could not apply as the copy did (consuming a reset
     token Postgres never received removes the token from the copy). A Postgres
     restart always drops the LISTEN connection, and the re-hydrate after the
-    reconnect reloads every table, so after a restart the change is gone within
-    seconds of Postgres coming back: an account created during the outage can
-    no longer sign in, even on the replica that created it.
+    reconnect reloads every table, so after a restart the change is gone once
+    that re-hydrate has reloaded its table (the reconnect is tried again 2 s
+    after each failure, and the reload takes as long as the tables do to
+    read): an account created during the outage can no longer sign in, even
+    on the replica that created it.
 -   A peer replica's change that this replica cannot read back at that moment
     (no connection to be had) is logged (`pg_store_peer_refresh_failed`) and
     leaves that row stale in this replica's mirror until it changes again or
