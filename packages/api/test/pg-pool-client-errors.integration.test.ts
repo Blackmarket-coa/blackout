@@ -30,6 +30,7 @@ process.env.BLACKOUT_DB_MODE = 'memory';
 
 const { clearSharedPgPool, getSharedPgPool } = await import('../src/config/postgres');
 const { dbPoolClientErrorsTotal } = await import('../src/telemetry/metrics');
+const { dbWriteBehindFailuresTotal } = await import('../src/telemetry/metrics');
 const { PgNotifyTransport } = await import('../src/db/pgNotify');
 const { forgetIdleSessionFailuresForTests, raiseIdleSessionTimeoutTo, restoreIdleSessionTimeout } =
     await import('../src/db/pooledClient');
@@ -62,6 +63,11 @@ class FakeConnection extends EventEmitter {
     static respond:
         | ((sql: string, params?: unknown[]) => { rows: unknown[] } | Error | undefined)
         | null = null;
+    /**
+     * What the server does with a connection opened from now on, where a test
+     * needs another than taking it: an error refuses it.
+     */
+    static onConnect: ((connection: FakeConnection) => Error | void) | null = null;
     _queryable = true;
     _ending = false;
     ended = false;
@@ -87,7 +93,8 @@ class FakeConnection extends EventEmitter {
     }
 
     connect(callback: (err?: Error) => void): void {
-        setImmediate(() => callback());
+        const refused = FakeConnection.onConnect?.(this);
+        setImmediate(() => callback(refused || undefined));
     }
 
     async query(sql = '', params?: unknown[]): Promise<{ rows: unknown[] }> {
@@ -216,6 +223,7 @@ const sharedPoolOfFakes = async (): Promise<SharedPool> => {
     FakeConnection.made = [];
     FakeConnection.executed = [];
     FakeConnection.respond = null;
+    FakeConnection.onConnect = null;
     const pool = (await getSharedPgPool()) as unknown as SharedPool;
     pool.Client = FakeConnection;
     return pool;
@@ -901,6 +909,206 @@ for (const [step, sql] of [
         );
     });
 }
+
+/**
+ * The server can end several of the process's sessions together and still
+ * take connections (a failover, every backend of the role terminated).
+ * pg-pool learns that an idle connection has ended only when the event loop
+ * reads its socket, and until then hands it out unasked. These are such
+ * connections: `n` of them idle in the pool, ended by the server, with the
+ * server's FATAL going to the first statement sent on each. pg-pool hands out
+ * the one given back last, so the last of them is the first a write gets.
+ */
+const endedUnnoticed = async (pool: SharedPool, n: number): Promise<FakeConnection[]> => {
+    const clients = await Promise.all(Array.from({ length: n }, () => pool.connect()));
+    for (const client of clients) client.release();
+    const connections = clients as unknown as FakeConnection[];
+    for (const connection of connections) connection.terminateUnderNextQuery(terminated());
+    return connections;
+};
+
+/** Each `db_write_behind_retry` line: the attempt that failed, and whether its connection had ended. */
+const retries = (lines: string[]): unknown[][] =>
+    logged(lines, 'db_write_behind_retry').map((e) => [e.attempt, e.connectionEnded]);
+
+const droppedWrites = (kind: string): number => {
+    const line = dbWriteBehindFailuresTotal
+        .expose()
+        .split('\n')
+        .find(
+            (l) =>
+                l.startsWith('db_write_behind_failures_total{') &&
+                l.includes('map="probe"') &&
+                l.includes(`kind="${kind}"`)
+        );
+    return line ? Number(line.split(' ').pop()) : 0;
+};
+
+test('a write is tried on each pooled connection the server ended together, and lands on a connection opened after them', async (t) => {
+    const lines = captureLogs(t);
+    const pool = (openPool = await sharedPoolOfFakes());
+    const ended = await endedUnnoticed(pool, 4);
+    const queue = new WriteBehindQueue(pool as never, new Map([['probe', probePlan]]) as never);
+    queue.enqueueUpsert('probe', { id: 'a', v: 'written' });
+    await queue.drain();
+
+    assert.deepEqual(logged(lines, 'db_write_behind_failed'), [], 'the write was not dropped');
+    assert.deepEqual(
+        retries(lines),
+        [
+            [1, true],
+            [2, true],
+            [3, true],
+            [4, true],
+        ],
+        'one further attempt for each connection that had ended'
+    );
+    assert.deepEqual(
+        ended.map((c) => c.ended),
+        [true, true, true, true],
+        'each ended connection was destroyed, not pooled'
+    );
+    assert.equal(FakeConnection.made.length, 5, 'one connection was opened');
+    const writes = FakeConnection.executed.filter((e) => e.sql.startsWith('INSERT INTO probe_wb'));
+    assert.deepEqual(
+        writes.map((w) => w.connection),
+        [4],
+        'the write landed once, on the connection opened after them'
+    );
+});
+
+test('a targeted write whose COMMIT went unanswered is tried past the other ended connections, and the keys of that COMMIT are still read back', async (t) => {
+    const lines = captureLogs(t);
+    const pool = (openPool = await sharedPoolOfFakes());
+    const ended = await endedUnnoticed(pool, 3);
+    // The first connection the write gets is ended under its COMMIT, the other
+    // two before anything is sent on them.
+    ended[2].terminateUnderQuery(/^COMMIT/, terminated());
+    FakeConnection.respond = (sql) =>
+        sql.startsWith('DELETE FROM probe_wb') ? { rows: [{ id: 'a' }] } : undefined;
+    const queue = new WriteBehindQueue(pool as never, new Map([['probe', probePlan]]) as never);
+    const reread: string[][] = [];
+    queue.onRereadKeys((keys) => reread.push([...(keys.get('probe')?.keys() ?? [])]));
+    queue.enqueueTargeted({
+        method: 'deleteProbe',
+        statements: [
+            {
+                map: 'probe',
+                sql: 'DELETE FROM probe_wb WHERE id = $1 RETURNING id',
+                params: ['a'],
+                required: false,
+            },
+        ],
+        touched: new Map([['probe', new Map([['a', ['a']]])]]),
+    });
+    await queue.drain();
+
+    assert.deepEqual(logged(lines, 'db_write_behind_failed'), [], 'the write was not dropped');
+    assert.deepEqual(retries(lines), [
+        [1, true],
+        [2, true],
+        [3, true],
+    ]);
+    const sent = (sql: string) =>
+        FakeConnection.executed.filter((e) => e.sql === sql).map((e) => e.connection);
+    assert.deepEqual(sent('BEGIN'), [2, 3], 'nothing reached the two ended before the attempt');
+    assert.deepEqual(sent('COMMIT'), [3], 'the op committed on the connection opened after them');
+    // The first attempt's COMMIT may have been applied. Its key is read back
+    // after the attempt that committed, two attempts later.
+    assert.deepEqual(reread, [['a']]);
+});
+
+test('a write is given up once a connection opened after the first failure has ended too: one attempt for each connection the pool held, and one more', async (t) => {
+    const lines = captureLogs(t);
+    const pool = (openPool = await sharedPoolOfFakes());
+    const ended = await endedUnnoticed(pool, 3);
+    // The server ends every session it takes from here on as well.
+    FakeConnection.onConnect = (connection) => connection.terminateUnderNextQuery(terminated());
+    const dropped = droppedWrites('upsert');
+    const queue = new WriteBehindQueue(pool as never, new Map([['probe', probePlan]]) as never);
+    queue.enqueueUpsert('probe', { id: 'a', v: 'written' });
+    await queue.drain();
+
+    assert.equal(FakeConnection.made.length, 4, 'the three it held, and one opened: no more');
+    assert.deepEqual(
+        [...ended, FakeConnection.made[3]].map((c) => c.ended),
+        [true, true, true, true],
+        'each was tried, and destroyed'
+    );
+    assert.deepEqual(retries(lines), [
+        [1, true],
+        [2, true],
+        [3, true],
+    ]);
+    const failed = logged(lines, 'db_write_behind_failed');
+    assert.equal(failed.length, 1, 'the dropped write is logged');
+    assert.equal(failed[0].map, 'probe');
+    assert.equal(failed[0].kind, 'upsert');
+    assert.equal(failed[0].error, 'terminating connection due to administrator command');
+    assert.equal(droppedWrites('upsert'), dropped + 1, 'and counted');
+    for (const line of lines) assertSecretFree(line);
+});
+
+test('a write is given up after its one retry when Postgres takes no connection, whatever ended connections came before', async (t) => {
+    const lines = captureLogs(t);
+    const pool = (openPool = await sharedPoolOfFakes());
+    await endedUnnoticed(pool, 2);
+    let refused = 0;
+    FakeConnection.onConnect = () => {
+        refused += 1;
+        return Object.assign(new Error('the database system is shutting down'), { code: '57P03' });
+    };
+    const dropped = droppedWrites('upsert');
+    const queue = new WriteBehindQueue(pool as never, new Map([['probe', probePlan]]) as never);
+    queue.enqueueUpsert('probe', { id: 'a', v: 'written' });
+    await queue.drain();
+
+    assert.equal(refused, 2, 'one retry after the first refusal');
+    assert.deepEqual(
+        retries(lines),
+        [
+            [1, true],
+            [2, true],
+            [3, false],
+        ],
+        'a connection that could not be had is not one that ended'
+    );
+    const failed = logged(lines, 'db_write_behind_failed');
+    assert.equal(failed.length, 1);
+    assert.equal(failed[0].error, 'the database system is shutting down');
+    assert.equal(droppedWrites('upsert'), dropped + 1);
+});
+
+test('a write the server refuses on a connection that still answers gets its one retry and no more, whatever else the pool holds', async (t) => {
+    const lines = captureLogs(t);
+    const pool = (openPool = await sharedPoolOfFakes());
+    // Three healthy connections idle in the pool.
+    const clients = await Promise.all([pool.connect(), pool.connect(), pool.connect()]);
+    for (const client of clients) client.release();
+    FakeConnection.respond = (sql) =>
+        sql.startsWith('INSERT INTO probe_wb')
+            ? Object.assign(new Error('value too long for type character varying(3)'), {
+                  code: '22001',
+              })
+            : undefined;
+    const queue = new WriteBehindQueue(pool as never, new Map([['probe', probePlan]]) as never);
+    queue.enqueueUpsert('probe', { id: 'a', v: 'written' });
+    await queue.drain();
+
+    assert.deepEqual(retries(lines), [[1, false]]);
+    const sent = (sql: string) =>
+        FakeConnection.executed.filter((e) => e.sql.startsWith(sql)).map((e) => e.connection);
+    assert.deepEqual(sent('INSERT INTO probe_wb'), [2, 1], 'two attempts');
+    assert.deepEqual(sent('SELECT 1'), [2, 1], 'each connection was asked, and answered');
+    assert.deepEqual(
+        FakeConnection.made.map((c) => c.ended),
+        [false, true, true],
+        'the third connection was not touched'
+    );
+    const failed = logged(lines, 'db_write_behind_failed');
+    assert.equal(failed.length, 1);
+    assert.equal(failed[0].error, 'value too long for type character varying(3)');
+});
 
 /** A pool for PostgresBackedDb that can refuse new connections; one table, users. */
 const storePool = () => {
@@ -1807,6 +2015,53 @@ test('PostgreSQL (PGlite): a statement the server refuses leaves the session as 
     );
     await restoreIdleSessionTimeout(client);
     assert.equal(await timeout(), '3s', 'and nothing is put back');
+});
+
+// What PostgreSQL answers on the connection of a write it refused. After a
+// failed attempt the write-behind queue asks the connection for one more
+// answer, and takes a connection that gives none for one that has ended
+// (db/pooledClient.ts). Inside a failed transaction PostgreSQL refuses every
+// statement but ROLLBACK, so that answer means what it should only because a
+// targeted write's attempt rolls its transaction back first.
+test('PostgreSQL (PGlite): a targeted write the server refuses inside its transaction is rolled back, so its connection still answers: one retry, as for any failure but an ended connection', async (t) => {
+    const lines = captureLogs(t);
+    const { db, client } = await pgliteSession(t);
+    await db.query('CREATE TABLE probe_wb (id text PRIMARY KEY, v text)');
+    try {
+        const pool = {
+            connect: async () => ({ ...client, release() {} }),
+            end: async () => {},
+        };
+        const queue = new WriteBehindQueue(pool as never, new Map([['probe', probePlan]]) as never);
+        const insert = (v: string) => ({
+            map: 'probe',
+            sql: `INSERT INTO probe_wb (id, v) VALUES ($1, '${v}') RETURNING id`,
+            params: ['a'],
+            required: false,
+        });
+        queue.enqueueTargeted({
+            method: 'insertProbeTwice',
+            // id is the primary key: the server takes the first and refuses the second.
+            statements: [insert('taken'), insert('refused')],
+            touched: new Map([['probe', new Map([['a', ['a']]])]]),
+        });
+        await queue.drain();
+
+        assert.deepEqual(
+            retries(lines),
+            [[1, false]],
+            'the connection answered after the failed attempt'
+        );
+        const failed = logged(lines, 'db_write_behind_failed');
+        assert.equal(failed.length, 1);
+        assert.equal(failed[0].kind, 'targeted');
+        const { rows } = await db.query<{ n: number }>('SELECT count(*)::int AS n FROM probe_wb');
+        assert.equal(rows[0].n, 0, 'nothing of either attempt stayed');
+    } finally {
+        // Outside a transaction this changes nothing.
+        await db.query('ROLLBACK');
+        await db.query('DROP TABLE probe_wb');
+    }
 });
 
 test('an API that runs the loops itself stays up when its leader-lock connection fails, stops the loops, and takes the lock again on a new connection', async (t) => {

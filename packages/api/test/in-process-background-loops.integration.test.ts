@@ -224,7 +224,11 @@ test('stop() during a lock attempt waits for it and starts nothing', async () =>
     assert.equal(loops.started, 0, 'no loop started');
 });
 
-/** A port nothing listens on right now (the API's env check refuses PORT=0). */
+/**
+ * A port nothing listens on right now. The test needs the port before the API
+ * starts. With PORT=0 the API would listen on a port the OS picks: outside a
+ * production boot its env check only warns about the value.
+ */
 const freePort = async (): Promise<number> => {
     const probe = net.createServer();
     probe.listen(0, '127.0.0.1');

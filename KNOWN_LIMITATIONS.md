@@ -825,18 +825,22 @@ statement in flight goes to that statement first, as the server's error, and
 the connection reports it only when its socket closes, a moment later. Code
 that gives the connection back with that error at once has the pool close it
 before then, and such a drop is that statement's error and nothing more: no
-`pg_pool_client_error` line and no count. A write-behind write that is a
-single statement goes that way. So do a lock check on the background-leader
-lock's connection (the loss is logged as `background_leader_lost`,
-`lock_check_failed`) and the LISTEN connection's LISTEN. Where the connection
-is still checked out when its socket closes, the drop is also logged and
-counted, as `held`:
+`pg_pool_client_error` line and no count. A lock check on the
+background-leader lock's connection goes that way (the loss is logged as
+`background_leader_lost`, `lock_check_failed`), and so does the LISTEN
+connection's LISTEN. Where the connection is still checked out when its
+socket closes, the drop is also logged and counted, as `held`:
 
 -   where the code sends another statement on the connection before giving it
-    back, since that statement waits until the socket closes, as the store
-    does with the ROLLBACK after a statement inside a targeted write's
-    transaction (or inside the boot check of its statements) fails, and as a
-    migration does with its ROLLBACK and the unlock of the migration lock;
+    back, since that statement waits until the socket closes. The
+    write-behind queue does so after every failed attempt at a write: since
+    2026-11-15 it asks the connection for one more answer (the write-behind
+    item under "What remains"). Before then a write that was a single
+    statement gave its connection back at once, and a drop under it was
+    that statement's error and nothing more. The store does so with the
+    ROLLBACK after a statement inside a targeted write's transaction (or
+    inside the boot check of its statements) fails, and a migration with
+    its ROLLBACK and the unlock of the migration lock;
 -   where the code passes the failure over and keeps the connection, as the
     leader lock's holder does with the statement it sends about the
     idle-session timeout (below), and the LISTEN connection with its
@@ -993,16 +997,60 @@ What remains:
     setting, and against a stand-in; for the LISTEN connection, against a
     stand-in.
 
--   A write-behind write gets one immediate retry, on another connection than
-    the one it failed on (a new one only when none is idle). A write whose own
-    connection was dropped under it lands on that retry; one attempted while
-    Postgres cannot be reached or is restarting fails twice
-    (`db_write_behind_failed`, `db_write_behind_failures_total`), though the
-    request that made it was answered 2xx, and the queue does not try it again.
-    The change is then only in that process's memory, and it is lost unless the
-    same process writes that row again first, which only a later write that
-    saves the whole row does (most writes save the one row their call
-    returned, whole: see "Several API processes on one database"). A delete,
+-   A write-behind write that fails is tried again at once, on another
+    connection than the one it failed on (a new one only when none is idle).
+    How often depends on what failed. Since 2026-11-15 the queue asks the
+    connection of a failed attempt for one more answer before it gives the
+    connection back, and a connection that gives none had ended: the server
+    ended the session, or the connection was reset. The queue waits for that
+    answer as it waits for any statement's. A connection that neither
+    answers nor closes holds the queue there, and the API sets no timeout
+    of its own on a statement.
+
+    -   An attempt whose connection had ended is made again on another
+        connection: once for every connection the pool still held when the
+        first one was found ended, and once more. Any of those may have
+        ended with the first, where the server ends several of the process's
+        sessions together and goes on taking connections (a failover, every
+        session of the role terminated). The pool hands an idle connection
+        out without knowing that, until the process has read what the server
+        sent on it. Each failed attempt has its connection destroyed, so the
+        write runs out of connections that were there at the first failure
+        before it runs out of attempts: it lands earlier, or one attempt is
+        on a connection opened after that failure.
+    -   Any other failure gets one retry, as every failure did before: no
+        connection to be had, or a statement that failed on a connection
+        that still answers.
+
+    Before 2026-11-15 the one retry could be handed an idle connection that
+    the server had ended in the same instant as the write's own, and the
+    write was dropped with Postgres up. In the runs here (one write in
+    flight; one idle pooled connection, or two in 4 of the tries; every
+    session of the API ended by one statement) that lost 32 of 160 writes
+    before the change and none of 280 after it, 16 of which were handed a
+    second ended connection before they landed.
+
+    What still loses a write:
+
+    -   Postgres cannot be reached or is restarting. The attempts follow one
+        another with no wait between them, so a write attempted while
+        Postgres refuses connections has been refused twice within
+        milliseconds, whatever ended connections it met first. A restart of
+        the server under four writers here left 31 of 520 requests that
+        were answered 201 without a row, as it did before the change (32 of
+        437).
+    -   Every one of the attempts above finds its connection ended, the one
+        on a connection opened after the first failure included: the server
+        is ending the sessions it has just taken.
+    -   Postgres refuses the statement twice on connections that answer.
+
+    Such a write is logged and counted (`db_write_behind_failed`,
+    `db_write_behind_failures_total`), though the request that made it was
+    answered 2xx, and the queue does not try it again. The change is then
+    only in that process's memory, and it is lost unless the same process
+    writes that row again first, which only a later write that saves the
+    whole row does (most writes save the one row their call returned,
+    whole: see "Several API processes on one database"). A delete,
     revocation, consume or sweep writes only what its own call changed, so it
     never writes the lost change. The change leaves memory unwritten when the
     process restarts, when a re-hydrate (or a table reload asked for by a
@@ -1017,6 +1065,7 @@ What remains:
     after each failure, and the reload takes as long as the tables do to
     read): an account created during the outage can no longer sign in, even
     on the replica that created it.
+
 -   A peer replica's change that this replica cannot read back at that moment
     (no connection to be had) is logged (`pg_store_peer_refresh_failed`) and
     leaves that row stale in this replica's mirror until it changes again or

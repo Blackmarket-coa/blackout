@@ -197,6 +197,80 @@ const orphaningProxy = async (target: URL) => {
     };
 };
 
+/**
+ * A TCP proxy in front of the server at `target` that can hold back what the
+ * server sends on a connection, its close included, until the process next
+ * sends something on that connection. To pg-pool, a connection the server
+ * ends while it is held is one whose socket the event loop has not read yet:
+ * nothing has arrived on it, and the server's FATAL comes in answer to the
+ * next statement.
+ */
+const holdingProxy = async (target: URL) => {
+    interface Pair {
+        down: net.Socket;
+        up: net.Socket;
+        /** What the server sent while the connection was held; null when it is not held. */
+        held: Buffer[] | null;
+        serverClosed: boolean;
+    }
+    const pairs = new Set<Pair>();
+    let lastUsed: Pair | null = null;
+    const server = net.createServer((down) => {
+        const up = net.connect(Number(target.port || 5432), target.hostname);
+        const pair: Pair = { down, up, held: null, serverClosed: false };
+        pairs.add(pair);
+        down.on('data', (d) => {
+            lastUsed = pair;
+            if (pair.held) {
+                // The process uses the connection again: it gets what the
+                // server sent meanwhile, and the close if there was one.
+                const held = pair.held;
+                pair.held = null;
+                for (const chunk of held) down.write(chunk);
+                if (pair.serverClosed) down.end();
+            }
+            if (!pair.serverClosed) up.write(d);
+        });
+        up.on('data', (d) => {
+            if (pair.held) pair.held.push(d);
+            else down.write(d);
+        });
+        up.on('close', () => {
+            pair.serverClosed = true;
+            if (!pair.held) down.end();
+        });
+        down.on('close', () => {
+            pairs.delete(pair);
+            up.destroy();
+        });
+        for (const socket of [down, up]) socket.on('error', () => undefined);
+    });
+    await new Promise<void>((r) => server.listen(0, '127.0.0.1', () => r()));
+    const via = new URL(target.toString());
+    via.hostname = '127.0.0.1';
+    via.port = String((server.address() as net.AddressInfo).port);
+    return {
+        url: via.toString(),
+        /** Hold every connection but the one the process sent on last. Returns how many are held. */
+        holdAllButLastUsed(): number {
+            let held = 0;
+            for (const pair of pairs) {
+                if (pair === lastUsed) continue;
+                pair.held = [];
+                held += 1;
+            }
+            return held;
+        },
+        async close(): Promise<void> {
+            for (const pair of pairs) {
+                pair.down.destroy();
+                pair.up.destroy();
+            }
+            await new Promise<void>((r) => server.close(() => r()));
+        },
+    };
+};
+
 /** console.warn and console.error lines while the test runs. */
 const captureWarnings = (t: { after(fn: () => void): void }): string[] => {
     const lines: string[] = [];
@@ -1188,6 +1262,100 @@ test(
         assert.equal(logged(lines, 'db_write_behind_retry').length, 1);
         const { rows } = await a.query('SELECT id FROM probe_wb ORDER BY id');
         assert.deepEqual(rows, [{ id: 'b' }]);
+    }
+);
+
+test(
+    'a write-behind write in flight when the server ends every session of the process lands, past each pooled connection ended with its own',
+    { skip, timeout: 60_000 },
+    async (t) => {
+        const lines = captureWarnings(t);
+        const database = await newDatabase();
+        const proxy = await holdingProxy(new URL(urlFor(database)));
+        const pool = await sharedPool(database, proxy.url);
+        t.after(async () => {
+            await endPool(pool);
+            await proxy.close();
+        });
+        const a = await admin(urlFor(database));
+        t.after(() => a.end());
+        await a.query('CREATE TABLE probe_wb (id text PRIMARY KEY, v text)');
+
+        // Four connections idle in the pool.
+        const clients = await Promise.all(Array.from({ length: 4 }, () => pool.connect()));
+        const pids = await Promise.all(clients.map(pidOf));
+        const columns = await introspectColumns(clients[0] as never, 'probe_wb');
+        for (const client of clients) client.release();
+        const plan = {
+            descriptor: {
+                mapName: 'probe',
+                tableName: 'probe_wb',
+                keyOf: (r: Record<string, unknown>) => String(r.id),
+                conflictColumns: ['id'],
+            },
+            columns,
+            columnNames: new Set(columns.map((c) => c.name)),
+        };
+        const queue = new WriteBehindQueue(pool as never, new Map([['probe', plan]]) as never);
+
+        // Hold the write in flight on a lock, on one of the four.
+        const locker = await admin(urlFor(database));
+        t.after(() => locker.end());
+        await locker.query('BEGIN');
+        await locker.query('LOCK TABLE probe_wb IN ACCESS EXCLUSIVE MODE');
+        queue.enqueueUpsert('probe', { id: 'a', v: 'written' });
+        let blocked: number[] = [];
+        const deadline = Date.now() + 5_000;
+        while (blocked.length === 0 && Date.now() < deadline) {
+            const { rows } = await a.query(
+                `SELECT pid FROM pg_stat_activity WHERE datname = current_database()
+                  AND wait_event_type = 'Lock' AND query ILIKE 'INSERT INTO probe_wb%'`
+            );
+            blocked = rows.map((r) => r.pid as number);
+            if (blocked.length === 0) await sleep(20);
+        }
+        assert.equal(blocked.length, 1, 'the write blocked on the lock');
+        assert.ok(pids.includes(blocked[0]), 'on a pooled connection');
+
+        // The server ends all four in one statement and goes on taking
+        // connections. The process hears at once of the one its write is on,
+        // and of each of the other three only when it next sends on it: as
+        // when the event loop has not yet read their sockets.
+        assert.equal(proxy.holdAllButLastUsed(), 3);
+        const ended = await terminate(database, 'pid = ANY($1::int[])', [pids]);
+        assert.deepEqual(
+            [...ended].sort((x, y) => x - y),
+            [...pids].sort((x, y) => x - y)
+        );
+        await locker.query('ROLLBACK');
+        await queue.drain();
+
+        assert.deepEqual(logged(lines, 'db_write_behind_failed'), [], 'the write was not dropped');
+        assert.deepEqual(
+            logged(lines, 'db_write_behind_retry').map((e) => [
+                e.attempt,
+                e.connectionEnded,
+                e.error,
+            ]),
+            [1, 2, 3, 4].map((attempt) => [
+                attempt,
+                true,
+                'terminating connection due to administrator command',
+            ]),
+            'one further attempt for each connection the server had ended'
+        );
+        assert.deepEqual(
+            logged(lines, 'pg_pool_client_error').map((e) => e.state),
+            ['held', 'held', 'held', 'held'],
+            'the pool heard of none of them while it sat idle'
+        );
+        const { rows } = await a.query('SELECT id, v FROM probe_wb');
+        assert.deepEqual(rows, [{ id: 'a', v: 'written' }]);
+        assert.equal(pool.totalCount, 1, 'the four are gone from the pool');
+        const landedOn = await pool.connect();
+        const pid = await pidOf(landedOn);
+        landedOn.release();
+        assert.ok(!pids.includes(pid), 'the write landed on a connection opened after them');
     }
 );
 
