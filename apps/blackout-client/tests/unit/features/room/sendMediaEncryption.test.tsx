@@ -43,6 +43,7 @@ vi.mock('../../../../src/app/plugins/matrix-adapters/hooks/useLegacyRoomAdapter'
 }));
 
 import { useLegacySendMessageAdapter } from '../../../../src/app/plugins/matrix-adapters/hooks/useLegacyTimelineAdapter';
+import { sendRoomAttachment } from '../../../../src/app/features/media/utils/roomAttachment';
 
 const SECRET = 'TOP-SECRET-PLAINTEXT-MARKER the meeting is at the old mill';
 const FILE_NAME = 'meeting-location-old-mill.txt';
@@ -306,6 +307,95 @@ describe('a file sent in a room without encryption', () => {
         });
         expect(sent[0].content.file).toBeUndefined();
         await sender.unmount();
+    });
+});
+
+describe('a room that leaves the store while an encrypted file is uploading', () => {
+    // The message that would follow carries the file's key. The SDK sends a
+    // message to a room it no longer holds without encrypting it, so the send
+    // has to be checked again after the upload, not only before it.
+    it('gets no message: the key is not sent', async () => {
+        rooms['!leaving:example.org'] = { hasEncryptionStateEvent: () => true };
+        client.uploadContent.mockImplementationOnce(
+            async (body: Blob, opts?: Record<string, unknown>) => {
+                uploads.push({ body, opts });
+                // A sign-out clears the store while the upload is in flight.
+                rooms['!leaving:example.org'] = null;
+                return { content_uri: 'mxc://example.org/orphan' };
+            }
+        );
+        const sender = await mountSender('!leaving:example.org');
+        let failure: unknown;
+        await act(async () => {
+            await sender
+                .api()
+                .sendMedia(secretFile())
+                .catch((err: unknown) => {
+                    failure = err;
+                });
+        });
+
+        expect(failure).toBeInstanceOf(Error);
+        expect((failure as Error).message).toMatch(/has not finished loading/);
+        expect(uploads).toHaveLength(1);
+        expect(sent).toHaveLength(0);
+        await sender.unmount();
+    });
+});
+
+describe('sendRoomAttachment on its own, whatever the caller sends with', () => {
+    // The hooks and the client both refuse an unloaded room. This layer must
+    // not lean on them: a caller hands it any `send` it likes.
+    it('does not call send when the room left the store during an encrypted upload', async () => {
+        let room: { hasEncryptionStateEvent: () => boolean } | null = {
+            hasEncryptionStateEvent: () => true,
+        };
+        const bare = {
+            getRoom: () => room,
+            getCrypto: () => undefined,
+            uploadContent: vi.fn(async () => {
+                room = null;
+                return { content_uri: 'mxc://example.org/orphan' };
+            }),
+        };
+        const send = vi.fn(async () => undefined);
+
+        await expect(
+            sendRoomAttachment(
+                bare as never,
+                '!leaving:example.org',
+                secretFile(),
+                (source) => ({ msgtype: 'm.file', ...source }),
+                send
+            )
+        ).rejects.toThrow(/has not finished loading/);
+
+        expect(bare.uploadContent).toHaveBeenCalledTimes(1);
+        expect(send).not.toHaveBeenCalled();
+    });
+
+    it('does not call send when a plain upload finds the room encrypted afterwards', async () => {
+        let encrypted = false;
+        const bare = {
+            getRoom: () => ({ hasEncryptionStateEvent: () => encrypted }),
+            getCrypto: () => undefined,
+            uploadContent: vi.fn(async () => {
+                encrypted = true;
+                return { content_uri: 'mxc://example.org/raced' };
+            }),
+        };
+        const send = vi.fn(async () => undefined);
+
+        await expect(
+            sendRoomAttachment(
+                bare as never,
+                '!turning:example.org',
+                secretFile(),
+                (source) => ({ msgtype: 'm.file', ...source }),
+                send
+            )
+        ).rejects.toThrow(/Encryption was turned on/);
+        expect(send).not.toHaveBeenCalled();
     });
 });
 

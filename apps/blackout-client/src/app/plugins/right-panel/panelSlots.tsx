@@ -13,6 +13,7 @@ import { usePowerLevels, readPowerLevel } from '../../hooks/usePowerLevels';
 import { useRoomPermissions } from '../../hooks/useRoomPermissions';
 import { useUserRoles } from '../../features/roles/useRoles';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
+import { avatarThumbnailUrl, roomHomeserverUrl } from '../../utils/media';
 import type { RightPanelType } from '../../state/navigation';
 import {
     findThreadRoot,
@@ -87,10 +88,12 @@ export const isWidgetPanelInventoryId = (
 ): panel is WidgetPanelInventoryId =>
     WIDGET_PANEL_INVENTORY_IDS.some((inventoryId) => inventoryId === panel);
 
-const buildMemberProfile = (member: RoomMember): MemberProfile => ({
+const buildMemberProfile = (member: RoomMember, room: Room): MemberProfile => ({
     userId: member.userId,
     displayName: member.name ?? member.userId,
-    avatarUrl: member.getMxcAvatarUrl?.() ?? undefined,
+    // Only an avatar the homeserver holds; see `avatarThumbnailUrl`.
+    avatarUrl:
+        avatarThumbnailUrl(member.getMxcAvatarUrl?.(), roomHomeserverUrl(room), 256) ?? undefined,
     roleBadges: [],
     mutualSpaces: [],
     profile: {},
@@ -296,21 +299,21 @@ const MembersPanel: RightPanelSlotRenderer = ({ room, rolesEnabled }) => {
                 members={members.online}
                 room={room}
                 rolesEnabled={rolesEnabled}
-                onOpenProfile={(member) => setProfileTarget(buildMemberProfile(member))}
+                onOpenProfile={(member) => setProfileTarget(buildMemberProfile(member, room))}
             />
             <GroupedMembersSection
                 title="Away"
                 members={members.away}
                 room={room}
                 rolesEnabled={rolesEnabled}
-                onOpenProfile={(member) => setProfileTarget(buildMemberProfile(member))}
+                onOpenProfile={(member) => setProfileTarget(buildMemberProfile(member, room))}
             />
             <GroupedMembersSection
                 title="Offline"
                 members={members.offline}
                 room={room}
                 rolesEnabled={rolesEnabled}
-                onOpenProfile={(member) => setProfileTarget(buildMemberProfile(member))}
+                onOpenProfile={(member) => setProfileTarget(buildMemberProfile(member, room))}
             />
             <ProfileModal
                 open={Boolean(profileTarget)}

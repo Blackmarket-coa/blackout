@@ -72,6 +72,12 @@ are in
     every encrypted room. Until this change it uploaded each attachment, voice
     note and hidden-message image to the homeserver as it was, with its name
     and type, and encrypted only the message that pointed to it.
+-   **Nor was it true of den documents, proposals, objectives and playbooks,
+    and it still is not.** These are stored as part of the room (Matrix room
+    state), which Matrix does not encrypt in any room. In an encrypted den the
+    homeserver can read their titles and text. Nothing about how they are
+    stored changes here; what changes is that the app and the trust page now
+    say so.
 
 ### Changed
 

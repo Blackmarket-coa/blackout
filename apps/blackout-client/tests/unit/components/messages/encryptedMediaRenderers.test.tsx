@@ -37,7 +37,12 @@ import {
     StickerMessage,
     VideoMessage,
 } from '../../../../src/app/components/messages';
-import { UNENCRYPTED_MEDIA_NOTE } from '../../../../src/app/components/messages/mediaShared';
+import {
+    EXPOSED_KEY_MEDIA_NOTE,
+    UNENCRYPTED_MEDIA_NOTE,
+} from '../../../../src/app/components/messages/mediaShared';
+import { getDefaultStore } from 'jotai';
+import { settingsAtom } from '../../../../src/app/state/compat-settings';
 
 const fetchArrayBuffer = vi.spyOn(mediaClient, 'fetchArrayBuffer');
 
@@ -93,12 +98,18 @@ const encryptedContent = async (
     };
 };
 
-const eventOf = (content: Record<string, unknown>, roomId = ROOM): MatrixEvent =>
+const eventOf = (
+    content: Record<string, unknown>,
+    roomId = ROOM,
+    { eventEncrypted = true }: { eventEncrypted?: boolean } = {}
+): MatrixEvent =>
     ({
         getContent: () => content,
         getRoomId: () => roomId,
         getType: () => 'm.room.message',
         getId: () => '$event',
+        // Whether the message itself arrived end-to-end encrypted.
+        isEncrypted: () => eventEncrypted,
     } as unknown as MatrixEvent);
 
 const mounted: ReactDOM.Root[] = [];
@@ -170,9 +181,7 @@ describe('an encrypted image in the timeline', () => {
             'https://hs.example/_matrix/media/v3/download/hs.example/cipher1'
         );
         // Unasked, so capped.
-        expect(fetchArrayBuffer.mock.calls[0][2]).toEqual({
-            maxBytes: ENCRYPTED_AUTO_LOAD_MAX_BYTES,
-        });
+        expect(fetchArrayBuffer.mock.calls[0][2]?.maxBytes).toBe(ENCRYPTED_AUTO_LOAD_MAX_BYTES);
         expect(objectUrls).toHaveLength(1);
         expect(objectUrls[0].type).toBe('image/png');
         expect(new TextDecoder().decode(await readBlob(objectUrls[0]))).toBe(PLAINTEXT);
@@ -267,7 +276,7 @@ describe('an encrypted image in the timeline', () => {
         await settle();
 
         expect(fetchArrayBuffer).toHaveBeenCalledTimes(1);
-        expect(fetchArrayBuffer.mock.calls[0][2]).toBeUndefined();
+        expect(fetchArrayBuffer.mock.calls[0][2]?.maxBytes).toBeUndefined();
         expect(container.querySelector('img')?.getAttribute('src')).toBe('blob:test/1');
     });
 
@@ -305,12 +314,13 @@ describe('an encrypted image in the timeline', () => {
         expect(objectUrls).toHaveLength(0);
         expect(container.textContent).not.toContain('failed to load');
         const button = container.querySelector('[data-testid="load-encrypted-media"]');
-        expect(button).not.toBeNull();
+        // The size the message states was found to be wrong, so it is not repeated.
+        expect(button?.textContent).toBe('Load encrypted image (larger than its message says)');
 
         await click(button);
         await settle();
         expect(fetchArrayBuffer).toHaveBeenCalledTimes(2);
-        expect(fetchArrayBuffer.mock.calls[1][2]).toBeUndefined();
+        expect(fetchArrayBuffer.mock.calls[1][2]?.maxBytes).toBeUndefined();
         expect(container.querySelector('img')?.getAttribute('src')).toBe('blob:test/1');
     });
 
@@ -338,6 +348,51 @@ describe('an encrypted image in the timeline', () => {
         expect(fetchArrayBuffer).not.toHaveBeenCalled();
         expect(container.querySelector('img')).toBeNull();
         expect(container.textContent).toContain('does not carry a usable key');
+        // Asking again cannot produce a key the message does not have.
+        expect(container.querySelector('[data-testid="retry-encrypted-media"]')).toBeNull();
+    });
+
+    it('stops downloading when it leaves the timeline before the file has arrived', async () => {
+        const { content } = await encryptedContent();
+        let signal: AbortSignal | undefined;
+        fetchArrayBuffer.mockImplementation((_url, _retry, options) => {
+            signal = options?.signal;
+            return new Promise<ArrayBuffer>(() => {});
+        });
+
+        await mount(<ImageMessage event={eventOf(content)} />);
+        await settle();
+        expect(signal).toBeDefined();
+        expect(signal?.aborted).toBe(false);
+
+        await act(async () => {
+            while (mounted.length) mounted.pop()?.unmount();
+        });
+        expect(signal?.aborted).toBe(true);
+    });
+
+    it('is not fetched unasked when the reader has switched media auto-load off', async () => {
+        const store = getDefaultStore();
+        const before = store.get(settingsAtom);
+        store.set(settingsAtom, { ...before, mediaAutoLoad: false });
+        try {
+            const { ciphertext, content } = await encryptedContent();
+            fetchArrayBuffer.mockResolvedValue(ciphertext);
+
+            const container = await mount(<ImageMessage event={eventOf(content)} />);
+            await settle();
+
+            expect(fetchArrayBuffer).not.toHaveBeenCalled();
+            const button = container.querySelector('[data-testid="load-encrypted-media"]');
+            expect(button?.textContent).toBe('Load encrypted image (25.0 B)');
+
+            await click(button);
+            await settle();
+            expect(fetchArrayBuffer).toHaveBeenCalledTimes(1);
+            expect(container.querySelector('img')?.getAttribute('src')).toBe('blob:test/1');
+        } finally {
+            store.set(settingsAtom, before);
+        }
     });
 
     it('releases the decrypted copy when it leaves the timeline', async () => {
@@ -352,6 +407,123 @@ describe('an encrypted image in the timeline', () => {
             while (mounted.length) mounted.pop()?.unmount();
         });
         expect(revoked).toEqual(['blob:test/1']);
+    });
+});
+
+describe('a file whose key travelled in a message that was not encrypted', () => {
+    // The file is ciphertext on the server, but the server also holds the
+    // message with the key in it, so it can read the file or swap it. Calling
+    // that "encrypted" would be false.
+    it('is not labelled encrypted, and in an encrypted room says the server can read it', async () => {
+        const { ciphertext, content } = await encryptedContent();
+        fetchArrayBuffer.mockResolvedValue(ciphertext);
+
+        const container = await mount(
+            <ImageMessage event={eventOf(content, ROOM, { eventEncrypted: false })} />
+        );
+        await settle();
+
+        expect(container.querySelector('img')?.getAttribute('src')).toBe('blob:test/1');
+        expect(container.textContent).not.toContain('Encrypted image');
+        expect(container.querySelector('[data-testid="unencrypted-media-note"]')?.textContent).toBe(
+            EXPOSED_KEY_MEDIA_NOTE
+        );
+    });
+
+    it('is labelled encrypted, with no note, when the message was end-to-end encrypted', async () => {
+        const { ciphertext, content } = await encryptedContent();
+        fetchArrayBuffer.mockResolvedValue(ciphertext);
+
+        const container = await mount(<ImageMessage event={eventOf(content)} />);
+        await settle();
+
+        expect(container.textContent).toContain('Encrypted image');
+        expect(container.querySelector('[data-testid="unencrypted-media-note"]')).toBeNull();
+    });
+
+    it.each([
+        ['video', 'Encrypted video'],
+        // With its separator: the note itself contains the words.
+        ['file', ' · end-to-end encrypted'],
+    ])('the %s component makes the same distinction', async (kind, label) => {
+        const build = (eventEncrypted: boolean) => async () => {
+            const { ciphertext, content } = await encryptedContent(
+                kind === 'video'
+                    ? { msgtype: 'm.video', body: 'c.mp4' }
+                    : { msgtype: 'm.file', body: 'f.bin' },
+                { mimetype: kind === 'video' ? 'video/mp4' : 'application/zip' }
+            );
+            fetchArrayBuffer.mockResolvedValue(ciphertext);
+            const event = eventOf(content, ROOM, { eventEncrypted });
+            const container = await mount(
+                kind === 'video' ? <VideoMessage event={event} /> : <FileMessage event={event} />
+            );
+            await settle();
+            if (kind === 'video') {
+                await click(container.querySelector('[data-testid="load-encrypted-media"]'));
+                await settle();
+            }
+            return container;
+        };
+
+        const exposed = await build(false)();
+        expect(exposed.textContent).not.toContain(label);
+        expect(exposed.querySelector('[data-testid="unencrypted-media-note"]')?.textContent).toBe(
+            EXPOSED_KEY_MEDIA_NOTE
+        );
+
+        const sealed = await build(true)();
+        expect(sealed.textContent).toContain(label);
+        expect(sealed.querySelector('[data-testid="unencrypted-media-note"]')).toBeNull();
+    });
+
+    it('in a room without encryption carries no note and no encrypted label', async () => {
+        rooms[ROOM] = { hasEncryptionStateEvent: () => false };
+        const { ciphertext, content } = await encryptedContent();
+        fetchArrayBuffer.mockResolvedValue(ciphertext);
+
+        const container = await mount(
+            <ImageMessage event={eventOf(content, ROOM, { eventEncrypted: false })} />
+        );
+        await settle();
+
+        expect(container.textContent).not.toContain('Encrypted image');
+        expect(container.querySelector('[data-testid="unencrypted-media-note"]')).toBeNull();
+    });
+});
+
+describe('a thumbnail address chosen by the sender', () => {
+    const video = (thumbnail: string) => ({
+        msgtype: 'm.video',
+        body: 'clip.mp4',
+        url: 'mxc://hs.example/plainvideo',
+        info: { mimetype: 'video/mp4', size: 10, thumbnail_url: thumbnail },
+    });
+
+    it.each([
+        'https://tracker.example/pixel.png',
+        'http://tracker.example/pixel.png',
+        '//tracker.example/pixel.png',
+        'data:image/png;base64,AAAA',
+    ])('is not handed to the browser when it is %s', async (thumbnail) => {
+        const container = await mount(<VideoMessage event={eventOf(video(thumbnail))} />);
+        await settle();
+
+        const player = container.querySelector('video');
+        expect(player).not.toBeNull();
+        expect(player?.getAttribute('poster')).toBeNull();
+        expect(container.innerHTML).not.toContain('tracker.example');
+    });
+
+    it('is loaded from this homeserver when it is an mxc:// address', async () => {
+        const container = await mount(
+            <VideoMessage event={eventOf(video('mxc://hs.example/thumb1'))} />
+        );
+        await settle();
+
+        expect(container.querySelector('video')?.getAttribute('poster')).toBe(
+            'https://hs.example/_matrix/media/v3/download/hs.example/thumb1'
+        );
     });
 });
 
@@ -550,7 +722,7 @@ describe('an encrypted file in the timeline', () => {
         await settle();
 
         expect(fetchArrayBuffer).toHaveBeenCalledTimes(1);
-        expect(fetchArrayBuffer.mock.calls[0][2]).toBeUndefined();
+        expect(fetchArrayBuffer.mock.calls[0][2]?.maxBytes).toBeUndefined();
         expect(saveAs).toHaveBeenCalledTimes(1);
         const [blob, name] = saveAs.mock.calls[0] as [Blob, string];
         expect(name).toBe('minutes.pdf');

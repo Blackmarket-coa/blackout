@@ -7,6 +7,13 @@ import { useLegacySendMessageAdapter as useSendMessage } from '../../plugins/mat
 import { useDismissOnOutsideOrEscape } from '../room/useDismissOnOutsideOrEscape';
 import { stopPropagation } from '../../utils/keyboard';
 import type { ForumTag } from './useForum';
+import { RoomNotReadyError } from '../room/roomSendGuard';
+
+/** What to say when a post or a reply does not go out. What was typed is kept. */
+export const forumSendFailureNotice = (err: unknown): string =>
+    err instanceof RoomNotReadyError
+        ? err.message
+        : 'This was not sent. What you wrote is still here: try again.';
 
 const toBody = (value: Descendant[]): string => {
     return value
@@ -41,6 +48,7 @@ export const CreatePostModal = ({
     const [value, setValue] = useState<Descendant[]>(initialValue);
     const [selectedTags, setSelectedTags] = useState<string[]>([]);
     const [sending, setSending] = useState(false);
+    const [failure, setFailure] = useState<string | null>(null);
     const { sendRichText } = useSendMessage(roomId);
     const titleId = useId();
 
@@ -56,6 +64,7 @@ export const CreatePostModal = ({
         if (requireTag && selectedTags.length === 0) return;
 
         setSending(true);
+        setFailure(null);
         try {
             const finalBody = [title.trim(), body].filter(Boolean).join('\n');
             await sendRichText({
@@ -71,6 +80,10 @@ export const CreatePostModal = ({
             });
             onPosted();
             onClose();
+        } catch (err) {
+            // A post that failed used to leave the dialog open with nothing
+            // said. The title and text stay; say why it did not go.
+            setFailure(forumSendFailureNotice(err));
         } finally {
             setSending(false);
         }
@@ -220,6 +233,16 @@ export const CreatePostModal = ({
                             </div>
                         ) : null}
                     </div>
+
+                    {failure ? (
+                        <p
+                            role="alert"
+                            data-testid="forum-post-failure"
+                            style={{ margin: 0, color: 'var(--color-danger, #e5484d)' }}
+                        >
+                            {failure}
+                        </p>
+                    ) : null}
 
                     <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
                         <button

@@ -127,6 +127,38 @@ describe('media client byte limit', () => {
         expect((failure as BlackoutSdkError).code).toBe(MEDIA_TOO_LARGE);
     });
 
+    it('passes an abort signal to fetch, and only when one is given', async () => {
+        const fetchFn = vi.fn(async () => streamed([bytes(10)]));
+        const client = createMediaClient({ fetchFn: fetchFn as unknown as typeof fetch });
+        const controller = new AbortController();
+
+        await client.fetchArrayBuffer('https://hs.example/a', undefined, {
+            signal: controller.signal,
+        });
+        expect(fetchFn.mock.calls[0]).toEqual([
+            'https://hs.example/a',
+            { signal: controller.signal },
+        ]);
+
+        await client.fetchArrayBuffer('https://hs.example/b');
+        expect(fetchFn.mock.calls[1]).toEqual(['https://hs.example/b']);
+    });
+
+    it('an aborted request rejects and leaves nothing half-read', async () => {
+        const controller = new AbortController();
+        const fetchFn = vi.fn(async (_url: string, init?: RequestInit) => {
+            if (init?.signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+            return streamed([bytes(10)]);
+        });
+        const client = createMediaClient({ fetchFn: fetchFn as unknown as typeof fetch });
+        controller.abort();
+
+        const failure = await client
+            .fetchArrayBuffer('https://hs.example/a', undefined, { signal: controller.signal })
+            .catch((err: unknown) => err);
+        expect((failure as Error).name).toBe('AbortError');
+    });
+
     it('a failed request still reports the fetch failure, not a size error', async () => {
         const client = createMediaClient({
             fetchFn: (async () => new Response('nope', { status: 404 })) as unknown as typeof fetch,

@@ -201,6 +201,56 @@ describe('fetchDecryptedMedia', () => {
         expect(fetchArrayBuffer.mock.calls[1][2]).toBeUndefined();
     });
 
+    it('accepts a fingerprint written with base64 padding: the same hash, spelled differently', async () => {
+        const { ciphertext, file } = await encrypted();
+        fetchArrayBuffer.mockResolvedValue(ciphertext);
+        const padded = { ...file, hashes: { sha256: `${file.hashes.sha256}=` } };
+
+        const blob = await fetchDecryptedMedia({
+            file: padded,
+            homeserverUrl: 'https://hs.example',
+            blobType: 'image/png',
+        });
+        expect(new TextDecoder().decode(await readBlob(blob))).toBe(PLAINTEXT);
+
+        // Padding is all that is forgiven: a different hash is still refused.
+        const other = await encryptAttachment(new TextEncoder().encode('another file').buffer);
+        fetchArrayBuffer.mockResolvedValue(other.data);
+        await expect(
+            fetchDecryptedMedia({
+                file: padded,
+                homeserverUrl: 'https://hs.example',
+                blobType: 'image/png',
+            })
+        ).rejects.toBeInstanceOf(EncryptedMediaMismatchError);
+    });
+
+    it('hands the abort signal to the media client, with or without a byte ceiling', async () => {
+        const { ciphertext, file } = await encrypted();
+        fetchArrayBuffer.mockResolvedValue(ciphertext);
+        const controller = new AbortController();
+
+        await fetchDecryptedMedia({
+            file,
+            homeserverUrl: 'https://hs.example',
+            blobType: 'image/png',
+            signal: controller.signal,
+        });
+        expect(fetchArrayBuffer.mock.calls[0][2]).toEqual({ signal: controller.signal });
+
+        await fetchDecryptedMedia({
+            file,
+            homeserverUrl: 'https://hs.example',
+            blobType: 'image/png',
+            maxBytes: 10_000,
+            signal: controller.signal,
+        });
+        expect(fetchArrayBuffer.mock.calls[1][2]).toEqual({
+            maxBytes: 10_000,
+            signal: controller.signal,
+        });
+    });
+
     it('refuses a file whose bytes were changed on the server', async () => {
         const { ciphertext, file } = await encrypted();
         const tampered = new Uint8Array(ciphertext.slice(0));

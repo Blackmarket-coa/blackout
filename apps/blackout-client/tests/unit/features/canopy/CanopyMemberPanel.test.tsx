@@ -9,8 +9,10 @@ import type { Room } from 'matrix-js-sdk';
 // wiring, not the matrix-client / friends / profile-action tree the real
 // connected modal pulls in.
 vi.mock('../../../../src/app/features/profile/ConnectedProfileModal', () => ({
-    ConnectedProfileModal: ({ profile }: { profile: { userId: string } }) => (
-        <div data-testid="profile-modal">{profile.userId}</div>
+    ConnectedProfileModal: ({ profile }: { profile: { userId: string; avatarUrl?: string } }) => (
+        <div data-testid="profile-modal" data-avatar={profile.avatarUrl ?? ''}>
+            {profile.userId}
+        </div>
     ),
 }));
 
@@ -52,14 +54,19 @@ vi.mock('../../../../src/app/features/profile/useProfileActions', () => ({
 
 import { CanopyMemberPanel } from '../../../../src/app/features/canopy/CanopyMemberPanel';
 
+// The avatar address in the member's membership event: free text.
+let avatarInMembership: string | undefined;
 const member = {
     userId: '@alice:server',
     name: 'Alice',
     powerLevel: 0,
-    getMxcAvatarUrl: () => undefined,
+    getMxcAvatarUrl: () => avatarInMembership,
 };
 
-const room = { getJoinedMembers: () => [member] } as unknown as Room;
+const room = {
+    getJoinedMembers: () => [member],
+    client: { getHomeserverUrl: () => 'https://hs.example' },
+} as unknown as Room;
 
 const mount = async () => {
     const container = document.createElement('div');
@@ -74,6 +81,7 @@ const mount = async () => {
 
 beforeEach(() => {
     document.body.innerHTML = '';
+    avatarInMembership = undefined;
 });
 
 afterEach(() => {
@@ -102,6 +110,32 @@ describe('CanopyMemberPanel', () => {
         const modal = container.querySelector('[data-testid="profile-modal"]');
         expect(modal).not.toBeNull();
         expect(modal?.textContent).toBe('@alice:server');
+    });
+
+    // The profile card shows the avatar it is handed. A member can put any
+    // address in their membership event; only one the homeserver holds is
+    // passed on, so opening a profile does not send the reader to a server of
+    // that member's choosing.
+    it.each([
+        ['https://tracker.example/pixel.png', ''],
+        ['//tracker.example/pixel.png', ''],
+        [
+            'mxc://server/abc',
+            'https://hs.example/_matrix/media/v3/thumbnail/server/abc?width=256&height=256&method=scale',
+        ],
+    ])('hands the profile card an avatar of %s as %j', async (avatar, expected) => {
+        avatarInMembership = avatar;
+        const { container } = await mount();
+
+        const row = container.querySelector<HTMLButtonElement>('[data-testid="canopy-member-row"]');
+        await act(async () => {
+            row?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+            await Promise.resolve();
+        });
+
+        expect(
+            container.querySelector('[data-testid="profile-modal"]')?.getAttribute('data-avatar')
+        ).toBe(expected);
     });
 
     it('opens and closes the coalitions dialog from the header button', async () => {

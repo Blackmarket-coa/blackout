@@ -34,6 +34,7 @@ import { isTimedSessionLength, MAX_TIMER_DELAY_MS, signOutDeviceByToken } from '
 import { cryptoCallbacks } from './secretStorageKeys';
 import { startEncryptionHealthTracking, stopEncryptionHealthTracking } from './encryptionHealth';
 import { filteredMatrixLogger } from './matrixLogger';
+import { refuseSendsToUnloadedRooms } from '../app/features/room/roomSendGuard';
 
 type AtomStore = ReturnType<typeof createStore>;
 
@@ -317,6 +318,10 @@ const initClientForSession = async (session: StoredSession): Promise<MatrixClien
         // logs pass through. See ./matrixLogger.
         logger: filteredMatrixLogger,
     });
+
+    // The SDK sends an event to a room it does not hold without encrypting
+    // it. Refuse instead, for every sender in the app.
+    refuseSendsToUnloadedRooms(client);
 
     await syncStore.startup();
     const rustCryptoPrefix = storageNamespace().rustCryptoPrefix(session.userId, session.deviceId);

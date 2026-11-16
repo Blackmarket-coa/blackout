@@ -2,15 +2,19 @@ import { BlackoutSdkError } from '../errors/sdkError';
 import type { RetryPolicy } from './types';
 import { fetchWithRetry } from './withRetry';
 
-/**
- * A ceiling on how much a media request may bring into memory. The limit is
- * enforced on the bytes that arrive, not on what the sender of a message said
- * the size was, so a message that understates its attachment cannot make a
- * client buffer more than the caller allowed.
- */
-export type MediaFetchLimits = {
-    /** Fail with `MEDIA_TOO_LARGE` once the body exceeds this many bytes. */
+/** How one media request is bounded. */
+export type MediaFetchOptions = {
+    /**
+     * Fail with `MEDIA_TOO_LARGE` once the body exceeds this many bytes. The
+     * limit is enforced on the bytes that arrive, not on what the sender of a
+     * message said the size was, so a message that understates its attachment
+     * cannot make a client buffer more than the caller allowed. With a
+     * `Content-Length` the request is refused before any of the body is read;
+     * without one, it is stopped at the chunk that crosses the line.
+     */
     maxBytes?: number;
+    /** Abort the request and stop reading its body. */
+    signal?: AbortSignal;
 };
 
 export type MediaClient = {
@@ -18,7 +22,7 @@ export type MediaClient = {
     fetchArrayBuffer: (
         url: string,
         retry?: RetryPolicy,
-        limits?: MediaFetchLimits
+        options?: MediaFetchOptions
     ) => Promise<ArrayBuffer>;
 };
 
@@ -27,7 +31,7 @@ export type CreateMediaClientOptions = {
     defaultRetry?: RetryPolicy;
 };
 
-/** The code on the error thrown when a body exceeds `MediaFetchLimits.maxBytes`. */
+/** The code on the error thrown when a body exceeds `MediaFetchOptions.maxBytes`. */
 export const MEDIA_TOO_LARGE = 'MEDIA_TOO_LARGE';
 
 const tooLarge = (maxBytes: number): BlackoutSdkError =>
@@ -96,9 +100,13 @@ const requestMedia = async (
     url: string,
     parse: (response: Response) => Promise<Blob | ArrayBuffer>,
     fetchFn: typeof fetch,
-    retry?: RetryPolicy
+    retry?: RetryPolicy,
+    signal?: AbortSignal
 ): Promise<Blob | ArrayBuffer> => {
-    const { response, retryable } = await fetchWithRetry(() => fetchFn(url), retry);
+    const { response, retryable } = await fetchWithRetry(
+        () => (signal ? fetchFn(url, { signal }) : fetchFn(url)),
+        retry
+    );
 
     if (response.ok) {
         return parse(response);
@@ -122,15 +130,16 @@ export const createMediaClient = ({
             fetchFn,
             retry ?? defaultRetry
         ) as Promise<Blob>,
-    fetchArrayBuffer: (url, retry, limits) =>
+    fetchArrayBuffer: (url, retry, options) =>
         requestMedia(
             url,
             (response) =>
-                typeof limits?.maxBytes === 'number'
-                    ? readBounded(response, limits.maxBytes)
+                typeof options?.maxBytes === 'number'
+                    ? readBounded(response, options.maxBytes)
                     : response.arrayBuffer(),
             fetchFn,
-            retry ?? defaultRetry
+            retry ?? defaultRetry,
+            options?.signal
         ) as Promise<ArrayBuffer>,
 });
 

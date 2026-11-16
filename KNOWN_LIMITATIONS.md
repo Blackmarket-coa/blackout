@@ -770,8 +770,8 @@ For the source-of-truth triage with tier/owner detail see
     message was encrypted; the file, its name and its type were not. The
     timeline also could not open an encrypted file sent by another Matrix app.
 -   **State:** a file sent in an encrypted room is now encrypted in the app
-    before it is uploaded, and encrypted files from any Matrix app open after
-    their fingerprint is checked. What remains:
+    before it is uploaded, and an encrypted file opens after its fingerprint is
+    checked. What remains:
     -   **Files already sent are still on the homeserver, unencrypted.** The
         app cannot delete them, and deleting the message does not remove the
         file. Each one is marked in the conversation ("Not end-to-end
@@ -784,17 +784,65 @@ For the source-of-truth triage with tier/owner detail see
         uploaded it and when, and the network addresses it is downloaded from.
         Media is served to anyone who has a file's address; this Synapse
         version has no authenticated media.
+    -   **On a homeserver that requires a login for media, the timeline shows
+        no media at all**, encrypted or not: it fetches from the
+        unauthenticated address. This homeserver serves that address;
+        matrix.org, for one, does not.
     -   **No thumbnails for encrypted images**: the full image is fetched when
         it comes on screen, up to 20 MiB; larger ones, and any that state no
         size, wait for a click. Encrypted video is downloaded whole before it
         plays, and only on a click. No inline preview for an encrypted PDF.
+    -   **A decrypted copy lasts as long as its row is on screen or near it.**
+        A row the timeline unmounts fetches and decrypts again when it comes
+        back.
     -   **Whole file in memory** to encrypt and to decrypt.
     -   **Not run** against a real homeserver, in the desktop or mobile shell,
-        or against another Matrix app; see the record's "Not verified".
--   **Also fixed there:** a message typed into a room the app had not finished
-    loading was sent unencrypted by the Matrix SDK. The send paths now refuse
-    until the room is loaded, and a failed send says so under the composer.
-    The dead-drop composer wraps the same composer and takes the same path.
+        under a content security policy, or against another Matrix app; see the
+        record's "Not verified".
+-   **Also fixed there:** the Matrix SDK sends a message to a room the app has
+    not finished loading without encrypting it. The app's client now refuses
+    such a send, from every screen, and a failed send says so under the
+    composer and in the forum. A file attached in one room no longer stays
+    attached when the person moves to another. The older message components,
+    still used by message search, made blobs in the app's origin typed however
+    the sender declared, HTML and SVG included; they now use the same narrow
+    list of types as the timeline. The dead-drop composer wraps the same
+    composer and takes the same path.
+
+### What an encrypted room does not encrypt: documents, proposals, objectives, playbooks (2026-11-16)
+
+-   **Where:** `packages/blackout-sdk/src/documents/matrixActions.ts`, and the
+    `governance`, `objectives`, `playbook`, `compost` and `roles` actions
+    beside it. Record: `docs/security/trust-claims-2026-11-16.md`, T9.
+-   **State:** these features store what a person writes as Matrix room state.
+    Matrix does not encrypt room state in any room, so in an end-to-end
+    encrypted den the homeserver can still read the title and text of a den
+    document, a proposal, an objective and a playbook, and who holds which
+    role. Messages and files in the same room are encrypted. `TRUST.md` and the
+    lock beside the message box say so since 2026-11-16; nothing about how they
+    are stored has changed.
+-   **To change it** these would have to be sent as encrypted room events
+    rather than state, which changes how they are found and versioned.
+
+### Images at addresses chosen by other people (2026-11-16)
+
+-   **Where:** the profile card and page (`features/profile/MiniProfile.tsx`,
+    `ProfileModal.tsx`, `ProfilePage.tsx`, `AvatarDecoration.tsx`) and the
+    marketplace producer profile (`features/monetization/marketplace/ProducerProfile.tsx`).
+    Record: `docs/security/trust-claims-2026-11-16.md`, T10.
+-   **State:** an image address that someone else chose, handed to the browser
+    as it is, makes the reader's device fetch it, and so tells a server of that
+    person's choosing the reader's network address and the time. Until
+    2026-11-16 the room timeline did this with every member's avatar and with
+    video thumbnails, for everyone looking at the room, and the member panels
+    did it when a profile was opened. Those now load only media the homeserver
+    holds. Still open: a Blackout profile stores its avatar and banner as
+    plain addresses (the editor writes the homeserver's, but the stored value
+    can be any address), and the profile card and page show them as they are;
+    the producer profile takes an avatar address typed by hand. Opening such a
+    profile fetches whatever address its owner stored.
+-   **To close it:** show a profile image only when its address is media on
+    this homeserver, as the timeline now does.
 
 ### Dead drops: not reachable from the app (2026-11-16)
 
@@ -1382,6 +1430,24 @@ not point at that proxy. Pointing it there, or deciding that this deployment
 does not federate, is the operator's
 ([`ADJACENT_PROTOCOLS_NOSTR_RETICULUM.md`](docs/architecture/ADJACENT_PROTOCOLS_NOSTR_RETICULUM.md),
 sections 5 and 7).
+
+### The deployed client serves no script-restricting content security policy (2026-11-16)
+
+-   **Where:** the response headers of the web client. Observed on 2026-11-16:
+    `content-security-policy: frame-ancestors 'none'` and nothing more.
+-   **State:** nothing in the browser limits what script may run in the page
+    or where it may connect. The app's own rules are then the only defence
+    against injected content, and one of them was missing until 2026-11-16
+    (message search made HTML- and SVG-typed blobs in the app's origin;
+    `docs/security/attachment-encryption-2026-11-16.md`, R1).
+    `infra/nginx/snippets/security-headers.conf` holds a stricter policy that
+    is not what is served, and as written it would block the homeserver's
+    images and decrypted audio and video.
+-   **Operator decision:** adopt a policy for the client. It needs at least
+    the homeserver in `img-src` and `media-src`, `blob:` in `img-src`,
+    `media-src` and `connect-src`, and whatever the WebAssembly crypto needs.
+    Per `CLAUDE.md`, any change to those files is checked with `nginx -t` and a
+    header check per location on a running instance.
 
 ### Deploy workflows that have never run (2026-11-16)
 

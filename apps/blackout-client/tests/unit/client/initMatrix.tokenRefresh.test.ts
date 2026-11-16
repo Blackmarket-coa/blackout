@@ -13,6 +13,8 @@ import { createStore } from 'jotai/vanilla';
 
 vi.mock('@matrix-org/matrix-sdk-crypto-wasm', () => ({}));
 
+// What reaches the homeserver. initMatrix puts its guard in front of this.
+const sendEventOnServer = vi.fn(async (..._args: unknown[]) => ({ event_id: '$sent' }));
 const fakeClient = {
     initRustCrypto: vi.fn(async () => undefined),
     setMaxListeners: vi.fn(),
@@ -24,6 +26,9 @@ const fakeClient = {
     getDeviceId: () => 'DEVICE1',
     logout: vi.fn(async () => ({})),
     clearStores: vi.fn(async () => undefined),
+    // initMatrix wraps sendEvent so nothing is sent to a room that is not loaded.
+    getRoom: vi.fn(() => null),
+    sendEvent: sendEventOnServer as (...args: unknown[]) => Promise<unknown>,
 };
 const createClientMock = vi.fn(() => fakeClient);
 vi.mock('matrix-js-sdk', () => {
@@ -162,5 +167,37 @@ describe('token refresh refusals', () => {
         expect(result.accessToken).toBe('fresh');
         expect(result.refreshToken).toBe('fresh-refresh');
         expect(restoreActiveSession()?.accessToken).toBe('fresh');
+    });
+});
+
+describe('the client a stored session starts', () => {
+    // The SDK sends an event to a room it does not hold without encrypting it.
+    // initMatrix makes the client refuse instead, for every sender in the app.
+    it('refuses to send into a room that is not loaded', async () => {
+        fakeClient.sendEvent = sendEventOnServer;
+        sendEventOnServer.mockClear();
+        await refreshFunction();
+
+        expect(fakeClient.sendEvent).not.toBe(sendEventOnServer);
+        await expect(
+            fakeClient.sendEvent('!not-loaded:hs.example.test', 'm.room.message', {
+                body: 'secret',
+            })
+        ).rejects.toThrow('This room has not finished loading');
+        expect(sendEventOnServer).not.toHaveBeenCalled();
+    });
+
+    it('sends as usual into a room that is loaded', async () => {
+        fakeClient.sendEvent = sendEventOnServer;
+        sendEventOnServer.mockClear();
+        fakeClient.getRoom.mockReturnValueOnce({ roomId: '!loaded:hs.example.test' } as never);
+        await refreshFunction();
+
+        await fakeClient.sendEvent('!loaded:hs.example.test', 'm.room.message', { body: 'hi' });
+        expect(sendEventOnServer).toHaveBeenCalledWith(
+            '!loaded:hs.example.test',
+            'm.room.message',
+            { body: 'hi' }
+        );
     });
 });

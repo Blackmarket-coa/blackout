@@ -6,6 +6,7 @@ import { getPowerLevelTag, usePowerLevelTags } from '../../hooks/usePowerLevelTa
 import { Presence, useUserPresence } from '../../hooks/useUserPresence';
 import { ConnectedProfileModal } from '../profile/ConnectedProfileModal';
 import type { MemberProfile } from '../profile/profileTypes';
+import { avatarThumbnailUrl, roomHomeserverUrl } from '../../utils/media';
 import { CoalitionsDialog } from '../coalitions/CoalitionsDialog';
 
 const PANEL_WIDTH = 240;
@@ -209,7 +210,10 @@ export const CanopyMemberPanel = ({ room }: { room: Room }) => {
         setProfileTarget({
             userId: member.userId,
             displayName: member.name || member.userId,
-            avatarUrl: member.getMxcAvatarUrl?.() ?? undefined,
+            // Only an avatar the homeserver holds; see `avatarThumbnailUrl`.
+            avatarUrl:
+                avatarThumbnailUrl(member.getMxcAvatarUrl?.(), roomHomeserverUrl(room), 256) ??
+                undefined,
             roleBadges: [],
             mutualSpaces: [],
             profile: {},

@@ -3,7 +3,9 @@
  *
  * Every surface that posts a file as a room message goes through
  * `sendRoomAttachment`, so the decision "is this room end-to-end encrypted"
- * is made in one place and cannot be skipped by a new caller.
+ * is made in one place. Nothing in the language stops new code from calling a
+ * plain uploader instead; tests/unit/features/media/directUploadCallers.test.ts
+ * fails when a file that is not on its list refers to one.
  *
  * In an encrypted room the file is encrypted in this client (AES-256-CTR, the
  * Matrix encrypted-attachment format, v2) before anything is uploaded. The
@@ -41,7 +43,7 @@ export const ENCRYPTED_UPLOAD_TYPE = 'application/octet-stream';
 export class AttachmentEncryptionChangedError extends Error {
     constructor() {
         super(
-            'Encryption was turned on in this room while the file was uploading. The file was not posted to the room. A copy without encryption reached the server and this app cannot delete it. Attach the file again to send it encrypted.'
+            'Encryption was turned on in this room while the file was uploading. The file was not posted to the room. A copy without encryption reached the server and this app cannot delete it. Send again to send it encrypted.'
         );
         this.name = 'AttachmentEncryptionChangedError';
     }
@@ -137,7 +139,11 @@ export const sendRoomAttachment = async (
     // An upload can take minutes. If the room turned encrypted meanwhile, the
     // SDK would encrypt the event and the room would show an encrypted
     // message whose file is not. Ask again before posting.
-    if (!encrypt && (await roomEncryptsAttachments(client, roomId))) {
+    // It throws if the room has left the store meanwhile (a sign-out, say):
+    // the SDK would send a message to a room it no longer holds unencrypted,
+    // and for an encrypted upload that message carries the file's key.
+    const encryptNow = await roomEncryptsAttachments(client, roomId);
+    if (!encrypt && encryptNow) {
         throw new AttachmentEncryptionChangedError();
     }
 

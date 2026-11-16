@@ -22,6 +22,9 @@ const makeClient = () => ({
     getDeviceId: () => 'PANELDEV',
     logout: vi.fn(async () => ({})),
     clearStores: vi.fn(async () => undefined),
+    // initMatrix wraps sendEvent so nothing is sent to a room that is not loaded.
+    getRoom: vi.fn(() => null),
+    sendEvent: vi.fn(async () => ({ event_id: '$sent' })),
 });
 let fakeClient = makeClient();
 const createClientMock = vi.fn(() => fakeClient);

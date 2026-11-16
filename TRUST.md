@@ -100,10 +100,14 @@ Encryption claims are only worth something with the exceptions attached.
     updated. The full account, including what was not fixed, is in
     [`attachment-encryption-2026-11-16.md`](docs/security/attachment-encryption-2026-11-16.md).
 -   **What the homeserver sees in an encrypted room.** Not the text of messages
-    or the contents of files. It does see the room's name, topic, picture and
-    members; who sends something and when; emoji reactions, which Matrix does not
-    encrypt; and, for a file, its size to the byte, who uploaded it, and the
-    network addresses it is downloaded from.
+    or the contents of files. It does see who is in the room, who sends
+    something and when, and which earlier message a reply, an edit or a reaction
+    points to; emoji reactions, which Matrix does not encrypt; for a file, its
+    size to the byte, who uploaded it, and the network addresses it is
+    downloaded from; and everything kept as part of the room itself, because
+    Matrix does not encrypt room state in any room: its name, topic and picture,
+    its pinned messages list, role assignments, and **the text of den documents,
+    proposals, objectives and playbooks**.
 -   **Publicly joinable rooms.** Encrypting a room anyone can join hides history
     from everyone who joins later and breaks search, without making public content
     private.

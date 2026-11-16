@@ -22,16 +22,20 @@ may decide what to say, and to whom, on the strength of it.
 | T6  | The sign-in page                                                           | "Create an anonymous account (no email)"                                         | No email or name is asked; the homeserver keeps the IP addresses it is used from | Fixed (copy) |
 | T7  | The composer in every encrypted room, `THREAT_MODEL.md`                    | "Not even the server can" read what is sent here; attachments are E2EE           | Files were uploaded unencrypted; only the message was encrypted                  | Part fixed   |
 | T8  | A room with dead drop on: composer, indicator, settings                    | "Dead Drop: message will be queued"; "Anonymize delivery" on the Pro tier        | The message is sent at once; nothing queues or anonymizes                        | Fixed (UI)   |
+| T9  | `TRUST.md`, the composer in an encrypted room                              | Private rooms are end-to-end encrypted                                           | Documents, proposals, objectives and playbooks are room state, unencrypted       | Said         |
+| T10 | The room timeline, member panels, profile card                             | (nothing said)                                                                   | Images were fetched from addresses other people chose                            | Part fixed   |
 
 T7 was found while checking those sentences and outranks the rest: it has its
 own record,
 [`attachment-encryption-2026-11-16.md`](attachment-encryption-2026-11-16.md).
 
 T8 is the room "Dead Drop" mode, which told people a message would be queued
-and sent it at once.
+and sent it at once. T9 and T10 came out of the independent review of T7's
+fix: what an encrypted room does not encrypt, and images loaded from addresses
+other people chose.
 
-Findings T9 onward are the trust page's and the threat model's own sentences,
-checked one by one; they are in [the documents](#t9-onward-the-documents)
+Findings T11 onward are the trust page's and the threat model's own sentences,
+checked one by one; they are in [the documents](#t11-onward-the-documents)
 below.
 
 ## T1. Tor transport and decoy traffic
@@ -364,14 +368,72 @@ delivery", `lib/blackoutTerminology.ts`), which describes neither this nor the
 sealed envelope; and the marketplace's "dead-drop delivery" of a purchased
 file, which is a third thing with the same name.
 
-## T9 onward: the documents
+## T9. An encrypted room does not encrypt documents, proposals, objectives or playbooks
+
+**Claimed.** `TRUST.md`: "Every private room and direct message is end-to-end
+encrypted by default." The composer in an encrypted room: "not even the server
+can" read what is sent there.
+
+**Found.** Six features store what a person writes as Matrix room state: den
+documents (title and text), governance proposals, objectives, playbooks,
+compost records and role assignments
+(`packages/blackout-sdk/src/{documents,governance,objectives,playbook,compost,roles}/matrixActions.ts`,
+each a `sendStateEvent`). Matrix does not encrypt room state in any room. So in
+an end-to-end encrypted den the homeserver reads all of these. The server also
+sees which earlier message a reply, an edit or a reaction points to. Neither
+was among the exceptions `TRUST.md` attaches to its encryption claim.
+
+**Done.** Said, not changed. `TRUST.md` now lists what the homeserver sees in
+an encrypted room, these included; the lock beside the message box names
+documents and proposals; `KNOWN_LIMITATIONS.md` has the entry and what it
+would take to change (send them as encrypted events, not state);
+`docs/legal/CHANGELOG.md` withdraws the claim for them. Found by the
+independent review of T7's fix and confirmed here by reading the six files.
+
+## T10. Images loaded from addresses other people chose
+
+**Claimed.** Nothing in so many words. The product's promise is that using it
+does not tell third parties who you are talking to.
+
+**Found.** An image address that someone else chose, given to the browser as
+it is, makes the reader's device fetch it: the network address and the time of
+every reader go to a server of that person's choosing.
+
+-   The room timeline used each member's `avatar_url` as an image source for
+    their messages and read receipts, and a video's `thumbnail_url` as its
+    poster. Both are free text in a membership event or a message.
+-   The member panel and the right panel passed the same raw avatar to the
+    profile card.
+-   A Blackout profile stores its avatar and banner as plain addresses, and
+    the profile card and page show them as they are. The marketplace producer
+    profile takes an avatar address typed by hand.
+
+Checked and sound: the forum, the members drawer and the reaction viewer
+convert the address with the SDK's `mxcUrlToHttp`, which returns nothing for
+an address that is not `mxc://`.
+
+**Done.** The timeline and the two panels now load only media this homeserver
+holds (`avatarThumbnailUrl` in `utils/media.ts`; `mxcToUrl` for the poster).
+Tests: `tests/unit/utils/media.test.ts`, the avatar cases in
+`PinToggle.test.tsx`, the thumbnail cases in
+`encryptedMediaRenderers.test.tsx`. **Open:** the profile card and page and
+the producer profile. The rule to apply there is the same: show an image only
+when its address is media on this homeserver. Recorded in
+`KNOWN_LIMITATIONS.md`.
+
+A side effect worth knowing: in the timeline a member's `mxc://` avatar was
+being used as an image source as it was, which no browser can load. Avatars
+that never showed there will now show.
+
+## T11 onward: the documents
 
 Not in this commit. The sentences of `TRUST.md` (beyond the paragraphs T1, T2,
-T7 and T8 change), of `THREAT_MODEL.md`, of `docs/security/key-transparency.md`
-and `docs/security/webauthn-passkeys.md`, and the "CI release gate" sentence of
-`KNOWN_LIMITATIONS.md` are being checked against the code one by one. Each
-finding is added here, with its fix or its explanation, in a commit that
-follows on the same branch. Until then this record covers T1 to T8 only.
+T7, T8 and T9 change), of `THREAT_MODEL.md`, of
+`docs/security/key-transparency.md` and `docs/security/webauthn-passkeys.md`,
+and the "CI release gate" sentence of `KNOWN_LIMITATIONS.md` are being checked
+against the code one by one. Each finding is added here, with its fix or its
+explanation, in a commit that follows on the same branch. Until then this
+record covers T1 to T10 only.
 
 A first reading of those documents against the code reported the following.
 Each is a report, not yet a finding: none has been checked by a second look or
@@ -408,7 +470,9 @@ Strings in the app:
 
 -   The composer's "Signature: enabled" (adds the words "signed via Blackout",
     signs nothing), "Encryption: preset" (a marker that changes nothing) and
-    "Ephemeral drop: view-once, 24h" (kept only by this app, per device).
+    "Ephemeral drop: view-once, 24h" (kept only by this app, per device; the
+    review of T7's fix also reports that the media under it is never shown,
+    because the gate counts the view as it mounts and hides it at once).
 -   The welcome steps' "messages are end-to-end encrypted", said of every den.
 -   The vault's "encrypts everything", the privacy tools' "always on".
 -   The glossary's definitions of a dead drop and of a digital good's

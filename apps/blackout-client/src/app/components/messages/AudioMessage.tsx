@@ -2,7 +2,7 @@ import { useCallback, useMemo, useRef, useState } from 'react';
 import type { MatrixEvent } from 'matrix-js-sdk';
 import {
     MediaLoadError,
-    UnencryptedMediaNote,
+    ServerReadableNote,
     baseStyles,
     fitsEncryptedAutoLoad,
     getInfo,
@@ -29,10 +29,20 @@ export const PLAYBACK_RATES = [1, 1.25, 1.5, 2] as const;
 export const AudioMessage = ({ event }: AudioMessageProps) => {
     const { ref, inView } = useInViewport<HTMLDivElement>();
     const seen = useLatched(inView);
-    const { src, loading, error, encrypted, awaitingLoad, load, unencryptedInEncryptedRoom } =
-        useResolvedMediaSource(event, {
-            autoLoad: seen && fitsEncryptedAutoLoad(getInfo(event)),
-        });
+    const {
+        src,
+        loading,
+        error,
+        awaitingLoad,
+        load,
+        canRetry,
+        sizeUnderstated,
+        serverReadableNote,
+    } = useResolvedMediaSource(event, {
+        autoLoad: seen && fitsEncryptedAutoLoad(getInfo(event)),
+    });
+    // The browser refused or could not decode the audio it was handed.
+    const [unplayable, setUnplayable] = useState(false);
     const audioRef = useRef<HTMLAudioElement | null>(null);
     const [playing, setPlaying] = useState(false);
     const [position, setPosition] = useState(0);
@@ -75,12 +85,12 @@ export const AudioMessage = ({ event }: AudioMessageProps) => {
                 <MediaLoadError
                     what="Audio failed to load"
                     error={error}
-                    onRetry={encrypted ? load : undefined}
+                    onRetry={canRetry ? load : undefined}
                 />
             ) : null}
             {inView && awaitingLoad ? (
                 <button type="button" onClick={load} data-testid="load-encrypted-media">
-                    {loadEncryptedLabel('audio', info)}
+                    {loadEncryptedLabel('audio', info, sizeUnderstated)}
                 </button>
             ) : null}
 
@@ -91,6 +101,7 @@ export const AudioMessage = ({ event }: AudioMessageProps) => {
                         src={src}
                         onPlay={() => setPlaying(true)}
                         onPause={() => setPlaying(false)}
+                        onError={() => setUnplayable(true)}
                         onTimeUpdate={(event) => {
                             const target = event.currentTarget;
                             if (!target.duration) return;
@@ -183,7 +194,12 @@ export const AudioMessage = ({ event }: AudioMessageProps) => {
                     </div>
                 </>
             ) : null}
-            {unencryptedInEncryptedRoom ? <UnencryptedMediaNote /> : null}
+            {unplayable ? (
+                <div style={baseStyles.error} data-testid="media-unplayable">
+                    This audio could not be played here.
+                </div>
+            ) : null}
+            {serverReadableNote ? <ServerReadableNote text={serverReadableNote} /> : null}
         </div>
     );
 };

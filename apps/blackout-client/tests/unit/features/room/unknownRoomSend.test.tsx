@@ -11,7 +11,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react-dom/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createClient } from 'matrix-js-sdk';
+import { Room, createClient, type MatrixClient } from 'matrix-js-sdk';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -39,6 +39,10 @@ import {
     useLegacyEditMessageAdapter,
     useLegacySendMessageAdapter,
 } from '../../../../src/app/plugins/matrix-adapters/hooks/useLegacyTimelineAdapter';
+import {
+    RoomNotReadyError,
+    refuseSendsToUnloadedRooms,
+} from '../../../../src/app/features/room/roomSendGuard';
 
 const ROOM = '!not-loaded:example.org';
 
@@ -131,6 +135,76 @@ describe('the Matrix SDK, given a room it has not loaded', () => {
             msgtype: 'm.text',
             body: 'the meeting is at the old mill',
         });
+    });
+});
+
+describe('the client, once the guard is applied to it', () => {
+    const guardedClient = () => {
+        const requests: Array<{ url: string; method?: string; body?: string }> = [];
+        const sdk = refuseSendsToUnloadedRooms(
+            createClient({
+                baseUrl: 'https://hs.example',
+                accessToken: 'token-for-test',
+                userId: '@me:hs.example',
+                deviceId: 'DEVICE',
+                fetchFn: (async (input: RequestInfo | URL, init?: RequestInit) => {
+                    requests.push({
+                        url: String(input),
+                        method: init?.method,
+                        body: typeof init?.body === 'string' ? init.body : undefined,
+                    });
+                    return new Response(JSON.stringify({ event_id: '$sent' }), {
+                        status: 200,
+                        headers: { 'content-type': 'application/json' },
+                    });
+                }) as typeof fetch,
+            })
+        );
+        return { sdk, requests };
+    };
+
+    it.each([
+        [
+            'sendEvent',
+            (sdk: MatrixClient) =>
+                sdk.sendEvent(ROOM, 'm.room.message' as never, { body: 'secret' } as never),
+        ],
+        [
+            'sendMessage',
+            (sdk: MatrixClient) =>
+                sdk.sendMessage(ROOM, { msgtype: 'm.text', body: 'secret' } as never),
+        ],
+        ['sendTextMessage', (sdk: MatrixClient) => sdk.sendTextMessage(ROOM, 'secret')],
+        ['sendNotice', (sdk: MatrixClient) => sdk.sendNotice(ROOM, 'secret')],
+        ['sendEmoteMessage', (sdk: MatrixClient) => sdk.sendEmoteMessage(ROOM, 'secret')],
+        [
+            'sendHtmlMessage',
+            (sdk: MatrixClient) => sdk.sendHtmlMessage(ROOM, 'secret', '<b>secret</b>'),
+        ],
+        [
+            'a custom event from a feature',
+            (sdk: MatrixClient) =>
+                sdk.sendEvent(ROOM, 'co.bmc.proposal' as never, { text: 'secret' } as never),
+        ],
+    ])('refuses %s to a room it does not hold, and makes no request', async (_name, send) => {
+        const { sdk, requests } = guardedClient();
+
+        const failure = await send(sdk).catch((err: unknown) => err);
+
+        expect(failure).toBeInstanceOf(RoomNotReadyError);
+        expect(requests.filter((request) => request.url.includes('/send/'))).toEqual([]);
+        expect(requests.some((request) => request.body?.includes('secret'))).toBe(false);
+    });
+
+    it('still sends to a room it holds', async () => {
+        const { sdk, requests } = guardedClient();
+        sdk.store.storeRoom(new Room(ROOM, sdk, '@me:hs.example'));
+
+        await sdk.sendTextMessage(ROOM, 'hello');
+
+        const send = requests.find((request) => request.url.includes('/send/m.room.message/'));
+        expect(send?.method).toBe('PUT');
+        expect(JSON.parse(send?.body ?? '{}')).toMatchObject({ msgtype: 'm.text', body: 'hello' });
     });
 });
 

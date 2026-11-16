@@ -95,19 +95,35 @@ export const READABLE_EXT_TO_MIME_TYPE: Record<string, string> = {
     sql: 'text/sql',
 };
 
+/**
+ * The types a blob made from someone else's media may be given: raster
+ * images, video and audio, and nothing else.
+ *
+ * A blob lives in this app's origin. One typed as a document (HTML, XHTML,
+ * SVG, XML) runs the script inside it with the app's session and keys as soon
+ * as it is opened in a tab, and the type comes from whoever sent the media.
+ * Until 2026-11-16 this list also held the application and text types above
+ * (`text/html` and `application/xhtml+xml` among them), and message search
+ * made blobs from it. A text or PDF viewer reads a blob's bytes and does not
+ * need its type.
+ */
 export const ALLOWED_BLOB_MIME_TYPES = [
     ...IMAGE_MIME_TYPES,
     ...VIDEO_MIME_TYPES,
     ...AUDIO_MIME_TYPES,
-    ...APPLICATION_MIME_TYPES,
-    ...TEXT_MIME_TYPE,
 ];
 
+/** A type a browser saves and does not render. */
 export const FALLBACK_MIMETYPE = 'application/octet-stream';
 
-export const getBlobSafeMimeType = (mimeType: string) => {
+/**
+ * The type to give a blob made from media bytes: the declared type when it is
+ * on the list above, the fallback otherwise. Parameters, case and padding
+ * around the type are ignored.
+ */
+export const getBlobSafeMimeType = (mimeType: unknown): string => {
     if (typeof mimeType !== 'string') return FALLBACK_MIMETYPE;
-    const [type] = mimeType.split(';');
+    const type = mimeType.split(';')[0].trim().toLowerCase();
     if (!ALLOWED_BLOB_MIME_TYPES.includes(type)) {
         return FALLBACK_MIMETYPE;
     }

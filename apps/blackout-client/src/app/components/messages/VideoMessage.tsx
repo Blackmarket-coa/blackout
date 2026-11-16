@@ -2,7 +2,7 @@ import { useCallback, useMemo, useRef, useState } from 'react';
 import type { MatrixEvent } from 'matrix-js-sdk';
 import {
     MediaLoadError,
-    UnencryptedMediaNote,
+    ServerReadableNote,
     baseStyles,
     getInfo,
     loadEncryptedLabel,
@@ -10,6 +10,8 @@ import {
     useResolvedMediaSource,
 } from './mediaShared';
 import { useMediaPlaybackRate } from '../../hooks/media/useMediaPlaybackRate';
+import { useMatrixClient } from '../../hooks/useMatrixClient';
+import { mxcToUrl } from '../../utils/media';
 import { PLAYBACK_RATES } from './AudioMessage';
 
 interface VideoMessageProps {
@@ -17,11 +19,23 @@ interface VideoMessageProps {
 }
 
 export const VideoMessage = ({ event }: VideoMessageProps) => {
+    const client = useMatrixClient();
     const { ref, inView } = useInViewport<HTMLDivElement>();
     // An encrypted video has to be downloaded whole before it can be
     // decrypted, so it is never fetched unasked: the reader loads it.
-    const { src, loading, error, encrypted, awaitingLoad, load, unencryptedInEncryptedRoom } =
-        useResolvedMediaSource(event, { autoLoad: false });
+    const {
+        src,
+        loading,
+        error,
+        endToEndEncrypted,
+        awaitingLoad,
+        load,
+        canRetry,
+        sizeUnderstated,
+        serverReadableNote,
+    } = useResolvedMediaSource(event, { autoLoad: false });
+    // The browser refused or could not decode the video it was handed.
+    const [unplayable, setUnplayable] = useState(false);
     const videoRef = useRef<HTMLVideoElement | null>(null);
     const [playing, setPlaying] = useState(false);
     const [progress, setProgress] = useState(0);
@@ -35,10 +49,17 @@ export const VideoMessage = ({ event }: VideoMessageProps) => {
         setPlaybackRate(PLAYBACK_RATES[(idx + 1) % PLAYBACK_RATES.length]);
     }, [playbackRate, setPlaybackRate]);
 
-    const poster = useMemo(
-        () => (typeof info.thumbnail_url === 'string' ? info.thumbnail_url : undefined),
-        [info.thumbnail_url]
-    );
+    // A poster is used only when it is an `mxc://` address, loaded from this
+    // homeserver. A message can put any URL in `thumbnail_url`; handing that
+    // to the browser would tell a server of the sender's choosing who is
+    // looking at the message, from which address, and when.
+    const homeserverUrl =
+        (client as unknown as { getHomeserverUrl?: () => string }).getHomeserverUrl?.() ?? '';
+    const poster = useMemo(() => {
+        const thumbnail = info.thumbnail_url;
+        if (typeof thumbnail !== 'string' || !homeserverUrl) return undefined;
+        return mxcToUrl(thumbnail, homeserverUrl) ?? undefined;
+    }, [homeserverUrl, info.thumbnail_url]);
 
     return (
         <div ref={ref} style={{ ...baseStyles.surface, padding: 8, width: 'min(540px, 100%)' }}>
@@ -49,12 +70,12 @@ export const VideoMessage = ({ event }: VideoMessageProps) => {
                 <MediaLoadError
                     what="Video failed to load"
                     error={error}
-                    onRetry={encrypted ? load : undefined}
+                    onRetry={canRetry ? load : undefined}
                 />
             ) : null}
             {inView && awaitingLoad ? (
                 <button type="button" onClick={load} data-testid="load-encrypted-media">
-                    {loadEncryptedLabel('video', info)}
+                    {loadEncryptedLabel('video', info, sizeUnderstated)}
                 </button>
             ) : null}
 
@@ -72,6 +93,7 @@ export const VideoMessage = ({ event }: VideoMessageProps) => {
                         }}
                         onPlay={() => setPlaying(true)}
                         onPause={() => setPlaying(false)}
+                        onError={() => setUnplayable(true)}
                     />
 
                     <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 8 }}>
@@ -141,14 +163,19 @@ export const VideoMessage = ({ event }: VideoMessageProps) => {
                             Fullscreen
                         </button>
                     </div>
-                    {encrypted ? (
+                    {endToEndEncrypted ? (
                         <div style={{ color: 'var(--text-muted)', fontSize: 11 }}>
                             Encrypted video
                         </div>
                     ) : null}
                 </>
             ) : null}
-            {unencryptedInEncryptedRoom ? <UnencryptedMediaNote /> : null}
+            {unplayable ? (
+                <div style={baseStyles.error} data-testid="media-unplayable">
+                    This video could not be played here.
+                </div>
+            ) : null}
+            {serverReadableNote ? <ServerReadableNote text={serverReadableNote} /> : null}
         </div>
     );
 };

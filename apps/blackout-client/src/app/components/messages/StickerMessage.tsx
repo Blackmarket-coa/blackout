@@ -20,9 +20,10 @@ export const StickerMessage = ({ event }: StickerMessageProps) => {
     // Stickers are normally pack images referenced by a plain URL, in
     // encrypted rooms too: a pack is not private to the room. One that does
     // arrive encrypted is treated like any other encrypted image.
-    const { src, loading, error, awaitingLoad, load } = useResolvedMediaSource(event, {
-        autoLoad: seen && fitsEncryptedAutoLoad(info),
-    });
+    const { src, loading, error, awaitingLoad, load, sizeUnderstated } = useResolvedMediaSource(
+        event,
+        { autoLoad: seen && fitsEncryptedAutoLoad(info) }
+    );
     const body = event.getContent<Record<string, unknown>>().body;
     const alt = typeof body === 'string' ? body : 'Sticker';
 
@@ -36,7 +37,7 @@ export const StickerMessage = ({ event }: StickerMessageProps) => {
             {error ? <div style={baseStyles.error}>Sticker unavailable</div> : null}
             {inView && awaitingLoad ? (
                 <button type="button" onClick={load} data-testid="load-encrypted-media">
-                    {loadEncryptedLabel('sticker', info)}
+                    {loadEncryptedLabel('sticker', info, sizeUnderstated)}
                 </button>
             ) : null}
             {inView && src ? (

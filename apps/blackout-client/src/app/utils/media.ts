@@ -61,6 +61,31 @@ export const uploadMedia = async (mx: MatrixClient, file: File): Promise<string>
     return response.content_uri;
 };
 
+/**
+ * The URL to load an avatar from: this homeserver's thumbnail of an `mxc://`
+ * address, and null for anything else.
+ *
+ * A profile, a membership event or a message can carry any string where an
+ * image address belongs. Handing an `https://` one to the browser would make
+ * every reader's device fetch it, which tells a server of that person's
+ * choosing who is looking at the room, from which network address, and when.
+ * Only media held by the homeserver is loaded.
+ */
+export const avatarThumbnailUrl = (
+    avatar: unknown,
+    homeserverUrl: string,
+    size = 96
+): string | null =>
+    typeof avatar === 'string' && homeserverUrl
+        ? getThumbnailUrl(avatar, size, size, homeserverUrl)
+        : null;
+
+/** The homeserver a room's client is signed in to, or '' when it cannot be told. */
+export const roomHomeserverUrl = (room: unknown): string =>
+    (
+        room as { client?: { getHomeserverUrl?: () => string } } | null | undefined
+    )?.client?.getHomeserverUrl?.() ?? '';
+
 /** Extract media metadata from Matrix event content info block. */
 export const getMediaInfo = (event: MatrixEvent): MatrixMediaInfo => {
     const content = event.getContent<Record<string, unknown>>();

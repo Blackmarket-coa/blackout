@@ -8,7 +8,7 @@ import {
     readEncryptedFile,
 } from '../../features/media/utils/encryptedMedia';
 import {
-    UnencryptedMediaNote,
+    ServerReadableNote,
     baseStyles,
     formatBytes,
     getInfo,
@@ -46,15 +46,20 @@ export const FileMessage = ({ event, enablePdfPreview = true }: FileMessageProps
     // An encrypted file is never fetched by this hook (`autoLoad: false`, and
     // `load` is not used): it is fetched, decrypted and saved in one step when
     // the reader presses Download, below.
-    const { src, loading, error, encrypted, unencryptedInEncryptedRoom } = useResolvedMediaSource(
-        event,
-        { autoLoad: false }
-    );
+    const { src, loading, error, encrypted, endToEndEncrypted, serverReadableNote } =
+        useResolvedMediaSource(event, { autoLoad: false });
     const [saving, setSaving] = useState(false);
     const [saveError, setSaveError] = useState<string | null>(null);
     const info = getInfo(event);
     const content = event.getContent<Record<string, unknown>>();
-    const fileName = typeof content.body === 'string' ? content.body : 'Attachment';
+    // `filename` is the file's name when `body` is a caption; older messages
+    // carry the name in `body`.
+    const fileName =
+        typeof content.filename === 'string' && content.filename
+            ? content.filename
+            : typeof content.body === 'string'
+            ? content.body
+            : 'Attachment';
     const mime = typeof info.mimetype === 'string' ? info.mimetype : undefined;
     const isPdf = mime?.includes('pdf');
 
@@ -109,7 +114,7 @@ export const FileMessage = ({ event, enablePdfPreview = true }: FileMessageProps
                             <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>
                                 {mime ?? 'unknown'} ·{' '}
                                 {formatBytes(typeof info.size === 'number' ? info.size : undefined)}
-                                {encrypted ? ' · encrypted' : ''}
+                                {endToEndEncrypted ? ' · end-to-end encrypted' : ''}
                             </div>
                         </div>
                         {encrypted ? (
@@ -153,7 +158,7 @@ export const FileMessage = ({ event, enablePdfPreview = true }: FileMessageProps
                     ) : null}
                 </>
             ) : null}
-            {unencryptedInEncryptedRoom ? <UnencryptedMediaNote /> : null}
+            {serverReadableNote ? <ServerReadableNote text={serverReadableNote} /> : null}
         </div>
     );
 };

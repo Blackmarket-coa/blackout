@@ -15,13 +15,13 @@
  * browser saves and never renders.
  */
 import { decryptAttachment } from 'browser-encrypt-attachment';
-import { AUDIO_MIME_TYPES, IMAGE_MIME_TYPES, VIDEO_MIME_TYPES } from '../../../utils/mimeTypes';
+import { FALLBACK_MIMETYPE, getBlobSafeMimeType } from '../../../utils/mimeTypes';
 import { mxcToUrl } from '../../../utils/media';
 import { mediaClient } from '../../../sdk/client';
 import type { IEncryptedFile } from '../../../../types/matrix/common';
 
 /** A type the browser saves and does not render. */
-export const OPAQUE_BLOB_TYPE = 'application/octet-stream';
+export const OPAQUE_BLOB_TYPE = FALLBACK_MIMETYPE;
 
 /**
  * Encrypted media up to this size is fetched and decrypted when it scrolls
@@ -31,24 +31,13 @@ export const OPAQUE_BLOB_TYPE = 'application/octet-stream';
  */
 export const ENCRYPTED_AUTO_LOAD_MAX_BYTES = 20 * 1024 * 1024;
 
-const INLINE_BLOB_TYPES: ReadonlySet<string> = new Set([
-    ...IMAGE_MIME_TYPES,
-    ...VIDEO_MIME_TYPES,
-    ...AUDIO_MIME_TYPES,
-]);
-
 /**
  * The type to give a decrypted blob that will be shown inline: the declared
  * type when it is a raster image, audio or video type from the allow-list,
- * the opaque type otherwise.
+ * the opaque type otherwise. One rule for every blob the app makes from
+ * media, so it lives with the list: `getBlobSafeMimeType` in utils/mimeTypes.
  */
-export const inlineBlobType = (declared: unknown): string => {
-    if (typeof declared !== 'string') return OPAQUE_BLOB_TYPE;
-    const type = declared.split(';')[0].trim().toLowerCase();
-    if (!INLINE_BLOB_TYPES.has(type)) return OPAQUE_BLOB_TYPE;
-    // Chromium plays QuickTime containers only when told they are MP4.
-    return type === 'video/quicktime' ? 'video/mp4' : type;
-};
+export const inlineBlobType = (declared: unknown): string => getBlobSafeMimeType(declared);
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
     typeof value === 'object' && value !== null;
@@ -97,6 +86,8 @@ export interface FetchDecryptedMediaInput {
     blobType: string;
     /** Stop, with the SDK's `MEDIA_TOO_LARGE`, if more than this arrives. */
     maxBytes?: number;
+    /** Abort the download. */
+    signal?: AbortSignal;
 }
 
 /** Fetch an encrypted attachment, verify it, decrypt it. */
@@ -105,19 +96,30 @@ export const fetchDecryptedMedia = async ({
     homeserverUrl,
     blobType,
     maxBytes,
+    signal,
 }: FetchDecryptedMediaInput): Promise<Blob> => {
     const downloadUrl = mxcToUrl(file.url, homeserverUrl);
     if (!downloadUrl) throw new Error('Invalid MXC URI');
 
-    const ciphertext = await mediaClient.fetchArrayBuffer(
-        downloadUrl,
-        undefined,
-        typeof maxBytes === 'number' ? { maxBytes } : undefined
-    );
+    const options =
+        typeof maxBytes === 'number' || signal
+            ? {
+                  ...(typeof maxBytes === 'number' ? { maxBytes } : {}),
+                  ...(signal ? { signal } : {}),
+              }
+            : undefined;
+    const ciphertext = await mediaClient.fetchArrayBuffer(downloadUrl, undefined, options);
 
     let plaintext: ArrayBuffer;
     try {
-        plaintext = await decryptAttachment(ciphertext, file);
+        // The specification asks for unpadded base64. A sender that pads is
+        // describing the same hash, and the comparison below is exact, so the
+        // padding is dropped rather than read as tampering.
+        const sha256 = file.hashes.sha256.replace(/=+$/, '');
+        plaintext = await decryptAttachment(ciphertext, {
+            ...file,
+            hashes: { ...file.hashes, sha256 },
+        });
     } catch (err) {
         if (err instanceof Error && /Mismatched SHA-256/i.test(err.message)) {
             throw new EncryptedMediaMismatchError();

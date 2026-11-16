@@ -57,7 +57,7 @@ vi.mock('../../../../src/app/features/room/Reactions', () => ({ Reactions: () =>
 vi.mock('../../../../src/app/features/profile/ProfileModal', () => ({ ProfileModal: () => null }));
 vi.mock('../../../../src/app/features/rounds/RoundCard', () => ({ RoundCard: () => null }));
 
-import { PinToggle } from '../../../../src/app/features/room/RoomTimeline';
+import { PinToggle, getAvatar } from '../../../../src/app/features/room/RoomTimeline';
 
 const room = { roomId: '!den:server' } as unknown as Room;
 
@@ -120,5 +120,32 @@ describe('PinToggle', () => {
         mocks.power = 0;
         const container = await mount();
         expect(container.querySelector('[data-testid="canopy-message-pin"]')).toBeNull();
+    });
+});
+
+// A member's avatar address is whatever their membership event says. The
+// timeline loads it only when the homeserver holds it.
+describe('the address a member avatar is loaded from', () => {
+    const roomWith = (avatar: string | undefined) =>
+        ({
+            getMember: () => ({ getMxcAvatarUrl: () => avatar }),
+        } as unknown as Room);
+
+    it('is this homeserver for an mxc:// avatar', () => {
+        expect(getAvatar(roomWith('mxc://server/abc'), '@a:server', 'https://hs.example')).toBe(
+            'https://hs.example/_matrix/media/v3/thumbnail/server/abc?width=96&height=96&method=scale'
+        );
+    });
+
+    it.each(['https://tracker.example/pixel.png', '//tracker.example/p.png', 'data:image/png,x'])(
+        'is nothing for %s: the reader is not sent to an address the member chose',
+        (avatar) => {
+            expect(getAvatar(roomWith(avatar), '@a:server', 'https://hs.example')).toBeNull();
+        }
+    );
+
+    it('is nothing for a member with no avatar, or no room', () => {
+        expect(getAvatar(roomWith(undefined), '@a:server', 'https://hs.example')).toBeNull();
+        expect(getAvatar(null, '@a:server', 'https://hs.example')).toBeNull();
     });
 });
