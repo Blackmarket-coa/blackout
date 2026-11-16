@@ -826,23 +826,46 @@ For the source-of-truth triage with tier/owner detail see
 
 ### Images at addresses chosen by other people (2026-11-16)
 
--   **Where:** the profile card and page (`features/profile/MiniProfile.tsx`,
-    `ProfileModal.tsx`, `ProfilePage.tsx`, `AvatarDecoration.tsx`) and the
-    marketplace producer profile (`features/monetization/marketplace/ProducerProfile.tsx`).
-    Record: `docs/security/trust-claims-2026-11-16.md`, T10.
--   **State:** an image address that someone else chose, handed to the browser
-    as it is, makes the reader's device fetch it, and so tells a server of that
-    person's choosing the reader's network address and the time. Until
-    2026-11-16 the room timeline did this with every member's avatar and with
-    video thumbnails, for everyone looking at the room, and the member panels
-    did it when a profile was opened. Those now load only media the homeserver
-    holds. Still open: a Blackout profile stores its avatar and banner as
-    plain addresses (the editor writes the homeserver's, but the stored value
-    can be any address), and the profile card and page show them as they are;
-    the producer profile takes an avatar address typed by hand. Opening such a
-    profile fetches whatever address its owner stored.
--   **To close it:** show a profile image only when its address is media on
-    this homeserver, as the timeline now does.
+-   **Where:** the room timeline, the member panels, and the profile card,
+    window, page and editor. Record:
+    `docs/security/trust-claims-2026-11-16.md`, T10.
+-   **State:** fixed on 2026-11-16. An image address that someone else chose,
+    handed to the browser as it is, makes the reader's device fetch it, and so
+    tells a server of that person's choosing the reader's network address and
+    the time. The room timeline did this with every member's avatar and with
+    video thumbnails, the member panels did it when a profile was opened, and
+    the profile views did it with the avatar and banner a profile's owner
+    stored (the profile API accepts any URL). All of them now load an image
+    only when its address is media this homeserver serves
+    (`avatarThumbnailUrl` and `mxcToUrl` in `utils/media.ts`, `profileImageSrc`
+    in `features/profile/profileImage.ts`). Profiles and rooms opened before
+    the fix fetched whatever address was there; that cannot be undone.
+-   **What remains:** a file on another Matrix server loads through this
+    homeserver, so that server sees the homeserver, not the reader, but it can
+    tell that someone here asked for the file, and when, the first time anyone
+    here does. The marketplace producer profile loads an avatar address typed
+    by hand, and shows it only to the producer who typed it.
+
+### Calls: none start through the app, so none are end-to-end encrypted (2026-11-16)
+
+-   **Where:** `apps/blackout-client/src/app/features/call/`. Record:
+    `docs/security/trust-claims-2026-11-16.md`, T17.
+-   **State:** the call provider asks the Matrix SDK for
+    `matrixRTC.startRoomSession`. matrix-js-sdk 40.2.0, the version the app
+    ships with, has no such method (its session manager offers
+    `getRoomSession`), so no call starts through the app's own path and no
+    media key is negotiated; the in-call indicator says "No media E2EE". The
+    tests that covered calls gave the provider a fake client that had the
+    method. Until 2026-11-16 joining a voice channel then showed "Connected"
+    and "LIVE", the banner said "Retry shortly", Element Call loaded from
+    call.element.io at once with the room's ID, and the threat model and the
+    trust page said media encryption was negotiated by default. Now the voice
+    channel says "Not connected", the banner says a retry will not help, and
+    Element Call loads only when asked, after saying it is Element's service
+    and what loading it sends.
+-   **To close it:** build the call session on the SDK's current interface
+    (`getRoomSession(room)`, `joinRTCSession`) with media keys, and test it
+    against the real SDK; or host Element Call on the operator's own domain.
 
 ### Dead drops: not reachable from the app (2026-11-16)
 
@@ -866,6 +889,81 @@ For the source-of-truth triage with tier/owner detail see
     SDK gate, the appservice's queue (its flush logs a line and delivers
     nothing), and the API's `POST /v1/deaddrop`, which stores the payload
     string it is given as it is.
+-   **A purchased digital file is not a dead drop.** The buyer downloads it
+    from Library in the black market, from the marketplace API. With the
+    marketplace's Matrix bridge on (`FBM_MATRIX_BRIDGE_ENABLED`), a notice in
+    a temporary encrypted room also points there. Until 2026-11-16 the
+    glossary, the seller's form and that notice called it an encrypted
+    dead-drop delivery (trust-claims T15).
+
+### The vault: not reachable from the app (2026-11-16)
+
+-   **Where:** `apps/blackout-client/src/app/features/vault/`. Record:
+    `docs/security/trust-claims-2026-11-16.md`, T14.
+-   **State:** no screen mounts the vault panel, though `vault_item`
+    purchases add slots and templates to it. Each secret in it is encrypted
+    in the browser (AES-GCM, key from PBKDF2), but the label of each secret is
+    sent to the API as typed and stored so, and the key also depends on a
+    salt kept in that browser's storage: another browser, or the same one
+    after its site data is cleared, cannot open the vault even with the
+    passphrase. Since 2026-11-16 the panel says so (it said "Your passphrase
+    encrypts everything"); its behaviour is unchanged.
+-   **To close it:** encrypt labels (a change to what the vault API stores),
+    and either mount the panel or stop selling slots for it.
+
+### Photo metadata and link tracking: where they are removed (2026-11-16)
+
+-   **Where:** `apps/blackout-client/src/app/utils/stripImageMetadata.ts`,
+    `utils/sanitizeUrl.ts`, and the privacy tools panel
+    (`features/privacy-tools/PrivacyToolsSettings.tsx`). Record:
+    `docs/security/trust-claims-2026-11-16.md`, T12.
+-   **State:** until 2026-11-16 the panel said metadata stripping and link
+    cleaning were "always on". Metadata was removed only from JPEG, PNG and
+    WebP pictures attached in the message box and from avatars; a profile
+    banner, a listing photo, a role icon and a welcome image were uploaded as
+    picked, and with the avatar pattern on, the avatar was sent to the API with
+    its metadata before anything stripped it. Links were cleaned in the
+    message box only. All of those paths now strip or clean, and the panel
+    says where.
+-   **What remains:** metadata is removed from JPEG, PNG and WebP only. A
+    picture in another format (HEIC, which is what an iPhone takes, AVIF,
+    TIFF) and every video is sent with whatever it records, which for a phone
+    can be where and when it was taken; the message box names such
+    attachments before they are sent, and the other upload paths do not.
+    Emoji and stickers are uploaded as they are, because re-encoding would
+    flatten an animated one. The homeserver keeps every original as it was
+    uploaded. Files uploaded before the fix keep their metadata: replacing a
+    banner or a listing photo uploads a clean copy, and the old one stays on
+    the server until the operator removes it.
+
+### Signed messages, an encryption preset and expiring files: withdrawn (2026-11-16)
+
+-   **Where:** the composer's feature menu
+    (`apps/blackout-client/src/app/features/room/MessageComposer.tsx`) and the
+    timeline (`RoomTimeline.tsx`, `EphemeralGate`). Record:
+    `docs/security/trust-claims-2026-11-16.md`, T11.
+-   **State:** until 2026-11-16 the composer offered "Signed message preset"
+    ("Signature: enabled"), "Encryption preset" ("Encryption: preset") and
+    "Ephemeral drop: view-once, 24h". The first appended the words "— signed
+    via Blackout" and signed nothing; the second put a marker in the message
+    that nothing reads, and encrypted nothing that the room did not; the third
+    asked this app to hide the attached files after one viewing or a day,
+    which only this app did, on each device, while the files stayed on the
+    server and other apps showed them for good. All three are gone.
+-   **What remains:** messages sent with them keep the words, the markers and
+    the policy. The words prove nothing about who wrote a message, in a
+    message sent then or in anyone's message now. A file sent as an
+    ephemeral drop was not deleted: it is on the server until the operator
+    removes it, and anyone in the room using another app could see it and
+    keep it. This app still hides such files as their senders asked, with a
+    notice that hiding is all it does; a file limited to one view was hidden
+    here before anyone saw it, and still is. Deleting the message (redacting
+    it) makes Matrix apps stop showing it; a copy someone already kept is
+    beyond reach.
+-   **Not built:** a signature someone could check, and an expiring file that
+    the sender's app takes down when it expires. The "Ephemeral Pro"
+    entitlement unlocks nothing; what it is sold as is the operator's
+    decision (T11).
 
 ## Deferred multi-week workstreams
 
@@ -1353,20 +1451,22 @@ What remains:
     -   Postgres refuses the statement on connections that answer.
     -   Its connections give no answer, 5 s each time.
     -   node-postgres cannot send the write (a value it cannot turn into a
-        parameter): it fails so on every attempt. What node-postgres had
-        built of the failed statement also goes out with the next messages
-        the process sends, on any connection (pg-protocol 1.13.0 builds
-        the messages of every connection in the same two buffers, and a
-        statement that fails half-built stays in them). In the runs here the
-        write's own retry could not connect ("Connection terminated
-        unexpectedly"), and where a parameter had been built before the one
-        that failed, the first attempt of the next write was refused
-        (`08P01`, invalid message format) and that write landed on its
-        retry. The review of 2026-11-15 found no request that puts such a
-        value in a write. pg-protocol 1.15.0 and later empty that buffer
-        when a value fails, and node-postgres 8.20.0 accepts them
-        (`pg-protocol ^1.13.0`); moving the lockfile to one is a change of
-        its own, not made here.
+        parameter): it fails so on every attempt. The review of 2026-11-15
+        found no request that puts such a value in a write. Until
+        2026-11-16 what node-postgres had built of the failed statement
+        also went out with the next messages the process sent, on any
+        connection (pg-protocol 1.13.0 built the messages of every
+        connection in the same two buffers, and a statement that failed
+        half-built stayed in them): the write's own retry could not connect
+        ("Connection terminated unexpectedly"), and the next write's first
+        attempt was refused (`08P01`, invalid message format). The lockfile
+        now resolves pg-protocol 1.16.1, which empties that buffer when a
+        value fails (node-postgres 8.20.0 accepts it, `^1.13.0`). Measured
+        on PostgreSQL 16.15 with node-postgres 8.20.0: after such a failure
+        a new connection connects and answers with 1.16.1, and could not
+        connect with 1.13.0. The connection the failed statement was on
+        still answers nothing more under either (node-postgres sent part of
+        the statement and never finishes it); the queue does not reuse it.
 
     Such a write is logged and counted (`db_write_behind_failed`,
     `db_write_behind_failures_total`), though the request that made it was
@@ -1464,7 +1564,11 @@ in this repository records which commit that was.
 
 ### Release signoff
 
-The CI release gate
+No workflow runs the release gate: it is a script run by hand
+(`pnpm guard:blackout-client-release-gate`), and the report it reads is
+listed in `.gitignore`, so it cannot be committed for CI to check. Until
+2026-11-16 this entry called it "the CI release gate"
+(`docs/security/trust-claims-2026-11-16.md`, T26). The release gate
 (`tools/ci/check-blackout-client-release-gate.mjs`) requires a populated
 `apps/blackout-client/docs/release/staging-signoff.report.json`. The
 generator at `tools/ci/generate-staging-signoff.mjs`

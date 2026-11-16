@@ -17,7 +17,7 @@ every file they attached to that server as it was.
 | A5  | The composer's lock said the server could not read "these messages", with no exceptions                              | Fixed (copy)                                                  |
 | A6  | Message search made blobs in the app's origin typed however the sender declared, HTML and SVG included               | Fixed                                                         |
 | A7  | A file whose key travelled in an unencrypted message was labelled "Encrypted"                                        | Fixed                                                         |
-| A8  | The timeline and member panels handed member- and sender-chosen addresses (avatars, video thumbnails) to the browser | Fixed there; profile card images open                         |
+| A8  | The timeline and member panels handed member- and sender-chosen addresses (avatars, video thumbnails) to the browser | Fixed; profile images too (T10)                               |
 | A9  | A file attached in one room stayed attached when the person moved to another                                         | Fixed                                                         |
 | A10 | Scheduling handed a message to the API without knowing whether its room was encrypted                                | Fixed                                                         |
 
@@ -438,9 +438,10 @@ is T9 in the trust-claims record.
     homeserver holds (`avatarThumbnailUrl`, and `mxcToUrl` for the poster), and
     so do the two member panels that open a profile card. Checked and already
     sound: the forum, the members drawer and the reaction viewer, which
-    convert the address through the SDK. Still open: the images a Blackout
-    profile stores as plain addresses (avatar and banner on the profile card
-    and page) and the marketplace producer's avatar address. T10 in the
+    convert the address through the SDK. The images a Blackout profile stores
+    as plain addresses (avatar and banner on the profile card, window and
+    page) were closed the same way afterwards; the marketplace producer's
+    avatar address is shown only to the producer who typed it. T10 in the
     trust-claims record.
 -   _A file attached in one room went with the person to the next (A9)._ The
     composer is one instance across rooms and kept its attachments. They are

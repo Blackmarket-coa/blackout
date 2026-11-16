@@ -449,9 +449,16 @@ const EditedIndicator = ({ event }: { event: MatrixEvent }) => {
 };
 
 /**
- * Hides ephemeral media once it has expired (by time or local view count) and
- * counts a view per mount for view-limited drops. Best-effort + per-device:
- * there's no server counter, so this stops re-opening on this device.
+ * Hides a file whose message carries an expiry policy once the policy says so
+ * (by time, or by a view count kept on this device), as its sender asked.
+ *
+ * Hiding is all it does, and only in this app: nothing deletes the file or the
+ * message, and other apps ignore the policy. The composer offered the policy
+ * as "Ephemeral drop: view-once, 24h" until 2026-11-16 and no longer does
+ * (docs/security/trust-claims-2026-11-16.md, T11). A view is counted as the
+ * file mounts, so a file limited to one view is hidden before it is seen;
+ * that is left as it is for the messages already sent, rather than show
+ * files their senders asked to be shown once.
  */
 const EphemeralGate = memo(({ event, children }: { event: MatrixEvent; children: ReactNode }) => {
     const [views, setViews] = useAtom(ephemeralViewsAtom);
@@ -473,13 +480,18 @@ const EphemeralGate = memo(({ event, children }: { event: MatrixEvent; children:
     if (policy && verdict.expired) {
         return (
             <div style={{ ...styles.pill, fontStyle: 'italic' }}>
-                ⌛ Ephemeral file expired
-                {verdict.reason === 'views' ? ' (view limit reached)' : ''}
+                {verdict.reason === 'views'
+                    ? '⌛ Hidden by this app: the sender set this file to be shown once.'
+                    : '⌛ Hidden by this app: the sender set this file to expire.'}{' '}
+                Hiding it here does not delete it.
             </div>
         );
     }
     return <>{children}</>;
 });
+
+// Exported for its tests (tests/unit/features/room/ephemeralGate.test.tsx).
+export { EphemeralGate };
 
 const renderMessageType = (event: MatrixEvent): ReactNode => {
     if (event.isRedacted() || event.getType() === 'm.room.redaction') {

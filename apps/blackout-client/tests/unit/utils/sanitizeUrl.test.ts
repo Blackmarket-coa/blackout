@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
     sanitizeFormattedBody,
+    sanitizeMessageLinks,
     sanitizeUrl,
     sanitizeUrlsInText,
 } from '../../../src/app/utils/sanitizeUrl';
@@ -62,5 +63,39 @@ describe('sanitizeFormattedBody', () => {
     it('sanitizes href attribute values', () => {
         const html = '<a href="https://example.com/?utm_source=x">link</a>';
         expect(sanitizeFormattedBody(html)).toBe('<a href="https://example.com/">link</a>');
+    });
+});
+
+// Used where messages leave the app, so every text message is covered, not
+// only those typed in the message box. docs/security/trust-claims-2026-11-16.md, T12.
+describe('sanitizeMessageLinks', () => {
+    it('cleans the body and the formatted body of a text message, and keeps the rest', () => {
+        const content = {
+            msgtype: 'm.text',
+            body: 'read https://news.example/a?id=7&utm_source=x',
+            format: 'org.matrix.custom.html',
+            formatted_body: '<a href="https://news.example/a?id=7&fbclid=y">read</a>',
+            'm.relates_to': { rel_type: 'm.thread', event_id: '$root' },
+        };
+        expect(sanitizeMessageLinks(content)).toEqual({
+            ...content,
+            body: 'read https://news.example/a?id=7',
+            formatted_body: '<a href="https://news.example/a?id=7">read</a>',
+        });
+    });
+
+    it.each([['m.notice'], ['m.emote']])('cleans an %s too', (msgtype) => {
+        const out = sanitizeMessageLinks({ msgtype, body: 'https://x.example/?gclid=1' });
+        expect(out.body).toBe('https://x.example/');
+    });
+
+    it('leaves a file message alone: its body is the file name', () => {
+        const content = { msgtype: 'm.file', body: 'https://x.example/?utm_source=a.txt' };
+        expect(sanitizeMessageLinks(content)).toBe(content);
+    });
+
+    it('returns the same object when there is nothing to clean', () => {
+        const content = { msgtype: 'm.text', body: 'no links here' };
+        expect(sanitizeMessageLinks(content)).toBe(content);
     });
 });

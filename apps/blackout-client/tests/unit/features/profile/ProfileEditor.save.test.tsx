@@ -21,6 +21,7 @@ const mockClient = {
 
 vi.mock('../../../../src/app/hooks/useMatrixClient', () => ({
     useMatrixClient: () => mockClient,
+    useMatrixClientOrNull: () => mockClient,
 }));
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;

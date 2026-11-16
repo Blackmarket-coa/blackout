@@ -8,10 +8,17 @@ token, so there is no long-lived signing key to leak.
 
 ## What is signed
 
-| Artifact | Signature format | Lives at |
-|----------|-----------------|----------|
-| Web bundle, desktop builds, mobile builds | Detached `.sig`, `.pem`, `.bundle` | GitHub release assets |
+| Artifact                  | Signature format                                 | Lives at                           |
+| ------------------------- | ------------------------------------------------ | ---------------------------------- |
+| Web bundle, mobile builds | Detached `.sig`, `.pem`, `.bundle`               | GitHub release assets              |
 | Docker image (multi-arch) | Embedded Sigstore attestation + cosign signature | OCI registry under the same digest |
+
+Nothing has been signed yet: `release.yml` runs on a `v*` tag, and no tag
+or release exists. Desktop builds are not in this table: `release.yml` has
+no desktop job, and the desktop workflow signs only for Tauri's updater,
+whose public key in `tauri.conf.json` is still a placeholder. Until
+2026-11-16 the table listed desktop builds
+(`docs/security/trust-claims-2026-11-16.md`, T21).
 
 Each release also produces a CycloneDX/SPDX SBOM (`sbom.spdx.json` for
 the web bundle; embedded for the Docker image via
@@ -38,13 +45,13 @@ even if it is co-located with a forged signature.
 
 ## Why keyless
 
-- No private signing key to manage, rotate, or recover from compromise.
-- Verification pins the *workflow path* and *repository* — an attacker
-  who steals a token would still need to publish from the correct
-  workflow in the correct repo to forge a valid signature.
-- Transparent: every signature is recorded in the public Rekor
-  transparency log (https://search.sigstore.dev) within seconds of
-  signing, so retroactive tampering is detectable.
+-   No private signing key to manage, rotate, or recover from compromise.
+-   Verification pins the _workflow path_ and _repository_ — an attacker
+    who steals a token would still need to publish from the correct
+    workflow in the correct repo to forge a valid signature.
+-   Transparent: every signature is recorded in the public Rekor
+    transparency log (https://search.sigstore.dev) within seconds of
+    signing, so retroactive tampering is detectable.
 
 ## Operator playbook
 
@@ -56,6 +63,6 @@ even if it is co-located with a forged signature.
 
 ## Related controls
 
-- `THREAT_MODEL.md` §7 R5 — supply chain residual risk.
-- `apps/blackout-server/release/train/checklist.md` — release-train
-  checklist, gated on SBOM presence.
+-   `THREAT_MODEL.md` §7 R5 — supply chain residual risk.
+-   `apps/blackout-server/release/train/checklist.md` — release-train
+    checklist, gated on SBOM presence.

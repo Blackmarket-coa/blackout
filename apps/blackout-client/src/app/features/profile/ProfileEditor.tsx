@@ -16,6 +16,8 @@ import ProfileLayoutEditor from './ProfileLayoutEditor';
 import CircleMapBlock from './CircleMapBlock';
 import { fetchProfilePalettes } from './profileClient';
 import { syncStatusToPresence } from './customStatus';
+import { useProfileImageSrc } from './profileImage';
+import { stripImageMetadata } from '../../utils/stripImageMetadata';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { useMediaAuthentication } from '../../hooks/useMediaAuthentication';
 import { uploadMedia } from '../../utils/media';
@@ -110,6 +112,9 @@ export const ProfileEditor = ({ saveProfile = saveProfileDefault }: ProfileEdito
     // their progress, so the editor can show them as locked rather than hide them.
     const [palettes, setPalettes] = useState<PaletteAvailability[]>([]);
     const hardenImage = useHardenAvatarImage();
+    // The preview follows the rule every profile view follows (profileImage.ts),
+    // so the editor shows the banner other people will be shown, or none.
+    const bannerSrc = useProfileImageSrc(profile.profile.banner);
     const useAuthentication = useMediaAuthentication();
 
     const bioLength = useMemo(() => profile.profile.bio?.length ?? 0, [profile.profile.bio]);
@@ -183,8 +188,10 @@ export const ProfileEditor = ({ saveProfile = saveProfileDefault }: ProfileEdito
     const onImageUpload = async (field: 'banner' | 'avatarUrl', file?: File) => {
         if (!file) return;
         // Avatars carry faces — harden them (EXIF strip + optional perturbation)
-        // before they become the preview/upload source.
-        const prepared = field === 'avatarUrl' ? await hardenImage(file) : file;
+        // before they become the preview/upload source. A banner is public too:
+        // its metadata is removed as well (trust-claims-2026-11-16.md, T12).
+        const prepared =
+            field === 'avatarUrl' ? await hardenImage(file) : await stripImageMetadata(file);
         const apply = (url: string) =>
             setProfile((prev) =>
                 field === 'banner'
@@ -280,7 +287,7 @@ export const ProfileEditor = ({ saveProfile = saveProfileDefault }: ProfileEdito
 
             <section>
                 <h4>Banner upload with crop</h4>
-                {profile.profile.banner ? (
+                {bannerSrc ? (
                     <div
                         style={{
                             borderRadius: 10,
@@ -290,7 +297,7 @@ export const ProfileEditor = ({ saveProfile = saveProfileDefault }: ProfileEdito
                         }}
                     >
                         <img
-                            src={profile.profile.banner}
+                            src={bannerSrc}
                             alt="Banner preview"
                             style={{
                                 width: '100%',

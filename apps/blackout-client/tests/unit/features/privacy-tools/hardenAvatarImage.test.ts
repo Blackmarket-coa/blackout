@@ -52,6 +52,24 @@ describe('hardenAvatarImage', () => {
         expect(perturbImageClientSide).not.toHaveBeenCalled();
     });
 
+    // The service is the Blackout API. It used to be sent the picture as it
+    // was picked, with its metadata. docs/security/trust-claims-2026-11-16.md, T12.
+    it('sends the perturbation service a copy with its metadata removed, never the original', async () => {
+        const original = file('me.jpg', 'image/jpeg');
+        await hardenAvatarImage(original, { stripMetadata: true, perturb: true });
+        const sent = (perturbViaService as ReturnType<typeof vi.fn>).mock.calls[0][0] as File;
+        expect(sent).not.toBe(original);
+        expect(sent.name).toBe('stripped-me.jpg');
+    });
+
+    it('perturbs the cleaned copy on the device when the service is not there', async () => {
+        const result = await hardenAvatarImage(file('me.jpg', 'image/jpeg'), {
+            stripMetadata: true,
+            perturb: true,
+        });
+        expect(result.name).toBe('client-stripped-me.jpg');
+    });
+
     it('falls back to client-side perturbation when the service returns null', async () => {
         const result = await hardenAvatarImage(file(), { stripMetadata: false, perturb: true });
         expect(perturbViaService).toHaveBeenCalled();

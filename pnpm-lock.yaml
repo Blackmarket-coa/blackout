@@ -5790,8 +5790,8 @@ packages:
     peerDependencies:
       pg: '>=8.0'
 
-  pg-protocol@1.13.0:
-    resolution: {integrity: sha512-zzdvXfS6v89r6v7OcFCHfHlyG/wvry1ALxZo4LqgUoy7W9xhBDMaqOuMiF3qEV45VqsN6rdlcehHrfDtlCPc8w==}
+  pg-protocol@1.16.1:
+    resolution: {integrity: sha512-p9VOFMiHB/ZbJATetbg+99PxssTVSQRnyuPSQ67mN1+1KBOjZaZ83ZQzltnxPhJwSsC3nwVjJ10DVJlerbFzLg==}
 
   pg-types@2.2.0:
     resolution: {integrity: sha512-qTAAlrEsl8s4OiEQY69wDvcMIdQN6wdz5ojQiOy6YRMuynxenON0O5oCpJI6lshc6scgAY8qvJ2On/p+CXY0GA==}
@@ -10207,7 +10207,7 @@ snapshots:
   '@types/pg@8.20.0':
     dependencies:
       '@types/node': 22.19.15
-      pg-protocol: 1.13.0
+      pg-protocol: 1.16.1
       pg-types: 2.2.0
 
   '@types/prop-types@15.7.15': {}
@@ -13238,7 +13238,7 @@ snapshots:
     dependencies:
       pg: 8.20.0
 
-  pg-protocol@1.13.0: {}
+  pg-protocol@1.16.1: {}
 
   pg-types@2.2.0:
     dependencies:
@@ -13252,7 +13252,7 @@ snapshots:
     dependencies:
       pg-connection-string: 2.12.0
       pg-pool: 3.13.0(pg@8.20.0)
-      pg-protocol: 1.13.0
+      pg-protocol: 1.16.1
       pg-types: 2.2.0
       pgpass: 1.0.5
     optionalDependencies:

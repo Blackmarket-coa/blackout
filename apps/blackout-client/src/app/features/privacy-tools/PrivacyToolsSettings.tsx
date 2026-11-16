@@ -25,9 +25,20 @@ export function PrivacyToolsSettings({ requestClose }: PrivacyToolsSettingsProps
                 ) : null}
             </div>
 
+            {/* Until 2026-11-16 this said both were "always on". They were
+                not, and still are not everywhere; this says where they are.
+                docs/security/trust-claims-2026-11-16.md, T12. */}
             <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: 13 }}>
-                Image metadata (EXIF/GPS) stripping and link tracking-parameter removal are now
-                always on — they&apos;re privacy hygiene, not a toggle.
+                Before a picture leaves this device, this app removes its metadata, such as where
+                and when it was taken, if it is a JPEG, PNG or WebP: pictures attached to messages,
+                avatars, profile banners, listing photos, role icons and welcome images. Pictures in
+                other formats (such as HEIC from an iPhone) and all videos are sent as they are, and
+                the message box says so when you attach one. Emoji and stickers are uploaded as they
+                are.
+            </p>
+            <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: 13 }}>
+                Tracking parameters (utm_ tags, fbclid and the like) are removed from links in
+                messages, forum posts and replies, and wall posts.
             </p>
 
             <div
@@ -47,27 +58,11 @@ export function PrivacyToolsSettings({ requestClose }: PrivacyToolsSettingsProps
                             }))
                         }
                     />
-                    Perturb avatars against facial recognition (Advanced, best-effort)
+                    Add a faint pattern to avatars (Advanced). It changes the picture&apos;s
+                    fingerprint; it does not stop current face recognition.
                     {hardening.imagePerturbation ? null : (
                         <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Pro</span>
                     )}
-                </label>
-                <label style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 8 }}>
-                    <input
-                        type="checkbox"
-                        checked={settings.advancedOptions.nonStrippableWarning}
-                        disabled={!advancedEntitled}
-                        onChange={(event) =>
-                            setSettings((prev) => ({
-                                ...prev,
-                                advancedOptions: {
-                                    ...prev.advancedOptions,
-                                    nonStrippableWarning: event.target.checked,
-                                },
-                            }))
-                        }
-                    />
-                    Warn when a file type can&apos;t be stripped (Advanced)
                 </label>
                 <button
                     type="button"

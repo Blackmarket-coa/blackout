@@ -52,7 +52,7 @@ import { emojis } from '../../plugins/emoji';
 import { EmojiPicker } from './EmojiPicker';
 import { createScheduledMessage } from './scheduledMessagesClient';
 import { sanitizeFormattedBody, sanitizeUrlsInText } from '../../utils/sanitizeUrl';
-import { stripImageMetadata } from '../../utils/stripImageMetadata';
+import { keepsMetadata, stripImageMetadata } from '../../utils/stripImageMetadata';
 import { SLOWMODE_STATE_EVENT_TYPE, evaluateSlowmode, parseSlowmodeConfig } from './slowmode';
 import {
     VERIFICATION_GATE_STATE_EVENT_TYPE,
@@ -547,6 +547,10 @@ const FormatMarkButton = ({
  */
 export const ENCRYPTED_ROOM_NOTICE =
     'End-to-end encrypted. Messages and files you send here are encrypted on this device, and the server cannot read them. It can still see who is in the room, when things are sent and how large they are, emoji reactions, and anything kept as part of the room itself: its name and settings, den documents and proposals.';
+/** Why some attachments keep their metadata; see utils/stripImageMetadata.ts. */
+export const ATTACHMENT_METADATA_REASON =
+    'This app removes metadata only from JPEG, PNG and WebP pictures; a photo or video from a phone can record where and when it was taken.';
+
 export const UNENCRYPTED_ROOM_NOTICE =
     'Not encrypted. Messages and files are stored unencrypted on the server. Enable encryption in room settings for private conversations.';
 
@@ -668,14 +672,10 @@ export const MessageComposer = ({
     const [voiceAttachment, setVoiceAttachment] = useState<File | null>(null);
     const [voiceMetadata, setVoiceMetadata] = useState<VoiceNoteMetadata>({});
     const [voiceEnabled, setVoiceEnabled] = useState(false);
-    const [signatureEnabled, setSignatureEnabled] = useState(false);
     const [commandEnabled, setCommandEnabled] = useState(false);
     const [selectedCommand, setSelectedCommand] = useState<CommandPreset | null>(null);
     const [scheduledEnabled, setScheduledEnabled] = useState(false);
     const [scheduleDelayHours, setScheduleDelayHours] = useState(1);
-    const [encryptionPresetEnabled, setEncryptionPresetEnabled] = useState(false);
-    // Ephemeral drops: attached media expires (view-once, 24h) for the recipient.
-    const [ephemeralEnabled, setEphemeralEnabled] = useState(false);
     const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
     const [slowmodeNotice, setSlowmodeNotice] = useState<string | null>(null);
     const [sendNotice, setSendNotice] = useState<string | null>(null);
@@ -820,7 +820,6 @@ export const MessageComposer = ({
         if (text.includes('vote') || text.includes('poll')) suggestionsSet.push('Poll / vote');
         if (text.includes('secret') || text.includes('hide')) suggestionsSet.push('Steganography');
         if (text.startsWith('/')) suggestionsSet.push('Slash command');
-        if (text.includes('sign')) suggestionsSet.push('Signed message preset');
         return suggestionsSet;
     }, [value]);
 
@@ -1001,15 +1000,12 @@ export const MessageComposer = ({
         setSendNotice(null);
         try {
             const htmlBody = toHtml(value);
-            const signatureSuffix = signatureEnabled ? '\n— signed via Blackout' : '';
             const commandProcessedBody =
                 commandEnabled && selectedCommand
                     ? executeCommandTemplate(selectedCommand, plainBody)
                     : plainBody;
             // Link sanitization is native — always strip tracking params before send.
-            const bodyToSend = sanitizeUrlsInText(
-                `${commandProcessedBody}${signatureSuffix}`.trim()
-            );
+            const bodyToSend = sanitizeUrlsInText(commandProcessedBody.trim());
             const formattedBody = sanitizeFormattedBody(htmlBody);
 
             if (target?.mode === 'edit' && target.eventId) {
@@ -1027,9 +1023,6 @@ export const MessageComposer = ({
                         options: ['Yes', 'No'],
                         duration_hours: voteDurationHours,
                     };
-                }
-                if (signatureEnabled) {
-                    content['co.blackout.signature'] = { enabled: true };
                 }
                 if (
                     scheduledEnabled &&
@@ -1092,9 +1085,6 @@ export const MessageComposer = ({
                     }
                     return;
                 }
-                if (encryptionPresetEnabled) {
-                    content['co.blackout.encryption'] = { preset: 'enhanced' };
-                }
                 if (commandEnabled && selectedCommand) {
                     content['co.blackout.command'] = {
                         id: selectedCommand.id,
@@ -1131,9 +1121,6 @@ export const MessageComposer = ({
             // file that fails below does not leave it there to be sent twice.
             clearComposer();
 
-            const ephemeralPolicy = ephemeralEnabled
-                ? { expiresAtMs: Date.now() + 24 * 60 * 60 * 1000, maxViews: 1 }
-                : null;
             for (const file of attachments) {
                 // Images are measured up front so the m.image content can
                 // carry w/h; the msgtype is inferred from the mimetype so
@@ -1142,7 +1129,6 @@ export const MessageComposer = ({
                     ? await measureImageAttachment(file)
                     : undefined;
                 await sendMedia(file, {
-                    ephemeral: ephemeralPolicy,
                     buildContent: (source) =>
                         buildAttachmentContent({
                             source,
@@ -1162,7 +1148,6 @@ export const MessageComposer = ({
                 // renders them; buildVoiceMessageContent is the same
                 // builder the round-reply surface uses.
                 await sendMedia(voiceAttachment, {
-                    ephemeral: ephemeralPolicy,
                     buildContent: (source) =>
                         buildVoiceMessageContent({
                             source,
@@ -1222,7 +1207,6 @@ export const MessageComposer = ({
             voiceMetadataForRef.current = null;
             resetVoiceRecorder();
             setStegoAttachment(null);
-            setEphemeralEnabled(false);
             onSent?.();
             try {
                 await sendTyping(false);
@@ -1241,8 +1225,6 @@ export const MessageComposer = ({
         clearComposer,
         commandEnabled,
         editMessage,
-        encryptionPresetEnabled,
-        ephemeralEnabled,
         matrixClient,
         onSent,
         room,
@@ -1253,7 +1235,6 @@ export const MessageComposer = ({
         sendMedia,
         sendRichText,
         sendTyping,
-        signatureEnabled,
         stegoAttachment,
         target,
         value,
@@ -1297,10 +1278,6 @@ export const MessageComposer = ({
                 if (!selectedCommand) setSelectedCommand(COMMAND_PRESETS[0]);
                 return;
             }
-            if (actionLabel === 'Signed message preset') {
-                setSignatureEnabled((active) => !active);
-                return;
-            }
             if (actionLabel === 'Scheduled send preset') {
                 // Scheduled delivery is server-side and text-only; attachments
                 // would be sent immediately, so don't offer it alongside them.
@@ -1313,12 +1290,6 @@ export const MessageComposer = ({
                 setScheduleNotice(null);
                 setScheduledEnabled((active) => !active);
                 return;
-            }
-            if (actionLabel === 'Encryption preset') {
-                setEncryptionPresetEnabled((active) => !active);
-            }
-            if (actionLabel === 'Ephemeral drop') {
-                setEphemeralEnabled((active) => !active);
             }
         },
         [
@@ -1591,12 +1562,6 @@ export const MessageComposer = ({
                                 </strong>
                                 <button
                                     type="button"
-                                    onClick={() => applyFeatureAction('Signed message preset')}
-                                >
-                                    Signed message preset
-                                </button>
-                                <button
-                                    type="button"
                                     disabled={roomEncrypted}
                                     title={roomEncrypted ? SCHEDULE_ENCRYPTED_REASON : undefined}
                                     aria-describedby={
@@ -1614,21 +1579,6 @@ export const MessageComposer = ({
                                         {SCHEDULE_ENCRYPTED_REASON}
                                     </small>
                                 ) : null}
-                                <button
-                                    type="button"
-                                    onClick={() => applyFeatureAction('Encryption preset')}
-                                >
-                                    Encryption preset
-                                </button>
-                                <button
-                                    type="button"
-                                    aria-pressed={ephemeralEnabled}
-                                    onClick={() => applyFeatureAction('Ephemeral drop')}
-                                >
-                                    {ephemeralEnabled
-                                        ? 'Ephemeral drop: on (view-once, 24h)'
-                                        : 'Ephemeral drop'}
-                                </button>
                             </div>
                             {recentActions.length > 0 ? (
                                 <div style={{ display: 'grid', gap: 4 }}>
@@ -1764,10 +1714,8 @@ export const MessageComposer = ({
                 stegoAttachment ||
                 voteEnabled ||
                 voiceEnabled ||
-                signatureEnabled ||
                 commandEnabled ||
-                scheduledEnabled ||
-                encryptionPresetEnabled ? (
+                scheduledEnabled ? (
                     <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                         {attachments.map((file, idx) => (
                             <Badge
@@ -1924,33 +1872,6 @@ export const MessageComposer = ({
                                 </button>
                             </span>
                         ) : null}
-                        {signatureEnabled ? (
-                            <span
-                                style={{
-                                    border: '1px solid var(--border-default)',
-                                    borderRadius: 999,
-                                    padding: '2px 8px',
-                                    fontSize: 12,
-                                    display: 'inline-flex',
-                                    gap: 6,
-                                    alignItems: 'center',
-                                }}
-                            >
-                                Signature: enabled
-                                <button
-                                    type="button"
-                                    onClick={() => setSignatureEnabled(false)}
-                                    style={{
-                                        border: 'none',
-                                        background: 'transparent',
-                                        color: 'var(--text-secondary)',
-                                        cursor: 'pointer',
-                                    }}
-                                >
-                                    ×
-                                </button>
-                            </span>
-                        ) : null}
                         {scheduledEnabled ? (
                             <span
                                 style={{
@@ -1993,33 +1914,22 @@ export const MessageComposer = ({
                                 </button>
                             </span>
                         ) : null}
-                        {encryptionPresetEnabled ? (
-                            <span
-                                style={{
-                                    border: '1px solid var(--border-default)',
-                                    borderRadius: 999,
-                                    padding: '2px 8px',
-                                    fontSize: 12,
-                                    display: 'inline-flex',
-                                    gap: 6,
-                                    alignItems: 'center',
-                                }}
-                            >
-                                Encryption: preset
-                                <button
-                                    type="button"
-                                    onClick={() => setEncryptionPresetEnabled(false)}
-                                    style={{
-                                        border: 'none',
-                                        background: 'transparent',
-                                        color: 'var(--text-secondary)',
-                                        cursor: 'pointer',
-                                    }}
-                                >
-                                    ×
-                                </button>
-                            </span>
-                        ) : null}
+                    </div>
+                ) : null}
+
+                {attachments.some(keepsMetadata) ? (
+                    // Metadata is removed only from JPEG, PNG and WebP pictures.
+                    // Say which attachments go out with theirs before they are
+                    // sent (trust-claims-2026-11-16.md, T12).
+                    <div
+                        role="note"
+                        data-testid="attachment-metadata-note"
+                        style={{ marginTop: 6, fontSize: 12, color: 'var(--text-secondary)' }}
+                    >
+                        {`Sent with any metadata in them: ${attachments
+                            .filter(keepsMetadata)
+                            .map((file) => file.name)
+                            .join(', ')}. ${ATTACHMENT_METADATA_REASON}`}
                     </div>
                 ) : null}
 

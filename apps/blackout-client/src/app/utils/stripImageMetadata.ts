@@ -13,6 +13,27 @@
 
 const STRIPPABLE_MIME = new Set<string>(['image/jpeg', 'image/png', 'image/webp']);
 
+/** The files this module produced: each is a re-encoded copy with no metadata. */
+const cleaned = new WeakSet<File>();
+
+const PICTURE_NAME = /\.(jpe?g|png|webp|heic|heif|avif|tiff?|gif|bmp|jxl|dng)$/i;
+const VIDEO_NAME = /\.(mp4|m4v|mov|webm|mkv|3gp|avi)$/i;
+
+const isPicture = (file: File): boolean =>
+    file.type.startsWith('image/') || (!file.type && PICTURE_NAME.test(file.name));
+const isVideo = (file: File): boolean =>
+    file.type.startsWith('video/') || (!file.type && VIDEO_NAME.test(file.name));
+
+/**
+ * Whether a file is a picture or a video that would be sent with whatever
+ * metadata it carries: anything `stripImageMetadata` did not re-encode. That
+ * includes every picture in a format it does not handle (HEIC, AVIF, TIFF,
+ * GIF), one it could not re-encode, and every video. A photo or a video from
+ * a phone can record where and when it was taken.
+ */
+export const keepsMetadata = (file: File): boolean =>
+    !cleaned.has(file) && (isPicture(file) || isVideo(file));
+
 const canStrip = (file: File): boolean =>
     STRIPPABLE_MIME.has(file.type) &&
     typeof createImageBitmap === 'function' &&
@@ -47,10 +68,12 @@ export const stripImageMetadata = async (file: File): Promise<File> => {
         });
         if (!blob) return file;
 
-        return new File([blob], file.name, {
+        const copy = new File([blob], file.name, {
             type: file.type,
             lastModified: file.lastModified,
         });
+        cleaned.add(copy);
+        return copy;
     } catch {
         return file;
     } finally {

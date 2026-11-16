@@ -1,6 +1,7 @@
 import type { CSSProperties } from 'react';
 import { useAtomValue } from 'jotai';
 import { avatarDecorationCatalogAtom } from './cosmeticsAtoms';
+import { useProfileImageSrc } from './profileImage';
 
 interface AvatarDecorationProps {
     avatarUrl?: string;
@@ -26,6 +27,8 @@ export const AvatarDecoration = ({
 }: AvatarDecorationProps) => {
     const catalog = useAtomValue(avatarDecorationCatalogAtom);
     const decoration = catalog.find((item) => item.id === decorationId && item.id !== 'none');
+    // Only a picture the homeserver holds is loaded; see profileImage.ts.
+    const avatarSrc = useProfileImageSrc(avatarUrl);
 
     // Old Discord default avatar colors (blurple shades)
     const discordAvatarColors = ['#7289DA', '#5865F2', '#57F287', '#FEE75C', '#EB459E'];
@@ -51,8 +54,8 @@ export const AvatarDecoration = ({
 
     return (
         <div style={{ position: 'relative', width: size, height: size }}>
-            {avatarUrl ? (
-                <img src={avatarUrl} alt={safeName} style={avatarStyle} />
+            {avatarSrc ? (
+                <img src={avatarSrc} alt={safeName} style={avatarStyle} />
             ) : (
                 <div style={avatarStyle}>{getInitials(safeName)}</div>
             )}

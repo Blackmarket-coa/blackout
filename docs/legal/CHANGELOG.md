@@ -26,6 +26,106 @@ should be described as a published privacy policy until that review lands.
 
 ---
 
+## 2026-11-16 — The welcome steps said every message is end-to-end encrypted
+
+**Why this entry exists:** the steps shown to a new person at an invite, when
+a canopy has none of its own, said "Blackout is an end-to-end-encrypted,
+community-run space" and "messages are end-to-end encrypted". Many dens are
+not. The finding is T13 in
+[`docs/security/trust-claims-2026-11-16.md`](../security/trust-claims-2026-11-16.md).
+
+### Withdrawn
+
+-   **"An end-to-end-encrypted space" and "messages are end-to-end
+    encrypted".** A new canopy, a den with no canopy and a den in a public
+    canopy start public and not end-to-end encrypted. The steps now say that
+    the lock beside the message box shows whether a den is encrypted, and
+    that not every den is.
+
+### What a person relying on the old text should know
+
+-   **A den is end-to-end encrypted only if the lock beside its message box
+    says so.** What you sent in a den that was not encrypted was readable by
+    the server, and still is.
+
+## 2026-11-16 — Photo metadata and link tracking were not removed everywhere
+
+**Why this entry exists:** the privacy tools panel said that removing photo
+metadata and link tracking parameters was "always on". It was not, for some
+uploads, some formats and some kinds of post. The finding is T12 in
+[`docs/security/trust-claims-2026-11-16.md`](../security/trust-claims-2026-11-16.md).
+
+### Withdrawn
+
+-   **"Image metadata (EXIF/GPS) stripping ... always on".** Metadata was
+    removed from JPEG, PNG and WebP pictures attached to messages, and from
+    avatars. Profile banners, marketplace listing photos, role icons and
+    welcome images were uploaded with their metadata. Pictures in other
+    formats, such as the HEIC photos an iPhone takes, and all videos were
+    sent with theirs everywhere.
+-   **"Link tracking-parameter removal ... always on".** It applied to
+    messages only. Forum posts, forum replies and wall posts kept the
+    tracking parameters in their links.
+-   **"Perturb avatars against facial recognition".** The pattern does not
+    stop current face recognition. It is now described as what it is.
+-   **"Warn when a file type can't be stripped" (Advanced).** Nothing read
+    this setting. It is gone; the message box now warns everyone.
+
+### Changed
+
+-   Banners, listing photos, role icons and welcome images are now uploaded
+    without their metadata, and so is an avatar sent for the pattern. Forum
+    posts, forum replies and wall posts now lose tracking parameters from
+    their links. The panel says where each runs and where it does not.
+
+### What a person relying on the old text should know
+
+-   **A photo you uploaded as a profile banner, a listing photo, a role icon
+    or a welcome image before this change kept its metadata,** which for a
+    photo from a phone can say where and when it was taken. Uploading it
+    again now sends a clean copy; the old one stays on the server until the
+    operator removes it.
+-   **A HEIC photo or a video you sent anywhere, at any time, went with its
+    metadata, and still does.** The message box now says so before it is
+    sent.
+-   **With the avatar pattern on, your avatar reached the Blackout API with
+    its metadata.** The API passes it to the pattern service; neither keeps
+    it, as far as the code in this repository shows, and the avatar that was
+    published had been re-encoded.
+
+## 2026-11-16 — Three options beside the message box that said they protected a message
+
+**Why this entry exists:** the app offered "Signed message preset", "Encryption
+preset" and "Ephemeral drop: view-once, 24h" beside the message box. None did
+what its name said. The finding is T11 in
+[`docs/security/trust-claims-2026-11-16.md`](../security/trust-claims-2026-11-16.md).
+
+### Withdrawn
+
+-   **"Signature: enabled".** It added the words "— signed via Blackout" to the
+    message. Nothing was signed, and anyone can type those words.
+-   **"Encryption: preset".** It changed nothing. Whether a message is
+    encrypted depends only on whether the room is, and the lock beside the
+    message box says which.
+-   **"Ephemeral drop: view-once, 24h".** It asked this app to hide the files
+    sent with it after one viewing or a day. Only this app did, on each
+    device. The files stayed on the server, the messages stayed, and other
+    apps showed the files for good. In this app, a file limited to one viewing
+    was hidden before anyone saw it.
+
+### What a person relying on the old text should know
+
+-   **A message you sent "signed" carries the words "signed via Blackout" and
+    nothing more.** It proves nothing about who wrote it, and the same words
+    in someone else's message prove nothing either.
+-   **A message you sent with "Encryption: preset" in a room that was not
+    encrypted was not encrypted.** The server could read it then and can read
+    it now.
+-   **A file you sent as an ephemeral drop was not deleted.** It stays on the
+    server until the operator removes it, and anyone in the room using
+    another app could see it and keep it. Deleting the message makes Matrix
+    apps stop showing it; a copy someone already kept is beyond reach.
+
 ## 2026-11-16 — Dead drops: nobody can use one, and the room mode queued nothing
 
 **Why this entry exists:** the initial record below lists "dead-drop anonymity

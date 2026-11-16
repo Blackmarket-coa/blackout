@@ -7,6 +7,7 @@ import type {
 import { createAuthorizedApiClient } from '../../sdk/client';
 import { readBlackoutApiToken } from '../monetization/marketplace/useMarketplaceAuth';
 import type { BmcProfileEvent, MemberProfile } from './profileTypes';
+import { sanitizeUrlsInText } from '../../utils/sanitizeUrl';
 
 const PROFILE_BASE = '/v1/profile';
 const REPUTATION_BASE = '/v1/reputation';
@@ -144,9 +145,10 @@ export function postWall(
     body: string,
     token: string | null = readBlackoutApiToken()
 ): Promise<WallPost> {
+    // A wall post leaves without tracking params in its links, as a message does.
     return postJson<WallPost>(
         `${PROFILE_BASE}/${encodeURIComponent(userId)}/wall`,
-        { body },
+        { body: sanitizeUrlsInText(body) },
         token
     );
 }

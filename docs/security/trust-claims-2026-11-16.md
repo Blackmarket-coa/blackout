@@ -23,7 +23,23 @@ may decide what to say, and to whom, on the strength of it.
 | T7  | The composer in every encrypted room, `THREAT_MODEL.md`                    | "Not even the server can" read what is sent here; attachments are E2EE           | Files were uploaded unencrypted; only the message was encrypted                  | Part fixed   |
 | T8  | A room with dead drop on: composer, indicator, settings                    | "Dead Drop: message will be queued"; "Anonymize delivery" on the Pro tier        | The message is sent at once; nothing queues or anonymizes                        | Fixed (UI)   |
 | T9  | `TRUST.md`, the composer in an encrypted room                              | Private rooms are end-to-end encrypted                                           | Documents, proposals, objectives and playbooks are room state, unencrypted       | Said         |
-| T10 | The room timeline, member panels, profile card                             | (nothing said)                                                                   | Images were fetched from addresses other people chose                            | Part fixed   |
+| T10 | The room timeline, member panels, profile card, window and page            | (nothing said)                                                                   | Images were fetched from addresses other people chose                            | Fixed        |
+| T11 | The composer's feature menu                                                | "Signature: enabled", "Encryption: preset", "view-once, 24h"                     | Nothing was signed or encrypted; "view-once" hid the file in this app only       | Removed      |
+| T12 | The privacy tools panel                                                    | Metadata stripping and link cleaning are "always on"                             | Neither was: some uploads and formats kept metadata; links only in messages      | Fixed        |
+| T13 | The welcome steps at the invite entry                                      | "An end-to-end-encrypted space"; "messages are end-to-end encrypted"             | New canopies and most new dens start public and unencrypted                      | Fixed (copy) |
+| T14 | The vault panel (not mounted)                                              | "Your passphrase encrypts everything"; the server stores only ciphertext         | Labels go to the server as typed; the key needs this browser too                 | Fixed (copy) |
+| T15 | Glossary; the purchase delivery notice                                     | A digital good is "delivered via an encrypted dead-drop"; "Open it in Blackout"  | It is downloaded from Library; nothing opens a dead drop                         | Fixed (copy) |
+| T16 | `TRUST.md`: the bot                                                        | "No timeline-read capability at all"; a search with "no hits"                    | True of the code, not the token; the search has hits; other bots can read        | Fixed (copy) |
+| T17 | `THREAT_MODEL.md` R2, `TRUST.md`, the voice UI                             | Call media E2EE "negotiated by default"; "Connected"; "Retry shortly"            | No call starts: the SDK lacks the method; a third-party page loaded unasked      | Fixed        |
+| T18 | `THREAT_MODEL.md` A7, §3: devices                                          | Per-device verification (SAS/QR) and session revocation                          | No verification screen is mounted, QR is off; no one device can be ended         | Fixed (copy) |
+| T19 | `THREAT_MODEL.md` §3, R4: tokens                                           | "Tokens are short-lived"                                                         | API: 24 h, refresh 30 days renewed on use; Matrix refresh: no expiry             | Fixed (copy) |
+| T20 | `THREAT_MODEL.md` §3: boundaries                                           | The trust boundaries, listed                                                     | OpenStreetMap, reCAPTCHA, the FBM store and GIF hosts were missing               | Fixed (copy) |
+| T21 | `THREAT_MODEL.md` A8, A11, §3, R5                                          | Signed releases, reproducible builds                                             | Signing never ran (no tag, no release); updater key is a placeholder             | Fixed (copy) |
+| T22 | `THREAT_MODEL.md` §6a: plugins                                             | Bundles must carry a signature from a pinned key                                 | The only pinned key is a development secret in the client source                 | Said         |
+| T23 | `THREAT_MODEL.md` §4, §5                                                   | Ballots: "Hash chain + sigs"; audit logs: "tamper-evident", "WORM"               | Ordinary rows; nothing chains, signs or write-protects them                      | Fixed (copy) |
+| T24 | `docs/security/key-transparency.md`                                        | "Atomically rewritten"; witnesses on replicas; a cross-process test              | Rewritten in place; no witness setup; the test runs in one process               | Fixed (copy) |
+| T25 | `docs/security/webauthn-passkeys.md`                                       | "Status: shipped"                                                                | Server only, off by default, no app calls it, no session                         | Fixed (copy) |
+| T26 | `KNOWN_LIMITATIONS.md`: release signoff                                    | "The CI release gate"                                                            | No workflow runs it; its report is gitignored                                    | Fixed (copy) |
 
 T7 was found while checking those sentences and outranks the rest: it has its
 own record,
@@ -34,9 +50,14 @@ and sent it at once. T9 and T10 came out of the independent review of T7's
 fix: what an encrypted room does not encrypt, and images loaded from addresses
 other people chose.
 
-Findings T11 onward are the trust page's and the threat model's own sentences,
-checked one by one; they are in [the documents](#t11-onward-the-documents)
-below.
+T11 to T15 are strings in the app that a first reading reported and a second
+look confirmed: three composer options that said they protected a message, the
+privacy tools panel's "always on", the welcome steps, the vault, and the
+glossary with the purchase delivery notice. T16 onward are the documents'
+own sentences, checked one by one. The trust
+page's and the threat model's own sentences are being checked one by one; what
+that first reading reported is listed under
+[Reported, not yet checked](#reported-not-yet-checked) below.
 
 ## T1. Tor transport and decoy traffic
 
@@ -405,8 +426,10 @@ every reader go to a server of that person's choosing.
 -   The member panel and the right panel passed the same raw avatar to the
     profile card.
 -   A Blackout profile stores its avatar and banner as plain addresses, and
-    the profile card and page show them as they are. The marketplace producer
-    profile takes an avatar address typed by hand.
+    the profile API accepts any URL for them. The profile card, the profile
+    window, the profile page and the editor's preview showed them as they
+    were. The marketplace producer profile takes an avatar address typed by
+    hand.
 
 Checked and sound: the forum, the members drawer and the reaction viewer
 convert the address with the SDK's `mxcUrlToHttp`, which returns nothing for
@@ -416,67 +439,505 @@ an address that is not `mxc://`.
 holds (`avatarThumbnailUrl` in `utils/media.ts`; `mxcToUrl` for the poster).
 Tests: `tests/unit/utils/media.test.ts`, the avatar cases in
 `PinToggle.test.tsx`, the thumbnail cases in
-`encryptedMediaRenderers.test.tsx`. **Open:** the profile card and page and
-the producer profile. The rule to apply there is the same: show an image only
-when its address is media on this homeserver. Recorded in
-`KNOWN_LIMITATIONS.md`.
+`encryptedMediaRenderers.test.tsx`.
+
+The profile card, window and page, and the editor's preview, now go through
+one rule, `profileImageSrc` in `features/profile/profileImage.ts`. An image is
+loaded only when its address is an `mxc://` address, or this homeserver's own
+media download or thumbnail address. The check is made on the parsed address,
+so a `..` in the path, a look-alike host, a user name in front of the host,
+another port or plain http does not pass, and the parsed address is what the
+browser is given. The rest of the media API does not pass either: its
+`preview_url` makes the homeserver fetch any address it is handed. The one
+exception is the editor's `blob:` preview of a picture just picked on the
+device, which reaches no network. Tests:
+`tests/unit/features/profile/profileImage.test.ts` (the rule) and
+`profileImages.test.tsx` (the four views, given a profile whose owner pointed
+both images at a server of their own); 14 of the 20 tests in the second file
+fail on the code before this change, and the 6 that pass are the cases that
+should load. Sixteen mutations of the rule and its five call sites: fifteen
+caught; the survivor removes a guard that the address parse already covers.
+
+Checked and left as they are:
+
+-   The producer profile is mounted in one place, the creator dashboard
+    (`<ProducerProfile editable />`, with no user id), so it only ever shows
+    producers their own avatar: the address it loads is one the viewer typed.
+    A view that shows it to buyers would need the same rule.
+-   The server-rendered share pages (`packages/api/src/routes/sharePreview.ts`,
+    `campaignPreview.ts`) put an inviter's avatar or a coalition banner in
+    `og:image`. A browser does not fetch that; link-preview services do, from
+    their own servers.
+-   A Discord-compatible webhook's `avatar_url` is copied into the message it
+    posts as `m.blackout.origin_sender_avatar_url`. Nothing in this app reads
+    that field.
+
+How long: the avatar has been loaded this way since the profile components
+were added (6a750e8b34, 2026-03-20). The device of anyone who opened a profile
+whose owner had stored an outside address fetched it, and that server saw the
+device's network address and the time. That cannot be undone.
+
+What remains is how Matrix media works: a file on another Matrix server loads
+through this homeserver, so that server sees the homeserver, not the reader.
+It can still tell that someone here asked for the file, and when, the first
+time anyone here does; after that the homeserver answers from its own copy.
 
 A side effect worth knowing: in the timeline a member's `mxc://` avatar was
 being used as an image source as it was, which no browser can load. Avatars
 that never showed there will now show.
 
-## T11 onward: the documents
+## T11. Three composer options that said they protected a message
 
-Not in this commit. The sentences of `TRUST.md` (beyond the paragraphs T1, T2,
-T7, T8 and T9 change), of `THREAT_MODEL.md`, of
-`docs/security/key-transparency.md` and `docs/security/webauthn-passkeys.md`,
-and the "CI release gate" sentence of `KNOWN_LIMITATIONS.md` are being checked
-against the code one by one. Each finding is added here, with its fix or its
-explanation, in a commit that follows on the same branch. Until then this
-record covers T1 to T10 only.
+**Claimed.** The composer's feature menu, under "Tier 3 • Advanced", offered:
 
-A first reading of those documents against the code reported the following.
-Each is a report, not yet a finding: none has been checked by a second look or
-a test, and each will be confirmed or dropped here, with its evidence.
+-   "Signed message preset", shown while on as "Signature: enabled", and
+    suggested whenever the text typed contained "sign".
+-   "Encryption preset", shown while on as "Encryption: preset".
+-   "Ephemeral drop", shown while on as "Ephemeral drop: on (view-once, 24h)".
 
-Threat model:
+**Found.**
 
--   Device verification and remote sign-out (A7, §3.6): no verification screen
-    is mounted; QR verification is not enabled.
--   Call media (A4, R2 "Mitigated", and `TRUST.md` on calls): the call session
-    method the app calls is absent from the SDK version in use, so no call
-    starts; a third-party call page is framed instead. §5 says "TLS-only
-    today" and R2 says "Mitigated": the document contradicts itself.
--   Governance ballots ("hash chain + sigs") and audit logs ("tamper-evident",
-    "WORM"): stored as ordinary rows.
--   Signed releases and reproducible builds (A11): no tags or releases exist,
-    and the desktop updater's public key is a placeholder.
--   Plugin signatures (§6): the signing secret is in the client source.
--   "Short-lived" tokens: 24 hours, refresh 30 days.
--   Third parties missing from §3: a CAPTCHA provider on registration, map
-    tiles on the coalition map, the framed call page.
+-   The signing option signed nothing. It appended the words "— signed via
+    Blackout" to the message and put `co.blackout.signature: { enabled: true }`
+    in it, which nothing reads. Anyone can type those words, in any app, so a
+    reader who took them as proof of who wrote a message was misled. Matrix
+    already ties a message in an encrypted room to its sender's device; the
+    option added nothing to that.
+-   The encryption option changed nothing. It put
+    `co.blackout.encryption: { preset: 'enhanced' }` in the message, which
+    nothing reads. Whether a message is encrypted depends only on the room: in
+    an unencrypted room the message went out readable by the server while the
+    chip said "Encryption: preset".
+-   The ephemeral option put an expiry policy on the attached files
+    (`co.blackout.ephemeral`: 24 hours, one view). Only this app's timeline
+    acts on it, by hiding the file on each device. Nothing deletes the file
+    from the server, nothing redacts the message, and other apps show the file
+    for good. A comment in `features/ephemeral/ephemeralPolicy.ts` said the
+    sender's client redacts the message when it sees it expire; no code does.
+    In this app, a file limited to one view was not shown at all, to the
+    recipient or to the sender: the view is counted as the file mounts, and
+    the update that follows hides it. Reproduced: the file renders once and is
+    replaced, in the same update, by "Ephemeral file expired (view limit
+    reached)". A file limited only by time is shown until its time.
 
-Other documents:
+**Done.**
 
--   `docs/security/key-transparency.md`: "atomically rewritten", witnesses on
-    replicas, a cross-process test.
--   `docs/security/webauthn-passkeys.md`: "Status: shipped".
--   `KNOWN_LIMITATIONS.md`, "Release signoff": no workflow runs the release
-    gate it describes.
--   `TRUST.md`: "no timeline-read capability" for the bot, and the search it
-    tells a reader to run.
+-   The three options are gone from the menu, the suggestions and the chips,
+    and the send path no longer adds the words, the two markers or the policy
+    (`features/room/MessageComposer.tsx`).
+-   Messages already sent with an expiry policy are still hidden as their
+    senders asked: changing that now would show files their senders asked to
+    be shown once. The notice in their place now says what hiding is: "Hidden
+    by this app: the sender set this file to be shown once. Hiding it here does
+    not delete it." (or "... set this file to expire."). The module's comment
+    is corrected.
+-   Tests: in `tests/unit/features/room/MessageComposer.test.tsx`, "options
+    that said they protected a message" (the menu, the suggestions, a sent
+    message, a sent file; the first two fail on the code before this change),
+    and `tests/unit/features/room/ephemeralGate.test.tsx` (the gate and its
+    notice; the two notice tests fail on the old text). Eleven mutations, each
+    bringing back one of the claims or weakening the gate: all caught.
 
-Strings in the app:
+**Left as it is, and why.**
 
--   The composer's "Signature: enabled" (adds the words "signed via Blackout",
-    signs nothing), "Encryption: preset" (a marker that changes nothing) and
-    "Ephemeral drop: view-once, 24h" (kept only by this app, per device; the
-    review of T7's fix also reports that the media under it is never shown,
-    because the gate counts the view as it mounts and hides it at once).
--   The welcome steps' "messages are end-to-end encrypted", said of every den.
--   The vault's "encrypts everything", the privacy tools' "always on".
--   The glossary's definitions of a dead drop and of a digital good's
-    delivery.
+-   Messages already sent keep what was added to them: the words "signed via
+    Blackout", the two markers, the policy. The words mean no more than any
+    other words typed, and nothing reads the markers. Recorded in
+    `KNOWN_LIMITATIONS.md` and `docs/legal/CHANGELOG.md`, with what someone
+    who relied on them should know.
+-   `sendMedia` in `plugins/matrix-adapters/hooks/useLegacyTimelineAdapter.ts`
+    still accepts a policy. Nothing passes one.
+-   The "Ephemeral Pro" entitlement (`ephemeral_pro`) unlocks nothing:
+    `ephemeralProEntitledAtom` is read by no screen. The marketplace stub in
+    this repository lists it as "Custom expiry windows (up to 30 days) and
+    view caps for ephemeral file drops". A decision for the operator, below.
+
+## T12. The privacy tools panel: "always on"
+
+**Claimed.** "Image metadata (EXIF/GPS) stripping and link tracking-parameter
+removal are now always on — they're privacy hygiene, not a toggle." Below it,
+for the paid Advanced tier, "Perturb avatars against facial recognition
+(Advanced, best-effort)" and "Warn when a file type can't be stripped
+(Advanced)".
+
+**Found.**
+
+-   Metadata was removed only from JPEG, PNG and WebP pictures
+    (`utils/stripImageMetadata.ts` re-encodes those three through a canvas and
+    passes anything else through), and only on two paths: pictures attached
+    in the message box, and avatars. A profile banner, a marketplace listing
+    photo, a role icon and a welcome-screen image were uploaded as picked,
+    and all four are public. A picture in any other format (HEIC, which is
+    what an iPhone takes, AVIF, TIFF) went out as it was on every path, and
+    so did every video. A photo or video from a phone can record where it was
+    taken.
+-   With the avatar pattern on, `hardenAvatarImage` sent the picture as it
+    was picked, metadata included, to the Blackout API
+    (`POST /v1/media/perturb`), and stripped nothing itself, on the reasoning
+    that the pattern re-encodes it afterwards.
+-   Tracking parameters were removed from links in the message box only.
+    Forum posts and forum replies (sent through the same hook, which did not
+    clean them) and wall posts (the profile wall and the home composer) kept
+    `utm_*`, `fbclid` and the rest.
+-   "Warn when a file type can't be stripped" was read by nothing: a paid
+    option that did nothing.
+-   The pattern's own code (`utils/perturbImage.ts`) and the sidecar's README
+    say it "does NOT defeat state-of-the-art facial-recognition models" and
+    that callers "must label it honestly". The label said "against facial
+    recognition".
+
+**Done.**
+
+-   The banner, listing photos, role icons and welcome images are stripped
+    before upload. With the avatar pattern on, the picture is stripped on the
+    device first and only the cleaned copy is sent or patterned.
+-   The message box names the attachments that will go out with their
+    metadata (any picture the stripper did not re-encode, and any video)
+    before they are sent, for everyone (`keepsMetadata` in
+    `utils/stripImageMetadata.ts`).
+-   The send hook cleans the links in every text message it sends, which
+    covers the message box, forum posts and forum replies
+    (`sanitizeMessageLinks` in `utils/sanitizeUrl.ts`), and `postWall` cleans
+    wall posts.
+-   The unread option is gone, with its stored setting.
+-   The panel now says where each protection runs and where it does not, and
+    the pattern's label says it "does not stop current face recognition".
+-   Tests: `tests/unit/utils/stripImageMetadata.test.ts` (`keepsMetadata`),
+    `tests/unit/features/privacy-tools/hardenAvatarImage.test.ts` (the
+    service gets the cleaned copy), `uploadsRemoveMetadata.test.tsx` (the
+    listing photo and the banner, and, on the parsed source, that the role
+    icon and the welcome image upload what the stripper returned),
+    `outgoingLinks.test.tsx` and `tests/unit/utils/sanitizeUrl.test.ts`
+    (forum post, forum reply, reply, plain message, wall post),
+    `PrivacyToolsSettings.test.tsx` (the wording), and, in
+    `MessageComposer.test.tsx`, "attachments sent with their metadata". Each
+    of the new tests that checks a fix fails on the code before it.
+
+**Left as it is, and why.**
+
+-   Formats the canvas cannot re-encode are still sent as they are. Making a
+    HEIC or a video safe needs a decoder or a container rewriter in the
+    browser; the message box says so instead.
+-   Emoji and sticker images are uploaded as they are: re-encoding flattens an
+    animated PNG or WebP to one frame. The panel says so.
+-   The legacy `features/room/message/MessageEditor.tsx` sends edits without
+    cleaning links; nothing mounts it.
+-   The homeserver stores and serves an uploaded original as it arrived;
+    Synapse reads EXIF only to orient thumbnails.
+    `docs/oss_manifest_packaging.md` lists a server-side scrub as a backstop;
+    there is none in this repository.
+-   Files already uploaded keep what they carried. `KNOWN_LIMITATIONS.md` and
+    `docs/legal/CHANGELOG.md` say what someone who relied on the old text
+    should know.
+
+## T13. The welcome steps: "messages are end-to-end encrypted"
+
+**Claimed.** The steps every new person sees at the invite entry when a canopy
+has none of its own (`DEFAULT_ONBOARDING_STEPS` in
+`features/welcome/useWelcome.ts`): "Blackout is an end-to-end-encrypted,
+community-run space" and "Type in the composer at the bottom; messages are
+end-to-end encrypted."
+
+**Found.** In the Blackout app a new canopy, a den with no canopy and a den in
+a public canopy start public and not end-to-end encrypted
+(`KNOWN_LIMITATIONS.md`, "New canopy and den defaults"). The den a new person
+lands in can be one of those, and the steps told them otherwise.
+
+**Done.** The first step no longer says it; the third says "The lock beside it
+says whether this den is end-to-end encrypted. Not every den is." The lock is
+the composer's own (`MessageComposer.tsx`), which reads the room. Test:
+"the default steps" in `features/welcome/OnboardingWizard.test.tsx`, which
+fails on the old text. Entry in `docs/legal/CHANGELOG.md`.
+
+## T14. The vault: "Your passphrase encrypts everything"
+
+**Claimed.** "Your passphrase encrypts everything in the browser. The server
+only stores unreadable ciphertext — keep your passphrase safe, it cannot be
+recovered." (`features/vault/VaultPanel.tsx`.)
+
+**Found.**
+
+-   Each secret is encrypted (AES-GCM, key from PBKDF2), but its label is sent
+    to the API as typed (`createVaultItem({ label, ...ciphertext })`) and
+    stored so. A label such as "Safehouse door code" is readable by the
+    server.
+-   The key is derived from the passphrase and a salt kept in this browser's
+    storage (`getOrCreateVaultSalt`). Another browser, or this one after its
+    site data is cleared, derives a different key: the passphrase alone does
+    not open the vault, and the panel's error then said "Wrong passphrase".
+-   No screen mounts the panel. `vault_item` purchases add slots and templates
+    to it all the same.
+
+**Done.** The panel says what is encrypted and what is not, that the vault
+opens only in the browser it was made in, and that neither the passphrase nor
+that value can be recovered; the label field says "Label (not encrypted)"; the
+decrypt error names the other causes. Test:
+`tests/unit/features/vault/VaultPanel.test.tsx`, which fails on the old text.
+`KNOWN_LIMITATIONS.md` records the panel as not reachable. Encrypting labels
+needs a change to what the vault API stores; it is not made here.
+
+## T15. Dead drops in the glossary, and the purchase delivery notice
+
+**Claimed.** The glossary (`lib/blackoutTerminology.ts`): a dead drop is "a way
+to hide ephemeral messages inside images that disappear after delivery"; a
+digital good is "delivered after purchase via an encrypted dead-drop". The
+seller's form notes: "delivered via the encrypted dead-drop path". When the
+marketplace's Matrix bridge is on (`FBM_MATRIX_BRIDGE_ENABLED`, off in the
+example configuration), the bot posts "Your purchase is ready. Open it in
+Blackout before it expires." in a temporary encrypted room, and the app shows
+it as "Open it in Blackout before ...".
+
+**Found.** Nothing in the app sends or opens a dead drop (T8); hiding a message
+in an image is steganography, a separate feature; nothing disappears. A
+purchased file is downloaded from Library, from the marketplace API
+(`fetchFulfillmentAsset`), and the delivery room's notice offers no way to open
+anything; its date is when the room is closed, not when the purchase ends. The
+glossary entries are shown nowhere today (the only terms with a tooltip are
+canopy and den), so they were claims waiting for a screen.
+
+**Done.** The glossary says a dead drop is planned and nothing sends or opens
+one, and that a digital good is downloaded from Library; the seller notes say
+the same; the card and the bot's notice say "Download it from Library in the
+black market" and "This delivery room closes" with the date. The stub
+catalog's demo listing (used only with `FREEBLACKMARKET_STUB`) is corrected
+too. Tests: `tests/unit/lib/glossaryTruth.test.ts`, the delivery card case in
+`tests/unit/features/marketplace/marketplaceEventCard.test.tsx`, and the notice
+in `packages/api/test/fbm-matrix-bridge.integration.test.ts`; each fails on
+the old text.
+
+## T16. `TRUST.md`: "The server bot has no timeline-read capability at all"
+
+**Claimed.** "No bot or moderation tool can read your encrypted messages. The
+server bot has no timeline-read capability at all — not restricted, absent."
+In the table of things to check: "Search `packages/api/src` for `/messages`,
+`/context/`, `/sync` — there are no hits".
+
+**Found.**
+
+-   The code holds up: every call the API makes to the homeserver's client
+    API is in `packages/api/src/integrations/matrix-client.ts`, and they are
+    room creation, invites, kicks, a directory lookup, `whoami`, reading room
+    state and sending. None reads message events, and the bot has no
+    encryption keys.
+-   "Not restricted, absent" is not true of the capability. The bot's token is
+    a homeserver admin token (the API calls `_synapse/admin` with it to make
+    registration tokens, deactivate accounts and join users to rooms), and an
+    admin token can read any room's messages through the admin API. What is
+    absent is the code.
+-   The search the page gives returns hits: the API's own `/messages` route,
+    YouTube's chat endpoint, and four `/sync` routes that have nothing to do
+    with Matrix. A reader running it could not tell the claim from its
+    refutation.
+-   The Docker deployment runs a second bot by default, the moderation bot
+    (Draupnir), which reads the messages of the unencrypted rooms it
+    protects. It cannot decrypt encrypted ones unless the operator turns on
+    the Pantalaimon proxy for it (`DRAUPNIR_PANTALAIMON_USE`, `false` in the
+    example configuration). The optional `integrations` profile adds six
+    bridges, maubot and hookshot, which read what is sent in the rooms they
+    are in, encrypted rooms included when set up for encryption.
+
+**Done.** The paragraph says what the Blackout bot does and does not do, that
+the limit is in the code and not the token, what the moderation bot reads and
+when it could decrypt, and that a bridge or bot in a room can read it. The
+table's row gives a search that returns what it says. `trust.html`
+regenerated.
+
+## T17. Calls: "per-call media E2EE ... negotiated by default"
+
+**Claimed.** `THREAT_MODEL.md` R2: "Mitigated: per-call media E2EE (symmetric
+for 1:1/group, broadcast sender keys for townhalls) is negotiated by default in
+`CallProvider.tsx`." `TRUST.md`: "per-call media encryption is negotiated by
+default ... on top of DTLS-SRTP". In the app, after joining a voice channel:
+"Connected", "LIVE", and "Call provider is degraded (...). Retry shortly or
+continue in widget fallback mode."
+
+**Found.**
+
+-   `CallProvider.tsx` starts a call with `client.matrixRTC.startRoomSession`.
+    matrix-js-sdk 40.2.0, the version the app ships with, has no such method:
+    its `MatrixRTCSessionManager` offers `getRoomSession(room)` and
+    `getActiveRoomSession(room)`, and a session is joined with
+    `joinRTCSession`. So every join takes the branch for a missing method: no
+    session, no media keys. The tests that covered calls
+    (`CallProvider.media.test.tsx`) gave the provider a fake client that had
+    the method.
+-   That branch still marked the call as joined. The voice channel showed
+    "Connected" and "LIVE"; the banner said to retry, which cannot help.
+-   Joining then loaded Element Call in a frame from `https://call.element.io`,
+    with the room's ID in the address and the camera and microphone delegated
+    to it, without saying it was another organisation's service. Element saw
+    the person's network address and the room's ID.
+-   The in-call indicator was honest: with no session it said "No media
+    E2EE". §5 of the threat model said "TLS-only today", which contradicted
+    R2.
+
+**Done.**
+
+-   The provider has a `sessionActive` flag, set only when a session starts.
+    The voice channel says "Connected" and "LIVE" only then, and "Not
+    connected" otherwise.
+-   For the missing method the banner says: "Calls cannot start in this
+    version of the app: the Matrix library it is built with does not have the
+    call session it uses, so retrying will not help."
+-   Element Call loads only when the person presses "Open Element Call", after
+    "Element Call opens here as a page from call.element.io, a service run by
+    Element, not by this server. Opening it sends that service your network
+    address and this room's ID."
+-   R2 is Open; §3 gains the boundary to call.element.io; the §5 row says no
+    call has media E2EE; `TRUST.md` says the app cannot start a call itself
+    today and what opening Element Call sends. `KNOWN_LIMITATIONS.md` records
+    how to close it.
+-   Tests: `tests/unit/features/call/callTruth.test.tsx`, which uses a real
+    matrix-js-sdk client: the SDK has no `startRoomSession`; joining does not
+    say "Connected" or "LIVE" and the indicator says "No media E2EE"; the
+    banner; Element Call not loaded until asked, in both modes. The four that
+    check a fix fail on the code before it.
+
+## T18. Devices: "per-device verification" and "session revocation"
+
+**Claimed.** `THREAT_MODEL.md` A7: "Partial — addressed by per-device
+verification + session revocation". §3, boundary 6: "Verification (SAS/QR)
+extends the boundary to a peer device."
+
+**Found.** The emoji (SAS) dialog (`components/DeviceVerification.tsx`) is
+reached only from `features/settings/devices/`, which only the old
+`features/settings/Settings.tsx` renders, and nothing mounts that page: the app
+mounts `SettingsPage`, which has no devices section. The component that answers
+an incoming request (`ReceiveSelfDeviceVerification`) and the banner whose
+button says "Verify this device" are imported by nothing, and the code says so
+("This page is not mounted in the shipped app today"). QR is not enabled
+(`verificationMethods: ['m.sas.v1']` in `client/initMatrix.ts`) and not built.
+Signing out one chosen device is on the same unmounted page. What the app can
+do is end every Blackout API session (Release keys, which says "It ends no
+Matrix session") or, at a password reset, sign out every other device.
+
+**Done.** A7 and boundary 6 say so. Mounting the devices page is a product
+change; decision 7 below.
+
+## T19. Tokens: "short-lived"
+
+**Claimed.** `THREAT_MODEL.md` §3, boundary 4: "tokens are short-lived"; R4:
+"mitigated by short token TTLs".
+
+**Found.** The Blackout API's access token lasts 24 hours
+(`services/auth.ts`) and its refresh token 30 days, renewed with each rotation
+(`services/refreshToken.ts`), so it does not end while it is used; the session
+length caps are off by default. On the homeserver a refreshable access token
+lasts 5 minutes (the default), and neither `refresh_token_lifetime` nor
+`session_lifetime` is set in any template here, so a Matrix refresh token does
+not expire. The MAS template sets no lifetime; the IdP's are its own.
+
+**Done.** Boundary 4 and R4 give the numbers.
+
+## T20. Third parties the threat model did not name
+
+**Claimed.** §3 of `THREAT_MODEL.md` lists the trust boundaries.
+
+**Found.** Four origins the app loads from were not on it. The coalition map
+loads tiles from `tile.openstreetmap.org` whenever it opens, unless the
+operator sets `VITE_MAPLIBRE_STYLE_URL` (no deployment file here does), which
+sends OpenStreetMap the viewer's network address and the area on screen. The
+sign-up page loads Google's reCAPTCHA script if the homeserver asks for a
+CAPTCHA (none of the templates does). A public creator page (`/@handle`)
+fetches the store from `api.freeblackmarket.com` and shows its images from
+wherever they are hosted. With a Giphy or Tenor key on the API (none by
+default), the GIF picker shows thumbnails from the provider. The strict CSP in
+`infra/nginx/snippets/security-headers.conf` would block these where it is
+applied; the deployed client serves no CSP that does (`KNOWN_LIMITATIONS.md`).
+
+**Done.** §3 gains boundaries 8 to 10. Whether to self-host tiles or ask
+before loading them is decision 8.
+
+## T21. "Signed releases" and "reproducible builds"
+
+**Claimed.** `THREAT_MODEL.md` A8 ("signed releases"), A11 ("Yes —
+addressed by signed releases + reproducible builds"), §3 boundary 5 ("Signed
+(cosign) artifacts move the trust boundary"), R5 ("Sigstore-keyless cosign
+signatures pinned to the release workflow identity");
+`docs/security/release-signing.md` listed desktop builds among what is
+signed.
+
+**Found.** `release.yml` signs the image and the release files with cosign
+when a `v*` tag is pushed. No tag exists on the remote, so it has never run,
+and there is no release. Nothing makes builds reproducible. `release.yml` has
+no desktop job; the desktop workflow signs only for Tauri's updater, whose
+public key in `blackout-desktop/src-tauri/tauri.conf.json` is the literal
+`${TAURI_UPDATER_PUBKEY}`, which Tauri does not expand. The check pinned to
+the workflow identity is a script (`tools/release/verify-release.sh`) that
+nothing runs.
+
+**Done.** A8, A11, boundary 5, R5 and `release-signing.md` say so. Decision 10.
+
+## T22. Plugin bundles: "the client refuses to install if the key id is not on its pinned keyset"
+
+**Claimed.** `THREAT_MODEL.md` §6a: a malicious bundle is "Mitigated by
+requiring an Ed25519/HMAC signature envelope ... The blackout client refuses
+to install if the key id is not on its pinned keyset."
+
+**Found.** The key id check is real, but the only key the client pins is
+`fbm-dev-hmac`, an HMAC secret written in its source
+(`features/monetization/install/pluginSignature.ts`: `hmac:6465762d68616d63`,
+"dev-hamc"). The override reads `process.env`, which the browser build does
+not define, so the literal ships. `setPluginPublishingKeys` is called only by
+tests, and the API's stub marketplace signs with the same secret. The check
+runs in the live app (`pluginInstaller.ts`, through the entitlement hydrator
+`main.tsx` mounts). Anyone with the client can sign a bundle it will install;
+what remains between such a bundle and the person is the sandbox (a
+`srcdoc` iframe with a capability-gated bridge).
+
+**Said, not fixed.** §6a now says the mitigation is not in effect. A real fix
+needs the marketplace's Ed25519 publishing keyset pinned at build time and the
+development key left out of production builds: decision 9.
+
+## T23. Ballots and audit logs: "Hash chain + sigs", "tamper-evident", "WORM"
+
+**Claimed.** `THREAT_MODEL.md` §5: governance ballots, "Tamper-evident ledger
+| Hash chain + sigs"; audit logs, "WORM"; §4: "Audit logs (tamper-evident)".
+
+**Found.** A ballot is a row in `vote_entries` (who, which vote, which choice,
+weight), tallied by counting; there is no hash, previous-hash or signature
+column and nothing checks one. The only audit table,
+`subscription_audit_events`, is written with an upsert (`ON CONFLICT ... DO
+UPDATE`), so a row with the same id is overwritten; no trigger, rule or
+`REVOKE` protects it, and no deployment file configures write-once storage.
+The one hash-chained, signed log in the repository is the CRDT event log in
+`apps/blackout-server/blackout_runtime/runtime.py`, used only by its tests.
+
+**Done.** §4 and §5 say what the rows are.
+
+## T24. Key transparency: "atomically rewritten", witnesses on replicas, a cross-process test
+
+**Found.** `JsonFileKtStorage` writes over the file itself (`writeFileSync`,
+no temporary file and rename); an empty file loads as an empty log. Each API
+process keeps its own log and its own witness, built from its environment;
+no deployment file sets a witness seed or a log file, and nothing gossips tree
+heads. The test called cross-process opens two storages one after the other in
+one process, and the file holds 26 tests, not 27.
+
+**Done.** `docs/security/key-transparency.md` and R5 say so.
+
+## T25. Passkeys: "Status: shipped"
+
+**Found.** The API's WebAuthn endpoints exist and verify, but answer only with
+`WEBAUTHN_ENABLED=1`, which no deployment file sets; no app calls them; sign-in
+starts no session; credentials are kept in memory.
+
+**Done.** The status line of `docs/security/webauthn-passkeys.md` says so.
+
+## T26. "The CI release gate"
+
+**Found.** No workflow runs `tools/ci/check-blackout-client-release-gate.mjs`,
+directly or through `ci:parity`, and the report it reads is listed in
+`.gitignore`. The staging-signoff runbook said "the release-gate CI job will
+rerun the gate".
+
+**Done.** `KNOWN_LIMITATIONS.md` and the runbook say it is run by hand.
+
+## What this record does not cover
+
+The first reading of `TRUST.md`, `THREAT_MODEL.md` and the two security
+documents reported the items above, and each is now a finding. The sentences it
+did not report were read once, not checked one by one.
 
 ## Decisions for the operator to confirm or veto
 
@@ -503,6 +964,28 @@ Strings in the app:
    homeserver keeps the addresses. Shortening or switching off that retention
    (`user_ips_max_age` in the homeserver configuration) is the operator's
    setting and is not changed here.
+5. **What "Ephemeral Pro" sells** (T11). The entitlement unlocks nothing, and
+   since T11 the composer offers no expiring files at all. The listing in this
+   repository's marketplace stub promises custom expiry windows and view caps;
+   the Free Black Market's real listing is outside this repository and should
+   be read against T11. As with the tier keys in decision 2, removing it is a
+   pricing statement and is left to the operator.
+6. **Whether to build any of T11's three for real.** A signature that means
+   something needs a key per person and a published way to check it; an
+   expiring file needs, at the least, the sender's app to redact the message
+   when it expires, and wording that says other apps and saved copies are
+   beyond its reach. Neither is started here.
+7. **Mounting device verification and the devices list** (T18). The emoji
+   verification dialog and a devices page with per-device sign-out exist but
+   are not mounted; mounting them, and enabling QR, is a product change.
+8. **Map tiles** (T20). Set `VITE_MAPLIBRE_STYLE_URL` to tiles the operator
+   hosts, or add a step that asks before the map loads OpenStreetMap's.
+9. **A plugin publishing keyset** (T22). Pin the marketplace's Ed25519
+   publishing keys at build time and leave the development HMAC key out of
+   production builds. Until then a bundle's signature is not a protection.
+10. **The first signed release** (T21). Set a real updater public key, then
+    push a `v*` tag so `release.yml` signs something; until then nothing
+    downloadable is signed.
 
 ## Not verified
 

@@ -2,13 +2,15 @@ import React, { useCallback, useRef, useState, type CSSProperties } from 'react'
 import { useMatrixClientOrNull } from '../../../hooks/useMatrixClient';
 import { useMediaAuthentication } from '../../../hooks/useMediaAuthentication';
 import { uploadContent, mxcUrlToHttp } from '../../../utils/matrix';
+import { stripImageMetadata } from '../../../utils/stripImageMetadata';
 
 /**
  * Preview-media uploader for the sell flow. Uploads image files to the Matrix
  * media repo (the same `uploadContent` path the composer uses) and collects the
  * resulting `mxc://` URIs into `mediaUrls`. These are *preview* images shown to
- * buyers — the sellable artifact bytes are a separate concern (delivered via the
- * marketplace's signed-bundle / dead-drop path), which the wizard states plainly.
+ * buyers — the sellable artifact bytes are a separate concern (the buyer gets them
+ * from Library through the marketplace's fulfillment endpoint), which the wizard
+ * states plainly.
  */
 interface MediaUploadFieldProps {
     value: string[];
@@ -62,7 +64,11 @@ export const MediaUploadField: React.FC<MediaUploadFieldProps> = ({
             setBusy(true);
             setError(null);
             const uploaded: string[] = [];
-            for (const file of Array.from(files)) {
+            for (const picked of Array.from(files)) {
+                // A listing photo is public: its metadata (for a phone photo,
+                // where it was taken) is removed before it is uploaded.
+                // eslint-disable-next-line no-await-in-loop
+                const file = await stripImageMetadata(picked);
                 // eslint-disable-next-line no-await-in-loop
                 await uploadContent(mx, file, {
                     name: file.name,

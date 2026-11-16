@@ -2,6 +2,7 @@ import React, { useId, useState, type ReactNode } from 'react';
 import FocusTrap from 'focus-trap-react';
 import { mdToHtml, sanitizeMatrixHtml } from '../../plugins/markdown/matrixMarkdownUtils';
 import AvatarDecoration from './AvatarDecoration';
+import { useProfileImageSrc } from './profileImage';
 import type { MemberProfile } from './profileTypes';
 import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
 import { CharacterSheet } from '../character-sheet/CharacterSheet';
@@ -101,6 +102,8 @@ export const ProfileModal = ({
     const titleId = useId();
 
     useDismissOnOutsideOrEscape(open, null, onClose);
+    // Only a picture the homeserver holds is loaded; see profileImage.ts.
+    const bannerSrc = useProfileImageSrc(profile.profile.banner);
 
     if (!open) return null;
 
@@ -170,16 +173,16 @@ export const ProfileModal = ({
                     <div
                         style={{
                             height: 120,
-                            background: profile.profile.banner
+                            background: bannerSrc
                                 ? undefined
                                 : 'linear-gradient(135deg, #7289DA 0%, #5865F2 100%)',
                             position: 'relative',
                             flexShrink: 0,
                         }}
                     >
-                        {profile.profile.banner ? (
+                        {bannerSrc ? (
                             <img
-                                src={profile.profile.banner}
+                                src={bannerSrc}
                                 alt=""
                                 style={{
                                     width: '100%',

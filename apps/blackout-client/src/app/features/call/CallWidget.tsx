@@ -18,6 +18,21 @@ const postToWidget = (targetWindow: Window, payload: Record<string, unknown>) =>
     targetWindow.postMessage(payload, '*');
 };
 
+/** Where Element Call is loaded from when no other address is given. */
+const DEFAULT_ELEMENT_CALL_URL = 'https://call.element.io';
+
+/**
+ * What is said before Element Call is loaded. It is a page from another
+ * service: loading it sends that service the person's network address and
+ * the room's ID (in the address below). Until 2026-11-16 it loaded as soon as
+ * someone joined a voice channel or a stage, with nothing said
+ * (trust-claims-2026-11-16.md, T17).
+ */
+export const elementCallNotice = (host: string): string =>
+    host === 'call.element.io'
+        ? "Element Call opens here as a page from call.element.io, a service run by Element, not by this server. Opening it sends that service your network address and this room's ID."
+        : `Element Call opens here as a page from ${host}. Opening it sends that service your network address and this room's ID.`;
+
 export const CallWidget = ({
     roomId,
     mode = 'sdk',
@@ -30,10 +45,12 @@ export const CallWidget = ({
     const containerRef = useRef<HTMLDivElement | null>(null);
     const iframeRef = useRef<HTMLIFrameElement | null>(null);
     const [sdkReady, setSdkReady] = useState(false);
+    // Nothing from the other service loads until the person asks for it.
+    const [opened, setOpened] = useState(false);
     const { muted, cameraEnabled, updateAudioLevels } = useCall();
 
     const iframeSrc = useMemo(() => {
-        const base = widgetUrl ?? 'https://call.element.io';
+        const base = widgetUrl ?? DEFAULT_ELEMENT_CALL_URL;
         const url = new URL(base);
         url.searchParams.set('roomId', roomId);
         url.searchParams.set('mode', 'widget');
@@ -42,19 +59,20 @@ export const CallWidget = ({
     }, [mode, roomId, widgetUrl]);
 
     useEffect(() => {
+        if (!opened) return;
         if (mode !== 'sdk' || !containerRef.current || !window.ElementCallSdk) return;
 
         window.ElementCallSdk.mount(containerRef.current, {
             roomId,
             onParticipantsAudioLevel: (
-                participants: Array<{ userId: string; audioLevel: number }>,
+                participants: Array<{ userId: string; audioLevel: number }>
             ) => {
                 updateAudioLevels(
                     participants.map((item) => ({
                         userId: item.userId,
                         level: item.audioLevel,
                         speaking: item.audioLevel > 0.08,
-                    })),
+                    }))
                 );
             },
         });
@@ -64,7 +82,7 @@ export const CallWidget = ({
             window.ElementCallSdk?.unmount?.();
             setSdkReady(false);
         };
-    }, [mode, roomId, updateAudioLevels]);
+    }, [mode, opened, roomId, updateAudioLevels]);
 
     useEffect(() => {
         if (!iframeRef.current?.contentWindow) return;
@@ -101,7 +119,7 @@ export const CallWidget = ({
                     })
                     .filter(
                         (item): item is { userId: string; level: number; speaking: boolean } =>
-                            item !== null,
+                            item !== null
                     );
 
                 updateAudioLevels(levels);
@@ -111,6 +129,27 @@ export const CallWidget = ({
         window.addEventListener('message', onWidgetMessage);
         return () => window.removeEventListener('message', onWidgetMessage);
     }, [updateAudioLevels]);
+
+    if (!opened) {
+        return (
+            <div
+                data-testid="element-call-consent"
+                style={{
+                    border: '1px solid var(--border-default)',
+                    borderRadius: 10,
+                    padding: 12,
+                    display: 'grid',
+                    gap: 8,
+                    fontSize: 13,
+                }}
+            >
+                <span>{elementCallNotice(new URL(iframeSrc).host)}</span>
+                <button type="button" onClick={() => setOpened(true)}>
+                    Open Element Call
+                </button>
+            </div>
+        );
+    }
 
     if (mode === 'sdk') {
         return (

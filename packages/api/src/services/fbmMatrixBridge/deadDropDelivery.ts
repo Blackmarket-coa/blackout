@@ -85,11 +85,15 @@ export async function maybeDeliverDigitalDeadDrop(
 
         const expiresAt = new Date(Date.now() + ttlHours() * 60 * 60 * 1000).toISOString();
 
-        // Pointer event: tells the buyer's client which entitlement to fetch and
-        // seal via the existing fulfillment endpoint. No plaintext is posted.
+        // Pointer event: names the entitlement the buyer fetches from the
+        // fulfillment endpoint, which is what Library in the app does. No
+        // plaintext is posted. Until 2026-11-16 the body said "Open it in
+        // Blackout before it expires": nothing in the app opens it from here,
+        // and the date is when this room closes, not when the purchase ends
+        // (docs/security/trust-claims-2026-11-16.md, T15).
         await matrix.sendEvent(roomId, {
             msgtype: 'm.notice',
-            body: 'Your purchase is ready. Open it in Blackout before it expires.',
+            body: `Your purchase is ready. Download it from Library in the Blackout black market. This delivery room closes ${expiresAt}.`,
             [FBM_DEADDROP_POINTER_EVENT_TYPE]: {
                 schemaVersion: FBM_MARKETPLACE_SCHEMA_VERSION,
                 entitlementId: applied.entitlement?.id ?? null,

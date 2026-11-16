@@ -72,10 +72,20 @@ it by auditing our own claim before publishing it, and the full write-up —
 including what was broken and for how long — is public:
 [2026-08-10 encryption audit](docs/audits/2026-08-10-encryption-audit.md).
 
-**No bot or moderation tool can read your encrypted messages.** The server bot
-has no timeline-read capability at all — not restricted, absent. It can create
-rooms, invite, and moderate membership; it has no code path that fetches message
-events.
+**The Blackout bot reads no messages, and no bot this repository runs by
+default can decrypt them.** The API's bot creates rooms, invites, moderates
+membership, reads room state and posts. It has no code that fetches message
+events: every call it makes to the homeserver's client API is in
+[`matrix-client.ts`](packages/api/src/integrations/matrix-client.ts). It has no
+encryption keys, so it could not read an encrypted message if it tried. Its
+token is a homeserver admin token: this is a fact about the code, not a limit
+on the token. The moderation bot (Draupnir), which the Docker deployment runs,
+reads the messages of the unencrypted rooms it protects; it cannot decrypt
+encrypted ones unless the operator turns on the Pantalaimon proxy for it
+(`DRAUPNIR_PANTALAIMON_USE`, off by default). A bridge or bot an operator adds,
+or one a room's members invite, can read what is sent in the rooms it is in,
+encrypted rooms included when it is set up for encryption. A room's member list
+shows who is in it.
 
 **Nothing logs your messages.** No log line, error report, or analytics event
 carries message content. There is no PostHog, no Segment, no session replay in
@@ -135,13 +145,17 @@ Encryption claims are only worth something with the exceptions attached.
     If you name a room, the bot posts the text there unencrypted after the same
     room check.
 -   **Spaces**, which hold hierarchy state and never messages.
--   **Calls and townhall media** use a _different_ mechanism from messages:
-    per-call media encryption is negotiated by default
-    ([`CallProvider.tsx`](apps/blackout-client/src/app/features/call/CallProvider.tsx)),
-    on top of DTLS-SRTP, and the live status is shown in-call. It depends on the
-    operator running a matrixRTC-capable SDK, so treat the in-call indicator as
-    authoritative rather than assuming parity with message encryption. Background
-    in [THREAT_MODEL.md](THREAT_MODEL.md) §7.
+-   **Calls and townhall media.** The app cannot start a call itself today, so
+    it encrypts none: its call path
+    ([`CallProvider.tsx`](apps/blackout-client/src/app/features/call/CallProvider.tsx))
+    asks the Matrix library for a call session that the version the app is
+    built with does not have, and the in-call indicator says "No media E2EE".
+    Until 2026-11-16 this page said per-call media encryption was "negotiated
+    by default". A voice channel or a stage can open Element Call instead, a
+    page from call.element.io that Element runs; the app says so and loads it
+    only when you ask. Loading it sends Element your network address and the
+    room's ID, and what Element's service does with the call is up to Element.
+    Background in [THREAT_MODEL.md](THREAT_MODEL.md) §3 and R2.
 
 ### The distinction we will not blur
 
@@ -286,7 +300,7 @@ published anywhere else yet.
 | E2EE is not paywalled                           | [`bundles.ts`](packages/blackout-protocol/src/entitlements/bundles.ts) — grep it for an encryption key                                      |
 | Private rooms encrypt by default                | [`check-room-encryption.mjs`](tools/ci/check-room-encryption.mjs), run `pnpm guard:room-encryption`                                         |
 | Files in encrypted rooms are encrypted          | [`roomAttachment.ts`](apps/blackout-client/src/app/features/media/utils/roomAttachment.ts); or watch an upload in the network panel         |
-| The bot cannot read messages                    | Search `packages/api/src` for `/messages`, `/context/`, `/sync` — there are no hits                                                         |
+| The Blackout bot reads no messages              | Search `packages/api/src` for `_matrix/client`: one file, and none of its calls is `/messages`, `/context`, `/sync` or `/event`             |
 | Nothing logs message content                    | [`patterns.ts`](packages/core/src/redaction/patterns.ts)                                                                                    |
 | Export is free                                  | `curl` the endpoint on a free account, or read [`dataExport.ts`](packages/api/src/routes/dataExport.ts)                                     |
 | The server makes no canary statement of its own | [`warrantCanary.ts`](packages/api/src/services/warrantCanary.ts): `GET /v1/transparency/canary` answers `not_issued`, `current` or `lapsed` |

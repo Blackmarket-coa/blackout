@@ -426,6 +426,19 @@ test('digital dead-drop: provisions encrypted room + persists delivery; sweeper 
     );
     assert.equal(delivery!.tombstonedAt, null);
 
+    // The notice says where the purchase is and what the date is. It used to
+    // say "Open it in Blackout before it expires": nothing in the app opens it
+    // from this room, and the date is when the room closes
+    // (docs/security/trust-claims-2026-11-16.md, T15).
+    const notice = calls.sendEvent.find((s) => s.roomId === delivery!.roomId);
+    assert.ok(notice, 'a notice is posted in the delivery room');
+    assert.equal(
+        notice!.content.body,
+        `Your purchase is ready. Download it from Library in the Blackout black market. This delivery room closes ${
+            delivery!.expiresAt
+        }.`
+    );
+
     // Force the TTL into the past and sweep.
     db.upsertFbmDeaddropDelivery({ ...delivery!, expiresAt: '2000-01-01T00:00:00.000Z' });
     const swept = await runFbmTombstoneSweep(matrix as never);

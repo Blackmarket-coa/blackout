@@ -16,7 +16,12 @@ const styles = {
         gap: 6,
         maxWidth: 420,
     } as const,
-    header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 } as const,
+    header: {
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        gap: 8,
+    } as const,
     badge: {
         fontSize: 10,
         textTransform: 'uppercase',
@@ -34,7 +39,9 @@ const styles = {
 } as const;
 
 const money = (minorUnits: number, currency: string): string => {
-    const symbol = ({ USD: '$', EUR: '€', GBP: '£' } as Record<string, string>)[currency?.toUpperCase()];
+    const symbol = ({ USD: '$', EUR: '€', GBP: '£' } as Record<string, string>)[
+        currency?.toUpperCase()
+    ];
     const amount = (minorUnits / 100).toFixed(2);
     return symbol ? `${symbol}${amount}` : `${amount} ${currency?.toUpperCase() ?? ''}`.trim();
 };
@@ -89,7 +96,9 @@ export function MarketplaceEventCard({ normalized }: { normalized: NormalizedMar
                         </ul>
                     ) : null}
                     {typeof o.totalCents === 'number' ? (
-                        <div style={styles.muted}>Total {money(o.totalCents, o.currency ?? 'USD')}</div>
+                        <div style={styles.muted}>
+                            Total {money(o.totalCents, o.currency ?? 'USD')}
+                        </div>
                     ) : null}
                     {o.reason ? <div style={styles.muted}>Reason: {o.reason}</div> : null}
                 </Shell>
@@ -101,7 +110,9 @@ export function MarketplaceEventCard({ normalized }: { normalized: NormalizedMar
                 <Shell badge="ledger">
                     <div style={styles.title}>{LEDGER_LABEL[l.kind] ?? l.kind}</div>
                     <div style={styles.line}>{money(l.amountMinorUnits, l.currency)}</div>
-                    {l.orderId ? <div style={styles.muted}>Order #{shortRef(l.orderId)}</div> : null}
+                    {l.orderId ? (
+                        <div style={styles.muted}>Order #{shortRef(l.orderId)}</div>
+                    ) : null}
                 </Shell>
             );
         }
@@ -111,7 +122,8 @@ export function MarketplaceEventCard({ normalized }: { normalized: NormalizedMar
                 <Shell badge="inventory">
                     <div style={styles.title}>Low stock: {i.title}</div>
                     <div style={styles.line}>
-                        {i.remaining} left{typeof i.threshold === 'number' ? ` (threshold ${i.threshold})` : ''}
+                        {i.remaining} left
+                        {typeof i.threshold === 'number' ? ` (threshold ${i.threshold})` : ''}
                     </div>
                     <div style={styles.muted}>SKU {i.sku}</div>
                 </Shell>
@@ -122,14 +134,21 @@ export function MarketplaceEventCard({ normalized }: { normalized: NormalizedMar
             return (
                 <Shell badge={`dispute · ${d.status}`}>
                     <div style={styles.title}>Dispute #{shortRef(d.disputeId)}</div>
-                    {d.orderId ? <div style={styles.muted}>Order #{shortRef(d.orderId)}</div> : null}
+                    {d.orderId ? (
+                        <div style={styles.muted}>Order #{shortRef(d.orderId)}</div>
+                    ) : null}
                     {d.outcome ? <div style={styles.line}>Outcome: {d.outcome}</div> : null}
                 </Shell>
             );
         }
         case 'cycle': {
             const c = normalized.data;
-            const label = c.kind === 'open' ? 'Order cycle open' : c.kind === 'close' ? 'Order cycle closed' : 'Sold out';
+            const label =
+                c.kind === 'open'
+                    ? 'Order cycle open'
+                    : c.kind === 'close'
+                    ? 'Order cycle closed'
+                    : 'Sold out';
             return (
                 <Shell badge="order cycle">
                     <div style={styles.title}>
@@ -145,7 +164,12 @@ export function MarketplaceEventCard({ normalized }: { normalized: NormalizedMar
                         <div style={styles.muted}>SKU {c.soldOutSku}</div>
                     ) : null}
                     {c.listingDeepLink ? (
-                        <a style={styles.link} href={c.listingDeepLink} target="_blank" rel="noreferrer">
+                        <a
+                            style={styles.link}
+                            href={c.listingDeepLink}
+                            target="_blank"
+                            rel="noreferrer"
+                        >
                             View listing
                         </a>
                     ) : null}
@@ -175,9 +199,16 @@ export function MarketplaceEventCard({ normalized }: { normalized: NormalizedMar
                         </div>
                     ) : null}
                     {g.etaDelivery ? <div style={styles.muted}>ETA {g.etaDelivery}</div> : null}
-                    {g.failureReason ? <div style={styles.muted}>Reason: {g.failureReason}</div> : null}
+                    {g.failureReason ? (
+                        <div style={styles.muted}>Reason: {g.failureReason}</div>
+                    ) : null}
                     {g.trackingUrl ? (
-                        <a style={styles.link} href={g.trackingUrl} target="_blank" rel="noreferrer">
+                        <a
+                            style={styles.link}
+                            href={g.trackingUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                        >
                             Track delivery
                         </a>
                     ) : null}
@@ -193,7 +224,12 @@ export function MarketplaceEventCard({ normalized }: { normalized: NormalizedMar
                     </div>
                     {f.endsAt ? <div style={styles.muted}>Ends {f.endsAt}</div> : null}
                     {f.listingDeepLink ? (
-                        <a style={styles.link} href={f.listingDeepLink} target="_blank" rel="noreferrer">
+                        <a
+                            style={styles.link}
+                            href={f.listingDeepLink}
+                            target="_blank"
+                            rel="noreferrer"
+                        >
                             Shop the sale
                         </a>
                     ) : null}
@@ -239,8 +275,12 @@ export function MarketplaceEventCard({ normalized }: { normalized: NormalizedMar
             return (
                 <Shell badge="delivery">
                     <div style={styles.title}>Your purchase is ready</div>
+                    {/* Until 2026-11-16: "Open it in Blackout before ...". Nothing in
+                        the app opens a dead drop; the file is in Library, and the
+                        date is when this room closes (trust-claims, T15). */}
                     <div style={styles.muted}>
-                        Open it in Blackout{d.expiresAt ? ` before ${d.expiresAt}` : ''}.
+                        Download it from Library in the black market.
+                        {d.expiresAt ? ` This delivery room closes ${d.expiresAt}.` : ''}
                     </div>
                 </Shell>
             );

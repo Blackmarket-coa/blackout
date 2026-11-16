@@ -3,6 +3,7 @@ import { Badge, Button, Card, Checkbox, Input } from '@blackout/ui/primitives';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { useManageRoles, type RoleDefinition } from './useRoles';
 import { useConfirm } from '../../components/confirm-dialog';
+import { stripImageMetadata } from '../../utils/stripImageMetadata';
 
 const AVAILABLE_PERMISSIONS = [
     'send_messages',
@@ -41,8 +42,10 @@ export const RoleEditor = ({ roomId }: { roomId: string }) => {
 
     const orderedRoles = useMemo(() => [...roles].sort((a, b) => a.position - b.position), [roles]);
 
-    const onUploadIcon = async (file: File): Promise<string | undefined> => {
-        if (!file) return undefined;
+    const onUploadIcon = async (picked: File): Promise<string | undefined> => {
+        if (!picked) return undefined;
+        // Shown to the whole community: uploaded without its metadata.
+        const file = await stripImageMetadata(picked);
         const uploadResponse = (await client.uploadContent(file, {
             includeFilename: true,
             type: file.type,
