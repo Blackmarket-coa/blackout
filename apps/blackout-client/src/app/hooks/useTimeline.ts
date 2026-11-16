@@ -66,7 +66,7 @@ export const useRoomTimeline = (roomId: string): TimelineResult => {
                 setLoading(false);
             }
         },
-        [client, refresh, roomState.data],
+        [client, refresh, roomState.data]
     );
 
     return useMemo(
@@ -76,7 +76,7 @@ export const useRoomTimeline = (roomId: string): TimelineResult => {
             error: error ?? roomState.error,
             loadMore,
         }),
-        [error, events, loadMore, loading, roomState.error, roomState.loading],
+        [error, events, loadMore, loading, roomState.error, roomState.loading]
     );
 };
 
@@ -106,7 +106,7 @@ export const useTimelineScroll = (roomId: string) => {
             map[roomId] = next;
             window.localStorage.setItem(timelineScrollStorageKey, JSON.stringify(map));
         },
-        [roomId],
+        [roomId]
     );
 
     return { position, savePosition };
@@ -122,11 +122,11 @@ export const useSendMessage = (roomId: string) => {
                     sendEvent: (
                         rid: string,
                         et: string,
-                        c: Record<string, unknown>,
+                        c: Record<string, unknown>
                     ) => Promise<unknown>;
                 }
             ).sendEvent(roomIdArg, eventType, content),
-        [client],
+        [client]
     );
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<Error | null>(null);
@@ -157,7 +157,7 @@ export const useSendMessage = (roomId: string) => {
                 setLoading(false);
             }
         },
-        [roomId, sendEvent],
+        [roomId, sendEvent]
     );
 
     const sendRichText = useCallback(
@@ -173,7 +173,7 @@ export const useSendMessage = (roomId: string) => {
                 setLoading(false);
             }
         },
-        [roomId, sendEvent],
+        [roomId, sendEvent]
     );
 
     const sendMedia = useCallback(
@@ -198,7 +198,7 @@ export const useSendMessage = (roomId: string) => {
                 setLoading(false);
             }
         },
-        [client, roomId, sendEvent],
+        [client, roomId, sendEvent]
     );
 
     const sendReply = useCallback(
@@ -213,7 +213,7 @@ export const useSendMessage = (roomId: string) => {
                 });
             }, 'Failed to send reply.');
         },
-        [roomId, sendEvent, withStatus],
+        [roomId, sendEvent, withStatus]
     );
 
     const sendThread = useCallback(
@@ -231,7 +231,7 @@ export const useSendMessage = (roomId: string) => {
                 });
             }, 'Failed to send thread reply.');
         },
-        [roomId, sendEvent, withStatus],
+        [roomId, sendEvent, withStatus]
     );
 
     return { sendText, sendRichText, sendMedia, sendReply, sendThread, loading, error };
@@ -247,11 +247,11 @@ export const useEditMessage = (roomId: string) => {
                     sendEvent: (
                         rid: string,
                         et: string,
-                        c: Record<string, unknown>,
+                        c: Record<string, unknown>
                     ) => Promise<unknown>;
                 }
             ).sendEvent(roomIdArg, eventType, content),
-        [client],
+        [client]
     );
 
     return useCallback(
@@ -269,7 +269,7 @@ export const useEditMessage = (roomId: string) => {
                 },
             });
         },
-        [roomId, sendEvent],
+        [roomId, sendEvent]
     );
 };
 
@@ -283,11 +283,11 @@ export const useReaction = (roomId: string) => {
                     sendEvent: (
                         rid: string,
                         et: string,
-                        c: Record<string, unknown>,
+                        c: Record<string, unknown>
                     ) => Promise<unknown>;
                 }
             ).sendEvent(roomIdArg, eventType, content),
-        [client],
+        [client]
     );
 
     const addReaction = useCallback(
@@ -300,7 +300,7 @@ export const useReaction = (roomId: string) => {
                 },
             });
         },
-        [roomId, sendEvent],
+        [roomId, sendEvent]
     );
 
     const removeReaction = useCallback(
@@ -309,7 +309,7 @@ export const useReaction = (roomId: string) => {
                 reason: 'Reaction removed',
             });
         },
-        [client, roomId],
+        [client, roomId]
     );
 
     return { addReaction, removeReaction };

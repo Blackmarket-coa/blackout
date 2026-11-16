@@ -16,7 +16,7 @@ const requestMedia = async (
     url: string,
     parse: (response: Response) => Promise<Blob | ArrayBuffer>,
     fetchFn: typeof fetch,
-    retry?: RetryPolicy,
+    retry?: RetryPolicy
 ): Promise<Blob | ArrayBuffer> => {
     const { response, retryable } = await fetchWithRetry(() => fetchFn(url), retry);
 
@@ -27,14 +27,28 @@ const requestMedia = async (
     throw new BlackoutSdkError(
         'MEDIA_FETCH_FAILED',
         `Unable to fetch media (${response.status}).`,
-        retryable ? 'retryable' : 'fatal',
+        retryable ? 'retryable' : 'fatal'
     );
 };
 
-export const createMediaClient = ({ fetchFn = fetch, defaultRetry }: CreateMediaClientOptions = {}): MediaClient => ({
-    fetchBlob: (url, retry) => requestMedia(url, (response) => response.blob(), fetchFn, retry ?? defaultRetry) as Promise<Blob>,
+export const createMediaClient = ({
+    fetchFn = fetch,
+    defaultRetry,
+}: CreateMediaClientOptions = {}): MediaClient => ({
+    fetchBlob: (url, retry) =>
+        requestMedia(
+            url,
+            (response) => response.blob(),
+            fetchFn,
+            retry ?? defaultRetry
+        ) as Promise<Blob>,
     fetchArrayBuffer: (url, retry) =>
-        requestMedia(url, (response) => response.arrayBuffer(), fetchFn, retry ?? defaultRetry) as Promise<ArrayBuffer>,
+        requestMedia(
+            url,
+            (response) => response.arrayBuffer(),
+            fetchFn,
+            retry ?? defaultRetry
+        ) as Promise<ArrayBuffer>,
 });
 
 export const fetchBlob = async (url: string, fetchFn: typeof fetch = fetch): Promise<Blob> => {

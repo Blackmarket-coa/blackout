@@ -27,9 +27,7 @@ export const AudioMessage = ({ event }: AudioMessageProps) => {
     const getAudioElement = useCallback(() => audioRef.current, []);
     const { playbackRate, setPlaybackRate } = useMediaPlaybackRate(getAudioElement);
     const cyclePlaybackRate = useCallback(() => {
-        const idx = PLAYBACK_RATES.indexOf(
-            playbackRate as (typeof PLAYBACK_RATES)[number],
-        );
+        const idx = PLAYBACK_RATES.indexOf(playbackRate as typeof PLAYBACK_RATES[number]);
         setPlaybackRate(PLAYBACK_RATES[(idx + 1) % PLAYBACK_RATES.length]);
     }, [playbackRate, setPlaybackRate]);
 
@@ -42,8 +40,7 @@ export const AudioMessage = ({ event }: AudioMessageProps) => {
         const d = (audioBlock as { duration?: unknown }).duration;
         return typeof d === 'number' ? d : undefined;
     })();
-    const durationMs =
-        typeof info.duration === 'number' ? info.duration : (msc1767Duration ?? 0);
+    const durationMs = typeof info.duration === 'number' ? info.duration : msc1767Duration ?? 0;
     const durationSec = Math.floor(durationMs / 1000);
 
     // Real peaks when the sender transmitted them (MSC1767 audio block);
@@ -83,7 +80,9 @@ export const AudioMessage = ({ event }: AudioMessageProps) => {
                                     key={`wave-${idx}`}
                                     style={{
                                         width: 4,
-                                        height: `${height * (idx / waveform.length < position ? 1 : 0.45)}%`,
+                                        height: `${
+                                            height * (idx / waveform.length < position ? 1 : 0.45)
+                                        }%`,
                                         borderRadius: 2,
                                         background:
                                             idx / waveform.length < position
@@ -129,7 +128,7 @@ export const AudioMessage = ({ event }: AudioMessageProps) => {
                         />
                         <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>
                             {formatTime(
-                                (audioRef.current?.currentTime ?? position * durationSec) || 0,
+                                (audioRef.current?.currentTime ?? position * durationSec) || 0
                             )}{' '}
                             / {formatTime(durationSec)}
                         </span>

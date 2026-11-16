@@ -37,7 +37,7 @@ export interface RoundContribution {
  * concurrent rounds (e.g. parallel circles in a Workshop) renders cleanly.
  */
 export const useOpenRounds = (
-    roomId: string,
+    roomId: string
 ): { data: OpenRoundModel[]; loading: boolean; error: unknown } => {
     const timeline = useRoomTimeline(roomId);
 
@@ -83,7 +83,7 @@ export const useOpenRounds = (
  */
 export const collectRoundContributions = (
     timeline: ReadonlyArray<MatrixEvent>,
-    roundEventId: string,
+    roundEventId: string
 ): RoundContribution[] => {
     const latestByContributor = new Map<string, RoundContribution>();
 
@@ -121,7 +121,7 @@ export const collectRoundContributions = (
 
 export const useRoundContributions = (
     roomId: string,
-    roundEventId: string | null,
+    roundEventId: string | null
 ): { data: RoundContribution[]; loading: boolean; error: unknown } => {
     const timeline = useRoomTimeline(roomId);
     return useMemo(() => {
@@ -150,7 +150,7 @@ export const useOpenRound = (roomId: string, facilitatorId: string | null) => {
                 sendStateEvent: (rid, et, content, stateKey) =>
                     client.sendStateEvent(rid, et as never, content as never, stateKey),
             }),
-        [client],
+        [client]
     );
 
     return useCallback(
@@ -182,7 +182,7 @@ export const useOpenRound = (roomId: string, facilitatorId: string | null) => {
             // no-ops.
             void completeQuest('first-round', roomId);
         },
-        [actions, completeQuest, facilitatorId, roomId],
+        [actions, completeQuest, facilitatorId, roomId]
     );
 };
 
@@ -200,7 +200,7 @@ export const useCloseRound = (roomId: string, closerId: string | null) => {
                 sendStateEvent: (rid, et, content, stateKey) =>
                     client.sendStateEvent(rid, et as never, content as never, stateKey),
             }),
-        [client],
+        [client]
     );
     return useCallback(
         async (roundId: string) => {
@@ -211,7 +211,7 @@ export const useCloseRound = (roomId: string, closerId: string | null) => {
                 closedBy: closerId,
             });
         },
-        [actions, closerId, roomId],
+        [actions, closerId, roomId]
     );
 };
 
@@ -241,9 +241,7 @@ export interface VoiceReplyContentInput {
     roundEventId: string;
 }
 
-export function buildVoiceReplyContent(
-    input: VoiceReplyContentInput,
-): Record<string, unknown> {
+export function buildVoiceReplyContent(input: VoiceReplyContentInput): Record<string, unknown> {
     // Delegates to the shared MSC3245 builder (features/room/voiceMessage)
     // so the round-reply shape can't drift from the main composer's.
     return buildVoiceMessageContent({
@@ -269,6 +267,6 @@ export const useSendVoiceRoundReply = (roomId: string) => {
             });
             await client.sendEvent(roomId, 'm.room.message' as never, content as never);
         },
-        [client, roomId],
+        [client, roomId]
     );
 };

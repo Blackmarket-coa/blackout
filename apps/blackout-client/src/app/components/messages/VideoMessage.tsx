@@ -20,13 +20,13 @@ export const VideoMessage = ({ event }: VideoMessageProps) => {
     const getVideoElement = useCallback(() => videoRef.current, []);
     const { playbackRate, setPlaybackRate } = useMediaPlaybackRate(getVideoElement);
     const cyclePlaybackRate = useCallback(() => {
-        const idx = PLAYBACK_RATES.indexOf(playbackRate as (typeof PLAYBACK_RATES)[number]);
+        const idx = PLAYBACK_RATES.indexOf(playbackRate as typeof PLAYBACK_RATES[number]);
         setPlaybackRate(PLAYBACK_RATES[(idx + 1) % PLAYBACK_RATES.length]);
     }, [playbackRate, setPlaybackRate]);
 
     const poster = useMemo(
         () => (typeof info.thumbnail_url === 'string' ? info.thumbnail_url : undefined),
-        [info.thumbnail_url],
+        [info.thumbnail_url]
     );
 
     return (

@@ -20,7 +20,9 @@ const parseMxc = (mxcUri: string): { serverName: string; mediaId: string } | nul
 export const mxcToUrl = (mxcUri: string, homeserverUrl: string): string | null => {
     const parsed = parseMxc(mxcUri);
     if (!parsed) return null;
-    return `${homeserverUrl.replace(/\/$/, '')}/_matrix/media/v3/download/${parsed.serverName}/${parsed.mediaId}`;
+    return `${homeserverUrl.replace(/\/$/, '')}/_matrix/media/v3/download/${parsed.serverName}/${
+        parsed.mediaId
+    }`;
 };
 
 /** Build homeserver media thumbnail URL for MXC content. */
@@ -28,7 +30,7 @@ export const getThumbnailUrl = (
     mxcUri: string,
     width: number,
     height: number,
-    homeserverUrl: string,
+    homeserverUrl: string
 ): string | null => {
     const parsed = parseMxc(mxcUri);
     if (!parsed) return null;
