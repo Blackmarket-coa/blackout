@@ -16,7 +16,7 @@ export const HARDENING_ENTITLEMENT_KEYS = {
 } as const satisfies Record<string, EntitlementKey>;
 
 export type HardeningEntitlementKey =
-    (typeof HARDENING_ENTITLEMENT_KEYS)[keyof typeof HARDENING_ENTITLEMENT_KEYS];
+    typeof HARDENING_ENTITLEMENT_KEYS[keyof typeof HARDENING_ENTITLEMENT_KEYS];
 
 /**
  * Per-tier default boolean entitlements. Free keeps basic hardening; `pro`

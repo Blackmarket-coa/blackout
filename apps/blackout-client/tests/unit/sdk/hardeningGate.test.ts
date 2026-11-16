@@ -33,7 +33,9 @@ describe('checkHardeningEntitlements', () => {
     });
 
     it('gates image perturbation behind pro for free users', () => {
-        const result = checkHardeningEntitlements(payloadFor('free'), { requestPerturbation: true });
+        const result = checkHardeningEntitlements(payloadFor('free'), {
+            requestPerturbation: true,
+        });
         expect(result.ok).toBe(false);
         if (!result.ok) {
             expect(result.reason).toBe('perturbation_not_entitled');

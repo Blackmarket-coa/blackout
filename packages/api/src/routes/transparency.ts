@@ -10,17 +10,17 @@ import type { EntitlementTier } from '@blackout/protocol';
 const transparency = new Hono();
 
 const tierHas = (tier: EntitlementTier, key: string): boolean =>
-  Boolean((TRANSPARENCY_TIER_ENTITLEMENTS[tier] as Record<string, boolean>)[key]);
+    Boolean((TRANSPARENCY_TIER_ENTITLEMENTS[tier] as Record<string, boolean>)[key]);
 
 /** A burner is active while it hasn't been burned and hasn't expired. */
 const isActiveBurner = (b: { burnedAt: string | null; expiresAt: string | null }): boolean =>
-  b.burnedAt === null && (b.expiresAt === null || Date.parse(b.expiresAt) > Date.now());
+    b.burnedAt === null && (b.expiresAt === null || Date.parse(b.expiresAt) > Date.now());
 
 const transparencyEntitlements = (tier: EntitlementTier) => ({
-  enabled: tierHas(tier, TRANSPARENCY_ENTITLEMENT_KEYS.enabled),
-  selfReport: tierHas(tier, TRANSPARENCY_ENTITLEMENT_KEYS.selfReport),
-  auditExport: tierHas(tier, TRANSPARENCY_ENTITLEMENT_KEYS.auditExport),
-  warrantCanary: tierHas(tier, TRANSPARENCY_ENTITLEMENT_KEYS.warrantCanary),
+    enabled: tierHas(tier, TRANSPARENCY_ENTITLEMENT_KEYS.enabled),
+    selfReport: tierHas(tier, TRANSPARENCY_ENTITLEMENT_KEYS.selfReport),
+    auditExport: tierHas(tier, TRANSPARENCY_ENTITLEMENT_KEYS.auditExport),
+    warrantCanary: tierHas(tier, TRANSPARENCY_ENTITLEMENT_KEYS.warrantCanary),
 });
 
 /**
@@ -30,27 +30,27 @@ const transparencyEntitlements = (tier: EntitlementTier) => ({
  * and the caller's effective transparency entitlements. Free for every tier.
  */
 transparency.get('/me', (c) => {
-  const user = requireUser(c);
-  if (user instanceof Response) return user;
+    const user = requireUser(c);
+    if (user instanceof Response) return user;
 
-  const tier = entitlementTierForUser(user.sub);
-  const subscription = getSubscription(user.sub);
-  const burners = listBurnersForOwner(user.sub);
+    const tier = entitlementTierForUser(user.sub);
+    const subscription = getSubscription(user.sub);
+    const burners = listBurnersForOwner(user.sub);
 
-  return c.json({
-    userId: user.sub,
-    generatedAt: new Date().toISOString(),
-    subscription: {
-      tier: subscription.tier,
-      status: subscription.status,
-      isPaid: subscription.entitlementActive,
-    },
-    counts: {
-      activeBurnerIdentities: burners.filter(isActiveBurner).length,
-      totalBurnerIdentities: burners.length,
-    },
-    entitlements: transparencyEntitlements(tier),
-  });
+    return c.json({
+        userId: user.sub,
+        generatedAt: new Date().toISOString(),
+        subscription: {
+            tier: subscription.tier,
+            status: subscription.status,
+            isPaid: subscription.entitlementActive,
+        },
+        counts: {
+            activeBurnerIdentities: burners.filter(isActiveBurner).length,
+            totalBurnerIdentities: burners.length,
+        },
+        entitlements: transparencyEntitlements(tier),
+    });
 });
 
 /**
@@ -60,39 +60,41 @@ transparency.get('/me', (c) => {
  * key travels with the response for verification).
  */
 transparency.get('/canary', (c) => {
-  const user = requireUser(c);
-  if (user instanceof Response) return user;
+    const user = requireUser(c);
+    if (user instanceof Response) return user;
 
-  const now = new Date();
-  const periodStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
-  const periodEnd = new Date(
-    Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1),
-  ).toISOString();
+    const now = new Date();
+    const periodStart = new Date(
+        Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)
+    ).toISOString();
+    const periodEnd = new Date(
+        Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)
+    ).toISOString();
 
-  const statement = [
-    'As of the generation date below, Blackout has not received any National',
-    'Security Letter, FISA court order, gag order, or other secret request for',
-    'user data that we are prohibited from disclosing, and no warrant canary',
-    'we maintain has been compelled to be removed.',
-  ].join(' ');
+    const statement = [
+        'As of the generation date below, Blackout has not received any National',
+        'Security Letter, FISA court order, gag order, or other secret request for',
+        'user data that we are prohibited from disclosing, and no warrant canary',
+        'we maintain has been compelled to be removed.',
+    ].join(' ');
 
-  const canonical = `${statement}|${periodStart}|${periodEnd}`;
-  const digest = createHash('sha256').update(canonical).digest('hex');
-  const signed = signCanary(canonical);
+    const canonical = `${statement}|${periodStart}|${periodEnd}`;
+    const digest = createHash('sha256').update(canonical).digest('hex');
+    const signed = signCanary(canonical);
 
-  return c.json({
-    statement,
-    periodStart,
-    periodEnd,
-    generatedAt: now.toISOString(),
-    digestAlgorithm: 'sha256',
-    digest,
-    // Ed25519 signature over `${statement}|${periodStart}|${periodEnd}`.
-    signatureAlgorithm: signed.algorithm,
-    signatureKeySource: signed.keySource,
-    signature: signed.signature,
-    publicKey: signed.publicKey,
-  });
+    return c.json({
+        statement,
+        periodStart,
+        periodEnd,
+        generatedAt: now.toISOString(),
+        digestAlgorithm: 'sha256',
+        digest,
+        // Ed25519 signature over `${statement}|${periodStart}|${periodEnd}`.
+        signatureAlgorithm: signed.algorithm,
+        signatureKeySource: signed.keySource,
+        signature: signed.signature,
+        publicKey: signed.publicKey,
+    });
 });
 
 /**
@@ -101,32 +103,32 @@ transparency.get('/canary', (c) => {
  * Unentitled callers get a 402 tier prompt rather than an empty export.
  */
 transparency.get('/audit-export', (c) => {
-  const user = requireUser(c);
-  if (user instanceof Response) return user;
+    const user = requireUser(c);
+    if (user instanceof Response) return user;
 
-  const tier = entitlementTierForUser(user.sub);
-  if (!tierHas(tier, TRANSPARENCY_ENTITLEMENT_KEYS.auditExport)) {
-    return c.json(
-      {
-        code: 'audit_export_not_entitled',
-        message: 'Org-scoped audit export requires the Team tier or higher.',
-        suggestedTier: 'team',
-      },
-      402,
-    );
-  }
+    const tier = entitlementTierForUser(user.sub);
+    if (!tierHas(tier, TRANSPARENCY_ENTITLEMENT_KEYS.auditExport)) {
+        return c.json(
+            {
+                code: 'audit_export_not_entitled',
+                message: 'Org-scoped audit export requires the Team tier or higher.',
+                suggestedTier: 'team',
+            },
+            402
+        );
+    }
 
-  const subscription = getSubscription(user.sub);
-  const burners = listBurnersForOwner(user.sub);
+    const subscription = getSubscription(user.sub);
+    const burners = listBurnersForOwner(user.sub);
 
-  return c.json({
-    schema: 'blackout.transparency.audit-export.v1',
-    userId: user.sub,
-    generatedAt: new Date().toISOString(),
-    subscription,
-    burnerIdentities: burners,
-    entitlements: transparencyEntitlements(tier),
-  });
+    return c.json({
+        schema: 'blackout.transparency.audit-export.v1',
+        userId: user.sub,
+        generatedAt: new Date().toISOString(),
+        subscription,
+        burnerIdentities: burners,
+        entitlements: transparencyEntitlements(tier),
+    });
 });
 
 export default transparency;

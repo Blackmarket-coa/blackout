@@ -95,7 +95,12 @@ test('GET /v1/transparency/canary is Ed25519-signed and verifies against the ret
         format: 'der',
         type: 'spki',
     });
-    const ok = verify(null, Buffer.from(canonical, 'utf8'), publicKey, Buffer.from(body.signature, 'base64'));
+    const ok = verify(
+        null,
+        Buffer.from(canonical, 'utf8'),
+        publicKey,
+        Buffer.from(body.signature, 'base64')
+    );
     assert.equal(ok, true);
 
     // A tampered statement must fail verification.
@@ -103,7 +108,7 @@ test('GET /v1/transparency/canary is Ed25519-signed and verifies against the ret
         null,
         Buffer.from(`${canonical} TAMPERED`, 'utf8'),
         publicKey,
-        Buffer.from(body.signature, 'base64'),
+        Buffer.from(body.signature, 'base64')
     );
     assert.equal(bad, false);
 });

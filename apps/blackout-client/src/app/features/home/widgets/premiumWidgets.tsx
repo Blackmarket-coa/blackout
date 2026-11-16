@@ -72,9 +72,7 @@ export function PrivacyPulseWidget(): ReactNode {
                     >
                         <span aria-hidden="true">{statusDot(row.state)}</span>
                         <span>{row.label}</span>
-                        <span style={{ marginLeft: 'auto', fontSize: 11 }}>
-                            {row.state}
-                        </span>
+                        <span style={{ marginLeft: 'auto', fontSize: 11 }}>{row.state}</span>
                     </div>
                 ))}
             </div>

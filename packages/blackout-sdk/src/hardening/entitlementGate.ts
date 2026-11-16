@@ -54,7 +54,12 @@ const suggestTier = (
         const probe = resolveSdkEntitlement({
             payload: {
                 ...payload,
-                planState: { ...payload.planState, tier: TIER_ORDER[i], status: 'active', isPaid: true },
+                planState: {
+                    ...payload.planState,
+                    tier: TIER_ORDER[i],
+                    status: 'active',
+                    isPaid: true,
+                },
             },
             key: key as `features.${string}`,
         });

@@ -26,7 +26,7 @@ function mount(node: React.ReactNode): HTMLElement {
 describe('TipButton', () => {
     it('renders a closed trigger with the default label', () => {
         const container = mount(
-            <TipButton recipientUserId="creator-1" recipientLabel="Creator" contextKind="profile" />,
+            <TipButton recipientUserId="creator-1" recipientLabel="Creator" contextKind="profile" />
         );
         const trigger = container.querySelector<HTMLButtonElement>('[data-testid="tip-button"]');
         expect(trigger).not.toBeNull();
@@ -42,7 +42,7 @@ describe('TipButton', () => {
                 recipientLabel="Creator"
                 contextKind="stream"
                 contextRef="stream-abc"
-            />,
+            />
         );
         const trigger = container.querySelector<HTMLButtonElement>('[data-testid="tip-button"]');
         flushSync(() => {
@@ -59,7 +59,7 @@ describe('TipButton', () => {
 
     it('renders the compact label when compact=true', () => {
         const container = mount(
-            <TipButton recipientUserId="creator-1" contextKind="post" compact />,
+            <TipButton recipientUserId="creator-1" contextKind="post" compact />
         );
         const trigger = container.querySelector<HTMLButtonElement>('[data-testid="tip-button"]');
         expect(trigger!.textContent).toContain('$ Tip');
