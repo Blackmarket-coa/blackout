@@ -714,7 +714,7 @@ export const ClientLayout = () => {
                             <MessageComposer roomId={selectedRoomId} />
                         )}
 
-                        <DeadDropSettings roomId={selectedRoomId} />
+                        <DeadDropSettings roomId={selectedRoomId} hideWhenOff />
                     </RoomInviteAcceptGate>
                 </div>
             );

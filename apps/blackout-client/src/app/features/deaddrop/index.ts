@@ -9,7 +9,7 @@ export { MutualAidPage, type MutualAidFetcher } from './MutualAidPage';
 
 export { default as DeadDropIndicator } from './DeadDropIndicator';
 export { default as DeadDropComposer } from './DeadDropComposer';
-export { default as DeadDropSettings } from './DeadDropSettings';
+export { default as DeadDropSettings, DEAD_DROP_NOTHING_TO_CONFIGURE } from './DeadDropSettings';
 export {
     DEAD_DROP_COMMAND_EVENT_TYPE,
     DEAD_DROP_EVENT_TYPE,
@@ -17,8 +17,7 @@ export {
     DEAD_DROP_SCHEMA_VERSION,
 } from '@blackout/protocol';
 export {
-    describeDeadDropSchedule,
-    getNextDeliveryDate,
+    DEAD_DROP_NOT_BUILT_NOTICE,
     useDeadDrop,
     useDeadDropQueueActions,
     useSetDeadDrop,

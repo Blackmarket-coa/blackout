@@ -26,6 +26,36 @@ should be described as a published privacy policy until that review lands.
 
 ---
 
+## 2026-11-16 — Dead drops: nobody can use one, and the room mode queued nothing
+
+**Why this entry exists:** the initial record below lists "dead-drop anonymity
+padding and decoys" among the privacy features a tier provides, and the app
+told people in a "Dead Drop" room that their message would be queued. Neither
+described something a person could use. The finding is T8 in
+[`docs/security/trust-claims-2026-11-16.md`](../security/trust-claims-2026-11-16.md).
+
+### Withdrawn
+
+-   **Dead drops are not a feature a tier provides today.** The sealed-envelope
+    format, a service to hold envelopes, and limits per tier exist in the
+    repository, but no screen of the app sends or opens a dead drop and no
+    deployment file here runs that service. The tiers still hold the
+    entitlement keys
+    ([`entitlements.ts`](../../packages/blackout-protocol/src/deaddrop/entitlements.ts)).
+-   **"Dead Drop: message will be queued" and "Anonymize delivery via bot
+    account" were not true.** A room switched into dead-drop mode showed both,
+    with a countdown to a "next delivery" and a prompt to upgrade to Pro for
+    scheduled and anonymized delivery. Nothing queued, scheduled or anonymized
+    anything.
+
+### What a person relying on the old text should know
+
+-   **A message you typed under "message will be queued" was sent to the room
+    at once, under your own name.** It was never held, and it was not
+    delivered by a bot in your place.
+-   **If you were told to upgrade for scheduled or anonymized dead-drop
+    delivery:** no tier has either.
+
 ## 2026-11-16 — Files sent in encrypted rooms were not encrypted
 
 **Why this entry exists:** the commitment that private rooms and direct

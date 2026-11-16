@@ -105,37 +105,20 @@ const toQueueCount = (content: Record<string, unknown> | undefined): number => {
     return typeof raw === 'number' ? Math.max(0, Math.floor(raw)) : 0;
 };
 
-export const getNextDeliveryDate = (config: DeadDropConfig): Date | null => {
-    if (!config.enabled) return null;
-
-    if (config.schedule.type === 'interval') {
-        const minutes = config.schedule.intervalMinutes ?? 60;
-        return new Date(Date.now() + minutes * 60_000);
-    }
-
-    if (config.schedule.type === 'cron') {
-        const next = new Date();
-        next.setMinutes(0, 0, 0);
-        next.setHours(next.getHours() + 1);
-        return next;
-    }
-
-    return null;
-};
-
-export const describeDeadDropSchedule = (config: DeadDropConfig): string => {
-    if (!config.enabled) return 'Dead drop disabled';
-
-    if (config.schedule.type === 'interval') {
-        return `Dead Drop: delivers every ${config.schedule.intervalMinutes ?? 60} min`;
-    }
-
-    if (config.schedule.type === 'cron') {
-        return `Dead Drop: cron ${config.schedule.cronExpression ?? '0 * * * *'}`;
-    }
-
-    return 'Dead Drop: manual release only';
-};
+/**
+ * What every dead-drop surface in a room says, and all it may say.
+ *
+ * A room can carry a `co.bmc.deaddrop` state event with a schedule, a queue
+ * size and an "anonymize" flag. Only this client's UI reads it. Nothing
+ * queues a message, holds it for the schedule, or delivers it under another
+ * sender: a message typed in such a room goes to the room at once, like any
+ * other. Until 2026-11-16 the composer said "message will be queued", the
+ * indicator counted down to a "next delivery", and the settings sold a paid
+ * tier for "anonymized delivery". See
+ * docs/security/trust-claims-2026-11-16.md, T8.
+ */
+export const DEAD_DROP_NOT_BUILT_NOTICE =
+    "Dead drop is switched on in this room's settings, but queued and anonymized delivery are planned and not built yet. Messages here are delivered at once, under the sender's own name.";
 
 export const useDeadDrop = (roomId: string) => {
     const roomState = useRoom(roomId);
@@ -158,8 +141,6 @@ export const useDeadDrop = (roomId: string) => {
                 queueCount,
                 invalidStateEvents: normalized.invalid ? 1 : 0,
             } satisfies DeadDropDiagnostics,
-            summary: describeDeadDropSchedule(normalized.config),
-            nextDelivery: getNextDeliveryDate(normalized.config),
         };
     }, [roomState]);
 };

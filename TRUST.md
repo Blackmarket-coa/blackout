@@ -145,10 +145,20 @@ Encryption claims are only worth something with the exceptions attached.
 do not say it.**
 
 Privacy-enhancing features beyond encryption _are_ tiered: image perturbation,
-persona compartments and rotation, dead-drop anonymity padding and decoys, mesh
-transport, active defense. Free dead-drops are capped at 64 KB, 24 hours, one
-recipient, no decoys. The confidentiality of your messages is free; some of the
-tools for hiding _that you are communicating at all_ are not.
+persona compartments and rotation, mesh transport, active defense. The
+confidentiality of your messages is free; some of the tools for hiding _that you
+are communicating at all_ are not.
+
+**Dead drops are not among them yet, because nobody can use one.** The
+sealed-envelope format, the service that would hold envelopes and the tier
+limits for them (64 KB, 24 hours, one recipient and no decoys on the free tier)
+are in the repository and tested, but no screen of the app sends or opens a
+dead drop, and no deployment file here runs that service. Until 2026-11-16 a
+room could be put in a "Dead Drop" mode whose banner said your message "will be
+queued" and whose settings offered "anonymized delivery" on a paid tier.
+Neither existed: the message was sent at once, under your own name. The mode
+now says so
+([`trust-claims-2026-11-16.md`](docs/security/trust-claims-2026-11-16.md), T8).
 
 **Tor transport and decoy traffic are not built.** Paid tiers are assigned them,
 and until 2026-11-16 this page listed them with the features above. There is no

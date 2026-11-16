@@ -21,13 +21,17 @@ may decide what to say, and to whom, on the strength of it.
 | T5  | Settings, "What's stored about me"                                         | "The self-report below and the warrant canary are always available on your plan" | The app shows no canary anywhere                                                 | Fixed (copy) |
 | T6  | The sign-in page                                                           | "Create an anonymous account (no email)"                                         | No email or name is asked; the homeserver keeps the IP addresses it is used from | Fixed (copy) |
 | T7  | The composer in every encrypted room, `THREAT_MODEL.md`                    | "Not even the server can" read what is sent here; attachments are E2EE           | Files were uploaded unencrypted; only the message was encrypted                  | Part fixed   |
+| T8  | A room with dead drop on: composer, indicator, settings                    | "Dead Drop: message will be queued"; "Anonymize delivery" on the Pro tier        | The message is sent at once; nothing queues or anonymizes                        | Fixed (UI)   |
 
 T7 was found while checking those sentences and outranks the rest: it has its
 own record,
 [`attachment-encryption-2026-11-16.md`](attachment-encryption-2026-11-16.md).
 
-Findings T8 onward are the trust page's and the threat model's own sentences,
-checked one by one; they are in [the documents](#t8-onward-the-documents)
+T8 is the room "Dead Drop" mode, which told people a message would be queued
+and sent it at once.
+
+Findings T9 onward are the trust page's and the threat model's own sentences,
+checked one by one; they are in [the documents](#t9-onward-the-documents)
 below.
 
 ## T1. Tor transport and decoy traffic
@@ -282,14 +286,133 @@ not verified) is in
 `TRUST.md`, `THREAT_MODEL.md` §4 and §5, `KNOWN_LIMITATIONS.md` and
 `docs/legal/CHANGELOG.md` now say so.
 
-## T8 onward: the documents
+## T8. Dead drops: a message "will be queued", and was sent at once
 
-Not in this commit. The sentences of `TRUST.md` (beyond the paragraphs T1, T2
-and T7 change), of `THREAT_MODEL.md`, of `docs/security/key-transparency.md`
+**Claimed.** In a room whose state has dead drop switched on, three places
+spoke:
+
+-   above the message box: "Dead Drop: message will be queued", a "Delivery
+    condition" selector (None, Deliver at time, Recipient online), and the
+    placeholder "Message will be queued until next dead drop release…";
+-   above the timeline: "Dead Drop: delivers every 60 min", "Next delivery:"
+    with a countdown, and "Queue: 0";
+-   in the settings panel, shown under the composer of every room: a schedule
+    (interval, cron or manual), "Anonymize delivery via bot account", a queue
+    size, "Flush queue" and "Clear queue", a tier banner, and two prompts:
+    "Scheduled flush requires the Pro tier or higher" and "Anonymized delivery
+    (cover sender) requires the Pro tier or higher".
+
+`TRUST.md` listed "dead-drop anonymity padding and decoys" among the tiered
+privacy features and said "Free dead-drops are capped at 64 KB, 24 hours, one
+recipient, no decoys".
+
+**Found.** Nothing queues, schedules or anonymizes a message.
+
+-   The dead-drop composer was the ordinary composer under a banner. It sent
+    the message to the room at once
+    (`tests/unit/features/deaddrop/roomDeadDropTruth.test.tsx`, first test,
+    which passed before any change). The "Delivery condition" value was read
+    by nothing.
+-   The room's `co.bmc.deaddrop` state is read only by this client's UI. No
+    code in `packages/api/src` or `apps/deaddrop-appservice/src` reads it, and
+    nothing writes the queue count the indicator showed.
+-   The countdown was the interval counted from the current second
+    (`new Date(Date.now() + minutes * 60_000)`), so it never reached zero.
+-   The appservice has a queue (`POST /ingest`), which no client calls, and
+    its flush "delivers" with `console.log` ("Replace with Matrix client
+    `sendEvent` in production"). No deployment file, compose file or proxy
+    config in the repository runs or routes that service.
+-   The sealed dead drop (the envelope format in `@blackout/protocol`, the
+    `/v1/deaddrop/send`, `/fetch` and `/open` routes of the appservice, the
+    SDK's `createDeadDropActions`) exists and is tested, but no screen of the
+    app sends or opens one: `createDeadDropActions`, `sendDeadDrop`,
+    `encryptDeadDrop` and `decryptDeadDrop` have no caller under
+    `apps/blackout-client/src`. The API's own `POST /v1/deaddrop` stores the
+    `payload` string it is given, as it is.
+
+So a person who typed under that banner believing the message was held had
+already sent it, under their own name, and a person who switched on "Anonymize
+delivery" or was told to upgrade for it was offered something no tier has.
+
+**Done.**
+
+-   The banner, the indicator and the panel now say one thing
+    (`DEAD_DROP_NOT_BUILT_NOTICE`): "Dead drop is switched on in this room's
+    settings, but queued and anonymized delivery are planned and not built yet.
+    Messages here are delivered at once, under the sender's own name."
+-   The delivery-condition selector, the schedule and countdown, the queue
+    count, the form, "Flush queue", "Clear queue", the tier banner and both
+    upgrade prompts are gone. The panel offers one action, for a room that has
+    the state switched on: switch it off, which removes the notice. What the
+    room had stored (schedule, limits) is kept.
+-   The panel no longer sits under the composer of rooms that do not have dead
+    drop switched on. On its own settings page it says there is nothing to
+    switch on.
+-   `TRUST.md`, `THREAT_MODEL.md` §5 and `KNOWN_LIMITATIONS.md` say that no
+    dead drop can be sent or opened from the app.
+
+Not changed: the entitlement keys for dead drops in the tier tables
+(`packages/blackout-protocol/src/deaddrop/entitlements.ts`), the SDK gate, the
+appservice and the envelope code. They are the parts of a feature that is not
+finished, and none of them makes a claim to a user. Whether the tiers should
+list dead-drop keys before anyone can use a dead drop is the operator's
+decision, with T1's.
+
+Also not changed, and still to check: the glossary's definition of a dead drop
+("A way to hide ephemeral messages inside images that disappear after
+delivery", `lib/blackoutTerminology.ts`), which describes neither this nor the
+sealed envelope; and the marketplace's "dead-drop delivery" of a purchased
+file, which is a third thing with the same name.
+
+## T9 onward: the documents
+
+Not in this commit. The sentences of `TRUST.md` (beyond the paragraphs T1, T2,
+T7 and T8 change), of `THREAT_MODEL.md`, of `docs/security/key-transparency.md`
 and `docs/security/webauthn-passkeys.md`, and the "CI release gate" sentence of
 `KNOWN_LIMITATIONS.md` are being checked against the code one by one. Each
 finding is added here, with its fix or its explanation, in a commit that
-follows on the same branch. Until then this record covers T1 to T7 only.
+follows on the same branch. Until then this record covers T1 to T8 only.
+
+A first reading of those documents against the code reported the following.
+Each is a report, not yet a finding: none has been checked by a second look or
+a test, and each will be confirmed or dropped here, with its evidence.
+
+Threat model:
+
+-   Device verification and remote sign-out (A7, §3.6): no verification screen
+    is mounted; QR verification is not enabled.
+-   Call media (A4, R2 "Mitigated", and `TRUST.md` on calls): the call session
+    method the app calls is absent from the SDK version in use, so no call
+    starts; a third-party call page is framed instead. §5 says "TLS-only
+    today" and R2 says "Mitigated": the document contradicts itself.
+-   Governance ballots ("hash chain + sigs") and audit logs ("tamper-evident",
+    "WORM"): stored as ordinary rows.
+-   Signed releases and reproducible builds (A11): no tags or releases exist,
+    and the desktop updater's public key is a placeholder.
+-   Plugin signatures (§6): the signing secret is in the client source.
+-   "Short-lived" tokens: 24 hours, refresh 30 days.
+-   Third parties missing from §3: a CAPTCHA provider on registration, map
+    tiles on the coalition map, the framed call page.
+
+Other documents:
+
+-   `docs/security/key-transparency.md`: "atomically rewritten", witnesses on
+    replicas, a cross-process test.
+-   `docs/security/webauthn-passkeys.md`: "Status: shipped".
+-   `KNOWN_LIMITATIONS.md`, "Release signoff": no workflow runs the release
+    gate it describes.
+-   `TRUST.md`: "no timeline-read capability" for the bot, and the search it
+    tells a reader to run.
+
+Strings in the app:
+
+-   The composer's "Signature: enabled" (adds the words "signed via Blackout",
+    signs nothing), "Encryption: preset" (a marker that changes nothing) and
+    "Ephemeral drop: view-once, 24h" (kept only by this app, per device).
+-   The welcome steps' "messages are end-to-end encrypted", said of every den.
+-   The vault's "encrypts everything", the privacy tools' "always on".
+-   The glossary's definitions of a dead drop and of a digital good's
+    delivery.
 
 ## Decisions for the operator to confirm or veto
 

@@ -778,8 +778,8 @@ For the source-of-truth triage with tier/owner detail see
         encrypted"). Whether to notify people or delete the files is an
         operator decision listed in the record.
     -   **An app built before the fix keeps uploading unencrypted** until it is
-        updated. The desktop and mobile shells bundle the client and need new
-        builds.
+        updated, and cannot open the encrypted files an updated app sends. The
+        desktop and mobile shells bundle the client and need new builds.
     -   **The server still sees** an encrypted file's size to the byte, who
         uploaded it and when, and the network addresses it is downloaded from.
         Media is served to anyone who has a file's address; this Synapse
@@ -794,8 +794,30 @@ For the source-of-truth triage with tier/owner detail see
 -   **Also fixed there:** a message typed into a room the app had not finished
     loading was sent unencrypted by the Matrix SDK. The send paths now refuse
     until the room is loaded, and a failed send says so under the composer.
-    The dead-drop composer wraps the same composer and takes the same path;
-    whether its "message will be queued" banner is true was not checked here.
+    The dead-drop composer wraps the same composer and takes the same path.
+
+### Dead drops: not reachable from the app (2026-11-16)
+
+-   **Where:** `apps/blackout-client/src/app/features/deaddrop/`,
+    `apps/deaddrop-appservice/`, `packages/blackout-sdk/src/deaddrop/`.
+    Record: `docs/security/trust-claims-2026-11-16.md`, T8.
+-   **State:** Nobody can send or open a dead drop from the app. The
+    sealed-envelope format, the appservice that would hold envelopes and the
+    SDK calls for them are in the repository and tested, but no screen calls
+    them, and no deployment, compose or proxy file runs or routes the
+    appservice.
+-   **The room "Dead Drop" mode queues nothing.** A room's `co.bmc.deaddrop`
+    state is read only by the app's own UI. Until 2026-11-16 that UI said
+    "Dead Drop: message will be queued", counted down to a "next delivery",
+    and offered "Anonymize delivery via bot account" behind a prompt to
+    upgrade to Pro. A message typed there was sent to the room at once, under
+    the sender's own name. Since 2026-11-16 the banner, the indicator and the
+    panel say that, the controls that did nothing are gone, and the panel's one
+    action is to switch the mode off.
+-   **Left as it is:** the dead-drop entitlement keys in the tier tables, the
+    SDK gate, the appservice's queue (its flush logs a line and delivers
+    nothing), and the API's `POST /v1/deaddrop`, which stores the payload
+    string it is given as it is.
 
 ## Deferred multi-week workstreams
 

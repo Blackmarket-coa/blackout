@@ -208,7 +208,11 @@ reader asks. A load that fails can be tried again from where it failed.
    updated. The desktop and mobile shells bundle the client
    (`blackout-desktop/src-tauri/tauri.conf.json`, `blackout-mobile/capacitor.config.ts`),
    so they need new builds; a browser tab needs a reload that picks up the new
-   bundle. The updated app marks what the old ones send.
+   bundle. The updated app marks what the old ones send. The other way round,
+   an old build cannot open the encrypted files a new one sends (A2): it shows
+   "Encrypted media not supported by current client runtime" until it is
+   updated. That is also what a rollback of the client would do to files sent
+   while the fix was live.
 3. **The server still learns, for an encrypted file:** its size to the byte
    (CTR mode adds no padding), who uploaded it and when, and the network
    addresses it is downloaded from (downloads need no login, so it sees
@@ -224,9 +228,8 @@ reader asks. A load that fails can be tried again from where it failed.
    sent" and to check the conversation; it does not clear what did go out.
 7. **The dead-drop banner.** `features/deaddrop/DeadDropComposer.tsx` wraps the
    same composer, so a file sent from it takes the path described here. Its
-   banner says the message "will be queued"; whether anything queues it is a
-   separate claim, not checked in this change and carried to the trust-claims
-   record's next findings.
+   banner said the message "will be queued". Nothing queued it: that is
+   finding T8 of the trust-claims record, fixed in the commit after this one.
 
 ## Tests, and what each shows
 

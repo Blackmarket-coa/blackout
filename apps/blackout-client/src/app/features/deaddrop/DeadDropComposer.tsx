@@ -1,64 +1,32 @@
-import { useState } from 'react';
 import MessageComposer from '../room/MessageComposer';
+import { DEAD_DROP_NOT_BUILT_NOTICE } from './useDeadDrop';
 
-type DeliveryConditionType = 'none' | 'deliver-at' | 'recipient-online';
-
-export const DeadDropComposer = ({ roomId }: { roomId: string }) => {
-    const [conditionType, setConditionType] = useState<DeliveryConditionType>('none');
-    const [deliverAt, setDeliverAt] = useState('');
-
-    return (
-        <div style={{ borderTop: '1px solid var(--border-default)' }}>
-            <div
-                style={{
-                    display: 'grid',
-                    gap: 10,
-                    borderBottom: '1px solid var(--border-default)',
-                    background: 'var(--bg-input)',
-                    padding: 10,
-                }}
-            >
-                <strong>Dead Drop: message will be queued</strong>
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                    <label>
-                        Delivery condition
-                        <select
-                            value={conditionType}
-                            onChange={(event) =>
-                                setConditionType(event.target.value as DeliveryConditionType)
-                            }
-                            style={{ marginLeft: 8 }}
-                        >
-                            <option value="none">None</option>
-                            <option value="deliver-at">Deliver at time</option>
-                            <option value="recipient-online">Recipient online</option>
-                        </select>
-                    </label>
-
-                    {conditionType === 'deliver-at' ? (
-                        <label>
-                            Time
-                            <input
-                                type="datetime-local"
-                                value={deliverAt}
-                                onChange={(event) => setDeliverAt(event.target.value)}
-                                style={{ marginLeft: 8 }}
-                            />
-                        </label>
-                    ) : null}
-                </div>
-            </div>
-
-            <MessageComposer
-                roomId={roomId}
-                placeholder={
-                    conditionType === 'none'
-                        ? 'Message will be queued until next dead drop release…'
-                        : `Queued message (${conditionType}${deliverAt ? `: ${deliverAt}` : ''})…`
-                }
-            />
+/**
+ * The composer for a room whose state has dead drop switched on.
+ *
+ * Until 2026-11-16 this showed "Dead Drop: message will be queued" and a
+ * delivery-condition selector above the ordinary composer. Nothing queued
+ * anything: the composer underneath sent the message to the room at once, and
+ * the selector's value was read by nothing. It now says so, and the selector is
+ * gone. See docs/security/trust-claims-2026-11-16.md, T8.
+ */
+export const DeadDropComposer = ({ roomId }: { roomId: string }) => (
+    <div style={{ borderTop: '1px solid var(--border-default)' }}>
+        <div
+            role="note"
+            data-testid="deaddrop-composer-notice"
+            style={{
+                borderBottom: '1px solid var(--border-default)',
+                background: 'var(--bg-input)',
+                padding: 10,
+                fontSize: 13,
+            }}
+        >
+            {DEAD_DROP_NOT_BUILT_NOTICE}
         </div>
-    );
-};
+
+        <MessageComposer roomId={roomId} />
+    </div>
+);
 
 export default DeadDropComposer;
