@@ -8,10 +8,17 @@ token, so there is no long-lived signing key to leak.
 
 ## What is signed
 
-| Artifact                                  | Signature format                                 | Lives at                           |
-| ----------------------------------------- | ------------------------------------------------ | ---------------------------------- |
-| Web bundle, desktop builds, mobile builds | Detached `.sig`, `.pem`, `.bundle`               | GitHub release assets              |
-| Docker image (multi-arch)                 | Embedded Sigstore attestation + cosign signature | OCI registry under the same digest |
+| Artifact                  | Signature format                                 | Lives at                           |
+| ------------------------- | ------------------------------------------------ | ---------------------------------- |
+| Web bundle, mobile builds | Detached `.sig`, `.pem`, `.bundle`               | GitHub release assets              |
+| Docker image (multi-arch) | Embedded Sigstore attestation + cosign signature | OCI registry under the same digest |
+
+Nothing has been signed yet: `release.yml` runs on a `v*` tag, and no tag
+or release exists. Desktop builds are not in this table: `release.yml` has
+no desktop job, and the desktop workflow signs only for Tauri's updater,
+whose public key in `tauri.conf.json` is still a placeholder. Until
+2026-11-16 the table listed desktop builds
+(`docs/security/trust-claims-2026-11-16.md`, T21).
 
 Each release also produces a CycloneDX/SPDX SBOM (`sbom.spdx.json` for
 the web bundle; embedded for the Docker image via

@@ -31,6 +31,15 @@ may decide what to say, and to whom, on the strength of it.
 | T15 | Glossary; the purchase delivery notice                                     | A digital good is "delivered via an encrypted dead-drop"; "Open it in Blackout"  | It is downloaded from Library; nothing opens a dead drop                         | Fixed (copy) |
 | T16 | `TRUST.md`: the bot                                                        | "No timeline-read capability at all"; a search with "no hits"                    | True of the code, not the token; the search has hits; other bots can read        | Fixed (copy) |
 | T17 | `THREAT_MODEL.md` R2, `TRUST.md`, the voice UI                             | Call media E2EE "negotiated by default"; "Connected"; "Retry shortly"            | No call starts: the SDK lacks the method; a third-party page loaded unasked      | Fixed        |
+| T18 | `THREAT_MODEL.md` A7, §3: devices                                          | Per-device verification (SAS/QR) and session revocation                          | No verification screen is mounted, QR is off; no one device can be ended         | Fixed (copy) |
+| T19 | `THREAT_MODEL.md` §3, R4: tokens                                           | "Tokens are short-lived"                                                         | API: 24 h, refresh 30 days renewed on use; Matrix refresh: no expiry             | Fixed (copy) |
+| T20 | `THREAT_MODEL.md` §3: boundaries                                           | The trust boundaries, listed                                                     | OpenStreetMap, reCAPTCHA, the FBM store and GIF hosts were missing               | Fixed (copy) |
+| T21 | `THREAT_MODEL.md` A8, A11, §3, R5                                          | Signed releases, reproducible builds                                             | Signing never ran (no tag, no release); updater key is a placeholder             | Fixed (copy) |
+| T22 | `THREAT_MODEL.md` §6a: plugins                                             | Bundles must carry a signature from a pinned key                                 | The only pinned key is a development secret in the client source                 | Said         |
+| T23 | `THREAT_MODEL.md` §4, §5                                                   | Ballots: "Hash chain + sigs"; audit logs: "tamper-evident", "WORM"               | Ordinary rows; nothing chains, signs or write-protects them                      | Fixed (copy) |
+| T24 | `docs/security/key-transparency.md`                                        | "Atomically rewritten"; witnesses on replicas; a cross-process test              | Rewritten in place; no witness setup; the test runs in one process               | Fixed (copy) |
+| T25 | `docs/security/webauthn-passkeys.md`                                       | "Status: shipped"                                                                | Server only, off by default, no app calls it, no session                         | Fixed (copy) |
+| T26 | `KNOWN_LIMITATIONS.md`: release signoff                                    | "The CI release gate"                                                            | No workflow runs it; its report is gitignored                                    | Fixed (copy) |
 
 T7 was found while checking those sentences and outranks the rest: it has its
 own record,
@@ -784,40 +793,151 @@ continue in widget fallback mode."
     banner; Element Call not loaded until asked, in both modes. The four that
     check a fix fail on the code before it.
 
-## Reported, not yet checked
+## T18. Devices: "per-device verification" and "session revocation"
 
-Not in this commit. The sentences of `TRUST.md` (beyond the paragraphs T1, T2,
-T7, T8 and T9 change), of `THREAT_MODEL.md`, of
-`docs/security/key-transparency.md` and `docs/security/webauthn-passkeys.md`,
-and the "CI release gate" sentence of `KNOWN_LIMITATIONS.md` are being checked
-against the code one by one. Each finding is added here, with its fix or its
-explanation, in a commit that follows on the same branch. Until then this
-record covers T1 to T17 only.
+**Claimed.** `THREAT_MODEL.md` A7: "Partial — addressed by per-device
+verification + session revocation". §3, boundary 6: "Verification (SAS/QR)
+extends the boundary to a peer device."
 
-A first reading of those documents against the code reported the following.
-Each is a report, not yet a finding: none has been checked by a second look or
-a test, and each will be confirmed or dropped here, with its evidence.
+**Found.** The emoji (SAS) dialog (`components/DeviceVerification.tsx`) is
+reached only from `features/settings/devices/`, which only the old
+`features/settings/Settings.tsx` renders, and nothing mounts that page: the app
+mounts `SettingsPage`, which has no devices section. The component that answers
+an incoming request (`ReceiveSelfDeviceVerification`) and the banner whose
+button says "Verify this device" are imported by nothing, and the code says so
+("This page is not mounted in the shipped app today"). QR is not enabled
+(`verificationMethods: ['m.sas.v1']` in `client/initMatrix.ts`) and not built.
+Signing out one chosen device is on the same unmounted page. What the app can
+do is end every Blackout API session (Release keys, which says "It ends no
+Matrix session") or, at a password reset, sign out every other device.
 
-Threat model:
+**Done.** A7 and boundary 6 say so. Mounting the devices page is a product
+change; decision 7 below.
 
--   Device verification and remote sign-out (A7, §3.6): no verification screen
-    is mounted; QR verification is not enabled.
--   Governance ballots ("hash chain + sigs") and audit logs ("tamper-evident",
-    "WORM"): stored as ordinary rows.
--   Signed releases and reproducible builds (A11): no tags or releases exist,
-    and the desktop updater's public key is a placeholder.
--   Plugin signatures (§6): the signing secret is in the client source.
--   "Short-lived" tokens: 24 hours, refresh 30 days.
--   Third parties missing from §3: a CAPTCHA provider on registration, map
-    tiles on the coalition map. (The framed call page is T17.)
+## T19. Tokens: "short-lived"
 
-Other documents:
+**Claimed.** `THREAT_MODEL.md` §3, boundary 4: "tokens are short-lived"; R4:
+"mitigated by short token TTLs".
 
--   `docs/security/key-transparency.md`: "atomically rewritten", witnesses on
-    replicas, a cross-process test.
--   `docs/security/webauthn-passkeys.md`: "Status: shipped".
--   `KNOWN_LIMITATIONS.md`, "Release signoff": no workflow runs the release
-    gate it describes.
+**Found.** The Blackout API's access token lasts 24 hours
+(`services/auth.ts`) and its refresh token 30 days, renewed with each rotation
+(`services/refreshToken.ts`), so it does not end while it is used; the session
+length caps are off by default. On the homeserver a refreshable access token
+lasts 5 minutes (the default), and neither `refresh_token_lifetime` nor
+`session_lifetime` is set in any template here, so a Matrix refresh token does
+not expire. The MAS template sets no lifetime; the IdP's are its own.
+
+**Done.** Boundary 4 and R4 give the numbers.
+
+## T20. Third parties the threat model did not name
+
+**Claimed.** §3 of `THREAT_MODEL.md` lists the trust boundaries.
+
+**Found.** Four origins the app loads from were not on it. The coalition map
+loads tiles from `tile.openstreetmap.org` whenever it opens, unless the
+operator sets `VITE_MAPLIBRE_STYLE_URL` (no deployment file here does), which
+sends OpenStreetMap the viewer's network address and the area on screen. The
+sign-up page loads Google's reCAPTCHA script if the homeserver asks for a
+CAPTCHA (none of the templates does). A public creator page (`/@handle`)
+fetches the store from `api.freeblackmarket.com` and shows its images from
+wherever they are hosted. With a Giphy or Tenor key on the API (none by
+default), the GIF picker shows thumbnails from the provider. The strict CSP in
+`infra/nginx/snippets/security-headers.conf` would block these where it is
+applied; the deployed client serves no CSP that does (`KNOWN_LIMITATIONS.md`).
+
+**Done.** §3 gains boundaries 8 to 10. Whether to self-host tiles or ask
+before loading them is decision 8.
+
+## T21. "Signed releases" and "reproducible builds"
+
+**Claimed.** `THREAT_MODEL.md` A8 ("signed releases"), A11 ("Yes —
+addressed by signed releases + reproducible builds"), §3 boundary 5 ("Signed
+(cosign) artifacts move the trust boundary"), R5 ("Sigstore-keyless cosign
+signatures pinned to the release workflow identity");
+`docs/security/release-signing.md` listed desktop builds among what is
+signed.
+
+**Found.** `release.yml` signs the image and the release files with cosign
+when a `v*` tag is pushed. No tag exists on the remote, so it has never run,
+and there is no release. Nothing makes builds reproducible. `release.yml` has
+no desktop job; the desktop workflow signs only for Tauri's updater, whose
+public key in `blackout-desktop/src-tauri/tauri.conf.json` is the literal
+`${TAURI_UPDATER_PUBKEY}`, which Tauri does not expand. The check pinned to
+the workflow identity is a script (`tools/release/verify-release.sh`) that
+nothing runs.
+
+**Done.** A8, A11, boundary 5, R5 and `release-signing.md` say so. Decision 10.
+
+## T22. Plugin bundles: "the client refuses to install if the key id is not on its pinned keyset"
+
+**Claimed.** `THREAT_MODEL.md` §6a: a malicious bundle is "Mitigated by
+requiring an Ed25519/HMAC signature envelope ... The blackout client refuses
+to install if the key id is not on its pinned keyset."
+
+**Found.** The key id check is real, but the only key the client pins is
+`fbm-dev-hmac`, an HMAC secret written in its source
+(`features/monetization/install/pluginSignature.ts`: `hmac:6465762d68616d63`,
+"dev-hamc"). The override reads `process.env`, which the browser build does
+not define, so the literal ships. `setPluginPublishingKeys` is called only by
+tests, and the API's stub marketplace signs with the same secret. The check
+runs in the live app (`pluginInstaller.ts`, through the entitlement hydrator
+`main.tsx` mounts). Anyone with the client can sign a bundle it will install;
+what remains between such a bundle and the person is the sandbox (a
+`srcdoc` iframe with a capability-gated bridge).
+
+**Said, not fixed.** §6a now says the mitigation is not in effect. A real fix
+needs the marketplace's Ed25519 publishing keyset pinned at build time and the
+development key left out of production builds: decision 9.
+
+## T23. Ballots and audit logs: "Hash chain + sigs", "tamper-evident", "WORM"
+
+**Claimed.** `THREAT_MODEL.md` §5: governance ballots, "Tamper-evident ledger
+| Hash chain + sigs"; audit logs, "WORM"; §4: "Audit logs (tamper-evident)".
+
+**Found.** A ballot is a row in `vote_entries` (who, which vote, which choice,
+weight), tallied by counting; there is no hash, previous-hash or signature
+column and nothing checks one. The only audit table,
+`subscription_audit_events`, is written with an upsert (`ON CONFLICT ... DO
+UPDATE`), so a row with the same id is overwritten; no trigger, rule or
+`REVOKE` protects it, and no deployment file configures write-once storage.
+The one hash-chained, signed log in the repository is the CRDT event log in
+`apps/blackout-server/blackout_runtime/runtime.py`, used only by its tests.
+
+**Done.** §4 and §5 say what the rows are.
+
+## T24. Key transparency: "atomically rewritten", witnesses on replicas, a cross-process test
+
+**Found.** `JsonFileKtStorage` writes over the file itself (`writeFileSync`,
+no temporary file and rename); an empty file loads as an empty log. Each API
+process keeps its own log and its own witness, built from its environment;
+no deployment file sets a witness seed or a log file, and nothing gossips tree
+heads. The test called cross-process opens two storages one after the other in
+one process, and the file holds 26 tests, not 27.
+
+**Done.** `docs/security/key-transparency.md` and R5 say so.
+
+## T25. Passkeys: "Status: shipped"
+
+**Found.** The API's WebAuthn endpoints exist and verify, but answer only with
+`WEBAUTHN_ENABLED=1`, which no deployment file sets; no app calls them; sign-in
+starts no session; credentials are kept in memory.
+
+**Done.** The status line of `docs/security/webauthn-passkeys.md` says so.
+
+## T26. "The CI release gate"
+
+**Found.** No workflow runs `tools/ci/check-blackout-client-release-gate.mjs`,
+directly or through `ci:parity`, and the report it reads is listed in
+`.gitignore`. The staging-signoff runbook said "the release-gate CI job will
+rerun the gate".
+
+**Done.** `KNOWN_LIMITATIONS.md` and the runbook say it is run by hand.
+
+## What this record does not cover
+
+The first reading of `TRUST.md`, `THREAT_MODEL.md` and the two security
+documents reported the items above, and each is now a finding. The sentences it
+did not report were read once, not checked one by one.
 
 ## Decisions for the operator to confirm or veto
 
@@ -855,6 +975,17 @@ Other documents:
    expiring file needs, at the least, the sender's app to redact the message
    when it expires, and wording that says other apps and saved copies are
    beyond its reach. Neither is started here.
+7. **Mounting device verification and the devices list** (T18). The emoji
+   verification dialog and a devices page with per-device sign-out exist but
+   are not mounted; mounting them, and enabling QR, is a product change.
+8. **Map tiles** (T20). Set `VITE_MAPLIBRE_STYLE_URL` to tiles the operator
+   hosts, or add a step that asks before the map loads OpenStreetMap's.
+9. **A plugin publishing keyset** (T22). Pin the marketplace's Ed25519
+   publishing keys at build time and leave the development HMAC key out of
+   production builds. Until then a bundle's signature is not a protection.
+10. **The first signed release** (T21). Set a real updater public key, then
+    push a `v*` tag so `release.yml` signs something; until then nothing
+    downloadable is signed.
 
 ## Not verified
 

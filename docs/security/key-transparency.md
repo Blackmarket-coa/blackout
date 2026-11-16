@@ -61,7 +61,14 @@ append-only — no rewrites, no truncations.
 
 Set `KT_LOG_FILE` to a writable path on the API host (e.g.
 `/var/lib/blackout/key-transparency.json`) and the log is loaded from
-that file on boot and atomically rewritten on every append. Without
+that file on boot and rewritten on every append. The rewrite is not
+atomic: `writeFileSync` writes over the file itself, with no temporary
+file and rename, so a crash in the middle can leave it empty or cut
+short, and an empty file loads as an empty log without an error. Two
+processes on one file each keep their own copy and rewrite the file
+from it, so one loses the other's entries. (Until 2026-11-16 this said
+"atomically rewritten"; `docs/security/trust-claims-2026-11-16.md`,
+T24.) Without
 the env var the log defaults to in-memory, which is the right choice
 for unit tests and ephemeral CI runs but explicitly _not_ for
 production.
@@ -80,9 +87,14 @@ fetch `GET /v1/key-transparency/sth` and verify the signature using
 `verifySignedTreeHead` (re-exported in the same module so client and
 auditor run identical code).
 
-Multi-witness deployments work today by running multiple API replicas
-with different seeds and gossiping the STHs out-of-band — clients
-treat divergent witnessed roots as a security incident. Without the
+Multi-witness deployments do not work today. Each API process keeps
+its own log and builds its one witness from its own environment, so the
+operator holds the witness key; replicas would serve different roots in
+normal operation, not only under attack; nothing gossips tree heads;
+and no client checks one. No deployment file here sets
+`KT_WITNESS_ED25519_SEED` or `KT_LOG_FILE`. (Until 2026-11-16 this said
+multi-witness deployments "work today by running multiple API
+replicas".) Without the
 env var the STH endpoint returns an explicitly-unsigned response
 (`scheme: 'none'`), not a forged one.
 
@@ -113,9 +125,10 @@ env var the STH endpoint returns an explicitly-unsigned response
     `packages/api/test/keyTransparency-witness.integration.test.ts`
     (seeded witness: served STH signed by that key, tampered root fails)
     and `packages/api/test/keyTransparency.integration.test.ts`
-    (27 tests covering empty/append/root, RFC 6962 hash vectors,
+    (26 tests covering empty/append/root, RFC 6962 hash vectors,
     inclusion verification across many tree sizes, consistency proofs,
     tampering rejection, JSON-file persistence round-trip + corruption
-    guard + cross-process growth, and Ed25519 witness STH sign/verify
-    including tampering and witness-key-swap rejection).
+    guard, a second storage in the same process reading what the first
+    wrote, and Ed25519 witness STH sign/verify including tampering and
+    witness-key-swap rejection). No test runs two processes.
 -   Threat model entry: `THREAT_MODEL.md` §7 R5.

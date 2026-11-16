@@ -126,8 +126,9 @@ git commit -m "chore(release): staging signoff for <sha>"
 git push -u origin <rc-branch>
 ```
 
-Open the deploy PR; the release-gate CI job will rerun the gate against
-the committed report.
+Open the deploy PR. No CI job runs the gate (there is none), and the
+report is listed in `.gitignore`: run the gate by hand
+(`pnpm guard:blackout-client-release-gate`) and attach its output to the PR.
 
 ## Schema reference
 

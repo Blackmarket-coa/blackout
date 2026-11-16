@@ -1,7 +1,11 @@
 # Native WebAuthn / Passkey Support
 
-Status: **shipped** (gated behind `WEBAUTHN_ENABLED=1`). Verification is
-backed by `@simplewebauthn/server`.
+Status: **server only, off by default.** The API's endpoints answer only
+with `WEBAUTHN_ENABLED=1`, which no deployment file here sets; no app calls
+them; sign-in verifies an assertion and starts no session; credentials and
+challenges are kept in memory. Until 2026-11-16 this said "shipped"
+(`docs/security/trust-claims-2026-11-16.md`, T25). Verification is backed
+by `@simplewebauthn/server`.
 
 This document describes the native WebAuthn / passkey surface in the
 Blackout API and the operator knobs that govern it.

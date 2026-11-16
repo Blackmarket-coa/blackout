@@ -1562,7 +1562,11 @@ in this repository records which commit that was.
 
 ### Release signoff
 
-The CI release gate
+No workflow runs the release gate: it is a script run by hand
+(`pnpm guard:blackout-client-release-gate`), and the report it reads is
+listed in `.gitignore`, so it cannot be committed for CI to check. Until
+2026-11-16 this entry called it "the CI release gate"
+(`docs/security/trust-claims-2026-11-16.md`, T26). The release gate
 (`tools/ci/check-blackout-client-release-gate.mjs`) requires a populated
 `apps/blackout-client/docs/release/staging-signoff.report.json`. The
 generator at `tools/ci/generate-staging-signoff.mjs`
