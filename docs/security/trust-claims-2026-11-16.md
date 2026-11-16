@@ -30,6 +30,7 @@ may decide what to say, and to whom, on the strength of it.
 | T14 | The vault panel (not mounted)                                              | "Your passphrase encrypts everything"; the server stores only ciphertext         | Labels go to the server as typed; the key needs this browser too                 | Fixed (copy) |
 | T15 | Glossary; the purchase delivery notice                                     | A digital good is "delivered via an encrypted dead-drop"; "Open it in Blackout"  | It is downloaded from Library; nothing opens a dead drop                         | Fixed (copy) |
 | T16 | `TRUST.md`: the bot                                                        | "No timeline-read capability at all"; a search with "no hits"                    | True of the code, not the token; the search has hits; other bots can read        | Fixed (copy) |
+| T17 | `THREAT_MODEL.md` R2, `TRUST.md`, the voice UI                             | Call media E2EE "negotiated by default"; "Connected"; "Retry shortly"            | No call starts: the SDK lacks the method; a third-party page loaded unasked      | Fixed        |
 
 T7 was found while checking those sentences and outranks the rest: it has its
 own record,
@@ -732,6 +733,57 @@ when it could decrypt, and that a bridge or bot in a room can read it. The
 table's row gives a search that returns what it says. `trust.html`
 regenerated.
 
+## T17. Calls: "per-call media E2EE ... negotiated by default"
+
+**Claimed.** `THREAT_MODEL.md` R2: "Mitigated: per-call media E2EE (symmetric
+for 1:1/group, broadcast sender keys for townhalls) is negotiated by default in
+`CallProvider.tsx`." `TRUST.md`: "per-call media encryption is negotiated by
+default ... on top of DTLS-SRTP". In the app, after joining a voice channel:
+"Connected", "LIVE", and "Call provider is degraded (...). Retry shortly or
+continue in widget fallback mode."
+
+**Found.**
+
+-   `CallProvider.tsx` starts a call with `client.matrixRTC.startRoomSession`.
+    matrix-js-sdk 40.2.0, the version the app ships with, has no such method:
+    its `MatrixRTCSessionManager` offers `getRoomSession(room)` and
+    `getActiveRoomSession(room)`, and a session is joined with
+    `joinRTCSession`. So every join takes the branch for a missing method: no
+    session, no media keys. The tests that covered calls
+    (`CallProvider.media.test.tsx`) gave the provider a fake client that had
+    the method.
+-   That branch still marked the call as joined. The voice channel showed
+    "Connected" and "LIVE"; the banner said to retry, which cannot help.
+-   Joining then loaded Element Call in a frame from `https://call.element.io`,
+    with the room's ID in the address and the camera and microphone delegated
+    to it, without saying it was another organisation's service. Element saw
+    the person's network address and the room's ID.
+-   The in-call indicator was honest: with no session it said "No media
+    E2EE". §5 of the threat model said "TLS-only today", which contradicted
+    R2.
+
+**Done.**
+
+-   The provider has a `sessionActive` flag, set only when a session starts.
+    The voice channel says "Connected" and "LIVE" only then, and "Not
+    connected" otherwise.
+-   For the missing method the banner says: "Calls cannot start in this
+    version of the app: the Matrix library it is built with does not have the
+    call session it uses, so retrying will not help."
+-   Element Call loads only when the person presses "Open Element Call", after
+    "Element Call opens here as a page from call.element.io, a service run by
+    Element, not by this server. Opening it sends that service your network
+    address and this room's ID."
+-   R2 is Open; §3 gains the boundary to call.element.io; the §5 row says no
+    call has media E2EE; `TRUST.md` says the app cannot start a call itself
+    today and what opening Element Call sends. `KNOWN_LIMITATIONS.md` records
+    how to close it.
+-   Tests: `tests/unit/features/call/callTruth.test.tsx`, which uses a real
+    matrix-js-sdk client: the SDK has no `startRoomSession`; joining does not
+    say "Connected" or "LIVE" and the indicator says "No media E2EE"; the
+    banner; Element Call not loaded until asked, in both modes. The four that
+    check a fix fail on the code before it.
+
 ## Reported, not yet checked
 
 Not in this commit. The sentences of `TRUST.md` (beyond the paragraphs T1, T2,
@@ -740,7 +792,7 @@ T7, T8 and T9 change), of `THREAT_MODEL.md`, of
 and the "CI release gate" sentence of `KNOWN_LIMITATIONS.md` are being checked
 against the code one by one. Each finding is added here, with its fix or its
 explanation, in a commit that follows on the same branch. Until then this
-record covers T1 to T16 only.
+record covers T1 to T17 only.
 
 A first reading of those documents against the code reported the following.
 Each is a report, not yet a finding: none has been checked by a second look or
@@ -750,10 +802,6 @@ Threat model:
 
 -   Device verification and remote sign-out (A7, §3.6): no verification screen
     is mounted; QR verification is not enabled.
--   Call media (A4, R2 "Mitigated", and `TRUST.md` on calls): the call session
-    method the app calls is absent from the SDK version in use, so no call
-    starts; a third-party call page is framed instead. §5 says "TLS-only
-    today" and R2 says "Mitigated": the document contradicts itself.
 -   Governance ballots ("hash chain + sigs") and audit logs ("tamper-evident",
     "WORM"): stored as ordinary rows.
 -   Signed releases and reproducible builds (A11): no tags or releases exist,
@@ -761,7 +809,7 @@ Threat model:
 -   Plugin signatures (§6): the signing secret is in the client source.
 -   "Short-lived" tokens: 24 hours, refresh 30 days.
 -   Third parties missing from §3: a CAPTCHA provider on registration, map
-    tiles on the coalition map, the framed call page.
+    tiles on the coalition map. (The framed call page is T17.)
 
 Other documents:
 

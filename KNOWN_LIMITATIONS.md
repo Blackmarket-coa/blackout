@@ -846,6 +846,27 @@ For the source-of-truth triage with tier/owner detail see
     here does. The marketplace producer profile loads an avatar address typed
     by hand, and shows it only to the producer who typed it.
 
+### Calls: none start through the app, so none are end-to-end encrypted (2026-11-16)
+
+-   **Where:** `apps/blackout-client/src/app/features/call/`. Record:
+    `docs/security/trust-claims-2026-11-16.md`, T17.
+-   **State:** the call provider asks the Matrix SDK for
+    `matrixRTC.startRoomSession`. matrix-js-sdk 40.2.0, the version the app
+    ships with, has no such method (its session manager offers
+    `getRoomSession`), so no call starts through the app's own path and no
+    media key is negotiated; the in-call indicator says "No media E2EE". The
+    tests that covered calls gave the provider a fake client that had the
+    method. Until 2026-11-16 joining a voice channel then showed "Connected"
+    and "LIVE", the banner said "Retry shortly", Element Call loaded from
+    call.element.io at once with the room's ID, and the threat model and the
+    trust page said media encryption was negotiated by default. Now the voice
+    channel says "Not connected", the banner says a retry will not help, and
+    Element Call loads only when asked, after saying it is Element's service
+    and what loading it sends.
+-   **To close it:** build the call session on the SDK's current interface
+    (`getRoomSession(room)`, `joinRTCSession`) with media keys, and test it
+    against the real SDK; or host Element Call on the operator's own domain.
+
 ### Dead drops: not reachable from the app (2026-11-16)
 
 -   **Where:** `apps/blackout-client/src/app/features/deaddrop/`,

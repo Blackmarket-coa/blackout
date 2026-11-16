@@ -12,6 +12,7 @@ import { useAtomValue } from 'jotai';
 import type { MatrixClient, MatrixEvent, RoomState } from 'matrix-js-sdk';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import {
+    MISSING_CALL_SESSION_REASON,
     getActionableCallMessage,
     resolveLivekitFocusFromWellKnown,
     type CallFocusResolution,
@@ -76,7 +77,14 @@ export interface JoinCallOptions {
 
 interface CallContextValue {
     roomId: string | null;
+    /** The person asked to join this room's call; not that a call is running. */
     joined: boolean;
+    /**
+     * A matrixRTC session started and joined. Only then is the person in a
+     * call. With the Matrix SDK the app ships with this stays false: the SDK
+     * has no `matrixRTC.startRoomSession` (trust-claims-2026-11-16.md, T17).
+     */
+    sessionActive: boolean;
     muted: boolean;
     deafened: boolean;
     cameraEnabled: boolean;
@@ -184,6 +192,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
 
     const [roomId, setRoomId] = useState<string | null>(null);
     const [joined, setJoined] = useState(false);
+    const [sessionActive, setSessionActive] = useState(false);
     const [muted, setMuted] = useState(false);
     const [deafened, setDeafened] = useState(false);
     const [cameraEnabled, setCameraEnabled] = useState(false);
@@ -383,6 +392,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         activeDisplayStreamRef.current = null;
         setDisplayStream(null);
         setJoined(false);
+        setSessionActive(false);
         setRoomId(null);
         setMembership({});
         setAudioLevels({});
@@ -415,7 +425,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
                 const matrixRtc = getSessionStarter(client).matrixRTC;
                 if (!matrixRtc?.startRoomSession) {
                     setFocusStatus('degraded');
-                    setFocusReason('matrixRTC startRoomSession unavailable');
+                    setFocusReason(MISSING_CALL_SESSION_REASON);
                     setE2ee({
                         mode,
                         status: 'unavailable',
@@ -432,6 +442,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
                     await session.joinRoomSession?.();
                     activeSessionRef.current = session;
                     setJoined(true);
+                    setSessionActive(true);
                     setE2ee({
                         mode,
                         status: mode === 'off' ? 'disabled' : 'active',
@@ -474,6 +485,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         () => ({
             roomId,
             joined,
+            sessionActive,
             muted,
             deafened,
             cameraEnabled,
@@ -516,6 +528,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
             preferredVideoDeviceId,
             roomId,
             screenSharing,
+            sessionActive,
             updateAudioLevels,
         ]
     );

@@ -145,13 +145,17 @@ Encryption claims are only worth something with the exceptions attached.
     If you name a room, the bot posts the text there unencrypted after the same
     room check.
 -   **Spaces**, which hold hierarchy state and never messages.
--   **Calls and townhall media** use a _different_ mechanism from messages:
-    per-call media encryption is negotiated by default
-    ([`CallProvider.tsx`](apps/blackout-client/src/app/features/call/CallProvider.tsx)),
-    on top of DTLS-SRTP, and the live status is shown in-call. It depends on the
-    operator running a matrixRTC-capable SDK, so treat the in-call indicator as
-    authoritative rather than assuming parity with message encryption. Background
-    in [THREAT_MODEL.md](THREAT_MODEL.md) §7.
+-   **Calls and townhall media.** The app cannot start a call itself today, so
+    it encrypts none: its call path
+    ([`CallProvider.tsx`](apps/blackout-client/src/app/features/call/CallProvider.tsx))
+    asks the Matrix library for a call session that the version the app is
+    built with does not have, and the in-call indicator says "No media E2EE".
+    Until 2026-11-16 this page said per-call media encryption was "negotiated
+    by default". A voice channel or a stage can open Element Call instead, a
+    page from call.element.io that Element runs; the app says so and loads it
+    only when you ask. Loading it sends Element your network address and the
+    room's ID, and what Element's service does with the call is up to Element.
+    Background in [THREAT_MODEL.md](THREAT_MODEL.md) §3 and R2.
 
 ### The distinction we will not blur
 

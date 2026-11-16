@@ -23,6 +23,7 @@ export const VoiceChannel = ({
     const {
         roomId: activeCallRoomId,
         joined,
+        sessionActive,
         joinCall,
         leaveCall,
         membership,
@@ -96,7 +97,9 @@ export const VoiceChannel = ({
                     </div>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    {joined && activeCallRoomId === roomId ? (
+                    {/* LIVE and Connected only for a call that started; joining
+                        alone used to show both (trust-claims-2026-11-16.md, T17). */}
+                    {sessionActive && activeCallRoomId === roomId ? (
                         <span
                             style={{
                                 fontSize: 10,
@@ -121,7 +124,11 @@ export const VoiceChannel = ({
                             padding: '6px 10px',
                         }}
                     >
-                        {joined && activeCallRoomId === roomId ? 'Connected' : 'Join Voice'}
+                        {activeCallRoomId !== roomId || !joined
+                            ? 'Join Voice'
+                            : sessionActive
+                            ? 'Connected'
+                            : 'Not connected'}
                     </button>
                 </div>
             </header>
