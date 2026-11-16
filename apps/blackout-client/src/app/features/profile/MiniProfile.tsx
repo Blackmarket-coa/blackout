@@ -1,6 +1,7 @@
 import { mdToHtml, sanitizeMatrixHtml } from '../../plugins/markdown/matrixMarkdownUtils';
 import AvatarDecoration from './AvatarDecoration';
 import { formatMemberSince } from './profileDisplay';
+import { useProfileImageSrc } from './profileImage';
 import type { MemberProfile } from './profileTypes';
 
 // Old Discord color palette
@@ -27,6 +28,8 @@ export const MiniProfile = ({
     onMention?: (userId: string) => void;
 }) => {
     const preview = (profile.profile.bio ?? '').split('\n').slice(0, 2).join('\n');
+    // Only a picture the homeserver holds is loaded; see profileImage.ts.
+    const bannerSrc = useProfileImageSrc(profile.profile.banner);
 
     return (
         <article
@@ -44,16 +47,16 @@ export const MiniProfile = ({
             <div
                 style={{
                     height: 60,
-                    background: profile.profile.banner
+                    background: bannerSrc
                         ? undefined
                         : 'linear-gradient(135deg, #7289DA 0%, #5865F2 100%)',
                     position: 'relative',
                     flexShrink: 0,
                 }}
             >
-                {profile.profile.banner ? (
+                {bannerSrc ? (
                     <img
-                        src={profile.profile.banner}
+                        src={bannerSrc}
                         alt=""
                         style={{
                             width: '100%',

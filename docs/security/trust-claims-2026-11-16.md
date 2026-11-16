@@ -23,7 +23,7 @@ may decide what to say, and to whom, on the strength of it.
 | T7  | The composer in every encrypted room, `THREAT_MODEL.md`                    | "Not even the server can" read what is sent here; attachments are E2EE           | Files were uploaded unencrypted; only the message was encrypted                  | Part fixed   |
 | T8  | A room with dead drop on: composer, indicator, settings                    | "Dead Drop: message will be queued"; "Anonymize delivery" on the Pro tier        | The message is sent at once; nothing queues or anonymizes                        | Fixed (UI)   |
 | T9  | `TRUST.md`, the composer in an encrypted room                              | Private rooms are end-to-end encrypted                                           | Documents, proposals, objectives and playbooks are room state, unencrypted       | Said         |
-| T10 | The room timeline, member panels, profile card                             | (nothing said)                                                                   | Images were fetched from addresses other people chose                            | Part fixed   |
+| T10 | The room timeline, member panels, profile card, window and page            | (nothing said)                                                                   | Images were fetched from addresses other people chose                            | Fixed        |
 
 T7 was found while checking those sentences and outranks the rest: it has its
 own record,
@@ -405,8 +405,10 @@ every reader go to a server of that person's choosing.
 -   The member panel and the right panel passed the same raw avatar to the
     profile card.
 -   A Blackout profile stores its avatar and banner as plain addresses, and
-    the profile card and page show them as they are. The marketplace producer
-    profile takes an avatar address typed by hand.
+    the profile API accepts any URL for them. The profile card, the profile
+    window, the profile page and the editor's preview showed them as they
+    were. The marketplace producer profile takes an avatar address typed by
+    hand.
 
 Checked and sound: the forum, the members drawer and the reaction viewer
 convert the address with the SDK's `mxcUrlToHttp`, which returns nothing for
@@ -416,10 +418,48 @@ an address that is not `mxc://`.
 holds (`avatarThumbnailUrl` in `utils/media.ts`; `mxcToUrl` for the poster).
 Tests: `tests/unit/utils/media.test.ts`, the avatar cases in
 `PinToggle.test.tsx`, the thumbnail cases in
-`encryptedMediaRenderers.test.tsx`. **Open:** the profile card and page and
-the producer profile. The rule to apply there is the same: show an image only
-when its address is media on this homeserver. Recorded in
-`KNOWN_LIMITATIONS.md`.
+`encryptedMediaRenderers.test.tsx`.
+
+The profile card, window and page, and the editor's preview, now go through
+one rule, `profileImageSrc` in `features/profile/profileImage.ts`. An image is
+loaded only when its address is an `mxc://` address, or this homeserver's own
+media download or thumbnail address. The check is made on the parsed address,
+so a `..` in the path, a look-alike host, a user name in front of the host,
+another port or plain http does not pass, and the parsed address is what the
+browser is given. The rest of the media API does not pass either: its
+`preview_url` makes the homeserver fetch any address it is handed. The one
+exception is the editor's `blob:` preview of a picture just picked on the
+device, which reaches no network. Tests:
+`tests/unit/features/profile/profileImage.test.ts` (the rule) and
+`profileImages.test.tsx` (the four views, given a profile whose owner pointed
+both images at a server of their own); 14 of the 20 tests in the second file
+fail on the code before this change, and the 6 that pass are the cases that
+should load. Sixteen mutations of the rule and its five call sites: fifteen
+caught; the survivor removes a guard that the address parse already covers.
+
+Checked and left as they are:
+
+-   The producer profile is mounted in one place, the creator dashboard
+    (`<ProducerProfile editable />`, with no user id), so it only ever shows
+    producers their own avatar: the address it loads is one the viewer typed.
+    A view that shows it to buyers would need the same rule.
+-   The server-rendered share pages (`packages/api/src/routes/sharePreview.ts`,
+    `campaignPreview.ts`) put an inviter's avatar or a coalition banner in
+    `og:image`. A browser does not fetch that; link-preview services do, from
+    their own servers.
+-   A Discord-compatible webhook's `avatar_url` is copied into the message it
+    posts as `m.blackout.origin_sender_avatar_url`. Nothing in this app reads
+    that field.
+
+How long: the avatar has been loaded this way since the profile components
+were added (6a750e8b34, 2026-03-20). The device of anyone who opened a profile
+whose owner had stored an outside address fetched it, and that server saw the
+device's network address and the time. That cannot be undone.
+
+What remains is how Matrix media works: a file on another Matrix server loads
+through this homeserver, so that server sees the homeserver, not the reader.
+It can still tell that someone here asked for the file, and when, the first
+time anyone here does; after that the homeserver answers from its own copy.
 
 A side effect worth knowing: in the timeline a member's `mxc://` avatar was
 being used as an image source as it was, which no browser can load. Avatars

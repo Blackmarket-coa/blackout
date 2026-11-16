@@ -16,6 +16,7 @@ import ProfileLayoutEditor from './ProfileLayoutEditor';
 import CircleMapBlock from './CircleMapBlock';
 import { fetchProfilePalettes } from './profileClient';
 import { syncStatusToPresence } from './customStatus';
+import { useProfileImageSrc } from './profileImage';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { useMediaAuthentication } from '../../hooks/useMediaAuthentication';
 import { uploadMedia } from '../../utils/media';
@@ -110,6 +111,9 @@ export const ProfileEditor = ({ saveProfile = saveProfileDefault }: ProfileEdito
     // their progress, so the editor can show them as locked rather than hide them.
     const [palettes, setPalettes] = useState<PaletteAvailability[]>([]);
     const hardenImage = useHardenAvatarImage();
+    // The preview follows the rule every profile view follows (profileImage.ts),
+    // so the editor shows the banner other people will be shown, or none.
+    const bannerSrc = useProfileImageSrc(profile.profile.banner);
     const useAuthentication = useMediaAuthentication();
 
     const bioLength = useMemo(() => profile.profile.bio?.length ?? 0, [profile.profile.bio]);
@@ -280,7 +284,7 @@ export const ProfileEditor = ({ saveProfile = saveProfileDefault }: ProfileEdito
 
             <section>
                 <h4>Banner upload with crop</h4>
-                {profile.profile.banner ? (
+                {bannerSrc ? (
                     <div
                         style={{
                             borderRadius: 10,
@@ -290,7 +294,7 @@ export const ProfileEditor = ({ saveProfile = saveProfileDefault }: ProfileEdito
                         }}
                     >
                         <img
-                            src={profile.profile.banner}
+                            src={bannerSrc}
                             alt="Banner preview"
                             style={{
                                 width: '100%',

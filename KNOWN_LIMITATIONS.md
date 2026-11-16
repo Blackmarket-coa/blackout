@@ -826,23 +826,25 @@ For the source-of-truth triage with tier/owner detail see
 
 ### Images at addresses chosen by other people (2026-11-16)
 
--   **Where:** the profile card and page (`features/profile/MiniProfile.tsx`,
-    `ProfileModal.tsx`, `ProfilePage.tsx`, `AvatarDecoration.tsx`) and the
-    marketplace producer profile (`features/monetization/marketplace/ProducerProfile.tsx`).
-    Record: `docs/security/trust-claims-2026-11-16.md`, T10.
--   **State:** an image address that someone else chose, handed to the browser
-    as it is, makes the reader's device fetch it, and so tells a server of that
-    person's choosing the reader's network address and the time. Until
-    2026-11-16 the room timeline did this with every member's avatar and with
-    video thumbnails, for everyone looking at the room, and the member panels
-    did it when a profile was opened. Those now load only media the homeserver
-    holds. Still open: a Blackout profile stores its avatar and banner as
-    plain addresses (the editor writes the homeserver's, but the stored value
-    can be any address), and the profile card and page show them as they are;
-    the producer profile takes an avatar address typed by hand. Opening such a
-    profile fetches whatever address its owner stored.
--   **To close it:** show a profile image only when its address is media on
-    this homeserver, as the timeline now does.
+-   **Where:** the room timeline, the member panels, and the profile card,
+    window, page and editor. Record:
+    `docs/security/trust-claims-2026-11-16.md`, T10.
+-   **State:** fixed on 2026-11-16. An image address that someone else chose,
+    handed to the browser as it is, makes the reader's device fetch it, and so
+    tells a server of that person's choosing the reader's network address and
+    the time. The room timeline did this with every member's avatar and with
+    video thumbnails, the member panels did it when a profile was opened, and
+    the profile views did it with the avatar and banner a profile's owner
+    stored (the profile API accepts any URL). All of them now load an image
+    only when its address is media this homeserver serves
+    (`avatarThumbnailUrl` and `mxcToUrl` in `utils/media.ts`, `profileImageSrc`
+    in `features/profile/profileImage.ts`). Profiles and rooms opened before
+    the fix fetched whatever address was there; that cannot be undone.
+-   **What remains:** a file on another Matrix server loads through this
+    homeserver, so that server sees the homeserver, not the reader, but it can
+    tell that someone here asked for the file, and when, the first time anyone
+    here does. The marketplace producer profile loads an avatar address typed
+    by hand, and shows it only to the producer who typed it.
 
 ### Dead drops: not reachable from the app (2026-11-16)
 

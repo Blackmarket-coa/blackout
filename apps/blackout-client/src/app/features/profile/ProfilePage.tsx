@@ -2,6 +2,7 @@ import React, { type CSSProperties } from 'react';
 import { useAtomValue } from 'jotai';
 import { myProfileAtom } from './profileAtoms';
 import { formatMemberSince, profileDisplayLabel } from './profileDisplay';
+import { useProfileImageSrc } from './profileImage';
 import AvatarDecoration from './AvatarDecoration';
 import Nameplate from './Nameplate';
 import ProfileEffect from './ProfileEffect';
@@ -95,12 +96,14 @@ export function ProfilePage({ profile, viewerId, viewerIsFriend = false }: Profi
     const { profile: profileEvent } = target;
     const displayLabel = profileDisplayLabel(target);
     const memberSinceLabel = formatMemberSince(target.memberSince);
+    // Only a picture the homeserver holds is loaded; see profileImage.ts.
+    const bannerSrc = useProfileImageSrc(profileEvent.banner);
 
     return (
         <ProfileThemeScope profileId={target.userId} theme={profileEvent.customTheme}>
             <div style={containerStyle} data-testid="profile-page">
-                {profileEvent.banner ? (
-                    <img src={profileEvent.banner} alt="Profile banner" style={bannerStyle} />
+                {bannerSrc ? (
+                    <img src={bannerSrc} alt="Profile banner" style={bannerStyle} />
                 ) : (
                     <div style={bannerStyle} aria-hidden />
                 )}
