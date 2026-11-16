@@ -68,7 +68,7 @@ const normalizeSchedule = (input: Record<string, unknown> | undefined): DeadDrop
 };
 
 const toDeadDropConfig = (
-    content: Record<string, unknown> | undefined,
+    content: Record<string, unknown> | undefined
 ): { config: DeadDropConfig; migrated: boolean; invalid: boolean } => {
     if (!content) return { config: defaultConfig, migrated: false, invalid: false };
 
@@ -85,14 +85,14 @@ const toDeadDropConfig = (
             typeof content.maxQueueSize === 'number'
                 ? Math.max(1, Math.floor(content.maxQueueSize))
                 : typeof content.queue_limit === 'number'
-                  ? Math.max(1, Math.floor(content.queue_limit))
-                  : defaultConfig.maxQueueSize,
+                ? Math.max(1, Math.floor(content.queue_limit))
+                : defaultConfig.maxQueueSize,
         retentionHours:
             typeof content.retentionHours === 'number'
                 ? Math.max(1, Math.floor(content.retentionHours))
                 : typeof content.retention_hours === 'number'
-                  ? Math.max(1, Math.floor(content.retention_hours))
-                  : defaultConfig.retentionHours,
+                ? Math.max(1, Math.floor(content.retention_hours))
+                : defaultConfig.retentionHours,
     };
 
     const invalid = !content.schedule || typeof content.enabled !== 'boolean';
@@ -169,16 +169,17 @@ export const useSetDeadDrop = (roomId: string) => {
     const actions = useMemo(
         () =>
             createDeadDropMatrixActions({
-                sendEvent: (rid, et, content) => client.sendEvent(rid, et as never, content as never),
+                sendEvent: (rid, et, content) =>
+                    client.sendEvent(rid, et as never, content as never),
                 sendStateEvent: (rid, et, content, stateKey) =>
                     client.sendStateEvent(rid, et as never, content as never, stateKey),
             }),
-        [client],
+        [client]
     );
 
     return useCallback(
         async (config: DeadDropConfig) => actions.setDeadDropConfig(roomId, config),
-        [actions, roomId],
+        [actions, roomId]
     );
 };
 
@@ -187,11 +188,12 @@ export const useDeadDropQueueActions = (roomId: string) => {
     const actions = useMemo(
         () =>
             createDeadDropMatrixActions({
-                sendEvent: (rid, et, content) => client.sendEvent(rid, et as never, content as never),
+                sendEvent: (rid, et, content) =>
+                    client.sendEvent(rid, et as never, content as never),
                 sendStateEvent: (rid, et, content, stateKey) =>
                     client.sendStateEvent(rid, et as never, content as never, stateKey),
             }),
-        [client],
+        [client]
     );
 
     return useMemo(
@@ -209,6 +211,6 @@ export const useDeadDropQueueActions = (roomId: string) => {
                     commandId: crypto.randomUUID(),
                 }),
         }),
-        [actions, roomId],
+        [actions, roomId]
     );
 };
