@@ -29,6 +29,7 @@ may decide what to say, and to whom, on the strength of it.
 | T13 | The welcome steps at the invite entry                                      | "An end-to-end-encrypted space"; "messages are end-to-end encrypted"             | New canopies and most new dens start public and unencrypted                      | Fixed (copy) |
 | T14 | The vault panel (not mounted)                                              | "Your passphrase encrypts everything"; the server stores only ciphertext         | Labels go to the server as typed; the key needs this browser too                 | Fixed (copy) |
 | T15 | Glossary; the purchase delivery notice                                     | A digital good is "delivered via an encrypted dead-drop"; "Open it in Blackout"  | It is downloaded from Library; nothing opens a dead drop                         | Fixed (copy) |
+| T16 | `TRUST.md`: the bot                                                        | "No timeline-read capability at all"; a search with "no hits"                    | True of the code, not the token; the search has hits; other bots can read        | Fixed (copy) |
 
 T7 was found while checking those sentences and outranks the rest: it has its
 own record,
@@ -42,7 +43,8 @@ other people chose.
 T11 to T15 are strings in the app that a first reading reported and a second
 look confirmed: three composer options that said they protected a message, the
 privacy tools panel's "always on", the welcome steps, the vault, and the
-glossary with the purchase delivery notice. The trust
+glossary with the purchase delivery notice. T16 onward are the documents'
+own sentences, checked one by one. The trust
 page's and the threat model's own sentences are being checked one by one; what
 that first reading reported is listed under
 [Reported, not yet checked](#reported-not-yet-checked) below.
@@ -693,6 +695,43 @@ too. Tests: `tests/unit/lib/glossaryTruth.test.ts`, the delivery card case in
 in `packages/api/test/fbm-matrix-bridge.integration.test.ts`; each fails on
 the old text.
 
+## T16. `TRUST.md`: "The server bot has no timeline-read capability at all"
+
+**Claimed.** "No bot or moderation tool can read your encrypted messages. The
+server bot has no timeline-read capability at all — not restricted, absent."
+In the table of things to check: "Search `packages/api/src` for `/messages`,
+`/context/`, `/sync` — there are no hits".
+
+**Found.**
+
+-   The code holds up: every call the API makes to the homeserver's client
+    API is in `packages/api/src/integrations/matrix-client.ts`, and they are
+    room creation, invites, kicks, a directory lookup, `whoami`, reading room
+    state and sending. None reads message events, and the bot has no
+    encryption keys.
+-   "Not restricted, absent" is not true of the capability. The bot's token is
+    a homeserver admin token (the API calls `_synapse/admin` with it to make
+    registration tokens, deactivate accounts and join users to rooms), and an
+    admin token can read any room's messages through the admin API. What is
+    absent is the code.
+-   The search the page gives returns hits: the API's own `/messages` route,
+    YouTube's chat endpoint, and four `/sync` routes that have nothing to do
+    with Matrix. A reader running it could not tell the claim from its
+    refutation.
+-   The Docker deployment runs a second bot by default, the moderation bot
+    (Draupnir), which reads the messages of the unencrypted rooms it
+    protects. It cannot decrypt encrypted ones unless the operator turns on
+    the Pantalaimon proxy for it (`DRAUPNIR_PANTALAIMON_USE`, `false` in the
+    example configuration). The optional `integrations` profile adds six
+    bridges, maubot and hookshot, which read what is sent in the rooms they
+    are in, encrypted rooms included when set up for encryption.
+
+**Done.** The paragraph says what the Blackout bot does and does not do, that
+the limit is in the code and not the token, what the moderation bot reads and
+when it could decrypt, and that a bridge or bot in a room can read it. The
+table's row gives a search that returns what it says. `trust.html`
+regenerated.
+
 ## Reported, not yet checked
 
 Not in this commit. The sentences of `TRUST.md` (beyond the paragraphs T1, T2,
@@ -701,7 +740,7 @@ T7, T8 and T9 change), of `THREAT_MODEL.md`, of
 and the "CI release gate" sentence of `KNOWN_LIMITATIONS.md` are being checked
 against the code one by one. Each finding is added here, with its fix or its
 explanation, in a commit that follows on the same branch. Until then this
-record covers T1 to T15 only.
+record covers T1 to T16 only.
 
 A first reading of those documents against the code reported the following.
 Each is a report, not yet a finding: none has been checked by a second look or
@@ -731,8 +770,6 @@ Other documents:
 -   `docs/security/webauthn-passkeys.md`: "Status: shipped".
 -   `KNOWN_LIMITATIONS.md`, "Release signoff": no workflow runs the release
     gate it describes.
--   `TRUST.md`: "no timeline-read capability" for the bot, and the search it
-    tells a reader to run.
 
 ## Decisions for the operator to confirm or veto
 
