@@ -8370,8 +8370,9 @@ export class FileBackedDb extends InMemoryDb {
  * inherited from InMemoryDb (served from the in-memory mirror hydrated on
  * boot), and every MUTATOR_SPECS mutator is wrapped to queue a Postgres write
  * after updating the mirror. The mutator returns before that write runs, so a
- * crash, or a write that fails twice (db_write_behind_failures_total), loses
- * it; flushRuntimeStoreWrites awaits the queue where that matters.
+ * crash, or a write the queue gives up (db_write_behind_failures_total: after
+ * its last attempt, db/writeBehindQueue.ts withRetry), loses it;
+ * flushRuntimeStoreWrites awaits the queue where that matters.
  *
  * What is written: an upsert of the record a method returned, or a targeted
  * op (pgDescriptors) that names the rows the call changed, by key or by a
@@ -8561,7 +8562,7 @@ export class PostgresBackedDb extends InMemoryDb {
                 this.queueTargeted(method, setBased, compiled, captures, args, result);
             } catch (err) {
                 // The mirror has changed and Postgres will not: the same loss
-                // condition as a write that failed after its retry. Never
+                // condition as a write given up after its last attempt. Never
                 // thrown into the caller, whose mirror change already stands.
                 dbWriteBehindFailuresTotal.inc({ map: maps.join(','), kind: 'targeted' });
                 log.error('db_write_behind_failed', {
@@ -9010,7 +9011,7 @@ export class PostgresBackedDb extends InMemoryDb {
 
     /**
      * Await the write-behind queue only: every op queued so far has run
-     * (committed, or failed after its retry and been counted). Mirror
+     * (committed, or given up after its last attempt and counted). Mirror
      * refreshes still on the apply chain (a peer's table reload, the
      * rehydrate after a reconnect) are not waited for; they are reads, not
      * durability. flushRuntimeStoreWrites uses this.

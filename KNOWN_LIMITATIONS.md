@@ -739,7 +739,14 @@ shipped (only incremental adoption remains).
     its copy before it starts listening, and nothing re-reads what changed in
     between. Most writes, a sign-out among them, send their notification after
     the write, and a failed send is only logged. A listening connection that
-    dies without an error is not noticed. Such a process keeps its old copy of
+    dies without an error is not noticed. Since 2026-11-16 the pool's TCP
+    keepalive turns one whose server's host has gone silent into an error: in
+    a run here it failed about 20.4 s after its last traffic
+    (`pg_notify_listen_error`, `read ETIMEDOUT`) and was replaced 2 s after
+    the network came back, re-reading every table as any reconnect does
+    ("Dropped Postgres connections"). One to a server process that stops
+    answering on a host that stays up is still not noticed. Such a process
+    keeps its old copy of
     the row until it restarts, or until something makes it re-read the row (a
     later change to the same row, or its listening connection failing and
     being replaced). For example, after you sign out, such a process can keep
@@ -818,6 +825,43 @@ pool discards an idle one, and the store gives a connection whose query failed
 back with that error, so the pool closes it and the next checkout gets another
 connection (a new one only when none is idle).
 
+Since 2026-11-16 the pool also turns TCP keepalive on for its connections and
+bounds the wait for one, 10 s each by default (`BLACKOUT_PG_KEEPALIVE_DELAY_MS`,
+`BLACKOUT_PG_CONNECT_TIMEOUT_MS`):
+
+-   Keepalive probes a connection once it has carried nothing for 10 s, idle in
+    the pool or waiting for the answer to a statement the server has
+    acknowledged. Where the server's host has gone silent (fenced, powered off,
+    or a network fault that drops everything), the connection then fails with
+    `ETIMEDOUT`: about 20.4 s after a statement's last traffic with the default
+    in the runs here, and 12.3 s with a 2 s delay (Linux, Node 22 with libuv
+    1.51.0, which sends the probes 1 s apart and gives up after 10; the
+    server's port dropped both ways with iptables, the statement waiting on a
+    lock). The drop is logged and counted like any other (`held` here), and a
+    write-behind write on such a connection is tried again as one whose
+    connection had ended: in the run here it landed on its retry once the
+    network was back. Before, such a connection waited until the process
+    restarted.
+-   Keepalive does not end a connection to a server process that stops
+    answering on a host that stays up (that host's kernel answers the probes),
+    nor one carrying a statement whose bytes the server's host had not yet
+    acknowledged when it went silent: TCP's retransmission governs that one,
+    about 15 minutes at Linux's `tcp_retries2` default.
+-   The connection timeout bounds `pool.connect()`: a new connection not made
+    within 10 s (the TCP connection and the start-up exchange; before, a host
+    that answers nothing held it for the kernel's SYN retries, about 2 minutes),
+    and, because pg-pool (3.13.0) applies the same setting to it, a caller
+    waiting for a free connection while all ten are out. Either way
+    `pool.connect()` rejects. The write-behind queue counts that as a failure
+    that gets one retry, so a write that cannot get a connection within 10 s
+    twice is given up, logged and counted; a change notification that cannot
+    is logged as `pg_notify_publish_failed`, and a process that does not
+    hear of that change keeps its old copy as "Several API processes on one
+    database" says. The pool holds the LISTEN and
+    leader-lock connections, one write at a time and a short-lived connection
+    for each change notification, so all ten are out only when the server has
+    slowed far enough for notifications to pile up.
+
 A drop is logged (`pg_pool_client_error`) and counted
 (`db_pool_client_errors_total`) when the connection itself reports it: sitting
 in the pool (`state` `idle`), or checked out (`held`). A drop that lands on a
@@ -825,18 +869,27 @@ statement in flight goes to that statement first, as the server's error, and
 the connection reports it only when its socket closes, a moment later. Code
 that gives the connection back with that error at once has the pool close it
 before then, and such a drop is that statement's error and nothing more: no
-`pg_pool_client_error` line and no count. A write-behind write that is a
-single statement goes that way. So do a lock check on the background-leader
-lock's connection (the loss is logged as `background_leader_lost`,
-`lock_check_failed`) and the LISTEN connection's LISTEN. Where the connection
-is still checked out when its socket closes, the drop is also logged and
-counted, as `held`:
+`pg_pool_client_error` line and no count. A lock check on the
+background-leader lock's connection goes that way (the loss is logged as
+`background_leader_lost`, `lock_check_failed`), and so does the LISTEN
+connection's LISTEN. Where the connection is still checked out when its
+socket closes, the drop is also logged and counted, as `held`:
 
 -   where the code sends another statement on the connection before giving it
-    back, since that statement waits until the socket closes, as the store
-    does with the ROLLBACK after a statement inside a targeted write's
-    transaction (or inside the boot check of its statements) fails, and as a
-    migration does with its ROLLBACK and the unlock of the migration lock;
+    back, since that statement waits until the socket closes. The
+    write-behind queue does so after a failed attempt at a write: since
+    2026-11-15 it sends the connection one more statement (the write-behind
+    item under "What remains"), and waits up to 5 s for what comes of it.
+    Before then a write that was a single statement gave its connection
+    back at once, and a drop under it was that statement's error and
+    nothing more. A connection whose socket has still not closed after
+    those 5 s goes back without having reported a drop: its line is
+    `pg_connection_unanswered`, nothing is added to
+    `db_pool_client_errors_total`, and the queue then destroys its socket,
+    which is not counted either. The store does so with the ROLLBACK
+    after a statement inside a targeted write's transaction (or inside the
+    boot check of its statements) fails, and a migration with its ROLLBACK
+    and the unlock of the migration lock;
 -   where the code passes the failure over and keeps the connection, as the
     leader lock's holder does with the statement it sends about the
     idle-session timeout (below), and the LISTEN connection with its
@@ -993,16 +1046,153 @@ What remains:
     setting, and against a stand-in; for the LISTEN connection, against a
     stand-in.
 
--   A write-behind write gets one immediate retry, on another connection than
-    the one it failed on (a new one only when none is idle). A write whose own
-    connection was dropped under it lands on that retry; one attempted while
-    Postgres cannot be reached or is restarting fails twice
-    (`db_write_behind_failed`, `db_write_behind_failures_total`), though the
-    request that made it was answered 2xx, and the queue does not try it again.
-    The change is then only in that process's memory, and it is lost unless the
-    same process writes that row again first, which only a later write that
-    saves the whole row does (most writes save the one row their call
-    returned, whole: see "Several API processes on one database"). A delete,
+-   A write-behind write that fails is tried again at once, on another
+    connection than the one it failed on (a new one only when none is idle).
+    How often depends on what failed. Since 2026-11-15 the queue sends the
+    connection of a failed attempt one more statement (`SELECT 1`) before it
+    gives the connection back, and a connection on which that statement
+    fails had ended: the server ended the session, or the connection was
+    reset.
+
+    -   An attempt whose connection had ended is made again on another
+        connection: once for every other connection the pool held when the
+        first one was found ended, and once more. Any of those may have
+        ended with the first, where the server ends several of the process's
+        sessions together and goes on taking connections (a failover, every
+        session of the role terminated). The pool hands an idle connection
+        out without knowing that, until the process has read what the server
+        sent on it. Each failed attempt has its connection destroyed, so the
+        write runs out of connections that were there at the first failure
+        before it runs out of attempts: it lands earlier, or one attempt is
+        on a connection opened after that failure.
+    -   Any other failure gets one retry, as every failure did before: no
+        connection to be had, a statement that failed on a connection that
+        still answers, and a connection that gave no answer (the two kinds
+        below), which is not known to have ended.
+
+    That is twelve attempts at most with the pool's default of ten
+    connections: the first, one for each of the nine others, one more, and
+    the one retry.
+
+    Two kinds of connection give no answer:
+
+    -   One that neither answers that statement nor closes within 5 s: the
+        server's FATAL arrived and the close after it did not, or something
+        between the API and the server keeps the connection open and passes
+        nothing on. The queue stops waiting, logs
+        `pg_connection_unanswered`, gives the connection back to be
+        destroyed, and destroys its socket. Giving it back alone is not
+        enough: node-postgres's end() closes only the API's side of a
+        connection whose last statement waits behind a FATAL, and where the
+        other side never closes, that socket, its client and the waiting
+        statement would stay for as long as the connection is held open. A
+        targeted write whose transaction is open waits those 5 s once, at
+        its ROLLBACK, and is not sent `SELECT 1` after it. A connection that
+        would have closed later is counted with the failures that get one
+        retry, as every failure was before 2026-11-15.
+
+        The wait costs time, and not only the write's: the queue runs its
+        writes one after another, so every write behind it waits too, and a
+        write whose two attempts both meet such a connection waits 10 s.
+        That reaches the default `SHUTDOWN_TIMEOUT_MS` (10 s, after which
+        the process exits with `shutdown_forced_after_timeout`), so a drain
+        at SIGTERM that meets two such connections can be cut off with the
+        writes behind them unwritten, where develop's code tried a
+        single-statement write again at once.
+
+    -   One on which node-postgres failed the write's statement itself, and
+        still holds it: a value it cannot turn into a parameter (an object
+        that holds a BigInt or a cycle, or whose `toJSON` or `toPostgres`
+        throws). node-postgres sends nothing more on such a connection, so
+        the queue sends it nothing either: no `SELECT 1`, and for a
+        targeted write no ROLLBACK (the server ends the open transaction
+        when the connection is destroyed). From 2026-11-08, when targeted
+        writes came in, until 2026-11-15, a targeted write with such a
+        statement held the queue for good, with nothing logged: its
+        ROLLBACK waited behind the statement node-postgres held, and every
+        later write stayed in memory.
+
+    The queue's own 5 s cover only the statement it sends after a failure.
+    The write's own statements have no timeout of their own: since
+    2026-11-16 the pool's TCP keepalive ends one whose server's host has
+    gone silent (about 20 s, above), and its connection timeout bounds the
+    wait for a connection (10 s), but a server process that stops answering
+    on a host that stays up still holds the queue while the write is in
+    flight, as it did before.
+
+    Where `DATABASE_URL` carries `query_timeout` (node-postgres's read
+    timeout; no file in this repository sets it, checked 2026-11-15), that
+    timer fails a statement in the client while the server is still at it,
+    on a connection that is up. node-postgres still holds the statement, so
+    the queue sends that connection nothing, and the failure gets the one
+    retry: a write whose statement is that slow on both attempts is logged
+    as given up, though the server may still finish what it was sent. In a
+    run here with a 300 ms timeout and a table lock held for 1.2 s, the
+    write was logged as given up after 0.6 s and its row was in Postgres
+    once the lock was released. The `SELECT 1` after a failure is under
+    that timer too: where it runs out before the queue's 5 s, a connection
+    that gave neither an answer nor a close is counted as ended, not as one
+    that gave no answer (in a run here with a 2 s timeout, behind a proxy
+    that kept the server's close from the API, after 2 s; the write then
+    landed on another connection).
+
+    Before 2026-11-15 the one retry could be handed an idle connection that
+    the server had ended in the same instant as the write's own, and the
+    write was dropped with Postgres up. In the runs here (one write in
+    flight; one idle pooled connection, or two in a few of the tries; every
+    session of the API ended by one statement) that lost 32 of 160 writes
+    before the change and none of 280 on its first version, 16 of which
+    were handed a second ended connection before they landed. Run again end
+    to end through the API on the code as it is now (one API on its own
+    database, 40 writes a run, every request answered 201), it lost none
+    of 80, where develop's code lost 8 of 40 in the same session: 8 of the
+    31 tries that had an idle pooled connection when the sessions were
+    ended, none of the 9 that had none. None of the 80 was handed a second
+    ended connection; that case is reached in the real-PostgreSQL tests
+    through a proxy that keeps the server's FATAL from idle connections
+    until they are used.
+
+    What still loses a write. It is given up at its second failure of the
+    kind that gets one retry, whichever two those are, or when its attempts
+    for ended connections are used up:
+
+    -   Postgres cannot be reached or is restarting. The attempts follow one
+        another with no wait between them, so a write attempted while
+        Postgres refuses connections has been refused twice within
+        milliseconds, whatever ended connections it met first. A restart of
+        the server under four writers here left 31 of 520 requests that
+        were answered 201 without a row, as it did before the change (32 of
+        437). Those runs were on the first version of the 2026-11-15
+        change, which waited for an answer with no bound; the bound added
+        since does not change what a refused connection meets.
+    -   Every one of the attempts above finds its connection ended, the one
+        on a connection opened after the first failure included: the server
+        is ending the sessions it has just taken.
+    -   Postgres refuses the statement on connections that answer.
+    -   Its connections give no answer, 5 s each time.
+    -   node-postgres cannot send the write (a value it cannot turn into a
+        parameter): it fails so on every attempt. What node-postgres had
+        built of the failed statement also goes out with the next messages
+        the process sends, on any connection (pg-protocol 1.13.0 builds
+        the messages of every connection in the same two buffers, and a
+        statement that fails half-built stays in them). In the runs here the
+        write's own retry could not connect ("Connection terminated
+        unexpectedly"), and where a parameter had been built before the one
+        that failed, the first attempt of the next write was refused
+        (`08P01`, invalid message format) and that write landed on its
+        retry. The review of 2026-11-15 found no request that puts such a
+        value in a write. pg-protocol 1.15.0 and later empty that buffer
+        when a value fails, and node-postgres 8.20.0 accepts them
+        (`pg-protocol ^1.13.0`); moving the lockfile to one is a change of
+        its own, not made here.
+
+    Such a write is logged and counted (`db_write_behind_failed`,
+    `db_write_behind_failures_total`), though the request that made it was
+    answered 2xx, and the queue does not try it again. The change is then
+    only in that process's memory, and it is lost unless the same process
+    writes that row again first, which only a later write that saves the
+    whole row does (most writes save the one row their call returned,
+    whole: see "Several API processes on one database"). A delete,
     revocation, consume or sweep writes only what its own call changed, so it
     never writes the lost change. The change leaves memory unwritten when the
     process restarts, when a re-hydrate (or a table reload asked for by a
@@ -1017,6 +1207,7 @@ What remains:
     after each failure, and the reload takes as long as the tables do to
     read): an account created during the outage can no longer sign in, even
     on the replica that created it.
+
 -   A peer replica's change that this replica cannot read back at that moment
     (no connection to be had) is logged (`pg_store_peer_refresh_failed`) and
     leaves that row stale in this replica's mirror until it changes again or
