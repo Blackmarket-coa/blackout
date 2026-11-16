@@ -85,163 +85,177 @@ export const CreatePostModal = ({
                 tabbableOptions: { displayCheck: 'none' },
             }}
         >
-        <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby={titleId}
-            data-testid="modal-createPost"
-            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)', zIndex: 50 }}
-            onClick={onClose}
-        >
             <div
-                style={{
-                    width: 700,
-                    maxWidth: '96vw',
-                    margin: '8vh auto',
-                    border: '1px solid var(--border-default)',
-                    borderRadius: 12,
-                    background: 'var(--bg-surface)',
-                    padding: 12,
-                    position: 'relative',
-                }}
-                onClick={(event) => event.stopPropagation()}
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby={titleId}
+                data-testid="modal-createPost"
+                style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)', zIndex: 50 }}
+                onClick={onClose}
             >
-                <button
-                    type="button"
-                    aria-label="Close"
-                    onClick={onClose}
-                    disabled={sending}
+                <div
                     style={{
-                        position: 'absolute',
-                        top: 8,
-                        right: 8,
-                        background: 'transparent',
-                        border: 'none',
-                        color: 'var(--text-secondary)',
-                        fontSize: 22,
-                        lineHeight: 1,
-                        cursor: 'pointer',
-                        padding: 4,
+                        width: 700,
+                        maxWidth: '96vw',
+                        margin: '8vh auto',
+                        border: '1px solid var(--border-default)',
+                        borderRadius: 12,
+                        background: 'var(--bg-surface)',
+                        padding: 12,
+                        position: 'relative',
                     }}
+                    onClick={(event) => event.stopPropagation()}
                 >
-                    ×
-                </button>
-                <h3 id={titleId} style={{ marginTop: 0 }}>
-                    Create New Post
-                </h3>
-
-                <label style={{ display: 'grid', gap: 6, marginBottom: 10 }}>
-                    <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                        Title (first line)
-                    </span>
-                    <input
-                        value={title}
-                        onChange={(event) => setTitle(event.target.value)}
-                        placeholder="Post title"
-                        style={{
-                            border: '1px solid var(--border-default)',
-                            borderRadius: 8,
-                            background: 'var(--bg-input)',
-                            color: 'var(--text-primary)',
-                            padding: '8px 10px',
-                        }}
-                    />
-                </label>
-
-                <div style={{ marginBottom: 10 }}>
-                    <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 6 }}>
-                        Body (rich text editor)
-                    </div>
-                    <div
-                        style={{
-                            border: '1px solid var(--border-default)',
-                            borderRadius: 8,
-                            padding: 8,
-                            minHeight: 120,
-                        }}
-                    >
-                        <Slate
-                            editor={editor}
-                            initialValue={value}
-                            onValueChange={(next) => setValue(next)}
-                        >
-                            <Editable placeholder="Write your forum post…" />
-                        </Slate>
-                    </div>
-                </div>
-
-                <div style={{ marginBottom: 10 }}>
-                    <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 6 }}>
-                        Tags
-                    </div>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                        {tags.map((tag) => {
-                            const selected = selectedTags.includes(tag.name);
-                            return (
-                                <button
-                                    key={tag.name}
-                                    type="button"
-                                    onClick={() => {
-                                        setSelectedTags((prev) =>
-                                            selected
-                                                ? prev.filter((item) => item !== tag.name)
-                                                : [...prev, tag.name],
-                                        );
-                                    }}
-                                    style={{
-                                        border: `1px solid ${tag.color}`,
-                                        borderRadius: 999,
-                                        background: selected ? tag.color : 'transparent',
-                                        color: selected ? '#fff' : tag.color,
-                                        padding: '3px 8px',
-                                        fontSize: 12,
-                                    }}
-                                >
-                                    {tag.emoji} {tag.name}
-                                </button>
-                            );
-                        })}
-                    </div>
-                    {requireTag && selectedTags.length === 0 ? (
-                        <div style={{ marginTop: 6, color: 'var(--warning)', fontSize: 12 }}>
-                            At least one tag is required.
-                        </div>
-                    ) : null}
-                </div>
-
-                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
                     <button
                         type="button"
+                        aria-label="Close"
                         onClick={onClose}
+                        disabled={sending}
                         style={{
-                            border: '1px solid var(--border-default)',
-                            borderRadius: 8,
-                            background: 'var(--bg-input)',
-                            color: 'var(--text-primary)',
-                            padding: '6px 10px',
+                            position: 'absolute',
+                            top: 8,
+                            right: 8,
+                            background: 'transparent',
+                            border: 'none',
+                            color: 'var(--text-secondary)',
+                            fontSize: 22,
+                            lineHeight: 1,
+                            cursor: 'pointer',
+                            padding: 4,
                         }}
                     >
-                        Cancel
+                        ×
                     </button>
-                    <button
-                        type="button"
-                        onClick={() => void submit()}
-                        disabled={
-                            !title.trim() || sending || (requireTag && selectedTags.length === 0)
-                        }
-                        style={{
-                            border: '1px solid var(--border-default)',
-                            borderRadius: 8,
-                            background: 'var(--accent-primary)',
-                            color: 'var(--bg-surface)',
-                            padding: '6px 10px',
-                        }}
-                    >
-                        {sending ? 'Posting…' : 'Post'}
-                    </button>
+                    <h3 id={titleId} style={{ marginTop: 0 }}>
+                        Create New Post
+                    </h3>
+
+                    <label style={{ display: 'grid', gap: 6, marginBottom: 10 }}>
+                        <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                            Title (first line)
+                        </span>
+                        <input
+                            value={title}
+                            onChange={(event) => setTitle(event.target.value)}
+                            placeholder="Post title"
+                            style={{
+                                border: '1px solid var(--border-default)',
+                                borderRadius: 8,
+                                background: 'var(--bg-input)',
+                                color: 'var(--text-primary)',
+                                padding: '8px 10px',
+                            }}
+                        />
+                    </label>
+
+                    <div style={{ marginBottom: 10 }}>
+                        <div
+                            style={{
+                                fontSize: 12,
+                                color: 'var(--text-secondary)',
+                                marginBottom: 6,
+                            }}
+                        >
+                            Body (rich text editor)
+                        </div>
+                        <div
+                            style={{
+                                border: '1px solid var(--border-default)',
+                                borderRadius: 8,
+                                padding: 8,
+                                minHeight: 120,
+                            }}
+                        >
+                            <Slate
+                                editor={editor}
+                                initialValue={value}
+                                onValueChange={(next) => setValue(next)}
+                            >
+                                <Editable placeholder="Write your forum post…" />
+                            </Slate>
+                        </div>
+                    </div>
+
+                    <div style={{ marginBottom: 10 }}>
+                        <div
+                            style={{
+                                fontSize: 12,
+                                color: 'var(--text-secondary)',
+                                marginBottom: 6,
+                            }}
+                        >
+                            Tags
+                        </div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                            {tags.map((tag) => {
+                                const selected = selectedTags.includes(tag.name);
+                                return (
+                                    <button
+                                        key={tag.name}
+                                        type="button"
+                                        onClick={() => {
+                                            setSelectedTags((prev) =>
+                                                selected
+                                                    ? prev.filter((item) => item !== tag.name)
+                                                    : [...prev, tag.name]
+                                            );
+                                        }}
+                                        style={{
+                                            border: `1px solid ${tag.color}`,
+                                            borderRadius: 999,
+                                            background: selected ? tag.color : 'transparent',
+                                            color: selected ? '#fff' : tag.color,
+                                            padding: '3px 8px',
+                                            fontSize: 12,
+                                        }}
+                                    >
+                                        {tag.emoji} {tag.name}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                        {requireTag && selectedTags.length === 0 ? (
+                            <div style={{ marginTop: 6, color: 'var(--warning)', fontSize: 12 }}>
+                                At least one tag is required.
+                            </div>
+                        ) : null}
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+                        <button
+                            type="button"
+                            onClick={onClose}
+                            style={{
+                                border: '1px solid var(--border-default)',
+                                borderRadius: 8,
+                                background: 'var(--bg-input)',
+                                color: 'var(--text-primary)',
+                                padding: '6px 10px',
+                            }}
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => void submit()}
+                            disabled={
+                                !title.trim() ||
+                                sending ||
+                                (requireTag && selectedTags.length === 0)
+                            }
+                            style={{
+                                border: '1px solid var(--border-default)',
+                                borderRadius: 8,
+                                background: 'var(--accent-primary)',
+                                color: 'var(--bg-surface)',
+                                padding: '6px 10px',
+                            }}
+                        >
+                            {sending ? 'Posting…' : 'Post'}
+                        </button>
+                    </div>
                 </div>
             </div>
-        </div>
         </FocusTrap>
     );
 };

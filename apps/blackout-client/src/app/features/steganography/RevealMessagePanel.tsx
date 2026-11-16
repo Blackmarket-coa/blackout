@@ -53,7 +53,7 @@ export const RevealMessagePanel = ({ imageUrl }: RevealMessagePanelProps) => {
                                 setError(
                                     err instanceof Error
                                         ? err.message
-                                        : 'Failed to decode hidden content.',
+                                        : 'Failed to decode hidden content.'
                                 );
                             } finally {
                                 setLoading(false);

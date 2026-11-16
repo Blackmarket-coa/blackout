@@ -188,7 +188,7 @@ export const ForumView = ({ roomId }: { roomId: string }) => {
 
     const selectedPost = useMemo(
         () => posts.data.find((post) => post.eventId === selectedPostId) ?? null,
-        [posts.data, selectedPostId],
+        [posts.data, selectedPostId]
     );
 
     const repliesFromTimeline = useMemo(() => {
