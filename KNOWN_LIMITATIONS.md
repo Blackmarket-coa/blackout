@@ -840,8 +840,9 @@ socket closes, the drop is also logged and counted, as `held`:
     back at once, and a drop under it was that statement's error and
     nothing more. A connection whose socket has still not closed after
     those 5 s goes back without having reported a drop: its line is
-    `pg_connection_unanswered`, and nothing is added to
-    `db_pool_client_errors_total`. The store does so with the ROLLBACK
+    `pg_connection_unanswered`, nothing is added to
+    `db_pool_client_errors_total`, and the queue then destroys its socket,
+    which is not counted either. The store does so with the ROLLBACK
     after a statement inside a targeted write's transaction (or inside the
     boot check of its statements) fails, and a migration with its ROLLBACK
     and the unlock of the migration lock;
@@ -1035,12 +1036,26 @@ What remains:
         server's FATAL arrived and the close after it did not, or something
         between the API and the server keeps the connection open and passes
         nothing on. The queue stops waiting, logs
-        `pg_connection_unanswered`, and gives the connection back to be
-        destroyed. A targeted write whose transaction is open waits those
-        5 s once, at its ROLLBACK, and is not sent `SELECT 1` after it. The
-        5 s decide nothing but this: a connection that would have closed
-        later is counted with the failures that get one retry, as every
-        failure was before 2026-11-15.
+        `pg_connection_unanswered`, gives the connection back to be
+        destroyed, and destroys its socket. Giving it back alone is not
+        enough: node-postgres's end() closes only the API's side of a
+        connection whose last statement waits behind a FATAL, and where the
+        other side never closes, that socket, its client and the waiting
+        statement would stay for as long as the connection is held open. A
+        targeted write whose transaction is open waits those 5 s once, at
+        its ROLLBACK, and is not sent `SELECT 1` after it. A connection that
+        would have closed later is counted with the failures that get one
+        retry, as every failure was before 2026-11-15.
+
+        The wait costs time, and not only the write's: the queue runs its
+        writes one after another, so every write behind it waits too, and a
+        write whose two attempts both meet such a connection waits 10 s.
+        That reaches the default `SHUTDOWN_TIMEOUT_MS` (10 s, after which
+        the process exits with `shutdown_forced_after_timeout`), so a drain
+        at SIGTERM that meets two such connections can be cut off with the
+        writes behind them unwritten, where develop's code tried a
+        single-statement write again at once.
+
     -   One on which node-postgres failed the write's statement itself, and
         still holds it: a value it cannot turn into a parameter (an object
         that holds a BigInt or a cycle, or whose `toJSON` or `toPostgres`

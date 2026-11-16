@@ -1414,18 +1414,43 @@ test('a write is attempted twelve times at most on a pool of ten connections: on
  * every simple query at once and every extended one when its Sync arrives, as
  * a statement that succeeded and returned no rows; and it answers nothing
  * else. So a statement pg does not finish sending gets no answer, as from
- * PostgreSQL. `completed` has, by connection, the statements it answered: Q
- * for a simple one, S for an extended one.
+ * PostgreSQL. `completed` has, by connection, the statements it answered as
+ * having succeeded: Q for a simple one, S for an extended one. `received` has,
+ * by connection and in order, the text of every simple query and `Sync` for
+ * every extended one, whatever became of it.
+ *
+ * `scriptFor` changes what one connection gets (by the order connections were
+ * opened, from 0):
+ * - `firstSync: 'error'`: its first extended statement is refused with an
+ *   ERROR (22012), and a ReadyForQuery for a failed transaction follows;
+ * - `firstSync: 'fatal'`: its first extended statement gets a FATAL (57P01)
+ *   and nothing after it, as from a server that ended the session whose close
+ *   then never reaches the client;
+ * - `stallOn`: a simple query whose text matches gets no answer.
+ * After a FATAL or a stall the connection is silent: nothing more is answered,
+ * the server's side never closes, and the client's close is not answered with
+ * one, as behind something that keeps a connection open and passes nothing
+ * on. Every other connection closes its side when the client closes its own.
  */
-const standInServer = async (t: { after(fn: () => Promise<void>): void }) => {
+interface StandInScript {
+    firstSync?: 'error' | 'fatal';
+    stallOn?: RegExp;
+}
+const standInServer = async (
+    t: { after(fn: () => Promise<void>): void },
+    scriptFor: (connection: number) => StandInScript = () => ({})
+) => {
     const sockets = new Set<net.Socket>();
     const completed: string[][] = [];
+    const received: string[][] = [];
     const message = (type: string, body: Buffer = Buffer.alloc(0)): Buffer => {
         const head = Buffer.alloc(5);
         head.write(type, 0, 'latin1');
         head.writeInt32BE(body.length + 4, 1);
         return Buffer.concat([head, body]);
     };
+    const errorResponse = (severity: string, code: string, text: string): Buffer =>
+        message('E', Buffer.from(`S${severity}\0V${severity}\0C${code}\0M${text}\0\0`, 'utf8'));
     const readyForQuery = message('Z', Buffer.from('I'));
     const authenticationOk = message('R', Buffer.alloc(4));
     const commandComplete = message('C', Buffer.from('SELECT 0\0'));
@@ -1437,17 +1462,26 @@ const standInServer = async (t: { after(fn: () => Promise<void>): void }) => {
         commandComplete,
         readyForQuery,
     ]);
-    const server = net.createServer((socket) => {
+    const server = net.createServer({ allowHalfOpen: true }, (socket) => {
         sockets.add(socket);
+        const script = scriptFor(completed.length);
         const mine: string[] = [];
+        const got: string[] = [];
         completed.push(mine);
+        received.push(got);
         let pending = Buffer.alloc(0);
         let started = false;
+        let syncs = 0;
+        let silent = false;
         socket.on('error', () => undefined);
         socket.on('close', () => sockets.delete(socket));
+        socket.on('end', () => {
+            if (!silent) socket.end();
+        });
         socket.on('data', (chunk) => {
             pending = Buffer.concat([pending, chunk]);
             for (;;) {
+                if (silent) return void (pending = Buffer.alloc(0));
                 // A startup packet is a length and a protocol version; every
                 // later message is a type, then a length that counts itself.
                 const head = started ? 1 : 0;
@@ -1457,17 +1491,45 @@ const standInServer = async (t: { after(fn: () => Promise<void>): void }) => {
                 if (pending.length < head + length) return;
                 const type = started ? String.fromCharCode(pending[0]) : '';
                 const version = started ? 0 : pending.readInt32BE(4);
+                const body = pending.subarray(head + 4, head + length);
                 pending = pending.subarray(head + length);
                 if (!started) {
                     if (version !== 196608) return void socket.destroy();
                     started = true;
                     socket.write(Buffer.concat([authenticationOk, readyForQuery]));
                 } else if (type === 'Q') {
+                    const text = body.subarray(0, body.length - 1).toString('utf8');
+                    got.push(text);
+                    if (script.stallOn?.test(text)) {
+                        silent = true;
+                        return;
+                    }
                     mine.push(type);
                     socket.write(Buffer.concat([commandComplete, readyForQuery]));
                 } else if (type === 'S') {
-                    mine.push(type);
-                    socket.write(extendedDone);
+                    got.push('Sync');
+                    syncs += 1;
+                    if (syncs === 1 && script.firstSync === 'error') {
+                        socket.write(
+                            Buffer.concat([
+                                errorResponse('ERROR', '22012', 'division by zero'),
+                                message('Z', Buffer.from('E')),
+                            ])
+                        );
+                    } else if (syncs === 1 && script.firstSync === 'fatal') {
+                        socket.write(
+                            errorResponse(
+                                'FATAL',
+                                '57P01',
+                                'terminating connection due to administrator command'
+                            )
+                        );
+                        silent = true;
+                        return;
+                    } else {
+                        mine.push(type);
+                        socket.write(extendedDone);
+                    }
                 } else if (type === 'X') {
                     socket.end();
                 }
@@ -1483,6 +1545,7 @@ const standInServer = async (t: { after(fn: () => Promise<void>): void }) => {
     return {
         url: `postgres://pool_test_user:${PASSWORD}@127.0.0.1:${port}/pool_test_db`,
         completed,
+        received,
     };
 };
 
@@ -1590,6 +1653,109 @@ test(
             server.completed.filter((statements) => statements.includes('S')).length,
             1,
             'the write queued behind it reached the server'
+        );
+        await sleep(20);
+        assert.deepEqual(rejections, []);
+    }
+);
+
+test(
+    "a targeted write whose ROLLBACK goes unanswered is logged as silent, not held: that ROLLBACK is pg's active query from then on, and the connection is asked nothing more",
+    { timeout: 5_000 },
+    async (t) => {
+        const WAIT_MS = 200;
+        const lines = captureLogs(t);
+        const rejections = captureUnhandledRejections(t);
+        // The server refuses the write's statement and the connection stays
+        // up; then its answer to the ROLLBACK never arrives.
+        const server = await standInServer(t, (connection) =>
+            connection === 0 ? { firstSync: 'error', stallOn: /^ROLLBACK/ } : {}
+        );
+        const pool = (openPool = await sharedPoolOfPgClients(server.url));
+        const queue = new WriteBehindQueue(
+            pool as never,
+            new Map([['probe', probePlan]]) as never,
+            undefined,
+            '',
+            WAIT_MS
+        );
+        queue.enqueueTargeted({
+            method: 'updateProbe',
+            statements: [
+                {
+                    map: 'probe',
+                    sql: 'UPDATE probe_wb SET v = $1 WHERE id = $2 RETURNING id',
+                    params: ['new', 'a'],
+                    required: false,
+                },
+            ],
+            touched: new Map([['probe', new Map([['a', ['a']]])]]),
+        });
+        await queue.drain();
+
+        assert.deepEqual(unanswered(lines), [['ROLLBACK', WAIT_MS]], 'waited for once, at it');
+        assert.deepEqual(
+            retryLines(lines),
+            [[1, false, 'silent', 'division by zero']],
+            'the statement pg holds is the unanswered ROLLBACK, not one pg failed itself'
+        );
+        assert.deepEqual(
+            server.received[0],
+            ['BEGIN', 'Sync', 'ROLLBACK'],
+            'nothing was sent after the ROLLBACK'
+        );
+        assert.deepEqual(logged(lines, 'db_write_behind_failed'), [], 'the write was not dropped');
+        assert.ok(server.completed[1]?.includes('S'), 'it ran again on another connection');
+        await sleep(20);
+        assert.deepEqual(rejections, []);
+    }
+);
+
+test(
+    "a connection that neither answers nor closes after the server's FATAL, where nothing answers its own close either, has its socket destroyed once it is given back: nothing of it is left waiting, and its close is not reported as a drop",
+    { timeout: 5_000 },
+    async (t) => {
+        const WAIT_MS = 200;
+        const lines = captureLogs(t);
+        const rejections = captureUnhandledRejections(t);
+        const server = await standInServer(t, (connection) =>
+            connection === 0 ? { firstSync: 'fatal' } : {}
+        );
+        const pool = (openPool = await sharedPoolOfPgClients(server.url));
+        const events = pool as unknown as EventEmitter;
+        const acquired: object[] = [];
+        const removed: object[] = [];
+        events.on('acquire', (client: object) => acquired.push(client));
+        events.on('remove', (client: object) => removed.push(client));
+        const queue = new WriteBehindQueue(
+            pool as never,
+            new Map([['probe', probePlan]]) as never,
+            undefined,
+            '',
+            WAIT_MS
+        );
+
+        queue.enqueueUpsert('probe', { id: 'a', v: 'written' });
+        await queue.drain();
+
+        assert.deepEqual(unanswered(lines), [['SELECT 1', WAIT_MS]]);
+        assert.deepEqual(retryLines(lines), [
+            [1, false, 'silent', 'terminating connection due to administrator command'],
+        ]);
+        assert.deepEqual(logged(lines, 'db_write_behind_failed'), [], 'the write was not dropped');
+        assert.ok(server.completed[1]?.includes('S'), 'it landed on another connection');
+        // pg's end() only closes the process's side where nothing is its
+        // active query; with nothing answering that close, the pool's end
+        // callback (and so 'remove') comes only once the socket is destroyed.
+        await waitFor(
+            () => removed.includes(acquired[0]),
+            'the silent connection to be gone',
+            1_000
+        );
+        assert.deepEqual(
+            logged(lines, 'pg_pool_client_error'),
+            [],
+            'its close reaches pg once the pool has ended the client: not a drop'
         );
         await sleep(20);
         assert.deepEqual(rejections, []);

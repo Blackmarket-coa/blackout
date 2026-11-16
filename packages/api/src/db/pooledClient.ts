@@ -112,22 +112,30 @@ const silentConnections = new WeakSet<object>();
  * Send `sql` on a connection whose work has just failed, and say what came of
  * it. Never rejects, and never waits longer than `withinMs`.
  *
- * Nothing is sent on a client that pg will not send on (holdsAStatement),
- * and nothing more on one that has left such a statement unanswered before.
- * Otherwise the statement is sent, and what the connection gives first is
- * the result: the server's answer, a failure, or neither within `withinMs`.
- * That last connection is logged (`pg_connection_unanswered`) and remembered.
- * The statement is still pg's then: pg fails it when the client is ended,
- * which the caller does by giving the connection back with its error, and
- * that failure is taken here.
+ * Nothing more is sent on a connection that has left such a statement
+ * unanswered before, and nothing on a client that pg will not send on
+ * (holdsAStatement). The first is asked first: a statement this function
+ * sent and was not answered is pg's active query from then on, and the
+ * connection is `silent`, not `held`. Otherwise the statement is sent, and
+ * what the connection gives first is the result: the server's answer, a
+ * failure, or neither within `withinMs`. That last connection is logged
+ * (`pg_connection_unanswered`) and remembered. The statement is still pg's
+ * then, and pg fails it when the socket closes: pg's end(), which the pool
+ * runs as it destroys the connection, destroys the socket where the
+ * statement is pg's active query, but where it waits behind one the server
+ * did not finish (a FATAL with no close after it) end() only closes the
+ * process's side, and the server's side may never close. So
+ * attemptOnPooledClient destroys a silent connection's socket once the
+ * connection is given back (destroySocketOf). Either way the failure is
+ * taken here.
  */
 export async function sendAfterFailure(
     client: { query(sql: string): Promise<unknown> },
     sql: string,
     withinMs: number = AFTER_FAILURE_WAIT_MS
 ): Promise<AfterFailure> {
-    if (holdsAStatement(client)) return 'held';
     if (silentConnections.has(client)) return 'silent';
+    if (holdsAStatement(client)) return 'held';
     const sent = (async (): Promise<AfterFailure> => {
         try {
             await client.query(sql);
@@ -170,8 +178,11 @@ export type PooledAttempt<T> =
           /**
            * Set where the connection gave no answer after the failure, and
            * so is not known to have ended: `held`, it was not asked, because
-           * pg holds the failed statement and sends nothing more on it;
-           * `silent`, it neither answered nor closed within the wait.
+           * pg still holds the statement the work failed on and sends nothing
+           * more on it until the server finishes that one, which for a
+           * statement pg failed itself is never; `silent`, a statement sent
+           * after the failure (SELECT 1, or a targeted write's ROLLBACK) was
+           * neither answered nor failed within the wait.
            */
           unanswered?: 'held' | 'silent';
           /**
@@ -213,10 +224,13 @@ export type PooledAttempt<T> =
  * is bounded: a connection that gives neither within `afterFailureWaitMs`
  * (a FATAL that arrived with no close after it; a proxy that keeps the
  * socket open and passes nothing on) is logged, and is not known to have
- * ended either: `connectionEnded` is false and `unanswered` is `silent`. The
- * bound decides nothing else. One that would have closed a moment later is
- * taken for one that had not ended, which costs the caller only what a
- * failure of that kind costs. Where the connection string carries
+ * ended either: `connectionEnded` is false and `unanswered` is `silent`. One
+ * that would have closed a moment later is taken for one that had not ended,
+ * which costs a failure of that kind: the write's one retry. What the bound
+ * costs is time: the caller waits that long, and for the write-behind queue,
+ * which runs its writes one after another, so does every write behind it
+ * (KNOWN_LIMITATIONS.md says what that does to a drain at shutdown). Where
+ * the connection string carries
  * `query_timeout`, pg's read timeout is a second timer on SELECT 1: if it
  * is the shorter one and runs out first, SELECT 1 fails on a connection that
  * may be up, and that reads as ended.
@@ -237,7 +251,8 @@ export type PooledAttempt<T> =
  * the same call, for a caller that was waiting for one (pg-pool 3.13.0
  * _remove: pg's end() calls back at once where the socket has already
  * closed, and the callback serves that caller), and that one was not there
- * when the failure was found.
+ * when the failure was found. A `silent` connection's socket is then
+ * destroyed as well (destroySocketOf, sendAfterFailure says why).
  */
 export async function attemptOnPooledClient<
     C extends ReleasableClient & { query(sql: string): Promise<unknown> },
@@ -254,11 +269,12 @@ export async function attemptOnPooledClient<
         return { ok: false, error, connectionEnded: false, othersHeld: 0 };
     }
     let failure: Error | undefined;
+    let asked: AfterFailure | undefined;
     try {
         return { ok: true, value: await fn(client) };
     } catch (error) {
         failure = asError(error);
-        const asked = await sendAfterFailure(client, 'SELECT 1', afterFailureWaitMs);
+        asked = await sendAfterFailure(client, 'SELECT 1', afterFailureWaitMs);
         return {
             ok: false,
             error,
@@ -268,8 +284,25 @@ export async function attemptOnPooledClient<
         };
     } finally {
         client.release?.(failure);
+        if (asked === 'silent') destroySocketOf(client);
     }
 }
+
+/**
+ * Destroy the socket of a connection that has just been given back with an
+ * error. The close reaches pg on a later tick, by when the pool has ended the
+ * client (pg-pool's release with an error runs pg's end() inside the call),
+ * so pg takes it as an ended client's (lib/client.js, 8.20.0, the
+ * connection's 'end' handler: it fails what still waits, "Connection
+ * terminated", and emits no 'error'): it is not reported or counted as a
+ * drop. Read from pg's `connection.stream`, as pg's own end() does; a client
+ * without one (a test's stand-in) is left as it is.
+ */
+const destroySocketOf = (client: object): void => {
+    const stream = (client as { connection?: { stream?: { destroy?: unknown } } }).connection
+        ?.stream;
+    if (typeof stream?.destroy === 'function') stream.destroy();
+};
 
 /** Connections whose idle_session_timeout one of the statements below changed. */
 const changedSessions = new WeakSet<object>();
