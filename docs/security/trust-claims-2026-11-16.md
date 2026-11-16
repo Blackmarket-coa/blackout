@@ -20,9 +20,14 @@ may decide what to say, and to whom, on the strength of it.
 | T4  | The widget gallery, the Coalition pulse widget                             | "Governance activity and shared-treasury health across your coalitions"          | The widget is static text with no data behind it                                 | Fixed (copy) |
 | T5  | Settings, "What's stored about me"                                         | "The self-report below and the warrant canary are always available on your plan" | The app shows no canary anywhere                                                 | Fixed (copy) |
 | T6  | The sign-in page                                                           | "Create an anonymous account (no email)"                                         | No email or name is asked; the homeserver keeps the IP addresses it is used from | Fixed (copy) |
+| T7  | The composer in every encrypted room, `THREAT_MODEL.md`                    | "Not even the server can" read what is sent here; attachments are E2EE           | Files were uploaded unencrypted; only the message was encrypted                  | Part fixed   |
 
-Findings T7 onward are the trust page's and the threat model's own sentences,
-checked one by one; they are in [the documents](#t7-onward-the-documents)
+T7 was found while checking those sentences and outranks the rest: it has its
+own record,
+[`attachment-encryption-2026-11-16.md`](attachment-encryption-2026-11-16.md).
+
+Findings T8 onward are the trust page's and the threat model's own sentences,
+checked one by one; they are in [the documents](#t8-onward-the-documents)
 below.
 
 ## T1. Tor transport and decoy traffic
@@ -255,14 +260,36 @@ same form, so it changes there too. The sign-up itself is unchanged.
 "anonymous sign-up"; that is a name for a code path, not something a person
 is told at the moment of choosing, and it is left.
 
-## T7 onward: the documents
+## T7. Files sent in encrypted rooms were not encrypted
 
-Not in this commit. The sentences of `TRUST.md` (beyond the two paragraphs
-T1 and T2 change), of `THREAT_MODEL.md`, of `docs/security/key-transparency.md`
+**Claimed.** The composer, beside the message box of every encrypted room:
+"End-to-end encrypted. Only people in this room can read these messages — not
+even the server can." `THREAT_MODEL.md` §5: "Attachments: E2EE (Matrix file
+encryption), AES-GCM AEAD".
+
+**Found.** The app uploaded every attachment, voice note and hidden-message
+image to the homeserver as it was, with its name and type, in encrypted rooms
+too; only the message pointing to the file was encrypted. The timeline could
+not open an encrypted file from any other Matrix app. The threat model's row
+was wrong twice: nothing was encrypted, and the Matrix format is AES-CTR with
+a separate hash, not AES-GCM.
+
+**Done.** Fixed for files sent from now on; files already sent remain on the
+server and are the operator's decision. The whole account (what was exposed
+and to whom, the fix, what is not fixed, the tests, the decisions and what was
+not verified) is in
+[`attachment-encryption-2026-11-16.md`](attachment-encryption-2026-11-16.md).
+`TRUST.md`, `THREAT_MODEL.md` §4 and §5, `KNOWN_LIMITATIONS.md` and
+`docs/legal/CHANGELOG.md` now say so.
+
+## T8 onward: the documents
+
+Not in this commit. The sentences of `TRUST.md` (beyond the paragraphs T1, T2
+and T7 change), of `THREAT_MODEL.md`, of `docs/security/key-transparency.md`
 and `docs/security/webauthn-passkeys.md`, and the "CI release gate" sentence of
 `KNOWN_LIMITATIONS.md` are being checked against the code one by one. Each
 finding is added here, with its fix or its explanation, in a commit that
-follows on the same branch. Until then this record covers T1 to T6 only.
+follows on the same branch. Until then this record covers T1 to T7 only.
 
 ## Decisions for the operator to confirm or veto
 

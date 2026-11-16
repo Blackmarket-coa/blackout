@@ -1,9 +1,15 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { MatrixEvent } from 'matrix-js-sdk';
 import { mxcToUrl } from '../../utils/media';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
-import { BlackoutSdkError } from '@blackout/sdk';
-import { mediaClient } from '../../sdk/client';
+import { BlackoutSdkError, MEDIA_TOO_LARGE } from '@blackout/sdk';
+import {
+    ENCRYPTED_AUTO_LOAD_MAX_BYTES,
+    fetchDecryptedMedia,
+    hasEncryptedFileField,
+    inlineBlobType,
+    readEncryptedFile,
+} from '../../features/media/utils/encryptedMedia';
 
 export const formatBytes = (value?: number): string => {
     if (!value || Number.isNaN(value)) return 'Unknown size';
@@ -40,18 +46,17 @@ export const useInViewport = <T extends HTMLElement>() => {
     return { ref, inView };
 };
 
-const getEncryptedFile = (event: MatrixEvent): Record<string, unknown> | null => {
-    const content = event.getContent<Record<string, unknown>>();
-    const file = content.file;
-    return typeof file === 'object' && file !== null ? (file as Record<string, unknown>) : null;
-};
-
-const getMxcUrl = (event: MatrixEvent): string | null => {
-    const content = event.getContent<Record<string, unknown>>();
-    if (typeof content.url === 'string') return content.url;
-    const file = getEncryptedFile(event);
-    if (typeof file?.url === 'string') return file.url;
-    return null;
+/**
+ * Latches true the first time `value` is true. Media that has scrolled into
+ * view once stays loaded when it scrolls out again, so a decrypted file is
+ * not thrown away and fetched again on every pass.
+ */
+export const useLatched = (value: boolean): boolean => {
+    const [latched, setLatched] = useState(value);
+    useEffect(() => {
+        if (value) setLatched(true);
+    }, [value]);
+    return latched || value;
 };
 
 export const getInfo = (event: MatrixEvent): Record<string, unknown> => {
@@ -61,80 +66,224 @@ export const getInfo = (event: MatrixEvent): Record<string, unknown> => {
         : {};
 };
 
-export const useResolvedMediaSource = (event: MatrixEvent) => {
+/**
+ * Whether an encrypted attachment may be fetched without being asked for:
+ * only when its message states a size, and that size is within the limit.
+ * The limit is enforced again on the bytes that arrive.
+ */
+export const fitsEncryptedAutoLoad = (info: Record<string, unknown>): boolean =>
+    typeof info.size === 'number' && info.size >= 0 && info.size <= ENCRYPTED_AUTO_LOAD_MAX_BYTES;
+
+const homeserverUrlOf = (client: unknown): string =>
+    (client as { getHomeserverUrl?: () => string }).getHomeserverUrl?.() ?? '';
+
+const roomIsEncrypted = (client: unknown, event: MatrixEvent): boolean => {
+    const roomId = event.getRoomId();
+    if (!roomId) return false;
+    const room = (
+        client as {
+            getRoom?: (id: string) => { hasEncryptionStateEvent?: () => boolean } | null;
+        }
+    ).getRoom?.(roomId);
+    return room?.hasEncryptionStateEvent?.() === true;
+};
+
+const describeMediaError = (err: unknown): string => {
+    if (err instanceof BlackoutSdkError && err.kind === 'retryable') {
+        return `${err.message} Retrying may succeed.`;
+    }
+    return err instanceof Error ? err.message : 'Failed to load media';
+};
+
+export interface ResolveMediaOptions {
+    /**
+     * Encrypted media only: fetch and decrypt without waiting for `load()`.
+     * Unencrypted media is a URL and is never fetched here.
+     */
+    autoLoad: boolean;
+}
+
+export interface ResolvedMediaSource {
+    /** A URL for `<img>`, `<audio>`, `<video>`: the media URL, or a blob URL of the decrypted file. */
+    src: string | null;
+    loading: boolean;
+    error: string | null;
+    /** The message references its media through an encrypted `file`. */
+    encrypted: boolean;
+    /** Encrypted and not fetched: waiting for `load()`. */
+    awaitingLoad: boolean;
+    /** Fetch and decrypt now, whatever the size. Also retries after a failure. */
+    load: () => void;
+    /** The room is end-to-end encrypted and this media was sent without encryption. */
+    unencryptedInEncryptedRoom: boolean;
+}
+
+export const useResolvedMediaSource = (
+    event: MatrixEvent,
+    { autoLoad }: ResolveMediaOptions
+): ResolvedMediaSource => {
     const client = useMatrixClient();
     const [src, setSrc] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    // Which message the reader asked to load (no size ceiling applies to it),
+    // and which message's unasked fetch hit the ceiling (it waits for the
+    // reader). Held as the message, not as a flag: a component that is reused
+    // for another message starts from nothing, with no stale "asked for".
+    const [requestedFor, setRequestedFor] = useState<MatrixEvent | null>(null);
+    const [autoRefusedFor, setAutoRefusedFor] = useState<MatrixEvent | null>(null);
+    // Bumped by `load()`, so asking again after a failure fetches again.
+    const [attempt, setAttempt] = useState(0);
+    const requested = requestedFor === event;
+    const autoRefused = autoRefusedFor === event;
 
-    const mxc = useMemo(() => getMxcUrl(event), [event]);
-    const encryptedFile = useMemo(() => getEncryptedFile(event), [event]);
+    const content = useMemo(() => event.getContent<Record<string, unknown>>(), [event]);
+    const encryptedFile = useMemo(() => readEncryptedFile(content), [content]);
+    // A `file` field that cannot be used is still an encrypted reference: it
+    // must never fall back to a plain `url` sitting beside it.
+    const encrypted = useMemo(() => hasEncryptedFileField(content), [content]);
+    const plainMxc = !encrypted && typeof content.url === 'string' ? content.url : null;
+    const declaredType = (content.info as { mimetype?: unknown } | undefined)?.mimetype;
+
+    const shouldDecrypt = requested || (autoLoad && !autoRefused);
 
     useEffect(() => {
         let active = true;
         let objectUrl: string | null = null;
+        const homeserverUrl = homeserverUrlOf(client);
 
-        const resolveSource = async () => {
-            if (!mxc) {
-                setError('Missing media URL');
-                setLoading(false);
-                return;
-            }
+        if (!encrypted) {
+            const directUrl = plainMxc ? mxcToUrl(plainMxc, homeserverUrl) : null;
+            setSrc(directUrl);
+            setError(directUrl ? null : plainMxc ? 'Invalid MXC URI' : 'Missing media URL');
+            setLoading(false);
+            return undefined;
+        }
 
-            setLoading(true);
+        if (!encryptedFile) {
+            setSrc(null);
+            setError('This message refers to an encrypted file but does not carry a usable key.');
+            setLoading(false);
+            return undefined;
+        }
+
+        if (!shouldDecrypt) {
+            setSrc(null);
             setError(null);
-            try {
-                const homeserverUrl =
-                    (
-                        client as unknown as { getHomeserverUrl?: () => string }
-                    ).getHomeserverUrl?.() ?? '';
-                const directUrl = mxcToUrl(mxc, homeserverUrl);
-                if (!directUrl) throw new Error('Invalid MXC URI');
+            setLoading(false);
+            return undefined;
+        }
 
-                if (!encryptedFile) {
-                    if (active) setSrc(directUrl);
+        setSrc(null);
+        setError(null);
+        setLoading(true);
+        fetchDecryptedMedia({
+            file: encryptedFile,
+            homeserverUrl,
+            blobType: inlineBlobType(declaredType),
+            maxBytes: requested ? undefined : ENCRYPTED_AUTO_LOAD_MAX_BYTES,
+        })
+            .then((blob) => {
+                if (!active) return;
+                objectUrl = URL.createObjectURL(blob);
+                setSrc(objectUrl);
+            })
+            .catch((err: unknown) => {
+                if (!active) return;
+                if (!requested && err instanceof BlackoutSdkError && err.code === MEDIA_TOO_LARGE) {
+                    // Larger than its message said. Not an error to show:
+                    // the reader can still ask for it.
+                    setAutoRefusedFor(event);
                     return;
                 }
-
-                const encryptedBuffer = await mediaClient.fetchArrayBuffer(directUrl);
-                const decrypt = (
-                    client as unknown as {
-                        decryptMedia?: (
-                            data: ArrayBuffer,
-                            file: Record<string, unknown>
-                        ) => Promise<ArrayBuffer>;
-                    }
-                ).decryptMedia;
-                if (!decrypt) {
-                    throw new Error('Encrypted media not supported by current client runtime');
-                }
-
-                const decrypted = await decrypt(encryptedBuffer, encryptedFile);
-                objectUrl = URL.createObjectURL(new Blob([decrypted]));
-                if (active) setSrc(objectUrl);
-            } catch (err) {
-                if (active) {
-                    setSrc(null);
-                    if (err instanceof BlackoutSdkError && err.kind === 'retryable') {
-                        setError(`${err.message} Retrying may succeed.`);
-                    } else {
-                        setError(err instanceof Error ? err.message : 'Failed to load media');
-                    }
-                }
-            } finally {
+                setError(describeMediaError(err));
+            })
+            .finally(() => {
                 if (active) setLoading(false);
-            }
-        };
-
-        void resolveSource();
+            });
 
         return () => {
             active = false;
             if (objectUrl) URL.revokeObjectURL(objectUrl);
         };
-    }, [client, encryptedFile, mxc]);
+    }, [
+        attempt,
+        client,
+        declaredType,
+        encrypted,
+        encryptedFile,
+        event,
+        plainMxc,
+        requested,
+        shouldDecrypt,
+    ]);
 
-    return { src, loading, error, encrypted: Boolean(encryptedFile) };
+    const load = useCallback(() => {
+        setRequestedFor(event);
+        setAttempt((n) => n + 1);
+    }, [event]);
+
+    return {
+        src,
+        loading,
+        error,
+        encrypted,
+        awaitingLoad: encrypted && Boolean(encryptedFile) && !shouldDecrypt,
+        load,
+        unencryptedInEncryptedRoom: Boolean(plainMxc) && roomIsEncrypted(client, event),
+    };
+};
+
+/**
+ * Shown under media that was sent without encryption into an encrypted room.
+ * Files sent from this app before 2026-11-16 are in this state, as is media
+ * posted by bridges and bots that do not encrypt.
+ */
+export const UNENCRYPTED_MEDIA_NOTE =
+    'Not end-to-end encrypted: this file was sent without encryption, and the server can read it.';
+
+export const UnencryptedMediaNote = () => (
+    <div
+        role="note"
+        data-testid="unencrypted-media-note"
+        style={{ color: 'var(--text-warning, var(--warning))', fontSize: 11, marginTop: 4 }}
+    >
+        {UNENCRYPTED_MEDIA_NOTE}
+    </div>
+);
+
+/**
+ * A failed load, with a way to try again when the media is encrypted (an
+ * unencrypted one is loaded by the browser from its URL, not by this code).
+ */
+export const MediaLoadError = ({
+    what,
+    error,
+    onRetry,
+}: {
+    what: string;
+    error: string;
+    onRetry?: () => void;
+}) => (
+    <div style={baseStyles.error} data-testid="media-load-error">
+        {what}: {error}
+        {onRetry ? (
+            <button
+                type="button"
+                onClick={onRetry}
+                data-testid="retry-encrypted-media"
+                style={{ marginLeft: 8 }}
+            >
+                Try again
+            </button>
+        ) : null}
+    </div>
+);
+
+/** The label on the button that fetches an encrypted file the reader has to ask for. */
+export const loadEncryptedLabel = (kind: string, info: Record<string, unknown>): string => {
+    const size = typeof info.size === 'number' ? ` (${formatBytes(info.size)})` : '';
+    return `Load encrypted ${kind}${size}`;
 };
 
 export const baseStyles = {

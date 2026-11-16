@@ -87,6 +87,23 @@ someone later adds a well-meaning debug line.
 
 Encryption claims are only worth something with the exceptions attached.
 
+-   **Files sent from a build of the app older than 2026-11-16.** Until then the
+    app uploaded every attachment, voice note and hidden-message image as it
+    was, in encrypted rooms too. The message around the file was encrypted; the
+    file, its name and its type were not. Those files are still on the
+    homeserver, readable by whoever runs it or holds its backups and by anyone
+    who has a file's address, and the app cannot delete them: deleting the
+    message does not remove the file. Since the fix, a file sent in an encrypted
+    room is encrypted on your device before it is uploaded, and every file that
+    was not is marked in the conversation: "Not end-to-end encrypted". A copy of
+    the app built before the fix keeps uploading unencrypted until it is
+    updated. The full account, including what was not fixed, is in
+    [`attachment-encryption-2026-11-16.md`](docs/security/attachment-encryption-2026-11-16.md).
+-   **What the homeserver sees in an encrypted room.** Not the text of messages
+    or the contents of files. It does see the room's name, topic, picture and
+    members; who sends something and when; emoji reactions, which Matrix does not
+    encrypt; and, for a file, its size to the byte, who uploaded it, and the
+    network addresses it is downloaded from.
 -   **Publicly joinable rooms.** Encrypting a room anyone can join hides history
     from everyone who joins later and breaks search, without making public content
     private.
@@ -254,6 +271,7 @@ published anywhere else yet.
 | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
 | E2EE is not paywalled                           | [`bundles.ts`](packages/blackout-protocol/src/entitlements/bundles.ts) — grep it for an encryption key                                      |
 | Private rooms encrypt by default                | [`check-room-encryption.mjs`](tools/ci/check-room-encryption.mjs), run `pnpm guard:room-encryption`                                         |
+| Files in encrypted rooms are encrypted          | [`roomAttachment.ts`](apps/blackout-client/src/app/features/media/utils/roomAttachment.ts); or watch an upload in the network panel         |
 | The bot cannot read messages                    | Search `packages/api/src` for `/messages`, `/context/`, `/sync` — there are no hits                                                         |
 | Nothing logs message content                    | [`patterns.ts`](packages/core/src/redaction/patterns.ts)                                                                                    |
 | Export is free                                  | `curl` the endpoint on a free account, or read [`dataExport.ts`](packages/api/src/routes/dataExport.ts)                                     |

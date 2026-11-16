@@ -26,6 +26,56 @@ should be described as a published privacy policy until that review lands.
 
 ---
 
+## 2026-11-16 — Files sent in encrypted rooms were not encrypted
+
+**Why this entry exists:** the commitment that private rooms and direct
+messages are end-to-end encrypted was not kept for files. The text of messages
+was encrypted. Files attached to them were not. This entry says what that
+means for anyone who relied on it. The finding, the fix and what is still open
+are in
+[`docs/security/attachment-encryption-2026-11-16.md`](../security/attachment-encryption-2026-11-16.md).
+
+### Withdrawn
+
+-   **"Not even the server can" read what is sent in an encrypted room was not
+    true of files.** The app showed that sentence beside the message box in
+    every encrypted room. Until this change it uploaded each attachment, voice
+    note and hidden-message image to the homeserver as it was, with its name
+    and type, and encrypted only the message that pointed to it.
+
+### Changed
+
+-   **A file sent in an encrypted room is encrypted on the sender's device
+    before it is uploaded.** The homeserver receives ciphertext with no file
+    name and no file type; the key travels inside the encrypted message
+    ([`roomAttachment.ts`](../../apps/blackout-client/src/app/features/media/utils/roomAttachment.ts)).
+    This is free at every tier, like the rest of end-to-end encryption.
+-   **The sentence beside the message box now carries its exceptions.** It
+    says that messages and files you send are encrypted on your device, and
+    names what the server still sees: the room's name and members, when things
+    are sent and how large they are, and emoji reactions.
+-   **A file that is not encrypted says so.** In an encrypted room, any file
+    that was sent without encryption is marked "Not end-to-end encrypted" in
+    the conversation.
+
+### What a person relying on the old text should know
+
+-   **Every file you sent from the Blackout app into an encrypted room before
+    you had a build with this fix is on the homeserver unencrypted**, with its
+    name. Whoever runs the server, or holds its backups, can read it. So can
+    the server of anyone in the room who is on another homeserver and opened
+    it, and anyone who has the file's address, which was inside the encrypted
+    message.
+-   **The app cannot delete those files, and deleting the message does not
+    remove them.** Only the operator of the homeserver can. Whether they will
+    is their decision, and it is listed as one in the record above.
+-   **The text of your messages was encrypted throughout.** This is about
+    files only, with one narrower exception the same record describes: a
+    message sent in the moment before a room had finished loading could go out
+    unencrypted. The app now refuses to send in that moment.
+-   **Other people in a room may still be on an older build.** Files they send
+    stay unencrypted until they update, and your app marks each one.
+
 ## 2026-11-16 — Two things this record and the trust page said that were not so: Tor and decoy traffic, and the warrant canary
 
 **Why this entry exists:** two statements are withdrawn, in plain words. Both

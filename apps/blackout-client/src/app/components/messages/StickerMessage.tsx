@@ -1,5 +1,13 @@
 import type { MatrixEvent } from 'matrix-js-sdk';
-import { baseStyles, useInViewport, useResolvedMediaSource } from './mediaShared';
+import {
+    baseStyles,
+    fitsEncryptedAutoLoad,
+    getInfo,
+    loadEncryptedLabel,
+    useInViewport,
+    useLatched,
+    useResolvedMediaSource,
+} from './mediaShared';
 
 interface StickerMessageProps {
     event: MatrixEvent;
@@ -7,7 +15,14 @@ interface StickerMessageProps {
 
 export const StickerMessage = ({ event }: StickerMessageProps) => {
     const { ref, inView } = useInViewport<HTMLDivElement>();
-    const { src, loading, error } = useResolvedMediaSource(event);
+    const info = getInfo(event);
+    const seen = useLatched(inView);
+    // Stickers are normally pack images referenced by a plain URL, in
+    // encrypted rooms too: a pack is not private to the room. One that does
+    // arrive encrypted is treated like any other encrypted image.
+    const { src, loading, error, awaitingLoad, load } = useResolvedMediaSource(event, {
+        autoLoad: seen && fitsEncryptedAutoLoad(info),
+    });
     const body = event.getContent<Record<string, unknown>>().body;
     const alt = typeof body === 'string' ? body : 'Sticker';
 
@@ -19,6 +34,11 @@ export const StickerMessage = ({ event }: StickerMessageProps) => {
                 />
             ) : null}
             {error ? <div style={baseStyles.error}>Sticker unavailable</div> : null}
+            {inView && awaitingLoad ? (
+                <button type="button" onClick={load} data-testid="load-encrypted-media">
+                    {loadEncryptedLabel('sticker', info)}
+                </button>
+            ) : null}
             {inView && src ? (
                 <img
                     src={src}

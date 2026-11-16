@@ -1,6 +1,16 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import type { MatrixEvent } from 'matrix-js-sdk';
-import { baseStyles, getInfo, useInViewport, useResolvedMediaSource } from './mediaShared';
+import {
+    MediaLoadError,
+    UnencryptedMediaNote,
+    baseStyles,
+    fitsEncryptedAutoLoad,
+    getInfo,
+    loadEncryptedLabel,
+    useInViewport,
+    useLatched,
+    useResolvedMediaSource,
+} from './mediaShared';
 import { readWaveformHeights } from '../../features/room/voiceMessage';
 import { useMediaPlaybackRate } from '../../hooks/media/useMediaPlaybackRate';
 
@@ -18,7 +28,11 @@ export const PLAYBACK_RATES = [1, 1.25, 1.5, 2] as const;
 
 export const AudioMessage = ({ event }: AudioMessageProps) => {
     const { ref, inView } = useInViewport<HTMLDivElement>();
-    const { src, loading, error } = useResolvedMediaSource(event);
+    const seen = useLatched(inView);
+    const { src, loading, error, encrypted, awaitingLoad, load, unencryptedInEncryptedRoom } =
+        useResolvedMediaSource(event, {
+            autoLoad: seen && fitsEncryptedAutoLoad(getInfo(event)),
+        });
     const audioRef = useRef<HTMLAudioElement | null>(null);
     const [playing, setPlaying] = useState(false);
     const [position, setPosition] = useState(0);
@@ -57,7 +71,18 @@ export const AudioMessage = ({ event }: AudioMessageProps) => {
             {!inView || loading ? (
                 <div style={{ ...baseStyles.skeleton, minHeight: 54, borderRadius: 8 }} />
             ) : null}
-            {error ? <div style={baseStyles.error}>Audio failed to load: {error}</div> : null}
+            {error ? (
+                <MediaLoadError
+                    what="Audio failed to load"
+                    error={error}
+                    onRetry={encrypted ? load : undefined}
+                />
+            ) : null}
+            {inView && awaitingLoad ? (
+                <button type="button" onClick={load} data-testid="load-encrypted-media">
+                    {loadEncryptedLabel('audio', info)}
+                </button>
+            ) : null}
 
             {inView && src ? (
                 <>
@@ -158,6 +183,7 @@ export const AudioMessage = ({ event }: AudioMessageProps) => {
                     </div>
                 </>
             ) : null}
+            {unencryptedInEncryptedRoom ? <UnencryptedMediaNote /> : null}
         </div>
     );
 };

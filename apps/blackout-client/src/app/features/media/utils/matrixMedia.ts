@@ -37,6 +37,14 @@ export const getThumbnailUrl = (
     return `${hs}/_matrix/media/v3/thumbnail/${parsed.serverName}/${parsed.mediaId}?width=${width}&height=${height}&method=scale`;
 };
 
+/**
+ * Upload a file to the Matrix content repository as it is, with its name, and
+ * return the MXC URI. The server can read what this uploads: use it for media
+ * that is public anyway (avatars, public posts). A file posted into a room
+ * goes through `sendRoomAttachment` (./roomAttachment.ts), which encrypts it
+ * first when the room is encrypted. Callers of this function are listed in
+ * tests/unit/features/media/directUploadCallers.test.ts.
+ */
 export const uploadMedia = async (mx: MatrixClient, file: File): Promise<string> => {
     const response = await mx.uploadContent(file, {
         includeFilename: true,

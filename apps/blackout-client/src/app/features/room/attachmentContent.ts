@@ -10,7 +10,13 @@
  *
  * Voice notes do NOT go through this: they carry the MSC3245 marker via
  * `voiceMessage.ts`.
+ *
+ * The media reference is an `AttachmentSource`, not a URL: `{ url }` for a
+ * plain upload, `{ file }` for one encrypted for an encrypted room. The
+ * builder spreads whichever it is given, so it cannot put a plain `url` on
+ * an encrypted file.
  */
+import type { AttachmentSource } from '../media/utils/roomAttachment';
 
 export type AttachmentKind = 'image' | 'video' | 'audio' | 'file';
 
@@ -29,7 +35,8 @@ const MSG_TYPE: Record<AttachmentKind, string> = {
 };
 
 export interface AttachmentContentInput {
-    url: string;
+    /** Where the upload landed, from `sendRoomAttachment`. */
+    source: AttachmentSource;
     fileName: string;
     mimeType: string;
     size: number;
@@ -49,7 +56,7 @@ export function buildAttachmentContent(input: AttachmentContentInput): Record<st
     return {
         msgtype: MSG_TYPE[attachmentKind(input.mimeType)],
         body: input.fileName,
-        url: input.url,
+        ...input.source,
         info,
     };
 }

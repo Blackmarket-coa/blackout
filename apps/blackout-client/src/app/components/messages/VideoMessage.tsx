@@ -1,6 +1,14 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import type { MatrixEvent } from 'matrix-js-sdk';
-import { baseStyles, getInfo, useInViewport, useResolvedMediaSource } from './mediaShared';
+import {
+    MediaLoadError,
+    UnencryptedMediaNote,
+    baseStyles,
+    getInfo,
+    loadEncryptedLabel,
+    useInViewport,
+    useResolvedMediaSource,
+} from './mediaShared';
 import { useMediaPlaybackRate } from '../../hooks/media/useMediaPlaybackRate';
 import { PLAYBACK_RATES } from './AudioMessage';
 
@@ -10,7 +18,10 @@ interface VideoMessageProps {
 
 export const VideoMessage = ({ event }: VideoMessageProps) => {
     const { ref, inView } = useInViewport<HTMLDivElement>();
-    const { src, loading, error, encrypted } = useResolvedMediaSource(event);
+    // An encrypted video has to be downloaded whole before it can be
+    // decrypted, so it is never fetched unasked: the reader loads it.
+    const { src, loading, error, encrypted, awaitingLoad, load, unencryptedInEncryptedRoom } =
+        useResolvedMediaSource(event, { autoLoad: false });
     const videoRef = useRef<HTMLVideoElement | null>(null);
     const [playing, setPlaying] = useState(false);
     const [progress, setProgress] = useState(0);
@@ -34,7 +45,18 @@ export const VideoMessage = ({ event }: VideoMessageProps) => {
             {!inView || loading ? (
                 <div style={{ ...baseStyles.skeleton, borderRadius: 8, minHeight: 180 }} />
             ) : null}
-            {error ? <div style={baseStyles.error}>Video failed to load: {error}</div> : null}
+            {error ? (
+                <MediaLoadError
+                    what="Video failed to load"
+                    error={error}
+                    onRetry={encrypted ? load : undefined}
+                />
+            ) : null}
+            {inView && awaitingLoad ? (
+                <button type="button" onClick={load} data-testid="load-encrypted-media">
+                    {loadEncryptedLabel('video', info)}
+                </button>
+            ) : null}
 
             {inView && src ? (
                 <>
@@ -126,6 +148,7 @@ export const VideoMessage = ({ event }: VideoMessageProps) => {
                     ) : null}
                 </>
             ) : null}
+            {unencryptedInEncryptedRoom ? <UnencryptedMediaNote /> : null}
         </div>
     );
 };

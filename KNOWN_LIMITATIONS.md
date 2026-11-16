@@ -759,6 +759,44 @@ For the source-of-truth triage with tier/owner detail see
     the room view it sits in is not mounted anywhere in the app. It has to be
     put right before that view is mounted or tips are charged.
 
+### Files in encrypted rooms (2026-11-16)
+
+-   **Where:** the composer and the timeline
+    (`apps/blackout-client/src/app/features/media/utils/roomAttachment.ts`,
+    `encryptedMedia.ts`, `apps/blackout-client/src/app/components/messages/`).
+    Record: `docs/security/attachment-encryption-2026-11-16.md`.
+-   **What was wrong:** until 2026-11-16 every attachment, voice note and
+    hidden-message image was uploaded as it was, in encrypted rooms too. The
+    message was encrypted; the file, its name and its type were not. The
+    timeline also could not open an encrypted file sent by another Matrix app.
+-   **State:** a file sent in an encrypted room is now encrypted in the app
+    before it is uploaded, and encrypted files from any Matrix app open after
+    their fingerprint is checked. What remains:
+    -   **Files already sent are still on the homeserver, unencrypted.** The
+        app cannot delete them, and deleting the message does not remove the
+        file. Each one is marked in the conversation ("Not end-to-end
+        encrypted"). Whether to notify people or delete the files is an
+        operator decision listed in the record.
+    -   **An app built before the fix keeps uploading unencrypted** until it is
+        updated. The desktop and mobile shells bundle the client and need new
+        builds.
+    -   **The server still sees** an encrypted file's size to the byte, who
+        uploaded it and when, and the network addresses it is downloaded from.
+        Media is served to anyone who has a file's address; this Synapse
+        version has no authenticated media.
+    -   **No thumbnails for encrypted images**: the full image is fetched when
+        it comes on screen, up to 20 MiB; larger ones, and any that state no
+        size, wait for a click. Encrypted video is downloaded whole before it
+        plays, and only on a click. No inline preview for an encrypted PDF.
+    -   **Whole file in memory** to encrypt and to decrypt.
+    -   **Not run** against a real homeserver, in the desktop or mobile shell,
+        or against another Matrix app; see the record's "Not verified".
+-   **Also fixed there:** a message typed into a room the app had not finished
+    loading was sent unencrypted by the Matrix SDK. The send paths now refuse
+    until the room is loaded, and a failed send says so under the composer.
+    The dead-drop composer wraps the same composer and takes the same path;
+    whether its "message will be queued" banner is true was not checked here.
+
 ## Deferred multi-week workstreams
 
 These are tracked in

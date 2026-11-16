@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { MatrixEvent, Room } from 'matrix-js-sdk';
 import { useMatrixClient } from './useMatrixClient';
 import { useLegacyRoomAdapter as useRoom } from '../plugins/matrix-adapters/hooks/useLegacyRoomAdapter';
-import { uploadMedia } from '../utils/media';
+import { sendRoomAttachment } from '../features/media/utils/roomAttachment';
+import { assertRoomLoaded } from '../features/room/roomSendGuard';
 
 export interface HookResult<T> {
     data: T;
@@ -116,8 +117,11 @@ export const useTimelineScroll = (roomId: string) => {
 export const useSendMessage = (roomId: string) => {
     const client = useMatrixClient();
     const sendEvent = useCallback(
-        (roomIdArg: string, eventType: string, content: Record<string, unknown>) =>
-            (
+        async (roomIdArg: string, eventType: string, content: Record<string, unknown>) => {
+            // Refuse a room that is not loaded: the SDK would send it
+            // unencrypted. See features/room/roomSendGuard.ts.
+            assertRoomLoaded(client, roomIdArg);
+            return (
                 client as unknown as {
                     sendEvent: (
                         rid: string,
@@ -125,7 +129,8 @@ export const useSendMessage = (roomId: string) => {
                         c: Record<string, unknown>
                     ) => Promise<unknown>;
                 }
-            ).sendEvent(roomIdArg, eventType, content),
+            ).sendEvent(roomIdArg, eventType, content);
+        },
         [client]
     );
     const [loading, setLoading] = useState(false);
@@ -181,16 +186,23 @@ export const useSendMessage = (roomId: string) => {
             setLoading(true);
             setError(null);
             try {
-                const url = await uploadMedia(client, file);
-                await sendEvent(roomId, 'm.room.message', {
-                    msgtype: 'm.file',
-                    body: file.name,
-                    url,
-                    info: {
-                        mimetype: file.type,
-                        size: file.size,
-                    },
-                });
+                // Encrypted before upload when the room is encrypted; see
+                // features/media/utils/roomAttachment.ts.
+                await sendRoomAttachment(
+                    client,
+                    roomId,
+                    file,
+                    (source) => ({
+                        msgtype: 'm.file',
+                        body: file.name,
+                        ...source,
+                        info: {
+                            mimetype: file.type,
+                            size: file.size,
+                        },
+                    }),
+                    (content) => sendEvent(roomId, 'm.room.message', content)
+                );
             } catch (err) {
                 setError(err instanceof Error ? err : new Error('Failed to send media.'));
                 throw err;
@@ -241,8 +253,11 @@ export const useSendMessage = (roomId: string) => {
 export const useEditMessage = (roomId: string) => {
     const client = useMatrixClient();
     const sendEvent = useCallback(
-        (roomIdArg: string, eventType: string, content: Record<string, unknown>) =>
-            (
+        async (roomIdArg: string, eventType: string, content: Record<string, unknown>) => {
+            // Refuse a room that is not loaded: the SDK would send it
+            // unencrypted. See features/room/roomSendGuard.ts.
+            assertRoomLoaded(client, roomIdArg);
+            return (
                 client as unknown as {
                     sendEvent: (
                         rid: string,
@@ -250,7 +265,8 @@ export const useEditMessage = (roomId: string) => {
                         c: Record<string, unknown>
                     ) => Promise<unknown>;
                 }
-            ).sendEvent(roomIdArg, eventType, content),
+            ).sendEvent(roomIdArg, eventType, content);
+        },
         [client]
     );
 

@@ -2,7 +2,11 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { MatrixEvent, Room } from 'matrix-js-sdk';
 import { useLegacyMatrixClientAdapter as useMatrixClient } from './useLegacyMatrixClientAdapter';
 import { useLegacyRoomAdapter as useRoom } from './useLegacyRoomAdapter';
-import { uploadMedia } from '../../../features/media/utils/matrixMedia';
+import {
+    sendRoomAttachment,
+    type AttachmentSource,
+} from '../../../features/media/utils/roomAttachment';
+import { assertRoomLoaded } from '../../../features/room/roomSendGuard';
 import {
     buildEphemeralContent,
     type EphemeralPolicy,
@@ -117,8 +121,11 @@ export const useLegacyTimelineScrollAdapter = (roomId: string) => {
 export const useLegacySendMessageAdapter = (roomId: string) => {
     const client = useMatrixClient();
     const sendEvent = useCallback(
-        (roomIdArg: string, eventType: string, content: Record<string, unknown>) =>
-            (
+        async (roomIdArg: string, eventType: string, content: Record<string, unknown>) => {
+            // Refuse a room that is not loaded: the SDK would send it
+            // unencrypted. See features/room/roomSendGuard.ts.
+            assertRoomLoaded(client, roomIdArg);
+            return (
                 client as unknown as {
                     sendEvent: (
                         rid: string,
@@ -126,7 +133,8 @@ export const useLegacySendMessageAdapter = (roomId: string) => {
                         c: Record<string, unknown>
                     ) => Promise<unknown>;
                 }
-            ).sendEvent(roomIdArg, eventType, content),
+            ).sendEvent(roomIdArg, eventType, content);
+        },
         [client]
     );
     const [loading, setLoading] = useState(false);
@@ -183,35 +191,44 @@ export const useLegacySendMessageAdapter = (roomId: string) => {
             options?: {
                 ephemeral?: EphemeralPolicy | null;
                 /**
-                 * Shape the message content from the uploaded mxc URL.
-                 * Voice notes use this to emit `m.audio` + MSC3245 markers
-                 * instead of the generic `m.file` fallback below.
+                 * Shape the message content from where the upload landed.
+                 * `source` is `{ url }` for a plain upload and `{ file }`
+                 * for an encrypted one: spread it into the content, and
+                 * never write a `url` of your own. Voice notes use this to
+                 * emit `m.audio` + MSC3245 markers instead of the generic
+                 * `m.file` fallback below.
                  */
-                buildContent?: (url: string) => Record<string, unknown>;
+                buildContent?: (source: AttachmentSource) => Record<string, unknown>;
             }
         ) => {
             setLoading(true);
             setError(null);
             try {
-                const url = await uploadMedia(client, file);
                 const ephemeralBlock = options?.ephemeral
                     ? buildEphemeralContent(options.ephemeral)
                     : null;
-                const baseContent = options?.buildContent
-                    ? options.buildContent(url)
-                    : {
-                          msgtype: 'm.file',
-                          body: file.name,
-                          url,
-                          info: {
-                              mimetype: file.type,
-                              size: file.size,
-                          },
-                      };
-                await sendEvent(roomId, 'm.room.message', {
-                    ...baseContent,
-                    ...(ephemeralBlock ?? {}),
-                });
+                // In an encrypted room the file is encrypted before it is
+                // uploaded; see roomAttachment.ts.
+                await sendRoomAttachment(
+                    client,
+                    roomId,
+                    file,
+                    (source) => ({
+                        ...(options?.buildContent
+                            ? options.buildContent(source)
+                            : {
+                                  msgtype: 'm.file',
+                                  body: file.name,
+                                  ...source,
+                                  info: {
+                                      mimetype: file.type,
+                                      size: file.size,
+                                  },
+                              }),
+                        ...(ephemeralBlock ?? {}),
+                    }),
+                    (content) => sendEvent(roomId, 'm.room.message', content)
+                );
             } catch (err) {
                 setError(err instanceof Error ? err : new Error('Failed to send media.'));
                 throw err;
@@ -261,8 +278,11 @@ export const useLegacySendMessageAdapter = (roomId: string) => {
 export const useLegacyEditMessageAdapter = (roomId: string) => {
     const client = useMatrixClient();
     const sendEvent = useCallback(
-        (roomIdArg: string, eventType: string, content: Record<string, unknown>) =>
-            (
+        async (roomIdArg: string, eventType: string, content: Record<string, unknown>) => {
+            // Refuse a room that is not loaded: the SDK would send it
+            // unencrypted. See features/room/roomSendGuard.ts.
+            assertRoomLoaded(client, roomIdArg);
+            return (
                 client as unknown as {
                     sendEvent: (
                         rid: string,
@@ -270,7 +290,8 @@ export const useLegacyEditMessageAdapter = (roomId: string) => {
                         c: Record<string, unknown>
                     ) => Promise<unknown>;
                 }
-            ).sendEvent(roomIdArg, eventType, content),
+            ).sendEvent(roomIdArg, eventType, content);
+        },
         [client]
     );
 

@@ -10,8 +10,10 @@
         `createAuthorizedApiClient` against `/v1/coliseum/*`.
 -   `src/app/features/steganography/RevealMessagePanel.tsx`:
     -   Image blob retrieval via SDK `fetchBlob` media helper.
--   `src/app/components/messages/mediaShared.tsx`:
-    -   Encrypted media retrieval via `mediaClient.fetchArrayBuffer`.
+-   `src/app/features/media/utils/encryptedMedia.ts` (used by the timeline's
+    media components in `src/app/components/messages/`):
+    -   Encrypted media retrieval via `mediaClient.fetchArrayBuffer`, with a byte
+        ceiling on fetches the reader did not ask for.
 
 ## Allowed direct `fetch()` exemptions (in guarded scope)
 
