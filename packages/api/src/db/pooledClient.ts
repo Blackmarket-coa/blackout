@@ -203,7 +203,7 @@ export type PooledAttempt<T> =
  * server's own error (its FATAL to the statement in flight), as pg's
  * ("Connection terminated unexpectedly", "Client has encountered a connection
  * error and is not queryable") or as the socket's (ECONNRESET), and of a
- * server error's severity pg-protocol (1.13.0) passes on only the wording.
+ * server error's severity pg-protocol (1.16.1) passes on only the wording.
  * So the connection is sent one more statement before it goes back
  * (sendAfterFailure, SELECT 1), and it had ended if that statement fails.
  * From pg 8.20.0's lib/client.js and lib/query.js, what the statement meets:
@@ -445,7 +445,7 @@ export async function raiseIdleSessionTimeoutTo(
         // the statement first, with a FATAL error, and pg reports the drop
         // only when the socket closes, a moment later. The error is not
         // relied on to tell the two apart: of its severity, pg-protocol
-        // (1.13.0) passes on only the wording (the protocol's field S, not
+        // (1.16.1) passes on only the wording (the protocol's field S, not
         // its field V). So the connection is asked. After a FATAL no
         // statement is answered: pg holds this one back until the socket
         // closes and fails it then, after the 'error' listeners have run. The

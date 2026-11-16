@@ -1394,16 +1394,17 @@ const retryLines = (lines: string[]): unknown[][] =>
 // that gives no answer, and the test's time limit is fifteen seconds: they
 // pass only where the queue does not wait on such a connection at all.
 //
-// What pg leaves behind of a statement it failed itself reaches the next
-// statements the process sends: pg-protocol (1.13.0) builds every message of
-// every connection in the same two buffers, and a statement that fails
-// half-built stays in them. On PostgreSQL 16 here (2026-11-15) the bad
-// write's own retry could not connect ("Connection terminated unexpectedly":
-// its startup packet carried the leftover), and where a parameter had been
-// written before the one that failed, the next write's first attempt was
-// refused (08P01, invalid message format) and its retry landed. These tests
-// do not pin that: only that the bad write is given up after its one retry,
-// and that the write behind it lands.
+// pg-protocol builds every message of every connection in shared buffers.
+// Up to 1.13.0 a statement that failed half-built stayed in them and went out
+// at the head of the next messages the process sent, on any connection: on
+// PostgreSQL 16 here (2026-11-15) the bad write's own retry could not connect
+// ("Connection terminated unexpectedly": its startup packet carried the
+// leftover), and the next write's first attempt was refused (08P01, invalid
+// message format) and its retry landed. From 1.15.0 the buffer is emptied
+// when a value fails, and the lockfile resolves 1.16.1 since 2026-11-16. The
+// first test below pins what that changed: the bad write's retry fails on the
+// value again, not on the connection, and the write behind it lands on its
+// first attempt.
 test(
     'a write-behind write pg fails itself, for a value it cannot serialize, does not hold the queue: it is given up and logged, and the next write lands',
     { skip, timeout: 15_000 },
@@ -1437,6 +1438,11 @@ test(
         const failed = logged(lines, 'db_write_behind_failed');
         assert.equal(failed.length, 1, 'the write that cannot be sent is given up, and logged');
         assert.equal(failed[0].kind, 'upsert');
+        // Nothing of the bad statement is left in pg-protocol's buffers: its
+        // retry connects and fails on the value again, and the next write is
+        // not refused (with pg-protocol 1.13.0 both went wrong; see above).
+        assert.equal(failed[0].error, 'Do not know how to serialize a BigInt');
+        assert.equal(retryLines(lines).length, 1, 'the write behind it lands on its first attempt');
         const { rows } = await a.query('SELECT id, v FROM probe_wb');
         assert.deepEqual(rows, [{ id: 'good', v: 'after the bad one' }]);
     }

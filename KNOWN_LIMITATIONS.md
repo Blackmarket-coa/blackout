@@ -1451,20 +1451,22 @@ What remains:
     -   Postgres refuses the statement on connections that answer.
     -   Its connections give no answer, 5 s each time.
     -   node-postgres cannot send the write (a value it cannot turn into a
-        parameter): it fails so on every attempt. What node-postgres had
-        built of the failed statement also goes out with the next messages
-        the process sends, on any connection (pg-protocol 1.13.0 builds
-        the messages of every connection in the same two buffers, and a
-        statement that fails half-built stays in them). In the runs here the
-        write's own retry could not connect ("Connection terminated
-        unexpectedly"), and where a parameter had been built before the one
-        that failed, the first attempt of the next write was refused
-        (`08P01`, invalid message format) and that write landed on its
-        retry. The review of 2026-11-15 found no request that puts such a
-        value in a write. pg-protocol 1.15.0 and later empty that buffer
-        when a value fails, and node-postgres 8.20.0 accepts them
-        (`pg-protocol ^1.13.0`); moving the lockfile to one is a change of
-        its own, not made here.
+        parameter): it fails so on every attempt. The review of 2026-11-15
+        found no request that puts such a value in a write. Until
+        2026-11-16 what node-postgres had built of the failed statement
+        also went out with the next messages the process sent, on any
+        connection (pg-protocol 1.13.0 built the messages of every
+        connection in the same two buffers, and a statement that failed
+        half-built stayed in them): the write's own retry could not connect
+        ("Connection terminated unexpectedly"), and the next write's first
+        attempt was refused (`08P01`, invalid message format). The lockfile
+        now resolves pg-protocol 1.16.1, which empties that buffer when a
+        value fails (node-postgres 8.20.0 accepts it, `^1.13.0`). Measured
+        on PostgreSQL 16.15 with node-postgres 8.20.0: after such a failure
+        a new connection connects and answers with 1.16.1, and could not
+        connect with 1.13.0. The connection the failed statement was on
+        still answers nothing more under either (node-postgres sent part of
+        the statement and never finishes it); the queue does not reuse it.
 
     Such a write is logged and counted (`db_write_behind_failed`,
     `db_write_behind_failures_total`), though the request that made it was
