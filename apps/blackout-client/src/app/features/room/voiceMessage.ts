@@ -8,7 +8,11 @@
  * in `org.matrix.msc1767.audio` (and `info.duration`) the way Element
  * clients emit it, so receivers can render a real waveform without
  * downloading the audio first.
+ *
+ * The media reference is an `AttachmentSource` (`{ url }` or, in an
+ * encrypted room, `{ file }`), spread into the content as given.
  */
+import type { AttachmentSource } from '../media/utils/roomAttachment';
 
 /** MSC1767/Element waveform convention: integer amplitudes in 0..1024. */
 export const VOICE_WAVEFORM_PEAK = 1024;
@@ -80,7 +84,8 @@ export const analyzeVoiceNote = async (file: File | Blob): Promise<VoiceNoteMeta
 };
 
 export interface VoiceMessageContentInput {
-    url: string;
+    /** Where the upload landed, from `sendRoomAttachment`. */
+    source: AttachmentSource;
     fileName: string;
     mimeType: string;
     size: number;
@@ -109,7 +114,7 @@ export function buildVoiceMessageContent(input: VoiceMessageContentInput): Recor
     const content: Record<string, unknown> = {
         msgtype: 'm.audio',
         body: input.fileName,
-        url: input.url,
+        ...input.source,
         info,
         // AudioMessage detection: org.matrix.msc3245.voice flags the
         // message as a voice note so the waveform renderer kicks in.

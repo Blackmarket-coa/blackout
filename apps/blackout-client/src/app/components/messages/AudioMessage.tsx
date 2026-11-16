@@ -1,6 +1,16 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import type { MatrixEvent } from 'matrix-js-sdk';
-import { baseStyles, getInfo, useInViewport, useResolvedMediaSource } from './mediaShared';
+import {
+    MediaLoadError,
+    ServerReadableNote,
+    baseStyles,
+    fitsEncryptedAutoLoad,
+    getInfo,
+    loadEncryptedLabel,
+    useInViewport,
+    useLatched,
+    useResolvedMediaSource,
+} from './mediaShared';
 import { readWaveformHeights } from '../../features/room/voiceMessage';
 import { useMediaPlaybackRate } from '../../hooks/media/useMediaPlaybackRate';
 
@@ -18,7 +28,21 @@ export const PLAYBACK_RATES = [1, 1.25, 1.5, 2] as const;
 
 export const AudioMessage = ({ event }: AudioMessageProps) => {
     const { ref, inView } = useInViewport<HTMLDivElement>();
-    const { src, loading, error } = useResolvedMediaSource(event);
+    const seen = useLatched(inView);
+    const {
+        src,
+        loading,
+        error,
+        awaitingLoad,
+        load,
+        canRetry,
+        sizeUnderstated,
+        serverReadableNote,
+    } = useResolvedMediaSource(event, {
+        autoLoad: seen && fitsEncryptedAutoLoad(getInfo(event)),
+    });
+    // The browser refused or could not decode the audio it was handed.
+    const [unplayable, setUnplayable] = useState(false);
     const audioRef = useRef<HTMLAudioElement | null>(null);
     const [playing, setPlaying] = useState(false);
     const [position, setPosition] = useState(0);
@@ -27,9 +51,7 @@ export const AudioMessage = ({ event }: AudioMessageProps) => {
     const getAudioElement = useCallback(() => audioRef.current, []);
     const { playbackRate, setPlaybackRate } = useMediaPlaybackRate(getAudioElement);
     const cyclePlaybackRate = useCallback(() => {
-        const idx = PLAYBACK_RATES.indexOf(
-            playbackRate as (typeof PLAYBACK_RATES)[number],
-        );
+        const idx = PLAYBACK_RATES.indexOf(playbackRate as typeof PLAYBACK_RATES[number]);
         setPlaybackRate(PLAYBACK_RATES[(idx + 1) % PLAYBACK_RATES.length]);
     }, [playbackRate, setPlaybackRate]);
 
@@ -42,8 +64,7 @@ export const AudioMessage = ({ event }: AudioMessageProps) => {
         const d = (audioBlock as { duration?: unknown }).duration;
         return typeof d === 'number' ? d : undefined;
     })();
-    const durationMs =
-        typeof info.duration === 'number' ? info.duration : (msc1767Duration ?? 0);
+    const durationMs = typeof info.duration === 'number' ? info.duration : msc1767Duration ?? 0;
     const durationSec = Math.floor(durationMs / 1000);
 
     // Real peaks when the sender transmitted them (MSC1767 audio block);
@@ -60,7 +81,18 @@ export const AudioMessage = ({ event }: AudioMessageProps) => {
             {!inView || loading ? (
                 <div style={{ ...baseStyles.skeleton, minHeight: 54, borderRadius: 8 }} />
             ) : null}
-            {error ? <div style={baseStyles.error}>Audio failed to load: {error}</div> : null}
+            {error ? (
+                <MediaLoadError
+                    what="Audio failed to load"
+                    error={error}
+                    onRetry={canRetry ? load : undefined}
+                />
+            ) : null}
+            {inView && awaitingLoad ? (
+                <button type="button" onClick={load} data-testid="load-encrypted-media">
+                    {loadEncryptedLabel('audio', info, sizeUnderstated)}
+                </button>
+            ) : null}
 
             {inView && src ? (
                 <>
@@ -69,6 +101,7 @@ export const AudioMessage = ({ event }: AudioMessageProps) => {
                         src={src}
                         onPlay={() => setPlaying(true)}
                         onPause={() => setPlaying(false)}
+                        onError={() => setUnplayable(true)}
                         onTimeUpdate={(event) => {
                             const target = event.currentTarget;
                             if (!target.duration) return;
@@ -83,7 +116,9 @@ export const AudioMessage = ({ event }: AudioMessageProps) => {
                                     key={`wave-${idx}`}
                                     style={{
                                         width: 4,
-                                        height: `${height * (idx / waveform.length < position ? 1 : 0.45)}%`,
+                                        height: `${
+                                            height * (idx / waveform.length < position ? 1 : 0.45)
+                                        }%`,
                                         borderRadius: 2,
                                         background:
                                             idx / waveform.length < position
@@ -129,7 +164,7 @@ export const AudioMessage = ({ event }: AudioMessageProps) => {
                         />
                         <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>
                             {formatTime(
-                                (audioRef.current?.currentTime ?? position * durationSec) || 0,
+                                (audioRef.current?.currentTime ?? position * durationSec) || 0
                             )}{' '}
                             / {formatTime(durationSec)}
                         </span>
@@ -159,6 +194,12 @@ export const AudioMessage = ({ event }: AudioMessageProps) => {
                     </div>
                 </>
             ) : null}
+            {unplayable ? (
+                <div style={baseStyles.error} data-testid="media-unplayable">
+                    This audio could not be played here.
+                </div>
+            ) : null}
+            {serverReadableNote ? <ServerReadableNote text={serverReadableNote} /> : null}
         </div>
     );
 };

@@ -80,7 +80,7 @@ const renderForm = async () => {
 
 const createButton = (container: HTMLElement) =>
     Array.from(container.querySelectorAll('button')).find((b) =>
-        b.textContent?.includes('Create an anonymous account')
+        b.textContent?.includes('Create an account without an email')
     );
 
 const alertText = (container: HTMLElement) =>

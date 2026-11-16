@@ -21,6 +21,7 @@ import { activeThreadRootIdAtom, rightPanelAtom } from '../../state/navigation';
 import { sanitizeMatrixHtml } from '../../plugins/markdown/matrixMarkdownUtils';
 import { designSpacing } from '../../../../../../packages/design/src';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
+import { avatarThumbnailUrl } from '../../utils/media';
 import { readPowerLevel, usePowerLevels } from '../../hooks/usePowerLevels';
 import { useRoomPinnedEvents } from '../../hooks/useRoomPinnedEvents';
 import { StateEvent } from '../../../types/matrix/room';
@@ -330,10 +331,16 @@ const resolveStateCopy = (event: MatrixEvent, room: Room | null): string => {
     }
 };
 
-const getAvatar = (room: Room | null, userId: string): string | null => {
-    const url = room?.getMember(userId)?.getMxcAvatarUrl?.();
-    return url ?? null;
-};
+/**
+ * The address a member's avatar is loaded from in the timeline. Only an avatar
+ * the homeserver holds is loaded; see `avatarThumbnailUrl`. Exported for its
+ * test.
+ */
+export const getAvatar = (
+    room: Room | null,
+    userId: string,
+    homeserverUrl: string
+): string | null => avatarThumbnailUrl(room?.getMember(userId)?.getMxcAvatarUrl?.(), homeserverUrl);
 
 const getRelation = (event: MatrixEvent): Record<string, unknown> | null => {
     const content = event.getContent<Record<string, unknown>>();
@@ -390,62 +397,6 @@ export const TextMessage = memo(({ event }: MessageBubbleProps) => {
         );
     }
     return <div style={styles.body}>{getBody(event)}</div>;
-});
-
-export const ImageMessage = memo(({ event }: MessageBubbleProps) => {
-    const content = event.getContent<Record<string, unknown>>();
-    const url = typeof content.url === 'string' ? content.url : '';
-    const body = getBody(event);
-    return (
-        <a href={url} target="_blank" rel="noreferrer" title="Open image in lightbox">
-            <img style={styles.media} src={url} alt={body || 'Image'} loading="lazy" />
-        </a>
-    );
-});
-
-export const VideoMessage = memo(({ event }: MessageBubbleProps) => {
-    const content = event.getContent<Record<string, unknown>>();
-    const url = typeof content.url === 'string' ? content.url : '';
-    return <video style={styles.media} controls src={url} preload="metadata" />;
-});
-
-export const AudioMessage = memo(({ event }: MessageBubbleProps) => {
-    const content = event.getContent<Record<string, unknown>>();
-    const url = typeof content.url === 'string' ? content.url : '';
-    return (
-        <div>
-            <audio controls src={url} style={{ width: '100%' }} />
-            <div style={{ ...styles.pill, marginTop: 6 }}>Waveform preview (voice)</div>
-        </div>
-    );
-});
-
-export const FileMessage = memo(({ event }: MessageBubbleProps) => {
-    const content = event.getContent<Record<string, unknown>>();
-    const url = typeof content.url === 'string' ? content.url : '';
-    const body = getBody(event) || 'Download file';
-    return (
-        <a
-            href={url}
-            target="_blank"
-            rel="noreferrer"
-            style={{ ...styles.pill, display: 'inline-block' }}
-        >
-            ⬇ {body}
-        </a>
-    );
-});
-
-export const StickerMessage = memo(({ event }: MessageBubbleProps) => {
-    const content = event.getContent<Record<string, unknown>>();
-    const url = typeof content.url === 'string' ? content.url : '';
-    return (
-        <img
-            src={url}
-            alt={getBody(event) || 'Sticker'}
-            style={{ ...styles.media, border: 'none', maxWidth: 220 }}
-        />
-    );
 });
 
 export const NoticeMessage = memo(({ event }: MessageBubbleProps) => (
@@ -635,10 +586,11 @@ const MessageBubble = ({
     receipts = [],
     room,
     roomId,
+    homeserverUrl,
     onOpenProfile,
-}: MessageBubbleProps & { room: Room | null; roomId: string }) => {
+}: MessageBubbleProps & { room: Room | null; roomId: string; homeserverUrl: string }) => {
     const sender = getEventSender(event);
-    const avatar = getAvatar(room, sender);
+    const avatar = getAvatar(room, sender, homeserverUrl);
     const senderName = getDisplayName(room, sender);
 
     if (isStateEvent(event)) {
@@ -770,6 +722,8 @@ export const RoomTimeline = ({
     onJumpResolved,
 }: RoomTimelineProps) => {
     const client = useMatrixClient();
+    const homeserverUrl =
+        (client as unknown as { getHomeserverUrl?: () => string }).getHomeserverUrl?.() ?? '';
     const { data: events, loadMore } = useRoomTimeline(roomId);
     const { data: room } = useRoom(roomId);
     const { data: typingMembers } = useTypingIndicator(roomId);
@@ -788,12 +742,17 @@ export const RoomTimeline = ({
         (userId: string): MemberProfile => ({
             userId,
             displayName: room?.getMember(userId)?.name ?? userId,
-            avatarUrl: room?.getMember(userId)?.getMxcAvatarUrl?.() ?? undefined,
+            avatarUrl:
+                avatarThumbnailUrl(
+                    room?.getMember(userId)?.getMxcAvatarUrl?.(),
+                    homeserverUrl,
+                    256
+                ) ?? undefined,
             roleBadges: [],
             mutualSpaces: [],
             profile: {},
         }),
-        [room]
+        [homeserverUrl, room]
     );
     const openProfileFromAudit = useCallback(
         (args?: Record<string, unknown>) => {
@@ -830,12 +789,16 @@ export const RoomTimeline = ({
                     return {
                         userId: entry.userId,
                         displayName: member?.name ?? entry.userId,
-                        avatarUrl: member?.getMxcAvatarUrl?.() ?? null,
+                        avatarUrl: avatarThumbnailUrl(
+                            member?.getMxcAvatarUrl?.(),
+                            homeserverUrl,
+                            48
+                        ),
                     };
                 });
             return receiptEntries;
         },
-        [room]
+        [homeserverUrl, room]
     );
 
     const handleScroll = useCallback(async () => {
@@ -1001,6 +964,7 @@ export const RoomTimeline = ({
                                     groupedWithPrevious={item.groupedWithPrevious}
                                     room={room}
                                     roomId={roomId}
+                                    homeserverUrl={homeserverUrl}
                                     receipts={getReceipts(item.event)}
                                     onOpenProfile={(userId) =>
                                         setProfileTarget(buildProfile(userId))

@@ -22,6 +22,23 @@ interface TipButtonProps {
     onTipCreated?: (tip: Tip) => void;
 }
 
+/**
+ * What the popover says once the API has taken a tip. The API records it as
+ * `pending` and nothing else: this app opens no checkout for a tip, so no
+ * payment is taken and the recipient is paid nothing until one is (the API's
+ * services/tips.ts createTip; docs/coalitions/TASK0_AUDIT.md, "the money leg
+ * is missing today"). Until 2026-11-16 this read "Sent $5.00 — they'll
+ * receive $4.85", which said money had moved.
+ */
+export function tipRecordedMessage(gross: string, net: string, recipientLabel?: string): string {
+    const who = recipientLabel ?? 'the recipient';
+    return (
+        `Tip of ${gross}${recipientLabel ? ` to ${recipientLabel}` : ''} recorded as pending. ` +
+        `No payment has been taken: checkout for tips is not connected yet, so you have not been charged and ${who} has not been paid. ` +
+        `Once it is paid, ${who} receives ${net} after the ${FBM_FEE_PERCENT}% platform fee.`
+    );
+}
+
 const DEFAULT_QUICK_AMOUNTS = [100, 250, 500, 1000, 2500];
 const MIN_TIP_CENTS = 100;
 
@@ -113,13 +130,12 @@ export function TipButton({
                 },
                 token
             );
-            const display = formatCents(finalCents);
             setConfirmation(
-                `Sent ${display}${
-                    recipientLabel ? ` to ${recipientLabel}` : ''
-                } — they'll receive ${formatCents(
-                    tip.netCents
-                )} after the ${FBM_FEE_PERCENT}% platform fee.`
+                tipRecordedMessage(
+                    formatCents(finalCents),
+                    formatCents(tip.netCents),
+                    recipientLabel
+                )
             );
             setNote('');
             setCustomCents('');
@@ -223,7 +239,10 @@ export function TipButton({
                   confirmation
                       ? createElement(
                             'div',
-                            { style: { fontSize: 11, color: 'var(--text-success)' } },
+                            {
+                                style: { fontSize: 11, color: 'var(--text-secondary)' },
+                                'data-testid': 'tip-recorded-notice',
+                            },
                             confirmation
                         )
                       : null,

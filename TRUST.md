@@ -87,6 +87,27 @@ someone later adds a well-meaning debug line.
 
 Encryption claims are only worth something with the exceptions attached.
 
+-   **Files sent from a build of the app older than 2026-11-16.** Until then the
+    app uploaded every attachment, voice note and hidden-message image as it
+    was, in encrypted rooms too. The message around the file was encrypted; the
+    file, its name and its type were not. Those files are still on the
+    homeserver, readable by whoever runs it or holds its backups and by anyone
+    who has a file's address, and the app cannot delete them: deleting the
+    message does not remove the file. Since the fix, a file sent in an encrypted
+    room is encrypted on your device before it is uploaded, and every file that
+    was not is marked in the conversation: "Not end-to-end encrypted". A copy of
+    the app built before the fix keeps uploading unencrypted until it is
+    updated. The full account, including what was not fixed, is in
+    [`attachment-encryption-2026-11-16.md`](docs/security/attachment-encryption-2026-11-16.md).
+-   **What the homeserver sees in an encrypted room.** Not the text of messages
+    or the contents of files. It does see who is in the room, who sends
+    something and when, and which earlier message a reply, an edit or a reaction
+    points to; emoji reactions, which Matrix does not encrypt; for a file, its
+    size to the byte, who uploaded it, and the network addresses it is
+    downloaded from; and everything kept as part of the room itself, because
+    Matrix does not encrypt room state in any room: its name, topic and picture,
+    its pinned messages list, role assignments, and **the text of den documents,
+    proposals, objectives and playbooks**.
 -   **Publicly joinable rooms.** Encrypting a room anyone can join hides history
     from everyone who joins later and breaks search, without making public content
     private.
@@ -127,12 +148,30 @@ Encryption claims are only worth something with the exceptions attached.
 **"E2EE is never paywalled" is true. "Privacy is never paywalled" is not, and we
 do not say it.**
 
-Privacy-enhancing features beyond encryption _are_ tiered: Tor transport, decoy
-traffic, image perturbation, persona compartments and rotation, dead-drop
-anonymity padding and decoys, mesh transport, active defense. Free dead-drops are
-capped at 64 KB, 24 hours, one recipient, no decoys. The confidentiality of your
-messages is free; some of the tools for hiding _that you are communicating at
-all_ are not.
+Privacy-enhancing features beyond encryption _are_ tiered: image perturbation,
+persona compartments and rotation, mesh transport, active defense. The
+confidentiality of your messages is free; some of the tools for hiding _that you
+are communicating at all_ are not.
+
+**Dead drops are not among them yet, because nobody can use one.** The
+sealed-envelope format, the service that would hold envelopes and the tier
+limits for them (64 KB, 24 hours, one recipient and no decoys on the free tier)
+are in the repository and tested, but no screen of the app sends or opens a
+dead drop, and no deployment file here runs that service. Until 2026-11-16 a
+room could be put in a "Dead Drop" mode whose banner said your message "will be
+queued" and whose settings offered "anonymized delivery" on a paid tier.
+Neither existed: the message was sent at once, under your own name. The mode
+now says so
+([`trust-claims-2026-11-16.md`](docs/security/trust-claims-2026-11-16.md), T8).
+
+**Tor transport and decoy traffic are not built.** Paid tiers are assigned them,
+and until 2026-11-16 this page listed them with the features above. There is no
+Tor or onion-routing code and no cover-traffic generator in the app. Blackout
+does not route your traffic through Tor and sends no decoy traffic, on any tier,
+so the server you use sees the IP address you connect from. The app labels both
+"planned", a marketplace listing that includes either says "planned, not built
+yet", and the code that records which hardening features exist is
+[`entitlements.ts`](packages/blackout-protocol/src/hardening/entitlements.ts).
 
 ### Open, not hidden
 
@@ -224,20 +263,35 @@ effect, and neither this page nor the policy changelog is a substitute for them.
 The commitments above are engineering and product commitments backed by code you
 can read.
 
+**The warrant canary is the operator's statement, or there is none.**
+`GET /v1/transparency/canary` reports a statement only when the operator of the
+server has issued one, with the date they issued it, and reports it as lapsed
+once they have not renewed it (after 35 days, unless the operator set another
+length). The server never writes or renews the statement itself. Until
+2026-11-16 it did: it wrote the statement on every request and dated it to the
+current month, so it could never lapse, and this page called that "live and
+signed". This page does not say whether a statement is in effect, because only
+the endpoint can: a page cannot lapse. Where the answer carries a signature, it
+is made with a key the server holds as it answers, so it shows that the answer
+came from a holder of that key and not that a person signed anything. The public
+key sent with the answer proves nothing by itself, and no copy of it is
+published anywhere else yet.
+
 ---
 
 ## Verify it yourself
 
-| Claim                             | Check                                                                                                         |
-| --------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| E2EE is not paywalled             | [`bundles.ts`](packages/blackout-protocol/src/entitlements/bundles.ts) — grep it for an encryption key        |
-| Private rooms encrypt by default  | [`check-room-encryption.mjs`](tools/ci/check-room-encryption.mjs), run `pnpm guard:room-encryption`           |
-| The bot cannot read messages      | Search `packages/api/src` for `/messages`, `/context/`, `/sync` — there are no hits                           |
-| Nothing logs message content      | [`patterns.ts`](packages/core/src/redaction/patterns.ts)                                                      |
-| Export is free                    | `curl` the endpoint on a free account, or read [`dataExport.ts`](packages/api/src/routes/dataExport.ts)       |
-| Warrant canary is live and signed | `GET /v1/transparency/canary` — Ed25519, public key travels with the response                                 |
-| Commitments are versioned         | [`docs/legal/CHANGELOG.md`](docs/legal/CHANGELOG.md)                                                          |
-| We publish our own failures       | [2026-08-10 encryption audit](docs/audits/2026-08-10-encryption-audit.md), [KNOWN_ISSUES.md](KNOWN_ISSUES.md) |
+| Claim                                           | Check                                                                                                                                       |
+| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| E2EE is not paywalled                           | [`bundles.ts`](packages/blackout-protocol/src/entitlements/bundles.ts) — grep it for an encryption key                                      |
+| Private rooms encrypt by default                | [`check-room-encryption.mjs`](tools/ci/check-room-encryption.mjs), run `pnpm guard:room-encryption`                                         |
+| Files in encrypted rooms are encrypted          | [`roomAttachment.ts`](apps/blackout-client/src/app/features/media/utils/roomAttachment.ts); or watch an upload in the network panel         |
+| The bot cannot read messages                    | Search `packages/api/src` for `/messages`, `/context/`, `/sync` — there are no hits                                                         |
+| Nothing logs message content                    | [`patterns.ts`](packages/core/src/redaction/patterns.ts)                                                                                    |
+| Export is free                                  | `curl` the endpoint on a free account, or read [`dataExport.ts`](packages/api/src/routes/dataExport.ts)                                     |
+| The server makes no canary statement of its own | [`warrantCanary.ts`](packages/api/src/services/warrantCanary.ts): `GET /v1/transparency/canary` answers `not_issued`, `current` or `lapsed` |
+| Commitments are versioned                       | [`docs/legal/CHANGELOG.md`](docs/legal/CHANGELOG.md)                                                                                        |
+| We publish our own failures                     | [2026-08-10 encryption audit](docs/audits/2026-08-10-encryption-audit.md), [KNOWN_ISSUES.md](KNOWN_ISSUES.md)                               |
 
 Source: <https://github.com/Blackmarket-coa/blackout>. Everything linked here is
 in the repository — no claim on this page depends on a document only we can see.

@@ -2,8 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { buildVoiceReplyContent } from '../../../../src/app/features/rounds/useRounds';
 
 describe('buildVoiceReplyContent', () => {
+    const url = 'mxc://example.org/abc123';
     const baseInput = {
-        url: 'mxc://example.org/abc123',
+        source: { url },
         fileName: 'voice-note-12345.webm',
         mimeType: 'audio/webm',
         size: 4096,
@@ -23,7 +24,7 @@ describe('buildVoiceReplyContent', () => {
 
     it('encodes the mxc upload URL + filename + info', () => {
         const content = buildVoiceReplyContent(baseInput);
-        expect(content.url).toBe(baseInput.url);
+        expect(content.url).toBe(url);
         expect(content.body).toBe(baseInput.fileName);
         expect(content.info).toEqual({
             mimetype: baseInput.mimeType,

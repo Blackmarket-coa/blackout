@@ -685,6 +685,188 @@ For the source-of-truth triage with tier/owner detail see
 -   **Not there yet:** refusing `none` for id_tokens (it could break a
     compliant provider), and comparing `aud` with the client id.
 
+### Tor transport and decoy traffic: not built (2026-11-16)
+
+-   **Where:** the hardening capabilities assigned to the paid tiers
+    (`packages/blackout-protocol/src/hardening/entitlements.ts`).
+-   **State:** Not built. Paid tiers hold entitlement keys for anonymized (Tor)
+    transport and for decoy traffic, and there is no Tor, SOCKS or
+    onion-routing code and no cover-traffic generator anywhere in this
+    repository. Blackout routes nothing through Tor and sends no decoy traffic,
+    on any tier, so the server a person uses sees the IP address they connect
+    from. Image perturbation, the third capability of that group, is built.
+-   **What says so:** `HARDENING_CAPABILITY_IMPLEMENTED` in that file. The
+    Privacy pulse widget has listed the two as "planned" since 2026-09-09.
+    Since 2026-11-16 three more places read the same map: the widget gallery's
+    description of that widget; a marketplace listing's "Unlocks" line, which
+    says "planned, not built yet" beside either key; and the SDK's hardening
+    gate, which refuses a request for either on every tier
+    (`tor_not_implemented`, `decoy_not_implemented`) and suggests no tier to
+    upgrade to. `TRUST.md` no longer lists them among the tiered features.
+    Before that the trust page listed them, the gallery said "Live status of
+    your anonymized transport", a listing carrying the key read "Unlocks: Tor
+    Transport", and the gate answered `ok` to an entitled caller
+    ([`docs/security/trust-claims-2026-11-16.md`](docs/security/trust-claims-2026-11-16.md)).
+-   **Not in this repository:** what the Free Black Market's catalog says a
+    tier includes. A listing there that names either capability is not
+    corrected by any of this, except in how this app shows it.
+
+### Warrant canary (2026-11-16)
+
+-   **Where:** `GET /v1/transparency/canary`
+    (`packages/api/src/services/warrantCanary.ts`).
+-   **State:** The server reports the statement its operator issued, or says
+    that none has been issued. The operator issues one by setting
+    `BLACKOUT_CANARY_ISSUED_ON` to the day they make it. It stands for 35 days
+    (`BLACKOUT_CANARY_VALID_DAYS`), and after that the answer is `lapsed`,
+    with the dates it had. Until 2026-11-16 the server wrote the statement
+    itself on every request and dated it to the current month: it could not
+    lapse, and nobody had made it.
+-   **Limits:**
+    -   No deployment file in this repository sets an issue date, so a
+        deployment made from them answers `not_issued` until its operator
+        sets one.
+    -   The statement's wording is fixed in the code and has not been reviewed
+        by counsel (the Privacy Policy and Terms of Service are drafts too).
+    -   The signature is made with a key the server holds, as it answers. It
+        shows that the answer came from a holder of that key, not that a
+        person signed anything, and whoever controls the server controls the
+        key. No copy of the public key is published outside the answer, so
+        there is nothing to check it against yet. No deployment file here
+        sets the key; without it a production server sends the statement
+        unsigned.
+    -   Issuing is a setting, not a ceremony: whoever can change the server's
+        environment can set the date.
+    -   The app does not show the canary. Only the endpoint does.
+
+### Tips: no payment is taken (2026-11-16)
+
+-   **Where:** the tip button
+    (`apps/blackout-client/src/app/features/monetization/components/TipButton.tsx`),
+    shown in the livestream viewer (behind the `streamsViewer` flag, off by
+    default).
+-   **State:** Sending a tip records it on the API as `pending`. The app
+    opens no checkout for it, so nothing is charged and the recipient is paid
+    nothing; a tip is captured only when the Free Black Market reports a paid
+    order for it, or an operator captures it with the admin key, and nothing
+    in the app starts that order (`docs/coalitions/TASK0_AUDIT.md`: "the
+    money leg is missing today").
+    Since 2026-11-16 the popover says so. Until then it read "Sent $5.00 —
+    they'll receive $4.85".
+-   **Also:** the room header's tip button (`RoomTipButton.tsx`) posts a
+    `co.bmc.tip` message into the room when a tip is recorded, which would
+    announce to the room a tip nobody has paid. It cannot be reached today:
+    the room view it sits in is not mounted anywhere in the app. It has to be
+    put right before that view is mounted or tips are charged.
+
+### Files in encrypted rooms (2026-11-16)
+
+-   **Where:** the composer and the timeline
+    (`apps/blackout-client/src/app/features/media/utils/roomAttachment.ts`,
+    `encryptedMedia.ts`, `apps/blackout-client/src/app/components/messages/`).
+    Record: `docs/security/attachment-encryption-2026-11-16.md`.
+-   **What was wrong:** until 2026-11-16 every attachment, voice note and
+    hidden-message image was uploaded as it was, in encrypted rooms too. The
+    message was encrypted; the file, its name and its type were not. The
+    timeline also could not open an encrypted file sent by another Matrix app.
+-   **State:** a file sent in an encrypted room is now encrypted in the app
+    before it is uploaded, and an encrypted file opens after its fingerprint is
+    checked. What remains:
+    -   **Files already sent are still on the homeserver, unencrypted.** The
+        app cannot delete them, and deleting the message does not remove the
+        file. Each one is marked in the conversation ("Not end-to-end
+        encrypted"). Whether to notify people or delete the files is an
+        operator decision listed in the record.
+    -   **An app built before the fix keeps uploading unencrypted** until it is
+        updated, and cannot open the encrypted files an updated app sends. The
+        desktop and mobile shells bundle the client and need new builds.
+    -   **The server still sees** an encrypted file's size to the byte, who
+        uploaded it and when, and the network addresses it is downloaded from.
+        Media is served to anyone who has a file's address; this Synapse
+        version has no authenticated media.
+    -   **On a homeserver that requires a login for media, the timeline shows
+        no media at all**, encrypted or not: it fetches from the
+        unauthenticated address. This homeserver serves that address;
+        matrix.org, for one, does not.
+    -   **No thumbnails for encrypted images**: the full image is fetched when
+        it comes on screen, up to 20 MiB; larger ones, and any that state no
+        size, wait for a click. Encrypted video is downloaded whole before it
+        plays, and only on a click. No inline preview for an encrypted PDF.
+    -   **A decrypted copy lasts as long as its row is on screen or near it.**
+        A row the timeline unmounts fetches and decrypts again when it comes
+        back.
+    -   **Whole file in memory** to encrypt and to decrypt.
+    -   **Not run** against a real homeserver, in the desktop or mobile shell,
+        under a content security policy, or against another Matrix app; see the
+        record's "Not verified".
+-   **Also fixed there:** the Matrix SDK sends a message to a room the app has
+    not finished loading without encrypting it. The app's client now refuses
+    such a send, from every screen, and a failed send says so under the
+    composer and in the forum. A file attached in one room no longer stays
+    attached when the person moves to another. The older message components,
+    still used by message search, made blobs in the app's origin typed however
+    the sender declared, HTML and SVG included; they now use the same narrow
+    list of types as the timeline. The dead-drop composer wraps the same
+    composer and takes the same path.
+
+### What an encrypted room does not encrypt: documents, proposals, objectives, playbooks (2026-11-16)
+
+-   **Where:** `packages/blackout-sdk/src/documents/matrixActions.ts`, and the
+    `governance`, `objectives`, `playbook`, `compost` and `roles` actions
+    beside it. Record: `docs/security/trust-claims-2026-11-16.md`, T9.
+-   **State:** these features store what a person writes as Matrix room state.
+    Matrix does not encrypt room state in any room, so in an end-to-end
+    encrypted den the homeserver can still read the title and text of a den
+    document, a proposal, an objective and a playbook, and who holds which
+    role. Messages and files in the same room are encrypted. `TRUST.md` and the
+    lock beside the message box say so since 2026-11-16; nothing about how they
+    are stored has changed.
+-   **To change it** these would have to be sent as encrypted room events
+    rather than state, which changes how they are found and versioned.
+
+### Images at addresses chosen by other people (2026-11-16)
+
+-   **Where:** the profile card and page (`features/profile/MiniProfile.tsx`,
+    `ProfileModal.tsx`, `ProfilePage.tsx`, `AvatarDecoration.tsx`) and the
+    marketplace producer profile (`features/monetization/marketplace/ProducerProfile.tsx`).
+    Record: `docs/security/trust-claims-2026-11-16.md`, T10.
+-   **State:** an image address that someone else chose, handed to the browser
+    as it is, makes the reader's device fetch it, and so tells a server of that
+    person's choosing the reader's network address and the time. Until
+    2026-11-16 the room timeline did this with every member's avatar and with
+    video thumbnails, for everyone looking at the room, and the member panels
+    did it when a profile was opened. Those now load only media the homeserver
+    holds. Still open: a Blackout profile stores its avatar and banner as
+    plain addresses (the editor writes the homeserver's, but the stored value
+    can be any address), and the profile card and page show them as they are;
+    the producer profile takes an avatar address typed by hand. Opening such a
+    profile fetches whatever address its owner stored.
+-   **To close it:** show a profile image only when its address is media on
+    this homeserver, as the timeline now does.
+
+### Dead drops: not reachable from the app (2026-11-16)
+
+-   **Where:** `apps/blackout-client/src/app/features/deaddrop/`,
+    `apps/deaddrop-appservice/`, `packages/blackout-sdk/src/deaddrop/`.
+    Record: `docs/security/trust-claims-2026-11-16.md`, T8.
+-   **State:** Nobody can send or open a dead drop from the app. The
+    sealed-envelope format, the appservice that would hold envelopes and the
+    SDK calls for them are in the repository and tested, but no screen calls
+    them, and no deployment, compose or proxy file runs or routes the
+    appservice.
+-   **The room "Dead Drop" mode queues nothing.** A room's `co.bmc.deaddrop`
+    state is read only by the app's own UI. Until 2026-11-16 that UI said
+    "Dead Drop: message will be queued", counted down to a "next delivery",
+    and offered "Anonymize delivery via bot account" behind a prompt to
+    upgrade to Pro. A message typed there was sent to the room at once, under
+    the sender's own name. Since 2026-11-16 the banner, the indicator and the
+    panel say that, the controls that did nothing are gone, and the panel's one
+    action is to switch the mode off.
+-   **Left as it is:** the dead-drop entitlement keys in the tier tables, the
+    SDK gate, the appservice's queue (its flush logs a line and delivers
+    nothing), and the API's `POST /v1/deaddrop`, which stores the payload
+    string it is given as it is.
+
 ## Deferred multi-week workstreams
 
 These are tracked in
@@ -1218,6 +1400,67 @@ What remains:
     `db:verify-import`, `db:clean-demo-seed`) make their own pools without
     these listeners, so a dropped connection still ends them. They hold no
     write-behind queue.
+
+### The apex domain answers with a placeholder (2026-11-16)
+
+Observed from outside on 2026-11-16, once, from one network.
+`https://theblackout.app/` answers every path tried with a "Coming Soon" page
+(`200`, `text/html`), and `/.well-known/matrix/server`,
+`/.well-known/matrix/client` and `/trust` are among them. The homeserver's name
+is `theblackout.app` (`server_name`, which cannot change after launch), so
+those two documents are looked up there and nowhere else. What follows:
+
+-   **Federation.** Another homeserver that looks up `theblackout.app` gets
+    HTML where it expects the delegation document, so it cannot learn that the
+    homeserver is at `matrix.theblackout.app:443`, unless a DNS SRV record or
+    port 8448 on the apex says so (neither was checked). The homeserver itself
+    answers federation requests at `matrix.theblackout.app`.
+-   **Client discovery.** A Matrix client given `theblackout.app` as its server
+    cannot discover the homeserver from it. Whether the Blackout app's own
+    sign-in depends on that lookup was not checked.
+-   **The trust page** is served at `https://chat.theblackout.app/trust`. Its
+    generator names `https://theblackout.app/trust` as its address
+    (`tools/ci/build-trust-page.mjs`), and that address shows the placeholder.
+
+The configuration in this repository serves both documents from the apex
+(`infra/single-server-baseline/nginx/sites-available/theblackout.app.conf`),
+and the launch checklist checks them
+(`infra/single-server-baseline/synapse/PRODUCTION_LAUNCH.md`), so the apex does
+not point at that proxy. Pointing it there, or deciding that this deployment
+does not federate, is the operator's
+([`ADJACENT_PROTOCOLS_NOSTR_RETICULUM.md`](docs/architecture/ADJACENT_PROTOCOLS_NOSTR_RETICULUM.md),
+sections 5 and 7).
+
+### The deployed client serves no script-restricting content security policy (2026-11-16)
+
+-   **Where:** the response headers of the web client. Observed on 2026-11-16:
+    `content-security-policy: frame-ancestors 'none'` and nothing more.
+-   **State:** nothing in the browser limits what script may run in the page
+    or where it may connect. The app's own rules are then the only defence
+    against injected content, and one of them was missing until 2026-11-16
+    (message search made HTML- and SVG-typed blobs in the app's origin;
+    `docs/security/attachment-encryption-2026-11-16.md`, R1).
+    `infra/nginx/snippets/security-headers.conf` holds a stricter policy that
+    is not what is served, and as written it would block the homeserver's
+    images and decrypted audio and video.
+-   **Operator decision:** adopt a policy for the client. It needs at least
+    the homeserver in `img-src` and `media-src`, `blob:` in `img-src`,
+    `media-src` and `connect-src`, and whatever the WebAssembly crypto needs.
+    Per `CLAUDE.md`, any change to those files is checked with `nginx -t` and a
+    header check per location on a running instance.
+
+### Deploy workflows that have never run (2026-11-16)
+
+`deploy-web.yml` and `deploy-compose-prod.yml` start on a push to `main` (the
+second can also be started by hand). This repository's default branch is
+`develop` and there is no `main`, so neither has ever run: the Actions history
+showed no run of either on 2026-11-16. `docker.yml` builds images on a push to
+`main` or a `v*` tag, and `release.yml` on a `v*` tag; no tag exists. So
+merging to `develop` deploys nothing and publishes no image. Production is
+updated by running `deploy.sh` on the host
+(`infra/single-server-baseline/RUNBOOK.md`), which builds there from
+`origin/develop`. What is live is whatever that script last built, and nothing
+in this repository records which commit that was.
 
 ### Release signoff
 

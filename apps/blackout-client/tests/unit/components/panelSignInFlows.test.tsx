@@ -312,7 +312,7 @@ describe('chat panel sign-in, B3 client switch on', () => {
 
     it('a new account number signs in only after a length is chosen, and binds it', async () => {
         const container = await openPanelSignIn(true);
-        await click(buttonByText(container, 'Create an anonymous account'));
+        await click(buttonByText(container, 'Create an account without an email'));
         await waitFor(() => buttonByText(container, "I've saved it") !== undefined);
         const saved = buttonByText(container, "I've saved it") as HTMLButtonElement;
         expect(saved.disabled).toBe(true);

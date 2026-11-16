@@ -17,6 +17,7 @@ import to from 'await-to-js';
 import { IImageInfo, IThumbnailContent, IVideoInfo } from '../../types/matrix/common';
 import { AccountDataEvent } from '../../types/matrix/accountData';
 import { getStateEvent } from './room';
+import { getBlobSafeMimeType } from './mimeTypes';
 import { Membership, StateEvent } from '../../types/matrix/room';
 
 const DOMAIN_REGEX = /\b(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}\b/;
@@ -136,7 +137,9 @@ export const decryptFile = async (
     encInfo: EncryptedAttachmentInfo
 ): Promise<Blob> => {
     const dataArray = await decryptAttachment(dataBuffer, encInfo);
-    const blob = new Blob([dataArray], { type });
+    // The type is the sender's. A blob typed as a document would run its
+    // script in this app's origin when opened; see `getBlobSafeMimeType`.
+    const blob = new Blob([dataArray], { type: getBlobSafeMimeType(type) });
     return blob;
 };
 
@@ -307,7 +310,11 @@ export const downloadMedia = async (src: string): Promise<Blob> => {
     // this request is authenticated by service worker
     const res = await fetch(src, { method: 'GET' });
     const blob = await res.blob();
-    return blob;
+    // The response's type is the uploader's. The headers a media server sends
+    // to keep a file from being rendered do not travel with the blob, so the
+    // type is narrowed here, as for a decrypted file.
+    const safeType = getBlobSafeMimeType(blob.type);
+    return blob.type === safeType ? blob : new Blob([blob], { type: safeType });
 };
 
 export const downloadEncryptedMedia = async (

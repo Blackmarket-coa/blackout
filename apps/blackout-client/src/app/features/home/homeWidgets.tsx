@@ -97,8 +97,12 @@ export const HOME_WIDGETS: HomeWidgetDef[] = [
     {
         id: 'premiumPrivacyPulse',
         label: 'Privacy pulse',
+        // Purchase-adjacent copy (the gallery shows it beside the unlock
+        // button): it names only what the widget can report as on. Anonymized
+        // (Tor) transport and decoy traffic are not built, and the widget
+        // lists them as planned. See HARDENING_CAPABILITY_IMPLEMENTED.
         description:
-            'Live status of your anonymized transport, decoy traffic, and hardening — a Signal-tier widget.',
+            'Status of your privacy hardening: image perturbation today. Anonymized (Tor) transport and decoy traffic are planned and not built yet — a Signal-tier widget.',
         defaultOrder: null,
         removable: true,
         requiredFeatureKeys: ['features.hardening.torTransport'],
@@ -107,8 +111,11 @@ export const HOME_WIDGETS: HomeWidgetDef[] = [
     {
         id: 'premiumCoalitionPulse',
         label: 'Coalition pulse',
+        // The widget is a placeholder with no data behind it (see
+        // CoalitionPulseWidget), and the gallery shows this beside the unlock
+        // button, so it says so.
         description:
-            'Governance activity and shared-treasury health across your coalitions — a Coalition-tier widget.',
+            'Reserved for a summary of governance activity and shared-treasury health across your coalitions. It shows no data yet — a Coalition-tier widget.',
         defaultOrder: null,
         removable: true,
         requiredFeatureKeys: ['features.transparency.auditExport'],

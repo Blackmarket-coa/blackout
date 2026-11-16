@@ -120,13 +120,51 @@ jobs:
                   path: api.log
                   if-no-files-found: ignore
 
+            # k6 comes from its GitHub release, checked against a pinned sha256,
+            # not from the dl.k6.io apt repository.
+            #
+            # From 2026-10-25 to 2026-11-16 every nightly stopped in this step,
+            # so no script ran. The step made the apt repository's keyring with
+            # `gpg --keyring ... --recv-keys`, which writes a GnuPG keybox, and
+            # the apt on the runner image that `ubuntu-latest` became that day
+            # (Ubuntu 26.04) does not read a keybox as a keyring: "The key(s)
+            # in the keyring ... are ignored as the file has an unsupported
+            # filetype", then NO_PUBKEY for the repository and exit 100. On the
+            # 24.04 image the same commands had passed since 2026-10-12. That
+            # step also asked a keyserver for the key on every run and
+            # installed whichever k6 the repository served that night.
+            #
+            # K6_SHA256 is the line for the linux-amd64 archive in
+            # k6-v${K6_VERSION}-checksums.txt on the release page, and moves
+            # with K6_VERSION. 2.3.0 is the version the four scripts below were
+            # last checked against
+            # (docs/audits/pre-launch-readiness-audit-2026-07.md, L8). The
+            # archive is checked before anything is extracted, and sha256sum
+            # and tar are called by absolute path, as for gitleaks in
+            # security.yml; the download's retry flags are that step's too,
+            # with --max-time raised for a 30 MB archive.
             - name: Install k6
+              timeout-minutes: 10
+              env:
+                  K6_VERSION: '2.3.0'
+                  K6_SHA256: '39c3117b6af817592dcd0ce4242105c0a7af10948c2a425306f0be8f7a8a8ab1'
               run: |
-                  sudo gpg -k
-                  sudo gpg --no-default-keyring --keyring /usr/share/keyrings/k6-archive-keyring.gpg --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
-                  echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
-                  sudo apt-get update
-                  sudo apt-get install -y k6
+                  set -euo pipefail
+                  name="k6-v${K6_VERSION}-linux-amd64.tar.gz"
+                  url="https://github.com/grafana/k6/releases/download/v${K6_VERSION}/${name}"
+                  archive="${RUNNER_TEMP}/k6/${name}"
+                  mkdir -p "${RUNNER_TEMP}/k6"
+                  curl --fail --location --no-progress-meter \
+                      --connect-timeout 10 --max-time 120 \
+                      --retry 12 --retry-connrefused --retry-delay 15 --retry-max-time 180 \
+                      --output "$archive" "$url"
+                  if ! echo "${K6_SHA256}  ${archive}" | /usr/bin/sha256sum --check --strict -; then
+                      echo "::error::The downloaded k6 archive does not match K6_SHA256; not extracting it."
+                      exit 1
+                  fi
+                  sudo /usr/bin/tar -xzf "$archive" -C /usr/local/bin --strip-components=1 \
+                      "k6-v${K6_VERSION}-linux-amd64/k6"
+                  k6 version
 
             - name: k6 — health
               env:

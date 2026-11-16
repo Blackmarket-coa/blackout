@@ -2,7 +2,17 @@ import { useMemo, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { useAtomValue } from 'jotai';
 import type { MatrixEvent } from 'matrix-js-sdk';
-import { baseStyles, getInfo, useInViewport, useResolvedMediaSource } from './mediaShared';
+import {
+    MediaLoadError,
+    ServerReadableNote,
+    baseStyles,
+    fitsEncryptedAutoLoad,
+    getInfo,
+    loadEncryptedLabel,
+    useInViewport,
+    useLatched,
+    useResolvedMediaSource,
+} from './mediaShared';
 import { stegoSettingsAtom, RevealMessagePanel } from '../../features/steganography';
 
 interface ImageMessageProps {
@@ -13,9 +23,22 @@ export const ImageMessage = ({ event }: ImageMessageProps) => {
     const [lightboxOpen, setLightboxOpen] = useState(false);
     const [loaded, setLoaded] = useState(false);
     const { ref, inView } = useInViewport<HTMLDivElement>();
-    const { src, loading, error, encrypted } = useResolvedMediaSource(event);
-    const stegoSettings = useAtomValue(stegoSettingsAtom);
     const info = getInfo(event);
+    // An encrypted image is fetched and decrypted once it has been on screen,
+    // and only unasked when it is small enough; see mediaShared.
+    const seen = useLatched(inView);
+    const {
+        src,
+        loading,
+        error,
+        endToEndEncrypted,
+        awaitingLoad,
+        load,
+        canRetry,
+        sizeUnderstated,
+        serverReadableNote,
+    } = useResolvedMediaSource(event, { autoLoad: seen && fitsEncryptedAutoLoad(info) });
+    const stegoSettings = useAtomValue(stegoSettingsAtom);
     const content = event.getContent<Record<string, unknown>>();
     const body = typeof content.body === 'string' ? content.body : 'Image';
     const stegoMeta = event.getContent<Record<string, unknown>>()['co.blackout.stego'] as
@@ -54,7 +77,16 @@ export const ImageMessage = ({ event }: ImageMessageProps) => {
                 </div>
             ) : null}
             {inView && error ? (
-                <div style={baseStyles.error}>Image failed to load: {error}</div>
+                <MediaLoadError
+                    what="Image failed to load"
+                    error={error}
+                    onRetry={canRetry ? load : undefined}
+                />
+            ) : null}
+            {inView && awaitingLoad ? (
+                <button type="button" onClick={load} data-testid="load-encrypted-media">
+                    {loadEncryptedLabel('image', info, sizeUnderstated)}
+                </button>
             ) : null}
 
             {inView && src && !error ? (
@@ -82,7 +114,7 @@ export const ImageMessage = ({ event }: ImageMessageProps) => {
                             transition: 'opacity 150ms ease',
                         }}
                     />
-                    {encrypted ? (
+                    {endToEndEncrypted ? (
                         <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>
                             Encrypted image
                         </span>
@@ -113,6 +145,7 @@ export const ImageMessage = ({ event }: ImageMessageProps) => {
                 </dialog>
             ) : null}
             {hasHiddenContent && src ? <RevealMessagePanel imageUrl={src} /> : null}
+            {serverReadableNote ? <ServerReadableNote text={serverReadableNote} /> : null}
         </div>
     );
 };

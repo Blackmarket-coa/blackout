@@ -17,8 +17,9 @@ describe('attachmentKind', () => {
 });
 
 describe('buildAttachmentContent', () => {
+    const url = 'mxc://example.org/abc';
     const base = {
-        url: 'mxc://example.org/abc',
+        source: { url },
         fileName: 'photo.png',
         mimeType: 'image/png',
         size: 1024,
@@ -28,7 +29,7 @@ describe('buildAttachmentContent', () => {
         expect(buildAttachmentContent({ ...base, dims: { w: 640, h: 480 } })).toEqual({
             msgtype: 'm.image',
             body: 'photo.png',
-            url: base.url,
+            url,
             info: { mimetype: 'image/png', size: 1024, w: 640, h: 480 },
         });
     });
@@ -58,8 +59,27 @@ describe('buildAttachmentContent', () => {
         ).toEqual({
             msgtype: 'm.file',
             body: 'doc.pdf',
-            url: base.url,
+            url,
             info: { mimetype: 'application/pdf', size: 1024 },
         });
+    });
+
+    const encryptedFile = {
+        url: 'mxc://example.org/ciphertext',
+        v: 'v2',
+        key: { alg: 'A256CTR', key_ops: ['encrypt', 'decrypt'], kty: 'oct', k: 'a2V5', ext: true },
+        iv: 'aXY',
+        hashes: { sha256: 'aGFzaA' },
+    };
+
+    it('references an encrypted upload by `file`, and writes no `url` beside it', () => {
+        const content = buildAttachmentContent({ ...base, source: { file: encryptedFile } });
+        expect(content).toEqual({
+            msgtype: 'm.image',
+            body: 'photo.png',
+            file: encryptedFile,
+            info: { mimetype: 'image/png', size: 1024 },
+        });
+        expect('url' in content).toBe(false);
     });
 });

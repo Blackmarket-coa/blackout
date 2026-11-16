@@ -26,6 +26,144 @@ should be described as a published privacy policy until that review lands.
 
 ---
 
+## 2026-11-16 — Dead drops: nobody can use one, and the room mode queued nothing
+
+**Why this entry exists:** the initial record below lists "dead-drop anonymity
+padding and decoys" among the privacy features a tier provides, and the app
+told people in a "Dead Drop" room that their message would be queued. Neither
+described something a person could use. The finding is T8 in
+[`docs/security/trust-claims-2026-11-16.md`](../security/trust-claims-2026-11-16.md).
+
+### Withdrawn
+
+-   **Dead drops are not a feature a tier provides today.** The sealed-envelope
+    format, a service to hold envelopes, and limits per tier exist in the
+    repository, but no screen of the app sends or opens a dead drop and no
+    deployment file here runs that service. The tiers still hold the
+    entitlement keys
+    ([`entitlements.ts`](../../packages/blackout-protocol/src/deaddrop/entitlements.ts)).
+-   **"Dead Drop: message will be queued" and "Anonymize delivery via bot
+    account" were not true.** A room switched into dead-drop mode showed both,
+    with a countdown to a "next delivery" and a prompt to upgrade to Pro for
+    scheduled and anonymized delivery. Nothing queued, scheduled or anonymized
+    anything.
+
+### What a person relying on the old text should know
+
+-   **A message you typed under "message will be queued" was sent to the room
+    at once, under your own name.** It was never held, and it was not
+    delivered by a bot in your place.
+-   **If you were told to upgrade for scheduled or anonymized dead-drop
+    delivery:** no tier has either.
+
+## 2026-11-16 — Files sent in encrypted rooms were not encrypted
+
+**Why this entry exists:** the commitment that private rooms and direct
+messages are end-to-end encrypted was not kept for files. The text of messages
+was encrypted. Files attached to them were not. This entry says what that
+means for anyone who relied on it. The finding, the fix and what is still open
+are in
+[`docs/security/attachment-encryption-2026-11-16.md`](../security/attachment-encryption-2026-11-16.md).
+
+### Withdrawn
+
+-   **"Not even the server can" read what is sent in an encrypted room was not
+    true of files.** The app showed that sentence beside the message box in
+    every encrypted room. Until this change it uploaded each attachment, voice
+    note and hidden-message image to the homeserver as it was, with its name
+    and type, and encrypted only the message that pointed to it.
+-   **Nor was it true of den documents, proposals, objectives and playbooks,
+    and it still is not.** These are stored as part of the room (Matrix room
+    state), which Matrix does not encrypt in any room. In an encrypted den the
+    homeserver can read their titles and text. Nothing about how they are
+    stored changes here; what changes is that the app and the trust page now
+    say so.
+
+### Changed
+
+-   **A file sent in an encrypted room is encrypted on the sender's device
+    before it is uploaded.** The homeserver receives ciphertext with no file
+    name and no file type; the key travels inside the encrypted message
+    ([`roomAttachment.ts`](../../apps/blackout-client/src/app/features/media/utils/roomAttachment.ts)).
+    This is free at every tier, like the rest of end-to-end encryption.
+-   **The sentence beside the message box now carries its exceptions.** It
+    says that messages and files you send are encrypted on your device, and
+    names what the server still sees: the room's name and members, when things
+    are sent and how large they are, and emoji reactions.
+-   **A file that is not encrypted says so.** In an encrypted room, any file
+    that was sent without encryption is marked "Not end-to-end encrypted" in
+    the conversation.
+
+### What a person relying on the old text should know
+
+-   **Every file you sent from the Blackout app into an encrypted room before
+    you had a build with this fix is on the homeserver unencrypted**, with its
+    name. Whoever runs the server, or holds its backups, can read it. So can
+    the server of anyone in the room who is on another homeserver and opened
+    it, and anyone who has the file's address, which was inside the encrypted
+    message.
+-   **The app cannot delete those files, and deleting the message does not
+    remove them.** Only the operator of the homeserver can. Whether they will
+    is their decision, and it is listed as one in the record above.
+-   **The text of your messages was encrypted throughout.** This is about
+    files only, with one narrower exception the same record describes: a
+    message sent in the moment before a room had finished loading could go out
+    unencrypted. The app now refuses to send in that moment.
+-   **Other people in a room may still be on an older build.** Files they send
+    stay unencrypted until they update, and your app marks each one.
+
+## 2026-11-16 — Two things this record and the trust page said that were not so: Tor and decoy traffic, and the warrant canary
+
+**Why this entry exists:** two statements are withdrawn, in plain words. Both
+were in the initial record below and on [`TRUST.md`](../../TRUST.md); neither
+was true when written. No protection that existed is removed. The findings are
+in
+[`docs/security/trust-claims-2026-11-16.md`](../security/trust-claims-2026-11-16.md).
+
+### Withdrawn
+
+-   **Tor transport and decoy traffic are not among the features a tier
+    provides, because they are not built.** The initial record listed them
+    with the privacy features that are tiered. There is no Tor or
+    onion-routing code and no cover-traffic generator in the app, and Blackout
+    routes nothing through Tor and sends no decoy traffic on any tier. The
+    tiers still hold the entitlement keys for both
+    ([`entitlements.ts`](../../packages/blackout-protocol/src/hardening/entitlements.ts)),
+    and the same file now records that neither capability exists. The rest of
+    that sentence stands: image perturbation, persona compartments and
+    rotation, dead-drop anonymity padding and decoys, mesh transport and
+    active defense are tiered.
+-   **The warrant canary was not "Ed25519-signed" in any deployment made from
+    this repository, and it was not a canary.** `GET /v1/transparency/canary`
+    wrote its statement on every request and dated it to the current month, so
+    it could never lapse and no person had made it; in production it was
+    unsigned unless an operator had set a key, which no deployment file here
+    does.
+
+### Changed
+
+-   **The warrant canary is the operator's statement, or there is none.** The
+    endpoint reports a statement only when the operator of the server has
+    issued one, with the date they issued it; it reports the statement as
+    lapsed when it has not been renewed (after 35 days unless the operator set
+    another length); and it says that none has been issued when none has. The
+    server never writes, dates or renews the statement itself
+    ([`warrantCanary.ts`](../../packages/api/src/services/warrantCanary.ts)).
+    It remains free at every tier. A signature, where there is one, is made
+    with a key the server holds as it answers: it shows that the answer came
+    from a holder of that key, not that a person signed it, and no copy of the
+    public key is published outside the answer yet.
+
+### What a person relying on the old text should know
+
+-   If you chose a paid tier for anonymized transport or decoy traffic: you
+    do not have either, and never did. The server you use sees the IP address
+    you connect from.
+-   If you read the canary as an assurance: until this change it said nothing
+    about whether the operator had received a secret order, because the
+    server produced it with no person involved. From this change on, read the
+    endpoint's `status`: `not_issued` means no assurance has been given.
+
 ## 2026-10-26 — Release keys: what the server keeps of them, and the export
 
 **Why this entry exists:** a new category of data the server keeps. Release keys

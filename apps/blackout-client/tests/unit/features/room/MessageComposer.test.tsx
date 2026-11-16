@@ -50,7 +50,12 @@ vi.mock('../../../../src/app/features/room/scheduledMessagesClient', () => ({
     createScheduledMessage: (...args: unknown[]) => createScheduledMessage(...args),
 }));
 
-import { MessageComposer, toHtml } from '../../../../src/app/features/room/MessageComposer';
+import {
+    ENCRYPTED_ROOM_NOTICE,
+    MessageComposer,
+    UNENCRYPTED_ROOM_NOTICE,
+    toHtml,
+} from '../../../../src/app/features/room/MessageComposer';
 
 /** A minimal room: just what the composer reads. `encrypted` can flip mid-test. */
 function makeRoom(encrypted: boolean) {
@@ -189,6 +194,7 @@ describe('MessageComposer', () => {
     });
 
     it('routes a scheduled send to the server API instead of sending immediately', async () => {
+        currentRoom = makeRoom(false);
         const { container } = await mountComposer({ initialMarkdown: 'later message' });
 
         await click(findByLabel(container, 'Open composer features'));
@@ -205,6 +211,60 @@ describe('MessageComposer', () => {
         expect(input.matrixRoomId).toBe('!room:test');
         expect(Date.parse(input.deliverAt)).toBeGreaterThan(Date.now());
         expect(sendRichText).not.toHaveBeenCalled();
+    });
+
+    // Scheduling hands the text to the API in the clear. A room this client
+    // has not loaded cannot be known to be unencrypted, so the text stays here.
+    it('C-0: scheduling into a room that has not loaded sends nothing to the API and keeps the draft', async () => {
+        currentRoom = undefined;
+        const { container } = await mountComposer({ initialMarkdown: 'for later' });
+
+        await click(findByLabel(container, 'Open composer features'));
+        await click(findButton(container, 'Scheduled send preset'));
+        await click(findButton(container, 'Send'));
+        await settle();
+
+        expect(createScheduledMessage).not.toHaveBeenCalled();
+        expect(sendRichText).not.toHaveBeenCalled();
+        expect(statusText(container)).toContain(
+            'This room has not finished loading, so nothing was scheduled. Try again shortly.'
+        );
+        expect(container.textContent).toContain('for later');
+    });
+
+    it('C-0: a room that arrives after the composer mounted is seen at send time', async () => {
+        currentRoom = undefined;
+        const { container } = await mountComposer({ initialMarkdown: 'for later' });
+        await click(findByLabel(container, 'Open composer features'));
+        await click(findButton(container, 'Scheduled send preset'));
+
+        // The room syncs in, encrypted, after the composer was already on screen.
+        currentRoom = makeRoom(true);
+        await click(findButton(container, 'Send'));
+        await settle();
+
+        expect(createScheduledMessage).not.toHaveBeenCalled();
+        expect(statusText(container)).toContain(ENCRYPTED_REASON);
+    });
+
+    it('C-0: a typing notice that fails after scheduling is not reported as a failed send', async () => {
+        currentRoom = makeRoom(false);
+        // Only the "stopped typing" notice sent after the schedule fails.
+        sendTyping.mockImplementation(async (typing: boolean) => {
+            if (typing === false) throw new Error('typing failed');
+        });
+        const { container } = await mountComposer({ initialMarkdown: 'later message' });
+
+        await click(findByLabel(container, 'Open composer features'));
+        await click(findButton(container, 'Scheduled send preset'));
+        await click(findButton(container, 'Send'));
+        await settle();
+
+        expect(createScheduledMessage).toHaveBeenCalledTimes(1);
+        expect(sendTyping).toHaveBeenCalledWith(false);
+        expect(container.querySelector('[data-testid="send-failure"]')).toBeNull();
+        sendTyping.mockReset();
+        sendTyping.mockResolvedValue(undefined);
     });
 
     it('C-1: in an encrypted room the scheduled-send preset is disabled, with the reason shown', async () => {
@@ -306,6 +366,239 @@ describe('MessageComposer', () => {
         expect(preset?.disabled).toBe(false);
         await click(preset);
         expect(container.textContent).toContain('sent unencrypted by the Blackout bot');
+    });
+
+    it('a send refused because the room is not loaded says so, and keeps the draft', async () => {
+        const { RoomNotReadyError } = await import(
+            '../../../../src/app/features/room/roomSendGuard'
+        );
+        sendRichText.mockRejectedValueOnce(new RoomNotReadyError());
+        const { container } = await mountComposer({ initialMarkdown: 'first message' });
+
+        await click(findButton(container, 'Send'));
+        await settle();
+
+        expect(container.querySelector('[data-testid="send-failure"]')?.textContent).toBe(
+            'This room has not finished loading, so nothing was sent. Try again shortly.'
+        );
+        expect(container.textContent).toContain('first message');
+
+        // The same draft goes out on the next try, and the notice goes away.
+        await click(findButton(container, 'Send'));
+        await settle();
+        expect(sendRichText).toHaveBeenCalledTimes(2);
+        expect(container.querySelector('[data-testid="send-failure"]')).toBeNull();
+    });
+
+    it('a file refused because encryption was turned on mid-upload says where the copy went', async () => {
+        const { AttachmentEncryptionChangedError } = await import(
+            '../../../../src/app/features/media/utils/roomAttachment'
+        );
+        currentRoom = makeRoom(true);
+        sendMedia.mockRejectedValueOnce(new AttachmentEncryptionChangedError());
+        const { container } = await mountComposer();
+
+        const input = container.querySelector('input[type="file"][multiple]') as HTMLInputElement;
+        Object.defineProperty(input, 'files', {
+            value: [new File(['x'], 'plan.txt', { type: 'text/plain' })],
+            configurable: true,
+        });
+        await act(async () => {
+            input.dispatchEvent(new Event('change', { bubbles: true }));
+            await Promise.resolve();
+        });
+        await settle();
+        await click(findButton(container, 'Send'));
+        await settle();
+
+        const notice = container.querySelector('[data-testid="send-failure"]')?.textContent;
+        expect(notice).toContain('The file was not posted to the room.');
+        expect(notice).toContain('A copy without encryption reached the server');
+    });
+
+    it('any other failed send is reported without claiming that nothing was sent', async () => {
+        sendRichText.mockRejectedValueOnce(new Error('M_LIMIT_EXCEEDED'));
+        const { container } = await mountComposer({ initialMarkdown: 'hello' });
+
+        await click(findButton(container, 'Send'));
+        await settle();
+
+        expect(container.querySelector('[data-testid="send-failure"]')?.textContent).toBe(
+            'Something was not sent. What is still in the box did not go out: send again to retry.'
+        );
+        expect(container.textContent).toContain('hello');
+    });
+
+    const attach = async (container: HTMLElement, file: File) => {
+        const input = container.querySelector('input[type="file"][multiple]') as HTMLInputElement;
+        Object.defineProperty(input, 'files', { value: [file], configurable: true });
+        await act(async () => {
+            input.dispatchEvent(new Event('change', { bubbles: true }));
+            await Promise.resolve();
+        });
+        await settle();
+    };
+
+    // The composer is one instance reused across rooms. A file attached while
+    // looking at one conversation must not be sent into the next one.
+    it('a file attached in one room does not follow the person into another', async () => {
+        currentRoom = makeRoom(true);
+        const container = document.createElement('div');
+        document.body.appendChild(container);
+        const root = ReactDOM.createRoot(container);
+        mountedRoots.push(root);
+        const store = createStore();
+        const renderFor = async (roomId: string) => {
+            await act(async () => {
+                root.render(
+                    <Provider store={store}>
+                        <MessageComposer roomId={roomId} />
+                    </Provider>
+                );
+                await Promise.resolve();
+            });
+        };
+
+        await renderFor('!private:test');
+        await attach(container, new File(['x'], 'passport-scan.png', { type: 'image/png' }));
+        expect(container.textContent).toContain('passport-scan.png');
+
+        await renderFor('!public:test');
+        await settle();
+        expect(container.textContent).not.toContain('passport-scan.png');
+
+        window.localStorage.setItem('blackout.draft.!public:test', 'hello everyone');
+        await renderFor('!private:test');
+        await renderFor('!public:test');
+        await settle();
+        await click(findButton(container, 'Send'));
+        await settle();
+
+        expect(sendMedia).not.toHaveBeenCalled();
+        expect(sendRichText).toHaveBeenCalledTimes(1);
+    });
+
+    it('a file sent with nothing typed goes out alone: no empty text message ahead of it', async () => {
+        currentRoom = makeRoom(true);
+        const { container } = await mountComposer();
+        await attach(container, new File(['x'], 'plan.txt', { type: 'text/plain' }));
+
+        await click(findButton(container, 'Send'));
+        await settle();
+
+        expect(sendMedia).toHaveBeenCalledTimes(1);
+        expect(sendRichText).not.toHaveBeenCalled();
+    });
+
+    it('after a file fails, what already went out is not sent again', async () => {
+        currentRoom = makeRoom(true);
+        const { container } = await mountComposer({ initialMarkdown: 'see attached' });
+        await attach(container, new File(['a'], 'first.txt', { type: 'text/plain' }));
+        await attach(container, new File(['b'], 'second.txt', { type: 'text/plain' }));
+        // The text and the first file go out; the second file fails.
+        sendMedia
+            .mockResolvedValueOnce(undefined)
+            .mockRejectedValueOnce(new Error('upload failed'));
+
+        await click(findButton(container, 'Send'));
+        await settle();
+
+        expect(sendRichText).toHaveBeenCalledTimes(1);
+        expect(sendMedia).toHaveBeenCalledTimes(2);
+        expect(container.querySelector('[data-testid="send-failure"]')).not.toBeNull();
+        // The text has left the box; only the file that failed is still attached.
+        expect(container.textContent).not.toContain('see attached');
+        expect(container.textContent).not.toContain('first.txt');
+        expect(container.textContent).toContain('second.txt');
+
+        await click(findButton(container, 'Send'));
+        await settle();
+
+        expect(sendRichText).toHaveBeenCalledTimes(1);
+        expect(sendMedia).toHaveBeenCalledTimes(3);
+        expect((sendMedia.mock.calls[2][0] as File).name).toBe('second.txt');
+        expect(container.querySelector('[data-testid="send-failure"]')).toBeNull();
+    });
+
+    it('the lock says what the server can and cannot see in an encrypted room, files included', async () => {
+        currentRoom = makeRoom(true);
+        const { container } = await mountComposer();
+
+        await click(findByLabel(container, 'Room is end-to-end encrypted. Show what this means.'));
+        const notice = container.querySelector('[role="tooltip"]')?.textContent;
+        expect(notice).toBe(ENCRYPTED_ROOM_NOTICE);
+        expect(notice).toContain('Messages and files you send here are encrypted on this device');
+        // The exceptions stay attached to the claim.
+        expect(notice).toContain('who is in the room');
+        expect(notice).toContain('how large they are');
+        expect(notice).toContain('emoji reactions');
+        // Room state is not encrypted, and documents and proposals are room state.
+        expect(notice).toContain('den documents and proposals');
+    });
+
+    it('the lock says messages and files are stored unencrypted in a room without encryption', async () => {
+        currentRoom = makeRoom(false);
+        const { container } = await mountComposer();
+
+        await click(findByLabel(container, 'Room is not encrypted. Show what this means.'));
+        const notice = container.querySelector('[role="tooltip"]')?.textContent;
+        expect(notice).toBe(UNENCRYPTED_ROOM_NOTICE);
+        expect(notice).toContain('Messages and files are stored unencrypted on the server');
+    });
+
+    // The composer never sees a media URL of its own: the send hook hands it
+    // where the upload landed, and the composer spreads that into the message.
+    // An encrypted upload must come out as `file`, with no `url` beside it.
+    it('builds an attachment message from the upload source it is given: `file` when encrypted, `url` when not', async () => {
+        currentRoom = makeRoom(true);
+        const { container } = await mountComposer();
+
+        const attachment = new File(['minutes of the meeting'], 'minutes.txt', {
+            type: 'text/plain',
+        });
+        const input = container.querySelector('input[type="file"][multiple]') as HTMLInputElement;
+        Object.defineProperty(input, 'files', { value: [attachment], configurable: true });
+        await act(async () => {
+            input.dispatchEvent(new Event('change', { bubbles: true }));
+            await Promise.resolve();
+        });
+        await settle();
+
+        await click(findButton(container, 'Send'));
+        await settle();
+
+        expect(sendMedia).toHaveBeenCalledTimes(1);
+        const [sentFile, options] = sendMedia.mock.calls[0] as [
+            File,
+            { buildContent: (source: Record<string, unknown>) => Record<string, unknown> }
+        ];
+        expect(sentFile.name).toBe('minutes.txt');
+
+        const file = {
+            url: 'mxc://example.org/ciphertext',
+            v: 'v2',
+            key: {
+                alg: 'A256CTR',
+                key_ops: ['encrypt', 'decrypt'],
+                kty: 'oct',
+                k: 'a2V5',
+                ext: true,
+            },
+            iv: 'aXY',
+            hashes: { sha256: 'aGFzaA' },
+        };
+        const encryptedContent = options.buildContent({ file });
+        expect(encryptedContent).toEqual({
+            msgtype: 'm.file',
+            body: 'minutes.txt',
+            file,
+            info: { mimetype: 'text/plain', size: attachment.size },
+        });
+        expect('url' in encryptedContent).toBe(false);
+
+        const plainContent = options.buildContent({ url: 'mxc://example.org/plain' });
+        expect(plainContent.url).toBe('mxc://example.org/plain');
+        expect('file' in plainContent).toBe(false);
     });
 
     // Mentions and links are inline element nodes nested inside a paragraph's

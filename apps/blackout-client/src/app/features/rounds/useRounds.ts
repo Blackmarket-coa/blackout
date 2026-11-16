@@ -10,7 +10,7 @@ import { createRoundsMatrixActions } from '@blackout/sdk';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { useLegacyRoomTimelineAdapter as useRoomTimeline } from '../../plugins/matrix-adapters/hooks/useLegacyTimelineAdapter';
 import { useCompleteQuest } from '../quests/useQuests';
-import { uploadMedia } from '../media/utils/matrixMedia';
+import { sendRoomAttachment, type AttachmentSource } from '../media/utils/roomAttachment';
 import { buildVoiceMessageContent } from '../room/voiceMessage';
 
 export interface OpenRoundModel extends RoundOpenedPayload {
@@ -37,7 +37,7 @@ export interface RoundContribution {
  * concurrent rounds (e.g. parallel circles in a Workshop) renders cleanly.
  */
 export const useOpenRounds = (
-    roomId: string,
+    roomId: string
 ): { data: OpenRoundModel[]; loading: boolean; error: unknown } => {
     const timeline = useRoomTimeline(roomId);
 
@@ -83,7 +83,7 @@ export const useOpenRounds = (
  */
 export const collectRoundContributions = (
     timeline: ReadonlyArray<MatrixEvent>,
-    roundEventId: string,
+    roundEventId: string
 ): RoundContribution[] => {
     const latestByContributor = new Map<string, RoundContribution>();
 
@@ -121,7 +121,7 @@ export const collectRoundContributions = (
 
 export const useRoundContributions = (
     roomId: string,
-    roundEventId: string | null,
+    roundEventId: string | null
 ): { data: RoundContribution[]; loading: boolean; error: unknown } => {
     const timeline = useRoomTimeline(roomId);
     return useMemo(() => {
@@ -150,7 +150,7 @@ export const useOpenRound = (roomId: string, facilitatorId: string | null) => {
                 sendStateEvent: (rid, et, content, stateKey) =>
                     client.sendStateEvent(rid, et as never, content as never, stateKey),
             }),
-        [client],
+        [client]
     );
 
     return useCallback(
@@ -182,7 +182,7 @@ export const useOpenRound = (roomId: string, facilitatorId: string | null) => {
             // no-ops.
             void completeQuest('first-round', roomId);
         },
-        [actions, completeQuest, facilitatorId, roomId],
+        [actions, completeQuest, facilitatorId, roomId]
     );
 };
 
@@ -200,7 +200,7 @@ export const useCloseRound = (roomId: string, closerId: string | null) => {
                 sendStateEvent: (rid, et, content, stateKey) =>
                     client.sendStateEvent(rid, et as never, content as never, stateKey),
             }),
-        [client],
+        [client]
     );
     return useCallback(
         async (roundId: string) => {
@@ -211,14 +211,15 @@ export const useCloseRound = (roomId: string, closerId: string | null) => {
                 closedBy: closerId,
             });
         },
-        [actions, closerId, roomId],
+        [actions, closerId, roomId]
     );
 };
 
 /**
  * Hook: send a voice-note reply to an open round event.
  *
- * Uploads the captured File through `uploadMedia`, then writes an
+ * Uploads the captured File through `sendRoomAttachment` (which encrypts
+ * it first when the room is encrypted), then writes an
  * `m.room.message` with `msgtype: 'm.audio'`, the MSC3245 voice marker
  * (`org.matrix.msc3245.voice`), and an `m.in_reply_to` relation pointing
  * at the round-opening event so `collectRoundContributions` picks it up
@@ -234,20 +235,19 @@ export const useCloseRound = (roomId: string, closerId: string | null) => {
  * be exercised by tests without hitting the Matrix client.
  */
 export interface VoiceReplyContentInput {
-    url: string;
+    /** Where the upload landed: `{ url }`, or `{ file }` in an encrypted room. */
+    source: AttachmentSource;
     fileName: string;
     mimeType: string;
     size: number;
     roundEventId: string;
 }
 
-export function buildVoiceReplyContent(
-    input: VoiceReplyContentInput,
-): Record<string, unknown> {
+export function buildVoiceReplyContent(input: VoiceReplyContentInput): Record<string, unknown> {
     // Delegates to the shared MSC3245 builder (features/room/voiceMessage)
     // so the round-reply shape can't drift from the main composer's.
     return buildVoiceMessageContent({
-        url: input.url,
+        source: input.source,
         fileName: input.fileName,
         mimeType: input.mimeType,
         size: input.size,
@@ -259,16 +259,23 @@ export const useSendVoiceRoundReply = (roomId: string) => {
     const client = useMatrixClient();
     return useCallback(
         async (file: File, roundEventId: string): Promise<void> => {
-            const url = await uploadMedia(client, file);
-            const content = buildVoiceReplyContent({
-                url,
-                fileName: file.name,
-                mimeType: file.type,
-                size: file.size,
-                roundEventId,
-            });
-            await client.sendEvent(roomId, 'm.room.message' as never, content as never);
+            // Encrypted before upload when the room is encrypted; see
+            // media/utils/roomAttachment.ts.
+            await sendRoomAttachment(
+                client,
+                roomId,
+                file,
+                (source) =>
+                    buildVoiceReplyContent({
+                        source,
+                        fileName: file.name,
+                        mimeType: file.type,
+                        size: file.size,
+                        roundEventId,
+                    }),
+                (content) => client.sendEvent(roomId, 'm.room.message' as never, content as never)
+            );
         },
-        [client, roomId],
+        [client, roomId]
     );
 };

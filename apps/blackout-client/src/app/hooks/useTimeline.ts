@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { MatrixEvent, Room } from 'matrix-js-sdk';
 import { useMatrixClient } from './useMatrixClient';
 import { useLegacyRoomAdapter as useRoom } from '../plugins/matrix-adapters/hooks/useLegacyRoomAdapter';
-import { uploadMedia } from '../utils/media';
+import { sendRoomAttachment } from '../features/media/utils/roomAttachment';
+import { assertRoomLoaded } from '../features/room/roomSendGuard';
 
 export interface HookResult<T> {
     data: T;
@@ -66,7 +67,7 @@ export const useRoomTimeline = (roomId: string): TimelineResult => {
                 setLoading(false);
             }
         },
-        [client, refresh, roomState.data],
+        [client, refresh, roomState.data]
     );
 
     return useMemo(
@@ -76,7 +77,7 @@ export const useRoomTimeline = (roomId: string): TimelineResult => {
             error: error ?? roomState.error,
             loadMore,
         }),
-        [error, events, loadMore, loading, roomState.error, roomState.loading],
+        [error, events, loadMore, loading, roomState.error, roomState.loading]
     );
 };
 
@@ -106,7 +107,7 @@ export const useTimelineScroll = (roomId: string) => {
             map[roomId] = next;
             window.localStorage.setItem(timelineScrollStorageKey, JSON.stringify(map));
         },
-        [roomId],
+        [roomId]
     );
 
     return { position, savePosition };
@@ -116,17 +117,21 @@ export const useTimelineScroll = (roomId: string) => {
 export const useSendMessage = (roomId: string) => {
     const client = useMatrixClient();
     const sendEvent = useCallback(
-        (roomIdArg: string, eventType: string, content: Record<string, unknown>) =>
-            (
+        async (roomIdArg: string, eventType: string, content: Record<string, unknown>) => {
+            // Refuse a room that is not loaded: the SDK would send it
+            // unencrypted. See features/room/roomSendGuard.ts.
+            assertRoomLoaded(client, roomIdArg);
+            return (
                 client as unknown as {
                     sendEvent: (
                         rid: string,
                         et: string,
-                        c: Record<string, unknown>,
+                        c: Record<string, unknown>
                     ) => Promise<unknown>;
                 }
-            ).sendEvent(roomIdArg, eventType, content),
-        [client],
+            ).sendEvent(roomIdArg, eventType, content);
+        },
+        [client]
     );
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<Error | null>(null);
@@ -157,7 +162,7 @@ export const useSendMessage = (roomId: string) => {
                 setLoading(false);
             }
         },
-        [roomId, sendEvent],
+        [roomId, sendEvent]
     );
 
     const sendRichText = useCallback(
@@ -173,7 +178,7 @@ export const useSendMessage = (roomId: string) => {
                 setLoading(false);
             }
         },
-        [roomId, sendEvent],
+        [roomId, sendEvent]
     );
 
     const sendMedia = useCallback(
@@ -181,16 +186,23 @@ export const useSendMessage = (roomId: string) => {
             setLoading(true);
             setError(null);
             try {
-                const url = await uploadMedia(client, file);
-                await sendEvent(roomId, 'm.room.message', {
-                    msgtype: 'm.file',
-                    body: file.name,
-                    url,
-                    info: {
-                        mimetype: file.type,
-                        size: file.size,
-                    },
-                });
+                // Encrypted before upload when the room is encrypted; see
+                // features/media/utils/roomAttachment.ts.
+                await sendRoomAttachment(
+                    client,
+                    roomId,
+                    file,
+                    (source) => ({
+                        msgtype: 'm.file',
+                        body: file.name,
+                        ...source,
+                        info: {
+                            mimetype: file.type,
+                            size: file.size,
+                        },
+                    }),
+                    (content) => sendEvent(roomId, 'm.room.message', content)
+                );
             } catch (err) {
                 setError(err instanceof Error ? err : new Error('Failed to send media.'));
                 throw err;
@@ -198,7 +210,7 @@ export const useSendMessage = (roomId: string) => {
                 setLoading(false);
             }
         },
-        [client, roomId, sendEvent],
+        [client, roomId, sendEvent]
     );
 
     const sendReply = useCallback(
@@ -213,7 +225,7 @@ export const useSendMessage = (roomId: string) => {
                 });
             }, 'Failed to send reply.');
         },
-        [roomId, sendEvent, withStatus],
+        [roomId, sendEvent, withStatus]
     );
 
     const sendThread = useCallback(
@@ -231,7 +243,7 @@ export const useSendMessage = (roomId: string) => {
                 });
             }, 'Failed to send thread reply.');
         },
-        [roomId, sendEvent, withStatus],
+        [roomId, sendEvent, withStatus]
     );
 
     return { sendText, sendRichText, sendMedia, sendReply, sendThread, loading, error };
@@ -241,17 +253,21 @@ export const useSendMessage = (roomId: string) => {
 export const useEditMessage = (roomId: string) => {
     const client = useMatrixClient();
     const sendEvent = useCallback(
-        (roomIdArg: string, eventType: string, content: Record<string, unknown>) =>
-            (
+        async (roomIdArg: string, eventType: string, content: Record<string, unknown>) => {
+            // Refuse a room that is not loaded: the SDK would send it
+            // unencrypted. See features/room/roomSendGuard.ts.
+            assertRoomLoaded(client, roomIdArg);
+            return (
                 client as unknown as {
                     sendEvent: (
                         rid: string,
                         et: string,
-                        c: Record<string, unknown>,
+                        c: Record<string, unknown>
                     ) => Promise<unknown>;
                 }
-            ).sendEvent(roomIdArg, eventType, content),
-        [client],
+            ).sendEvent(roomIdArg, eventType, content);
+        },
+        [client]
     );
 
     return useCallback(
@@ -269,7 +285,7 @@ export const useEditMessage = (roomId: string) => {
                 },
             });
         },
-        [roomId, sendEvent],
+        [roomId, sendEvent]
     );
 };
 
@@ -283,11 +299,11 @@ export const useReaction = (roomId: string) => {
                     sendEvent: (
                         rid: string,
                         et: string,
-                        c: Record<string, unknown>,
+                        c: Record<string, unknown>
                     ) => Promise<unknown>;
                 }
             ).sendEvent(roomIdArg, eventType, content),
-        [client],
+        [client]
     );
 
     const addReaction = useCallback(
@@ -300,7 +316,7 @@ export const useReaction = (roomId: string) => {
                 },
             });
         },
-        [roomId, sendEvent],
+        [roomId, sendEvent]
     );
 
     const removeReaction = useCallback(
@@ -309,7 +325,7 @@ export const useReaction = (roomId: string) => {
                 reason: 'Reaction removed',
             });
         },
-        [client, roomId],
+        [client, roomId]
     );
 
     return { addReaction, removeReaction };

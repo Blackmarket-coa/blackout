@@ -1,65 +1,30 @@
-import { useEffect, useMemo, useState } from 'react';
-import { describeDeadDropSchedule, getNextDeliveryDate, type DeadDropConfig } from './useDeadDrop';
+import { DEAD_DROP_NOT_BUILT_NOTICE, type DeadDropConfig } from './useDeadDrop';
 
-const formatCountdown = (target: Date): string => {
-    const ms = Math.max(0, target.getTime() - Date.now());
-    const totalSeconds = Math.floor(ms / 1000);
-    const hours = Math.floor(totalSeconds / 3600);
-    const minutes = Math.floor((totalSeconds % 3600) / 60);
-    const seconds = totalSeconds % 60;
-
-    if (hours > 0) return `${hours}h ${minutes}m ${seconds}s`;
-    return `${minutes}m ${seconds}s`;
-};
-
-export const DeadDropIndicator = ({
-    config,
-    queueCount,
-}: {
-    config: DeadDropConfig;
-    queueCount: number;
-}) => {
-    const [now, setNow] = useState(Date.now());
-
-    useEffect(() => {
-        const timer = window.setInterval(() => setNow(Date.now()), 1_000);
-        return () => window.clearInterval(timer);
-    }, []);
-
-    const nextDelivery = useMemo(() => {
-        void now;
-        return getNextDeliveryDate(config);
-    }, [config, now]);
-    const summary = useMemo(() => describeDeadDropSchedule(config), [config]);
-
+/**
+ * Shown above the timeline of a room whose state has dead drop switched on.
+ *
+ * Until 2026-11-16 this showed a schedule ("delivers every 60 min"), a
+ * countdown to the next delivery and a queue count. The countdown was the
+ * interval counted down from the current second, so it never reached zero,
+ * and no code ever wrote a queue count. It now says the one true thing.
+ * `queueCount` stays in the props so callers need not change; it is not shown.
+ */
+export const DeadDropIndicator = ({ config }: { config: DeadDropConfig; queueCount?: number }) => {
     if (!config.enabled) return null;
 
     return (
         <aside
+            role="note"
+            data-testid="deaddrop-indicator"
             style={{
-                display: 'flex',
-                flexWrap: 'wrap',
-                alignItems: 'center',
-                gap: 10,
-                border: '1px solid var(--accent-primary)',
+                border: '1px solid var(--border-default)',
                 borderRadius: 10,
                 background: 'var(--bg-input)',
                 padding: '6px 10px',
+                fontSize: 13,
             }}
         >
-            <strong>{summary}</strong>
-            <span style={{ opacity: 0.9 }}>
-                Next delivery: {nextDelivery ? formatCountdown(nextDelivery) : 'manual trigger'}
-            </span>
-            <span
-                style={{
-                    border: '1px solid var(--border-default)',
-                    borderRadius: 999,
-                    padding: '2px 8px',
-                }}
-            >
-                Queue: {queueCount}
-            </span>
+            {DEAD_DROP_NOT_BUILT_NOTICE}
         </aside>
     );
 };

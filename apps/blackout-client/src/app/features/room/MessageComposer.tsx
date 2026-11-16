@@ -38,7 +38,12 @@ import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { useStateEvent } from '../../hooks/useStateEvent';
 import { StateEvent } from '../../../types/matrix/room';
 import { composerCommandPayloadAtom } from '../../state/composer';
-import { uploadMedia } from '../media/utils/matrixMedia';
+import {
+    AttachmentEncryptionChangedError,
+    roomEncryptsAttachments,
+    sendRoomAttachment,
+} from '../media/utils/roomAttachment';
+import { RoomNotReadyError } from './roomSendGuard';
 import { HideMessageDialog } from '../steganography';
 import { useDismissOnOutsideOrEscape } from './useDismissOnOutsideOrEscape';
 import { useAttachPhoto } from './attachments/useAttachPhoto';
@@ -65,11 +70,29 @@ const DRAFT_STORAGE_PREFIX = 'blackout.draft.';
 
 // Scheduled messages are posted later by the Blackout bot, which has no Megolm
 // and cannot encrypt. In an encrypted room that would put plaintext in front of
-// the server under a composer that says "not even the server can" read it, so
+// the server under a composer that says the server cannot read it, so
 // scheduling is not offered there. The API refuses too (409); this is the
 // client-side half, so nothing leaves this client for scheduling at all.
 const SCHEDULE_ENCRYPTED_REASON =
     'Not available in encrypted rooms. The Blackout bot sends scheduled messages and cannot encrypt them.';
+
+/**
+ * What to tell the user when a send fails. Each part of a message leaves the
+ * composer as it goes out (the text first, then each file), so after a
+ * failure what is still in the box is exactly what was not sent, and sending
+ * again does not repeat what was. The two refusals that exist to keep content
+ * from leaving unencrypted say so in their own words.
+ */
+export const sendFailureNotice = (err: unknown): string => {
+    if (err instanceof RoomNotReadyError || err instanceof AttachmentEncryptionChangedError) {
+        return err.message;
+    }
+    return 'Something was not sent. What is still in the box did not go out: send again to retry.';
+};
+
+/** Scheduling refused because the room is not loaded: it cannot be known whether it is encrypted. */
+export const SCHEDULE_ROOM_NOT_READY =
+    'This room has not finished loading, so nothing was scheduled. Try again shortly.';
 
 /** What to tell the user when the API refuses or fails to schedule. */
 const scheduleFailureNotice = (err: unknown): string => {
@@ -513,6 +536,20 @@ const FormatMarkButton = ({
     );
 };
 
+/**
+ * What the lock next to the composer says when opened.
+ *
+ * The encrypted text is about what this client sends. It names what the
+ * server still sees: Matrix does not encrypt reactions or room state, and
+ * den documents, proposals, objectives and playbooks are room state; an
+ * encrypted file's size is visible. Files posted here by an app that does not
+ * encrypt them carry their own note in the timeline.
+ */
+export const ENCRYPTED_ROOM_NOTICE =
+    'End-to-end encrypted. Messages and files you send here are encrypted on this device, and the server cannot read them. It can still see who is in the room, when things are sent and how large they are, emoji reactions, and anything kept as part of the room itself: its name and settings, den documents and proposals.';
+export const UNENCRYPTED_ROOM_NOTICE =
+    'Not encrypted. Messages and files are stored unencrypted on the server. Enable encryption in room settings for private conversations.';
+
 // Surfaces the current room's end-to-end encryption status next to the
 // composer. Driven by the `m.room.encryption` state event so it stays in sync
 // if encryption is enabled while the room is open. Click toggles a short
@@ -568,9 +605,7 @@ const RoomEncryptionIndicator = ({ room }: { room: Room }) => {
                         boxShadow: '0 4px 12px rgba(0, 0, 0, 0.2)',
                     }}
                 >
-                    {encrypted
-                        ? 'End-to-end encrypted. Only people in this room can read these messages — not even the server can.'
-                        : 'Not encrypted. Messages are stored unencrypted on the server. Enable encryption in room settings for private conversations.'}
+                    {encrypted ? ENCRYPTED_ROOM_NOTICE : UNENCRYPTED_ROOM_NOTICE}
                 </div>
             ) : null}
         </div>
@@ -643,6 +678,7 @@ export const MessageComposer = ({
     const [ephemeralEnabled, setEphemeralEnabled] = useState(false);
     const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
     const [slowmodeNotice, setSlowmodeNotice] = useState<string | null>(null);
+    const [sendNotice, setSendNotice] = useState<string | null>(null);
     const [scheduleNotice, setScheduleNotice] = useState<string | null>(null);
     const scheduleUnavailableId = useId();
     const lastSentTsRef = useRef<number | null>(null);
@@ -663,8 +699,10 @@ export const MessageComposer = ({
     const { sendRichText, sendMedia } = useSendMessage(roomId);
     const editMessage = useEditMessage(roomId);
     const matrixClient = useMatrixClient();
-    const room = useMemo(() => matrixClient.getRoom?.(roomId) ?? undefined, [matrixClient, roomId]);
-    // Read on every render (opening the menu re-renders), and again at send time.
+    // Read on every render, not memoised: a composer mounted before its room
+    // has arrived from sync would otherwise hold "no room" for good, and "no
+    // room" reads as "not encrypted".
+    const room = matrixClient.getRoom?.(roomId) ?? undefined;
     const roomEncrypted = room?.hasEncryptionStateEvent() ?? false;
 
     const draftRoomRef = useRef(roomId);
@@ -692,6 +730,15 @@ export const MessageComposer = ({
         if (draftRoomRef.current === roomId) return;
         draftRoomRef.current = roomId;
         setComposerText(loadDraft(roomId));
+        // A file attached for one room must not go to another. What was
+        // attached, recorded or prepared stays behind with the room it was
+        // for; only the text draft is kept, per room.
+        setAttachments([]);
+        setVoiceAttachment(null);
+        setVoiceMetadata({});
+        voiceMetadataForRef.current = null;
+        setStegoAttachment(null);
+        setSendNotice(null);
     }, [roomId, setComposerText]);
 
     const insertEmoji = useCallback(
@@ -951,6 +998,7 @@ export const MessageComposer = ({
         }
 
         setSending(true);
+        setSendNotice(null);
         try {
             const htmlBody = toHtml(value);
             const signatureSuffix = signatureEnabled ? '\n— signed via Blackout' : '';
@@ -989,9 +1037,24 @@ export const MessageComposer = ({
                     !voiceAttachment &&
                     !stegoAttachment
                 ) {
-                    // The room may have become encrypted since scheduling was
-                    // switched on. Neither schedule nor send now; keep the draft.
-                    if (room?.hasEncryptionStateEvent()) {
+                    // Scheduling hands the text to the API in the clear, so it
+                    // is decided from the room as it is now, by the rule files
+                    // use: a room this client has not loaded is refused, and
+                    // so is one that is encrypted or that the crypto store
+                    // remembers as encrypted. Neither schedule nor send; keep
+                    // the draft.
+                    let encryptedNow: boolean;
+                    try {
+                        encryptedNow = await roomEncryptsAttachments(matrixClient, roomId);
+                    } catch (err) {
+                        setScheduleNotice(
+                            err instanceof RoomNotReadyError
+                                ? SCHEDULE_ROOM_NOT_READY
+                                : scheduleFailureNotice(err)
+                        );
+                        return;
+                    }
+                    if (encryptedNow) {
                         setScheduleNotice(SCHEDULE_ENCRYPTED_REASON);
                         return;
                     }
@@ -1022,7 +1085,11 @@ export const MessageComposer = ({
                     setStegoAttachment(null);
                     setScheduledEnabled(false);
                     onSent?.();
-                    await sendTyping(false);
+                    try {
+                        await sendTyping(false);
+                    } catch {
+                        // A typing notice that fails is not a failed schedule.
+                    }
                     return;
                 }
                 if (encryptionPresetEnabled) {
@@ -1053,8 +1120,16 @@ export const MessageComposer = ({
                     };
                 }
 
-                await sendRichText(content);
+                // A file sent with nothing typed is just the file: no empty
+                // text message goes out ahead of it.
+                if (bodyToSend.length > 0 || voteEnabled) {
+                    await sendRichText(content);
+                }
             }
+
+            // What was typed has gone out. Take it out of the box now, so a
+            // file that fails below does not leave it there to be sent twice.
+            clearComposer();
 
             const ephemeralPolicy = ephemeralEnabled
                 ? { expiresAtMs: Date.now() + 24 * 60 * 60 * 1000, maxViews: 1 }
@@ -1068,15 +1143,18 @@ export const MessageComposer = ({
                     : undefined;
                 await sendMedia(file, {
                     ephemeral: ephemeralPolicy,
-                    buildContent: (url) =>
+                    buildContent: (source) =>
                         buildAttachmentContent({
-                            url,
+                            source,
                             fileName: file.name,
                             mimeType: file.type,
                             size: file.size,
                             dims,
                         }),
                 });
+                // Sent: no longer attached, so a later failure and a second
+                // Send do not post it again.
+                setAttachments((current) => current.filter((attached) => attached !== file));
             }
             if (voiceAttachment) {
                 // Voice notes send as m.audio + MSC3245 (not the generic
@@ -1085,9 +1163,9 @@ export const MessageComposer = ({
                 // builder the round-reply surface uses.
                 await sendMedia(voiceAttachment, {
                     ephemeral: ephemeralPolicy,
-                    buildContent: (url) =>
+                    buildContent: (source) =>
                         buildVoiceMessageContent({
-                            url,
+                            source,
                             fileName: voiceAttachment.name,
                             mimeType: voiceAttachment.type,
                             size: voiceAttachment.size,
@@ -1095,35 +1173,46 @@ export const MessageComposer = ({
                             waveform: voiceMetadata.waveform,
                         }),
                 });
+                setVoiceAttachment(null);
+                setVoiceMetadata({});
+                voiceMetadataForRef.current = null;
             }
 
             if (stegoAttachment) {
-                const mxcUrl = await uploadMedia(matrixClient, stegoAttachment);
                 const image = await createImageBitmap(stegoAttachment);
-                await (
-                    matrixClient as unknown as {
-                        sendEvent: (
-                            rid: string,
-                            type: string,
-                            content: Record<string, unknown>
-                        ) => Promise<unknown>;
-                    }
-                ).sendEvent(roomId, 'm.room.message', {
-                    msgtype: 'm.image',
-                    body: stegoAttachment.name,
-                    url: mxcUrl,
-                    info: {
-                        mimetype: stegoAttachment.type,
-                        size: stegoAttachment.size,
-                        w: image.width,
-                        h: image.height,
-                    },
-                    'co.blackout.stego': {
-                        hidden: true,
-                        algorithm: 'lsb-aes-256-cbc',
-                        version: 1,
-                    },
-                });
+                // Same sender as every other attachment: in an encrypted
+                // room the carrier image is encrypted before it is uploaded.
+                await sendRoomAttachment(
+                    matrixClient,
+                    roomId,
+                    stegoAttachment,
+                    (source) => ({
+                        msgtype: 'm.image',
+                        body: stegoAttachment.name,
+                        ...source,
+                        info: {
+                            mimetype: stegoAttachment.type,
+                            size: stegoAttachment.size,
+                            w: image.width,
+                            h: image.height,
+                        },
+                        'co.blackout.stego': {
+                            hidden: true,
+                            algorithm: 'lsb-aes-256-cbc',
+                            version: 1,
+                        },
+                    }),
+                    (content) =>
+                        (
+                            matrixClient as unknown as {
+                                sendEvent: (
+                                    rid: string,
+                                    type: string,
+                                    content: Record<string, unknown>
+                                ) => Promise<unknown>;
+                            }
+                        ).sendEvent(roomId, 'm.room.message', content)
+                );
             }
 
             clearComposer();
@@ -1135,7 +1224,15 @@ export const MessageComposer = ({
             setStegoAttachment(null);
             setEphemeralEnabled(false);
             onSent?.();
-            await sendTyping(false);
+            try {
+                await sendTyping(false);
+            } catch {
+                // A typing notice that fails is not a failed send.
+            }
+        } catch (err) {
+            // A failed send used to end here with nothing on screen. The
+            // composer is left as it was; say why.
+            setSendNotice(sendFailureNotice(err));
         } finally {
             setSending(false);
         }
@@ -1926,7 +2023,7 @@ export const MessageComposer = ({
                     </div>
                 ) : null}
 
-                {slowmodeNotice || scheduleNotice ? (
+                {slowmodeNotice || scheduleNotice || sendNotice ? (
                     <div
                         role="status"
                         style={{
@@ -1937,6 +2034,7 @@ export const MessageComposer = ({
                     >
                         {slowmodeNotice ? <div>{slowmodeNotice}</div> : null}
                         {scheduleNotice ? <div>{scheduleNotice}</div> : null}
+                        {sendNotice ? <div data-testid="send-failure">{sendNotice}</div> : null}
                     </div>
                 ) : null}
 

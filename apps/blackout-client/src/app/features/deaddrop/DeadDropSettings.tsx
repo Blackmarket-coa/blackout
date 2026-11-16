@@ -1,43 +1,49 @@
-import { useEffect, useState } from 'react';
-import {
-    useDeadDrop,
-    useDeadDropQueueActions,
-    useSetDeadDrop,
-    type DeadDropConfig,
-    type DeadDropScheduleType,
-} from './useDeadDrop';
-import { useDeadDropQuota } from './useDeadDropQuota';
+import { useState } from 'react';
+import { DEAD_DROP_NOT_BUILT_NOTICE, useDeadDrop, useSetDeadDrop } from './useDeadDrop';
 
-export const DeadDropSettings = ({ roomId }: { roomId: string }) => {
+/** What the panel says for a room that does not have dead drop switched on. */
+export const DEAD_DROP_NOTHING_TO_CONFIGURE =
+    "Dead drop for rooms (queued, scheduled and anonymized delivery) is planned and not built yet. There is nothing to switch on: messages in a room are delivered at once, under the sender's own name.";
+
+/**
+ * The dead-drop panel for a room.
+ *
+ * Until 2026-11-16 this was a form: schedule type, interval or cron
+ * expression, "Anonymize delivery via bot account", queue size, retention,
+ * "Flush queue" and "Clear queue", with a tier banner and prompts to upgrade
+ * to Pro for scheduled flush and anonymized delivery. It wrote the room's
+ * `co.bmc.deaddrop` state, which nothing but this client's UI reads; no
+ * queue, schedule or cover sender exists on any tier.
+ *
+ * What is left is what is true: a statement that the feature is not built,
+ * and, for a room that has the state switched on, a way to switch it off so
+ * the notice goes away. The stored schedule and limits are kept as they are.
+ *
+ * `hideWhenOff` is for the room view, where a panel about a feature that does
+ * not exist should not sit under every composer.
+ */
+export const DeadDropSettings = ({
+    roomId,
+    hideWhenOff = false,
+}: {
+    roomId: string;
+    hideWhenOff?: boolean;
+}) => {
     const deadDrop = useDeadDrop(roomId);
     const setDeadDrop = useSetDeadDrop(roomId);
-    const queueActions = useDeadDropQueueActions(roomId);
-    const quota = useDeadDropQuota();
     const [saving, setSaving] = useState(false);
-    const [draft, setDraft] = useState<DeadDropConfig>(deadDrop.data);
+    const [failed, setFailed] = useState(false);
 
-    useEffect(() => {
-        setDraft(deadDrop.data);
-    }, [deadDrop.data]);
+    const enabled = deadDrop.data.enabled;
+    if (!enabled && hideWhenOff) return null;
 
-    const retentionExceeded = draft.retentionHours > quota.quotas.maxRetentionHours;
-    const cantSchedule = !quota.canUseScheduledFlush && draft.schedule.type !== 'manual';
-    const cantAnonymize = draft.anonymize && !quota.canUseCoverSender;
-
-    const onScheduleTypeChange = (type: DeadDropScheduleType) => {
-        setDraft((prev) => ({
-            ...prev,
-            schedule: {
-                ...prev.schedule,
-                type,
-            },
-        }));
-    };
-
-    const save = async () => {
+    const switchOff = async () => {
         setSaving(true);
+        setFailed(false);
         try {
-            await setDeadDrop(draft);
+            await setDeadDrop({ ...deadDrop.data, enabled: false });
+        } catch {
+            setFailed(true);
         } finally {
             setSaving(false);
         }
@@ -45,6 +51,7 @@ export const DeadDropSettings = ({ roomId }: { roomId: string }) => {
 
     return (
         <section
+            data-testid="deaddrop-settings"
             style={{
                 border: '1px solid var(--border-default)',
                 borderRadius: 12,
@@ -53,176 +60,36 @@ export const DeadDropSettings = ({ roomId }: { roomId: string }) => {
                 gap: 10,
             }}
         >
-            <h4 style={{ margin: 0 }}>Dead Drop Settings</h4>
-
-            <div
-                data-testid="deaddrop-tier-banner"
-                style={{
-                    border: '1px dashed var(--border-default)',
-                    borderRadius: 8,
-                    padding: 8,
-                    fontSize: 12,
-                    opacity: 0.85,
-                }}
-            >
-                <strong>Tier: {quota.tier}</strong> — max payload{' '}
-                {quota.quotas.maxPayloadBytes.toLocaleString()} bytes · max retention{' '}
-                {quota.quotas.maxRetentionHours} h · recipients{' '}
-                {quota.quotas.maxRecipients === -1 ? 'unlimited' : quota.quotas.maxRecipients} ·
-                decoys per fetch {quota.quotas.decoysPerFetch}
-                {quota.canUseQuorum ? ' · quorum opens enabled' : ''}
-            </div>
-
-            {retentionExceeded ? (
-                <p
-                    role="alert"
-                    data-testid="deaddrop-retention-warning"
-                    style={{ margin: 0, color: 'var(--accent-warning)' }}
-                >
-                    Retention exceeds your tier limit ({quota.quotas.maxRetentionHours} h). Lower it
-                    or upgrade.
-                </p>
+            <h4 style={{ margin: 0 }}>Dead Drop</h4>
+            <p role="note" data-testid="deaddrop-settings-notice" style={{ margin: 0 }}>
+                {enabled ? DEAD_DROP_NOT_BUILT_NOTICE : DEAD_DROP_NOTHING_TO_CONFIGURE}
+            </p>
+            {enabled ? (
+                <>
+                    <p style={{ margin: 0, fontSize: 13, opacity: 0.85 }}>
+                        The setting does one thing: it shows this notice to everyone in the room.
+                    </p>
+                    <div>
+                        <button
+                            type="button"
+                            onClick={() => void switchOff()}
+                            disabled={saving}
+                            data-testid="deaddrop-switch-off"
+                        >
+                            {saving ? 'Switching off…' : 'Switch off dead drop for this room'}
+                        </button>
+                    </div>
+                    {failed ? (
+                        <p
+                            role="alert"
+                            style={{ margin: 0, color: 'var(--color-danger, #e5484d)' }}
+                        >
+                            Could not switch it off. You may not have permission to change this
+                            room&apos;s settings.
+                        </p>
+                    ) : null}
+                </>
             ) : null}
-            {cantSchedule ? (
-                <p
-                    role="alert"
-                    data-testid="deaddrop-schedule-warning"
-                    style={{ margin: 0, color: 'var(--accent-warning)' }}
-                >
-                    Scheduled flush requires the Pro tier or higher. Switch to Manual or upgrade.
-                </p>
-            ) : null}
-            {cantAnonymize ? (
-                <p
-                    role="alert"
-                    data-testid="deaddrop-anonymize-warning"
-                    style={{ margin: 0, color: 'var(--accent-warning)' }}
-                >
-                    Anonymized delivery (cover sender) requires the Pro tier or higher.
-                </p>
-            ) : null}
-
-            <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <input
-                    type="checkbox"
-                    checked={draft.enabled}
-                    onChange={(event) =>
-                        setDraft((prev) => ({ ...prev, enabled: event.target.checked }))
-                    }
-                />
-                Enabled
-            </label>
-
-            <label>
-                Schedule type
-                <select
-                    value={draft.schedule.type}
-                    onChange={(event) =>
-                        onScheduleTypeChange(event.target.value as DeadDropScheduleType)
-                    }
-                    style={{ marginLeft: 8 }}
-                >
-                    <option value="interval">Interval</option>
-                    <option value="cron">Cron</option>
-                    <option value="manual">Manual</option>
-                </select>
-            </label>
-
-            {draft.schedule.type === 'interval' ? (
-                <label>
-                    Interval minutes
-                    <input
-                        type="number"
-                        min={1}
-                        value={draft.schedule.intervalMinutes ?? 60}
-                        onChange={(event) =>
-                            setDraft((prev) => ({
-                                ...prev,
-                                schedule: {
-                                    ...prev.schedule,
-                                    intervalMinutes: Number(event.target.value),
-                                },
-                            }))
-                        }
-                        style={{ marginLeft: 8 }}
-                    />
-                </label>
-            ) : null}
-
-            {draft.schedule.type === 'cron' ? (
-                <label>
-                    Cron expression
-                    <input
-                        value={draft.schedule.cronExpression ?? '0 * * * *'}
-                        onChange={(event) =>
-                            setDraft((prev) => ({
-                                ...prev,
-                                schedule: { ...prev.schedule, cronExpression: event.target.value },
-                            }))
-                        }
-                        style={{ marginLeft: 8, width: 180 }}
-                    />
-                </label>
-            ) : null}
-
-            <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <input
-                    type="checkbox"
-                    checked={draft.anonymize}
-                    onChange={(event) =>
-                        setDraft((prev) => ({ ...prev, anonymize: event.target.checked }))
-                    }
-                />
-                Anonymize delivery via bot account
-            </label>
-
-            <label>
-                Max queue size
-                <input
-                    type="number"
-                    min={1}
-                    value={draft.maxQueueSize}
-                    onChange={(event) =>
-                        setDraft((prev) => ({ ...prev, maxQueueSize: Number(event.target.value) }))
-                    }
-                    style={{ marginLeft: 8 }}
-                />
-            </label>
-
-            <label>
-                Retention hours
-                <input
-                    type="number"
-                    min={1}
-                    value={draft.retentionHours}
-                    onChange={(event) =>
-                        setDraft((prev) => ({
-                            ...prev,
-                            retentionHours: Number(event.target.value),
-                        }))
-                    }
-                    style={{ marginLeft: 8 }}
-                />
-            </label>
-
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                <button type="button" onClick={() => void save()} disabled={saving}>
-                    {saving ? 'Saving…' : 'Save dead drop config'}
-                </button>
-                <button type="button" onClick={() => void queueActions.flush()}>
-                    Flush queue
-                </button>
-                <button type="button" onClick={() => void queueActions.clear()}>
-                    Clear queue
-                </button>
-            </div>
-
-            <small style={{ opacity: 0.8 }}>Current queue count: {deadDrop.queueCount}</small>
-            <small style={{ opacity: 0.8 }}>
-                Schema v{deadDrop.diagnostics.schemaVersion} • migrated:{' '}
-                {String(deadDrop.diagnostics.migrated)} • invalid events:{' '}
-                {deadDrop.diagnostics.invalidStateEvents}
-            </small>
         </section>
     );
 };

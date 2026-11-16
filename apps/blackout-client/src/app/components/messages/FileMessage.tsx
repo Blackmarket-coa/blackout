@@ -1,5 +1,14 @@
+import { useCallback, useState } from 'react';
+import FileSaver from 'file-saver';
 import type { MatrixEvent } from 'matrix-js-sdk';
+import { useMatrixClient } from '../../hooks/useMatrixClient';
 import {
+    OPAQUE_BLOB_TYPE,
+    fetchDecryptedMedia,
+    readEncryptedFile,
+} from '../../features/media/utils/encryptedMedia';
+import {
+    ServerReadableNote,
     baseStyles,
     formatBytes,
     getInfo,
@@ -22,22 +31,72 @@ const iconForMime = (mime?: string): string => {
     return '📁';
 };
 
+const actionStyle = {
+    border: '1px solid var(--border-default)',
+    borderRadius: 8,
+    padding: '4px 8px',
+    color: 'var(--text-primary)',
+    background: 'transparent',
+    cursor: 'pointer',
+} as const;
+
 export const FileMessage = ({ event, enablePdfPreview = true }: FileMessageProps) => {
+    const client = useMatrixClient();
     const { ref, inView } = useInViewport<HTMLDivElement>();
-    const { src, loading, error } = useResolvedMediaSource(event);
+    // An encrypted file is never fetched by this hook (`autoLoad: false`, and
+    // `load` is not used): it is fetched, decrypted and saved in one step when
+    // the reader presses Download, below.
+    const { src, loading, error, encrypted, endToEndEncrypted, serverReadableNote } =
+        useResolvedMediaSource(event, { autoLoad: false });
+    const [saving, setSaving] = useState(false);
+    const [saveError, setSaveError] = useState<string | null>(null);
     const info = getInfo(event);
-    const body = event.getContent<Record<string, unknown>>().body;
-    const fileName = typeof body === 'string' ? body : 'Attachment';
+    const content = event.getContent<Record<string, unknown>>();
+    // `filename` is the file's name when `body` is a caption; older messages
+    // carry the name in `body`.
+    const fileName =
+        typeof content.filename === 'string' && content.filename
+            ? content.filename
+            : typeof content.body === 'string'
+            ? content.body
+            : 'Attachment';
     const mime = typeof info.mimetype === 'string' ? info.mimetype : undefined;
     const isPdf = mime?.includes('pdf');
+
+    const saveEncrypted = useCallback(async () => {
+        const file = readEncryptedFile(content);
+        if (!file) return;
+        setSaving(true);
+        setSaveError(null);
+        try {
+            // Always the opaque type: a saved file is opened by whatever the
+            // reader's system uses for its name, and a blob that a browser
+            // would render must never be made from a sender-declared type.
+            const blob = await fetchDecryptedMedia({
+                file,
+                homeserverUrl:
+                    (
+                        client as unknown as { getHomeserverUrl?: () => string }
+                    ).getHomeserverUrl?.() ?? '',
+                blobType: OPAQUE_BLOB_TYPE,
+            });
+            FileSaver.saveAs(blob, fileName);
+        } catch (err) {
+            setSaveError(err instanceof Error ? err.message : 'The file could not be downloaded.');
+        } finally {
+            setSaving(false);
+        }
+    }, [client, content, fileName]);
+
+    const shownError = error ?? saveError;
 
     return (
         <div ref={ref} style={{ ...baseStyles.surface, padding: 10, width: 'min(440px, 100%)' }}>
             {!inView || loading ? (
                 <div style={{ ...baseStyles.skeleton, minHeight: 72, borderRadius: 8 }} />
             ) : null}
-            {error ? <div style={baseStyles.error}>File unavailable: {error}</div> : null}
-            {inView && src ? (
+            {shownError ? <div style={baseStyles.error}>File unavailable: {shownError}</div> : null}
+            {inView && (src || (encrypted && !error)) ? (
                 <>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                         <div style={{ fontSize: 26 }}>{iconForMime(mime)}</div>
@@ -55,25 +114,36 @@ export const FileMessage = ({ event, enablePdfPreview = true }: FileMessageProps
                             <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>
                                 {mime ?? 'unknown'} ·{' '}
                                 {formatBytes(typeof info.size === 'number' ? info.size : undefined)}
+                                {endToEndEncrypted ? ' · end-to-end encrypted' : ''}
                             </div>
                         </div>
-                        <a
-                            href={src}
-                            target="_blank"
-                            rel="noreferrer"
-                            download={fileName}
-                            style={{
-                                border: '1px solid var(--border-default)',
-                                borderRadius: 8,
-                                padding: '4px 8px',
-                                color: 'var(--text-primary)',
-                            }}
-                        >
-                            Download
-                        </a>
+                        {encrypted ? (
+                            <button
+                                type="button"
+                                onClick={() => void saveEncrypted()}
+                                disabled={saving}
+                                data-testid="download-encrypted-file"
+                                style={actionStyle}
+                            >
+                                {saving ? 'Decrypting…' : 'Download'}
+                            </button>
+                        ) : src ? (
+                            <a
+                                href={src}
+                                target="_blank"
+                                rel="noreferrer"
+                                download={fileName}
+                                style={actionStyle}
+                            >
+                                Download
+                            </a>
+                        ) : null}
                     </div>
 
-                    {enablePdfPreview && isPdf ? (
+                    {/* No inline preview for an encrypted PDF: showing one
+                        would mean rendering a decrypted, sender-supplied
+                        document inside this app's origin. */}
+                    {enablePdfPreview && isPdf && !encrypted && src ? (
                         <iframe
                             title={fileName}
                             src={src}
@@ -88,6 +158,7 @@ export const FileMessage = ({ event, enablePdfPreview = true }: FileMessageProps
                     ) : null}
                 </>
             ) : null}
+            {serverReadableNote ? <ServerReadableNote text={serverReadableNote} /> : null}
         </div>
     );
 };

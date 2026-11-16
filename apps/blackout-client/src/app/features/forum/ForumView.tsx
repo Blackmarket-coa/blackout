@@ -5,7 +5,7 @@ import {
     useLegacyRoomTimelineAdapter as useRoomTimeline,
     useLegacySendMessageAdapter as useSendMessage,
 } from '../../plugins/matrix-adapters/hooks/useLegacyTimelineAdapter';
-import { CreatePostModal } from './CreatePostModal';
+import { CreatePostModal, forumSendFailureNotice } from './CreatePostModal';
 import { ForumPost } from './ForumPost';
 import { useForumPosts, useForumSettings, type ForumPostModel } from './useForum';
 import { useRegisterModalOpener } from '../../shell/modalOpenerRegistry';
@@ -39,6 +39,7 @@ const ThreadView = ({
     onReply: (body: string, rootEventId: string) => Promise<void>;
 }) => {
     const [reply, setReply] = useState('');
+    const [replyFailure, setReplyFailure] = useState<string | null>(null);
 
     return (
         <section style={{ display: 'grid', gap: 10 }}>
@@ -120,7 +121,13 @@ const ThreadView = ({
                         type="button"
                         onClick={() => {
                             if (!reply.trim()) return;
-                            void onReply(reply.trim(), post.eventId).then(() => setReply(''));
+                            setReplyFailure(null);
+                            // A reply that failed used to stay in the box with
+                            // nothing said. It still stays; now it says why.
+                            onReply(reply.trim(), post.eventId).then(
+                                () => setReply(''),
+                                (err: unknown) => setReplyFailure(forumSendFailureNotice(err))
+                            );
                         }}
                         style={{
                             justifySelf: 'end',
@@ -133,6 +140,15 @@ const ThreadView = ({
                     >
                         Reply
                     </button>
+                    {replyFailure ? (
+                        <p
+                            role="alert"
+                            data-testid="forum-reply-failure"
+                            style={{ margin: 0, color: 'var(--color-danger, #e5484d)' }}
+                        >
+                            {replyFailure}
+                        </p>
+                    ) : null}
                 </div>
             </section>
         </section>
@@ -188,7 +204,7 @@ export const ForumView = ({ roomId }: { roomId: string }) => {
 
     const selectedPost = useMemo(
         () => posts.data.find((post) => post.eventId === selectedPostId) ?? null,
-        [posts.data, selectedPostId],
+        [posts.data, selectedPostId]
     );
 
     const repliesFromTimeline = useMemo(() => {

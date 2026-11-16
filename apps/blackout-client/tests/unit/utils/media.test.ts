@@ -1,14 +1,20 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { MatrixClient, MatrixEvent } from 'matrix-js-sdk';
-import { mxcToUrl, getThumbnailUrl, uploadMedia, getMediaInfo } from '../../../src/app/utils/media';
+import {
+    avatarThumbnailUrl,
+    mxcToUrl,
+    getThumbnailUrl,
+    uploadMedia,
+    getMediaInfo,
+} from '../../../src/app/utils/media';
 
 describe('media utils', () => {
     it('mxcToUrl converts mxc URI to media URL', () => {
         expect(mxcToUrl('mxc://matrix.org/abc123', 'https://hs.example.org')).toBe(
-            'https://hs.example.org/_matrix/media/v3/download/matrix.org/abc123',
+            'https://hs.example.org/_matrix/media/v3/download/matrix.org/abc123'
         );
         expect(mxcToUrl('mxc://matrix.org/abc123', 'https://hs.example.org/')).toBe(
-            'https://hs.example.org/_matrix/media/v3/download/matrix.org/abc123',
+            'https://hs.example.org/_matrix/media/v3/download/matrix.org/abc123'
         );
     });
 
@@ -20,7 +26,7 @@ describe('media utils', () => {
     it('getThumbnailUrl builds thumbnail endpoint URL', () => {
         const url = getThumbnailUrl('mxc://matrix.org/abc123', 320, 240, 'https://hs.example.org');
         expect(url).toBe(
-            'https://hs.example.org/_matrix/media/v3/thumbnail/matrix.org/abc123?width=320&height=240&method=scale',
+            'https://hs.example.org/_matrix/media/v3/thumbnail/matrix.org/abc123?width=320&height=240&method=scale'
         );
     });
 
@@ -78,5 +84,36 @@ describe('media utils', () => {
             width: undefined,
             height: undefined,
         });
+    });
+});
+
+// An avatar address comes from a profile or a membership event, and can be any
+// string. Only media the homeserver holds is loaded: an https:// address would
+// make every reader's device fetch it, telling a server of that person's
+// choosing who is looking, from where, and when.
+describe('avatarThumbnailUrl', () => {
+    const HS = 'https://hs.example';
+
+    it("turns an mxc:// address into this homeserver's thumbnail", () => {
+        expect(avatarThumbnailUrl('mxc://hs.example/abc', HS, 64)).toBe(
+            'https://hs.example/_matrix/media/v3/thumbnail/hs.example/abc?width=64&height=64&method=scale'
+        );
+    });
+
+    it.each([
+        'https://tracker.example/pixel.png',
+        'http://tracker.example/pixel.png',
+        '//tracker.example/pixel.png',
+        'data:image/png;base64,AAAA',
+        'javascript:alert(1)',
+        '',
+    ])('loads nothing for %j', (avatar) => {
+        expect(avatarThumbnailUrl(avatar, HS)).toBeNull();
+    });
+
+    it('loads nothing for a missing avatar or an unknown homeserver', () => {
+        expect(avatarThumbnailUrl(undefined, HS)).toBeNull();
+        expect(avatarThumbnailUrl(null, HS)).toBeNull();
+        expect(avatarThumbnailUrl('mxc://hs.example/abc', '')).toBeNull();
     });
 });

@@ -46,8 +46,9 @@ describe('computeWaveformBuckets', () => {
 });
 
 describe('buildVoiceMessageContent', () => {
+    const url = 'mxc://example.org/abc';
     const base = {
-        url: 'mxc://example.org/abc',
+        source: { url },
         fileName: 'voice-note-1.webm',
         mimeType: 'audio/webm',
         size: 2048,
@@ -57,7 +58,7 @@ describe('buildVoiceMessageContent', () => {
         expect(buildVoiceMessageContent(base)).toEqual({
             msgtype: 'm.audio',
             body: base.fileName,
-            url: base.url,
+            url,
             info: { mimetype: base.mimeType, size: base.size },
             'org.matrix.msc3245.voice': {},
             'org.matrix.msc1767.audio': {},
@@ -86,6 +87,26 @@ describe('buildVoiceMessageContent', () => {
         expect(
             buildVoiceMessageContent({ ...base, replyToEventId: '$round-1' })['m.relates_to']
         ).toEqual({ 'm.in_reply_to': { event_id: '$round-1' } });
+    });
+
+    it('references an encrypted upload by `file`, and writes no `url` beside it', () => {
+        const file = {
+            url: 'mxc://example.org/ciphertext',
+            v: 'v2',
+            key: {
+                alg: 'A256CTR',
+                key_ops: ['encrypt', 'decrypt'],
+                kty: 'oct',
+                k: 'a2V5',
+                ext: true,
+            },
+            iv: 'aXY',
+            hashes: { sha256: 'aGFzaA' },
+        };
+        const content = buildVoiceMessageContent({ ...base, source: { file } });
+        expect(content.file).toEqual(file);
+        expect('url' in content).toBe(false);
+        expect(content['org.matrix.msc3245.voice']).toEqual({});
     });
 });
 
