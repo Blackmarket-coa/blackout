@@ -47,14 +47,14 @@ export const CallWidget = ({
         window.ElementCallSdk.mount(containerRef.current, {
             roomId,
             onParticipantsAudioLevel: (
-                participants: Array<{ userId: string; audioLevel: number }>,
+                participants: Array<{ userId: string; audioLevel: number }>
             ) => {
                 updateAudioLevels(
                     participants.map((item) => ({
                         userId: item.userId,
                         level: item.audioLevel,
                         speaking: item.audioLevel > 0.08,
-                    })),
+                    }))
                 );
             },
         });
@@ -101,7 +101,7 @@ export const CallWidget = ({
                     })
                     .filter(
                         (item): item is { userId: string; level: number; speaking: boolean } =>
-                            item !== null,
+                            item !== null
                     );
 
                 updateAudioLevels(levels);

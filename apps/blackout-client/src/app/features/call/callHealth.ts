@@ -24,7 +24,10 @@ export const resolveLivekitFocusFromWellKnown = (body: Record<string, unknown>):
     return livekitFocus.livekit_service_url ?? livekitFocus.livekit_alias ?? null;
 };
 
-export const getActionableCallMessage = (status: CallFocusResolution['status'], reason: string): string => {
+export const getActionableCallMessage = (
+    status: CallFocusResolution['status'],
+    reason: string
+): string => {
     if (status === 'healthy') return 'LiveKit focus resolved. Calls should connect normally.';
     if (status === 'unconfigured') {
         return `Call provider is not configured (${reason}). You can still open widget fallback mode.`;

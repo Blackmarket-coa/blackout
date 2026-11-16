@@ -65,7 +65,7 @@ interface MatrixRtcSessionStarter {
     matrixRTC?: {
         startRoomSession?: (
             roomId: string,
-            options?: Record<string, unknown>,
+            options?: Record<string, unknown>
         ) => Promise<MatrixRtcSessionLike>;
     };
 }
@@ -122,7 +122,7 @@ const parseMembership = (event: MatrixEvent): CallMemberState | null => {
     let fociPreferred: string[] | undefined;
     if (Array.isArray(content.foci_preferred)) {
         fociPreferred = content.foci_preferred.filter(
-            (item): item is string => typeof item === 'string',
+            (item): item is string => typeof item === 'string'
         );
     }
 
@@ -135,7 +135,11 @@ const readRtcFocus = async (client: MatrixClient): Promise<CallFocusResolution> 
         const body = await clientQueries.getWellKnownMatrixClient(homeserverUrl);
         const focusUrl = resolveLivekitFocusFromWellKnown(body);
         if (!focusUrl) {
-            return { focusUrl: null, status: 'unconfigured', reason: 'missing rtc_foci livekit entry' };
+            return {
+                focusUrl: null,
+                status: 'unconfigured',
+                reason: 'missing rtc_foci livekit entry',
+            };
         }
 
         return { focusUrl, status: 'healthy', reason: 'resolved from well-known' };
@@ -159,7 +163,7 @@ const getSessionStarter = (client: MatrixClient): MatrixRtcSessionStarter =>
  */
 export const buildRtcSessionOptions = (
     mode: CallE2eeMode,
-    focusUrl: string | null,
+    focusUrl: string | null
 ): Record<string, unknown> => {
     const base: Record<string, unknown> = {
         focusPreferred: focusUrl ? [focusUrl] : undefined,
@@ -453,7 +457,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
             pendingJoinRef.current = { roomId: nextRoomId, promise };
             return promise;
         },
-        [client, focusUrl, leaveCall, roomId],
+        [client, focusUrl, leaveCall, roomId]
     );
 
     const updateAudioLevels = useCallback((levels: AudioLevelState[]) => {
@@ -513,7 +517,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
             roomId,
             screenSharing,
             updateAudioLevels,
-        ],
+        ]
     );
 
     return <CallContext.Provider value={value}>{children}</CallContext.Provider>;
