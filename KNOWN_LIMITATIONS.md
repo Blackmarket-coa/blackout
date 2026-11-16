@@ -1293,6 +1293,49 @@ What remains:
     these listeners, so a dropped connection still ends them. They hold no
     write-behind queue.
 
+### The apex domain answers with a placeholder (2026-11-16)
+
+Observed from outside on 2026-11-16, once, from one network.
+`https://theblackout.app/` answers every path tried with a "Coming Soon" page
+(`200`, `text/html`), and `/.well-known/matrix/server`,
+`/.well-known/matrix/client` and `/trust` are among them. The homeserver's name
+is `theblackout.app` (`server_name`, which cannot change after launch), so
+those two documents are looked up there and nowhere else. What follows:
+
+-   **Federation.** Another homeserver that looks up `theblackout.app` gets
+    HTML where it expects the delegation document, so it cannot learn that the
+    homeserver is at `matrix.theblackout.app:443`, unless a DNS SRV record or
+    port 8448 on the apex says so (neither was checked). The homeserver itself
+    answers federation requests at `matrix.theblackout.app`.
+-   **Client discovery.** A Matrix client given `theblackout.app` as its server
+    cannot discover the homeserver from it. Whether the Blackout app's own
+    sign-in depends on that lookup was not checked.
+-   **The trust page** is served at `https://chat.theblackout.app/trust`. Its
+    generator names `https://theblackout.app/trust` as its address
+    (`tools/ci/build-trust-page.mjs`), and that address shows the placeholder.
+
+The configuration in this repository serves both documents from the apex
+(`infra/single-server-baseline/nginx/sites-available/theblackout.app.conf`),
+and the launch checklist checks them
+(`infra/single-server-baseline/synapse/PRODUCTION_LAUNCH.md`), so the apex does
+not point at that proxy. Pointing it there, or deciding that this deployment
+does not federate, is the operator's
+([`ADJACENT_PROTOCOLS_NOSTR_RETICULUM.md`](docs/architecture/ADJACENT_PROTOCOLS_NOSTR_RETICULUM.md),
+sections 5 and 7).
+
+### Deploy workflows that have never run (2026-11-16)
+
+`deploy-web.yml` and `deploy-compose-prod.yml` start on a push to `main` (the
+second can also be started by hand). This repository's default branch is
+`develop` and there is no `main`, so neither has ever run: the Actions history
+showed no run of either on 2026-11-16. `docker.yml` builds images on a push to
+`main` or a `v*` tag, and `release.yml` on a `v*` tag; no tag exists. So
+merging to `develop` deploys nothing and publishes no image. Production is
+updated by running `deploy.sh` on the host
+(`infra/single-server-baseline/RUNBOOK.md`), which builds there from
+`origin/develop`. What is live is whatever that script last built, and nothing
+in this repository records which commit that was.
+
 ### Release signoff
 
 The CI release gate

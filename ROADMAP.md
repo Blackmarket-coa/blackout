@@ -21,6 +21,12 @@ operations guide; it points at it.
 
 ## Current focus
 
+### Nostr and Reticulum beside Matrix — 2026-11-16
+
+A proposal to add Nostr (public posts, an identity a creator owns) and Reticulum (communication with no internet) beside Matrix was [checked against the code, the live deployment and the protocols' own documents](docs/architecture/ADJACENT_PROTOCOLS_NOSTR_RETICULUM.md). Its advice holds: neither yet, then Nostr first, Reticulum later, Matrix as the backbone. What the plan takes: an opt-in Nostr adapter for public posts inside the existing coalition cross-post frame, `name@theblackout.app` handles after it, and Reticulum as one candidate transport for the already-proposed Mesh/LoRa relay. What it does not take: zaps as a payment rail, Nostr direct messages or groups, a radio bridge into encrypted rooms, and live tracking. The gates it adds: Blackout never holds a person's Nostr key; a post that cannot be recalled says so before it is published; Reticulum's reference implementation is under a licence with conditions on use that the GPL and AGPL do not allow in linked code.
+
+Three things come first, all confirmed on 2026-11-16: BO-1's restore path; the apex domain, which answers every path with a placeholder page, so the homeserver cannot be found from `theblackout.app` and no handle can be served there; and the deploy workflows, which wait on a `main` branch that does not exist and have never run. This is a proposed sequence. It replaces nothing in the canonical milestone tracker and claims nothing shipped.
+
 ### Blackout agency, community, character, and creator growth — 2026-11-15
 
 The [new product requirements](docs/product/BLACKOUT_AGENCY_COMMUNITY_CHARACTER_AND_CREATOR_GROWTH.md) extend the [participation strategy](docs/BLACKOUT_HABIT_AND_PARTICIPATION_STRATEGY.md): crowd-selected Coliseum finales, champion/team pride and coalition-building, game-theory learning, map-based Coalition microlearning and Pinterest-style discovery, feed curation, username/password signup with short visual goals, evolving personas and earned digital choices, and creator audience/campaign research.

@@ -8,6 +8,7 @@
 -   [Agency, community, character, and creator growth](product/BLACKOUT_AGENCY_COMMUNITY_CHARACTER_AND_CREATOR_GROWTH.md)
 -   [Coalition field operations MVP](COALITION_FIELD_OPERATIONS_MVP.md)
 -   [Coalition field operations build plan](COALITION_FIELD_OPERATIONS_BUILD_PLAN.md)
+-   [Nostr and Reticulum beside Matrix: a proposal, checked](architecture/ADJACENT_PROTOCOLS_NOSTR_RETICULUM.md)
 -   [Differentiation brief](blackout-differentiation-brief.md)
 -   [Roadmap](../ROADMAP.md)
 

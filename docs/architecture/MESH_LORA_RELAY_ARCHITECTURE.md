@@ -3,6 +3,15 @@
 Status: Proposed  
 Last updated: 2026-04-09
 
+> **Note, 2026-11-16.** Before step 1 of the roadmap in section 10 (designing
+> an envelope, routing and key lifecycle from scratch), read
+> [`ADJACENT_PROTOCOLS_NOSTR_RETICULUM.md`](ADJACENT_PROTOCOLS_NOSTR_RETICULUM.md)
+> §4. It weighs Reticulum, Meshtastic and this repository's own
+> store-and-forward primitives as the transport for Phases 2 and 3, and records
+> a licence gate on Reticulum's reference implementation, the limits radio law
+> puts on encrypted traffic, and where relayed data may land. Nothing in this
+> document is built.
+
 ## 1) Scope
 
 This document proposes a phased architecture for **offline-capable message relay** using:

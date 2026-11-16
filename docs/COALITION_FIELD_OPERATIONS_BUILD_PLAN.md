@@ -89,7 +89,7 @@ Structured field reports: **what / where / when / how many**, with provenance, i
 
 ### Phase 7 — Offline resilience
 
-Investigate self-hosted/offline map tiles, degraded-network queueing, and compact LoRa status packets. The Mesh/LoRa architecture remains **proposed** until demonstrated. Define reconciliation, replay protection, expiration, and a clear offline/stale UI.
+Investigate self-hosted/offline map tiles, degraded-network queueing, and compact LoRa status packets. The Mesh/LoRa architecture remains **proposed** until demonstrated. The candidate transports for those packets, and the licence, radio-law and location-safety gates on them, are in [Nostr and Reticulum beside Matrix](architecture/ADJACENT_PROTOCOLS_NOSTR_RETICULUM.md) §4 (2026-11-16): what a radio carries is a check-in a person sends, not a position the system collects. Define reconciliation, replay protection, expiration, and a clear offline/stale UI.
 
 ## Safety and privacy defaults
 
