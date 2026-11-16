@@ -18,7 +18,10 @@ import { log } from './telemetry/logger';
  * lock it starts the loops again. While a tick it started before the loss is
  * still running (services/backgroundTicks.ts) it does not try, so a restarted
  * loop never runs beside one of its own earlier ticks. An API that does not
- * get the lock at boot does not try again, as before.
+ * get the lock at boot stands by the same way, so that the loops start on
+ * one of the replicas left when the process holding the lock is gone. Until
+ * 2026-11-16 it never tried again, and the loops then ran nowhere unless a
+ * worker was on standby.
  *
  * The worker (src/backgroundWorker.ts) exits 1 instead and comes back through
  * its restart policy; an API that exited would stop serving requests until its
@@ -115,7 +118,9 @@ export function runBackgroundLoopsWhileLeader(
     };
 
     void tryLead().then((led) => {
-        if (!led) log.info('background_loops_skipped_not_leader', {});
+        if (led) return;
+        log.info('background_loops_skipped_not_leader', { retryMs });
+        if (!stopped) standBy();
     });
 
     return {

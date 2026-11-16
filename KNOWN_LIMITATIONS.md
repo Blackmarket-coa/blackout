@@ -1094,6 +1094,33 @@ or off, an invitation the server no longer accepts (not recognized, used up,
 expired or revoked) stops the anonymous sign-up in the tab that holds it, and
 the form says why.
 
+### Stopping the API (2026-11-16)
+
+-   **Where:** `packages/api/src/httpShutdown.ts` and the shutdown in
+    `packages/api/src/index.ts`.
+-   **State:** on SIGTERM or SIGINT the API answers every request that
+    arrives 503 with `Connection: close` and `Retry-After: 1`, lets the
+    requests already in flight finish (their answers say `Connection: close`),
+    stops listening, closes idle connections as they become idle, and, once
+    no request is in flight or after half of `SHUTDOWN_TIMEOUT_MS` (5 s by
+    default), closes every connection, WebSockets included. Only then does it
+    drain the write-behind queue, and it exits when that is done; the other
+    half of the timeout is the drain's.
+-   **Until 2026-11-16** the drain waited for the server to close, which an
+    open connection held off: a keep-alive client that kept sending requests
+    (they were answered after the signal), a connection that had sent nothing,
+    an event stream or a WebSocket. The hard timeout then ended the process
+    with the queue undrained. Measured with real PostgreSQL and four
+    keep-alive clients signing up: 76 to 129 sign-ups per stop answered 201
+    with rows missing; now none, and the process exits within about 300 ms.
+-   **What remains:** an open event stream counts as a request in flight, so
+    it holds the stop for the grace (5 s by default) and is then cut. A
+    request still running at the end of the grace loses its connection and is
+    never answered; if its handler goes on and queues a write after the drain,
+    that write is lost, though nobody was told it succeeded. SIGKILL, or the
+    hard timeout, still loses whatever the queue holds. The worker
+    (`src/backgroundWorker.ts`) serves no requests and keeps its own shutdown.
+
 ### Dropped Postgres connections (2026-11-08)
 
 In postgres mode each API and worker process uses one shared connection pool
@@ -1209,7 +1236,12 @@ What remains:
     `deploy/kubernetes/phase4/blackout-api.yaml` and the Helm chart
     (`deploy/helm/blackout`). The production compose files set that variable
     on the app replicas and leave the loops to the worker, which exits 1 on the
-    loss and comes back through its restart policy.
+    loss and comes back through its restart policy. An API that does not get
+    the lock when it starts stands by the same way, so when the process
+    holding it is gone, one of the replicas left takes it within 15 s (measured
+    with real PostgreSQL: 14.3 s after the leader was killed). Until
+    2026-11-16 such an API never tried again, and the loops then ran nowhere
+    until a process was started or a worker stood by.
 -   A role's or database's `idle_session_timeout` (PostgreSQL 14 and later)
     still ends the pool's ordinary connections where it is 10 s or shorter.
     The pool closes its own idle connections after 10 s (pg-pool's default
