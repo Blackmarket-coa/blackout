@@ -739,7 +739,14 @@ shipped (only incremental adoption remains).
     its copy before it starts listening, and nothing re-reads what changed in
     between. Most writes, a sign-out among them, send their notification after
     the write, and a failed send is only logged. A listening connection that
-    dies without an error is not noticed. Such a process keeps its old copy of
+    dies without an error is not noticed. Since 2026-11-16 the pool's TCP
+    keepalive turns one whose server's host has gone silent into an error: in
+    a run here it failed about 20.4 s after its last traffic
+    (`pg_notify_listen_error`, `read ETIMEDOUT`) and was replaced 2 s after
+    the network came back, re-reading every table as any reconnect does
+    ("Dropped Postgres connections"). One to a server process that stops
+    answering on a host that stays up is still not noticed. Such a process
+    keeps its old copy of
     the row until it restarts, or until something makes it re-read the row (a
     later change to the same row, or its listening connection failing and
     being replaced). For example, after you sign out, such a process can keep
@@ -817,6 +824,43 @@ the process stays up, and the dead connection is not handed out again: the
 pool discards an idle one, and the store gives a connection whose query failed
 back with that error, so the pool closes it and the next checkout gets another
 connection (a new one only when none is idle).
+
+Since 2026-11-16 the pool also turns TCP keepalive on for its connections and
+bounds the wait for one, 10 s each by default (`BLACKOUT_PG_KEEPALIVE_DELAY_MS`,
+`BLACKOUT_PG_CONNECT_TIMEOUT_MS`):
+
+-   Keepalive probes a connection once it has carried nothing for 10 s, idle in
+    the pool or waiting for the answer to a statement the server has
+    acknowledged. Where the server's host has gone silent (fenced, powered off,
+    or a network fault that drops everything), the connection then fails with
+    `ETIMEDOUT`: about 20.4 s after a statement's last traffic with the default
+    in the runs here, and 12.3 s with a 2 s delay (Linux, Node 22 with libuv
+    1.51.0, which sends the probes 1 s apart and gives up after 10; the
+    server's port dropped both ways with iptables, the statement waiting on a
+    lock). The drop is logged and counted like any other (`held` here), and a
+    write-behind write on such a connection is tried again as one whose
+    connection had ended: in the run here it landed on its retry once the
+    network was back. Before, such a connection waited until the process
+    restarted.
+-   Keepalive does not end a connection to a server process that stops
+    answering on a host that stays up (that host's kernel answers the probes),
+    nor one carrying a statement whose bytes the server's host had not yet
+    acknowledged when it went silent: TCP's retransmission governs that one,
+    about 15 minutes at Linux's `tcp_retries2` default.
+-   The connection timeout bounds `pool.connect()`: a new connection not made
+    within 10 s (the TCP connection and the start-up exchange; before, a host
+    that answers nothing held it for the kernel's SYN retries, about 2 minutes),
+    and, because pg-pool (3.13.0) applies the same setting to it, a caller
+    waiting for a free connection while all ten are out. Either way
+    `pool.connect()` rejects. The write-behind queue counts that as a failure
+    that gets one retry, so a write that cannot get a connection within 10 s
+    twice is given up, logged and counted; a change notification that cannot
+    is logged as `pg_notify_publish_failed`, and a process that does not
+    hear of that change keeps its old copy as "Several API processes on one
+    database" says. The pool holds the LISTEN and
+    leader-lock connections, one write at a time and a short-lived connection
+    for each change notification, so all ten are out only when the server has
+    slowed far enough for notifications to pile up.
 
 A drop is logged (`pg_pool_client_error`) and counted
 (`db_pool_client_errors_total`) when the connection itself reports it: sitting
@@ -1069,10 +1113,12 @@ What remains:
         later write stayed in memory.
 
     The queue's own 5 s cover only the statement it sends after a failure.
-    For the write's own statements, and for a connection from the pool, the
-    API sets no timeout: a connection that neither answers nor closes while
-    the write itself is in flight still holds the queue, as it did before
-    2026-11-15.
+    The write's own statements have no timeout of their own: since
+    2026-11-16 the pool's TCP keepalive ends one whose server's host has
+    gone silent (about 20 s, above), and its connection timeout bounds the
+    wait for a connection (10 s), but a server process that stops answering
+    on a host that stays up still holds the queue while the write is in
+    flight, as it did before.
 
     Where `DATABASE_URL` carries `query_timeout` (node-postgres's read
     timeout; no file in this repository sets it, checked 2026-11-15), that

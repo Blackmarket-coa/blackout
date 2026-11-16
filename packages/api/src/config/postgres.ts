@@ -83,6 +83,63 @@ export function readDatabaseUrl(): string | null {
     return url && url.length > 0 ? url : null;
 }
 
+/**
+ * TCP keepalive on the shared pool's connections (node-postgres `keepAlive`,
+ * applied to each socket with setKeepAlive): probing starts once a connection
+ * has carried nothing for this long, whether it sits in the pool or waits for
+ * the answer to a statement the server has acknowledged. On Linux, Node 22's
+ * libuv (1.51.0 here) also sets the probes 1 s apart and gives up after 10, so
+ * a connection whose server's host has gone silent fails about this long and
+ * 10 s more after its last traffic (KNOWN_LIMITATIONS.md, "Dropped Postgres
+ * connections", has the measured figure). Not found this way: a server
+ * process that stops answering on a host that stays up (that host's kernel
+ * answers the probes), and a statement sent into the silence, which TCP
+ * retransmission governs. BLACKOUT_PG_KEEPALIVE_DELAY_MS overrides it.
+ */
+export const DEFAULT_PG_KEEPALIVE_DELAY_MS = 10_000;
+
+/**
+ * How long a caller of the shared pool waits for a connection
+ * (`connectionTimeoutMillis`). pg-pool (3.13.0) applies it to two waits: a new
+ * connection being made (TCP and the start-up exchange), and a caller waiting
+ * for one to come free while the pool has all of its connections out (ten,
+ * pg-pool's default). Either way pool.connect() rejects when it runs out
+ * ("timeout exceeded when trying to connect"). Without it a connection to a
+ * host that answers nothing waits on the kernel's SYN retries (about two
+ * minutes at Linux's defaults), and a waiting caller waits for good.
+ * BLACKOUT_PG_CONNECT_TIMEOUT_MS overrides it.
+ */
+export const DEFAULT_PG_CONNECT_TIMEOUT_MS = 10_000;
+
+/** `name` as a whole number of milliseconds above zero, or `fallback` (logged) for anything else. */
+const millisecondsFromEnv = (name: string, fallback: number): number => {
+    const raw = process.env[name];
+    if (raw === undefined || raw === '') return fallback;
+    const value = Number(raw);
+    if (Number.isInteger(value) && value > 0) return value;
+    log.warn('pg_pool_setting_ignored', { setting: name, usedMs: fallback });
+    return fallback;
+};
+
+/** What the shared pool is created with, beside the connection string. */
+export function sharedPoolOptions(): {
+    keepAlive: true;
+    keepAliveInitialDelayMillis: number;
+    connectionTimeoutMillis: number;
+} {
+    return {
+        keepAlive: true,
+        keepAliveInitialDelayMillis: millisecondsFromEnv(
+            'BLACKOUT_PG_KEEPALIVE_DELAY_MS',
+            DEFAULT_PG_KEEPALIVE_DELAY_MS
+        ),
+        connectionTimeoutMillis: millisecondsFromEnv(
+            'BLACKOUT_PG_CONNECT_TIMEOUT_MS',
+            DEFAULT_PG_CONNECT_TIMEOUT_MS
+        ),
+    };
+}
+
 /** Create (once) and return the shared pg pool. Throws if DATABASE_URL is unset. */
 export async function getSharedPgPool(): Promise<PgPool> {
     if (cachedPool) return cachedPool;
@@ -91,9 +148,13 @@ export async function getSharedPgPool(): Promise<PgPool> {
         throw new Error('DATABASE_URL is required when BLACKOUT_DB_MODE=postgres.');
     }
     const { default: pg } = (await import('pg')) as {
-        default: { Pool: new (cfg: { connectionString: string }) => PgPool & PgPoolEvents };
+        default: {
+            Pool: new (
+                cfg: { connectionString: string } & ReturnType<typeof sharedPoolOptions>
+            ) => PgPool & PgPoolEvents;
+        };
     };
-    const pool = new pg.Pool({ connectionString: url });
+    const pool = new pg.Pool({ connectionString: url, ...sharedPoolOptions() });
     handlePoolClientErrors(pool);
     cachedPool = pool;
     return pool;

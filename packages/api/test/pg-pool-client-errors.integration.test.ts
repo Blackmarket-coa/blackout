@@ -35,7 +35,13 @@ import net from 'node:net';
 process.env.NODE_ENV = process.env.NODE_ENV ?? 'test';
 process.env.BLACKOUT_DB_MODE = 'memory';
 
-const { clearSharedPgPool, getSharedPgPool } = await import('../src/config/postgres');
+const {
+    clearSharedPgPool,
+    getSharedPgPool,
+    sharedPoolOptions,
+    DEFAULT_PG_CONNECT_TIMEOUT_MS,
+    DEFAULT_PG_KEEPALIVE_DELAY_MS,
+} = await import('../src/config/postgres');
 const { dbPoolClientErrorsTotal } = await import('../src/telemetry/metrics');
 const { dbWriteBehindFailuresTotal } = await import('../src/telemetry/metrics');
 const { PgNotifyTransport } = await import('../src/db/pgNotify');
@@ -1761,6 +1767,120 @@ test(
         assert.deepEqual(rejections, []);
     }
 );
+
+/** Set `name` in process.env for the rest of the test, and put it back after. */
+const envForTest = (t: { after(fn: () => void): void }, name: string, value: string): void => {
+    const before = process.env[name];
+    process.env[name] = value;
+    t.after(() => {
+        if (before === undefined) delete process.env[name];
+        else process.env[name] = before;
+    });
+};
+
+test("the shared pool turns TCP keepalive on, 10 s from a connection's last traffic, and waits 10 s at most for a connection", async (t) => {
+    const server = await standInServer(t);
+    const pool = (openPool = await sharedPoolOfPgClients(server.url));
+    const options = (pool as unknown as { options: Record<string, unknown> }).options;
+    assert.equal(options.keepAlive, true);
+    assert.equal(options.keepAliveInitialDelayMillis, DEFAULT_PG_KEEPALIVE_DELAY_MS);
+    assert.equal(options.connectionTimeoutMillis, DEFAULT_PG_CONNECT_TIMEOUT_MS);
+    assert.equal(DEFAULT_PG_KEEPALIVE_DELAY_MS, 10_000, 'the delay KNOWN_LIMITATIONS.md names');
+    assert.equal(DEFAULT_PG_CONNECT_TIMEOUT_MS, 10_000, 'the wait KNOWN_LIMITATIONS.md names');
+});
+
+test('every connection the shared pool opens has keepalive on its socket, with the delay', async (t) => {
+    const calls: Array<[unknown, unknown]> = [];
+    const original = net.Socket.prototype.setKeepAlive;
+    net.Socket.prototype.setKeepAlive = function (
+        this: net.Socket,
+        enable?: boolean,
+        delay?: number
+    ) {
+        calls.push([enable, delay]);
+        return original.call(this, enable, delay);
+    };
+    t.after(() => {
+        net.Socket.prototype.setKeepAlive = original;
+    });
+    const server = await standInServer(t);
+    const pool = (openPool = await sharedPoolOfPgClients(server.url));
+    const first = await pool.connect();
+    const second = await pool.connect();
+    first.release();
+    second.release();
+    assert.deepEqual(calls, [
+        [true, DEFAULT_PG_KEEPALIVE_DELAY_MS],
+        [true, DEFAULT_PG_KEEPALIVE_DELAY_MS],
+    ]);
+});
+
+test(
+    'a connection the server takes and never answers is given up after the connection timeout, and leaves nothing behind',
+    { timeout: 5_000 },
+    async (t) => {
+        envForTest(t, 'BLACKOUT_PG_CONNECT_TIMEOUT_MS', '300');
+        const rejections = captureUnhandledRejections(t);
+        // A server that accepts the TCP connection and never answers the
+        // start-up packet: what a host whose database never gets that far does.
+        const silent = net.createServer((socket) => socket.on('error', () => undefined));
+        const held = new Set<net.Socket>();
+        silent.on('connection', (socket) => held.add(socket));
+        await new Promise<void>((r) => silent.listen(0, '127.0.0.1', () => r()));
+        t.after(async () => {
+            for (const socket of held) socket.destroy();
+            await new Promise<void>((r) => silent.close(() => r()));
+        });
+        const { port } = silent.address() as net.AddressInfo;
+        const pool = (openPool = await sharedPoolOfPgClients(
+            `postgres://pool_test_user:${PASSWORD}@127.0.0.1:${port}/pool_test_db`
+        ));
+
+        const started = Date.now();
+        await assert.rejects(pool.connect(), /timeout/i);
+        const took = Date.now() - started;
+        assert.ok(took >= 290, `not before the timeout (${took} ms)`);
+        assert.ok(took < 3_000, `and not long after it (${took} ms)`);
+        assert.equal(pool.totalCount, 0, 'the connection that was never made is not kept');
+        await sleep(20);
+        assert.deepEqual(rejections, []);
+    }
+);
+
+test(
+    'a caller waiting for a connection while all ten are out is refused after the same timeout',
+    { timeout: 5_000 },
+    async (t) => {
+        envForTest(t, 'BLACKOUT_PG_CONNECT_TIMEOUT_MS', '300');
+        const server = await standInServer(t);
+        const pool = (openPool = await sharedPoolOfPgClients(server.url));
+        const out = await Promise.all(Array.from({ length: 10 }, () => pool.connect()));
+        assert.equal(pool.totalCount, 10);
+
+        const started = Date.now();
+        await assert.rejects(pool.connect(), /timeout exceeded when trying to connect/);
+        assert.ok(Date.now() - started >= 290, 'it waited the timeout first');
+        for (const client of out) client.release();
+    }
+);
+
+test('a setting that is not a whole number of milliseconds above zero is ignored, logged, and the default used', async (t) => {
+    envForTest(t, 'BLACKOUT_PG_CONNECT_TIMEOUT_MS', '2.5s');
+    envForTest(t, 'BLACKOUT_PG_KEEPALIVE_DELAY_MS', '0');
+    const lines = captureLogs(t);
+    assert.deepEqual(sharedPoolOptions(), {
+        keepAlive: true,
+        keepAliveInitialDelayMillis: DEFAULT_PG_KEEPALIVE_DELAY_MS,
+        connectionTimeoutMillis: DEFAULT_PG_CONNECT_TIMEOUT_MS,
+    });
+    assert.deepEqual(
+        logged(lines, 'pg_pool_setting_ignored').map((e) => [e.setting, e.usedMs]),
+        [
+            ['BLACKOUT_PG_KEEPALIVE_DELAY_MS', DEFAULT_PG_KEEPALIVE_DELAY_MS],
+            ['BLACKOUT_PG_CONNECT_TIMEOUT_MS', DEFAULT_PG_CONNECT_TIMEOUT_MS],
+        ]
+    );
+});
 
 /** A pool for PostgresBackedDb that can refuse new connections; one table, users. */
 const storePool = () => {
