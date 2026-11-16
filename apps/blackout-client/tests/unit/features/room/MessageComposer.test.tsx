@@ -654,4 +654,65 @@ describe('MessageComposer', () => {
             'draft body'
         );
     });
+
+    // Until 2026-11-16 the feature menu offered three options that said they
+    // protected a message and did not: "Signed message preset" appended the
+    // words "signed via Blackout" and signed nothing; "Encryption preset" put
+    // a marker in the message that nothing reads, so in an unencrypted room
+    // the message still went out readable by the server; "Ephemeral drop"
+    // promised "view-once, 24h", which only this app's timeline acted on, and
+    // there it hid the file before anyone could see it. Other apps showed it
+    // for good and nothing deleted it. docs/security/trust-claims-2026-11-16.md,
+    // T11.
+    describe('options that said they protected a message', () => {
+        const CLAIMS = /sign|encryption preset|ephemeral|view-once/i;
+
+        it('are not offered in the feature menu', async () => {
+            currentRoom = makeRoom(false);
+            const { container } = await mountComposer();
+            await click(findByLabel(container, 'Open composer features'));
+
+            const offered = [...container.querySelectorAll('button')]
+                .map((btn) => btn.textContent?.trim() ?? '')
+                .filter((text) => CLAIMS.test(text));
+            expect(offered).toEqual([]);
+            // The menu is open: the options that are real are still there.
+            expect(findButton(container, 'Scheduled send preset')).toBeDefined();
+        });
+
+        it('are not suggested from what is typed', async () => {
+            currentRoom = makeRoom(false);
+            const { container } = await mountComposer({
+                initialMarkdown: 'please sign this and keep it secret',
+            });
+            await settle();
+
+            expect(container.textContent).not.toMatch(/signed message/i);
+            // The suggestion row still works for a real option.
+            expect(container.textContent).toContain('Steganography');
+        });
+
+        it('leave no words or markers in a sent message', async () => {
+            currentRoom = makeRoom(false);
+            const { container } = await mountComposer({ initialMarkdown: 'hello' });
+            await click(findButton(container, 'Send'));
+
+            const content = sendRichText.mock.calls[0][0] as Record<string, unknown>;
+            expect(content.body).toBe('hello');
+            expect(JSON.stringify(content)).not.toMatch(/signed via|co\.blackout\.signature/);
+            expect(content).not.toHaveProperty(['co.blackout.encryption']);
+        });
+
+        it('put no expiry policy on a sent file', async () => {
+            currentRoom = makeRoom(true);
+            const { container } = await mountComposer();
+            await attach(container, new File(['x'], 'plan.txt', { type: 'text/plain' }));
+            await click(findButton(container, 'Send'));
+            await settle();
+
+            expect(sendMedia).toHaveBeenCalledTimes(1);
+            const options = sendMedia.mock.calls[0][1] as Record<string, unknown>;
+            expect(options.ephemeral ?? null).toBeNull();
+        });
+    });
 });

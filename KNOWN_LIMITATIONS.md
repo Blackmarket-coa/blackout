@@ -869,6 +869,35 @@ For the source-of-truth triage with tier/owner detail see
     nothing), and the API's `POST /v1/deaddrop`, which stores the payload
     string it is given as it is.
 
+### Signed messages, an encryption preset and expiring files: withdrawn (2026-11-16)
+
+-   **Where:** the composer's feature menu
+    (`apps/blackout-client/src/app/features/room/MessageComposer.tsx`) and the
+    timeline (`RoomTimeline.tsx`, `EphemeralGate`). Record:
+    `docs/security/trust-claims-2026-11-16.md`, T11.
+-   **State:** until 2026-11-16 the composer offered "Signed message preset"
+    ("Signature: enabled"), "Encryption preset" ("Encryption: preset") and
+    "Ephemeral drop: view-once, 24h". The first appended the words "— signed
+    via Blackout" and signed nothing; the second put a marker in the message
+    that nothing reads, and encrypted nothing that the room did not; the third
+    asked this app to hide the attached files after one viewing or a day,
+    which only this app did, on each device, while the files stayed on the
+    server and other apps showed them for good. All three are gone.
+-   **What remains:** messages sent with them keep the words, the markers and
+    the policy. The words prove nothing about who wrote a message, in a
+    message sent then or in anyone's message now. A file sent as an
+    ephemeral drop was not deleted: it is on the server until the operator
+    removes it, and anyone in the room using another app could see it and
+    keep it. This app still hides such files as their senders asked, with a
+    notice that hiding is all it does; a file limited to one view was hidden
+    here before anyone saw it, and still is. Deleting the message (redacting
+    it) makes Matrix apps stop showing it; a copy someone already kept is
+    beyond reach.
+-   **Not built:** a signature someone could check, and an expiring file that
+    the sender's app takes down when it expires. The "Ephemeral Pro"
+    entitlement unlocks nothing; what it is sold as is the operator's
+    decision (T11).
+
 ## Deferred multi-week workstreams
 
 These are tracked in

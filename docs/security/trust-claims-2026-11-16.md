@@ -24,6 +24,7 @@ may decide what to say, and to whom, on the strength of it.
 | T8  | A room with dead drop on: composer, indicator, settings                    | "Dead Drop: message will be queued"; "Anonymize delivery" on the Pro tier        | The message is sent at once; nothing queues or anonymizes                        | Fixed (UI)   |
 | T9  | `TRUST.md`, the composer in an encrypted room                              | Private rooms are end-to-end encrypted                                           | Documents, proposals, objectives and playbooks are room state, unencrypted       | Said         |
 | T10 | The room timeline, member panels, profile card, window and page            | (nothing said)                                                                   | Images were fetched from addresses other people chose                            | Fixed        |
+| T11 | The composer's feature menu                                                | "Signature: enabled", "Encryption: preset", "view-once, 24h"                     | Nothing was signed or encrypted; "view-once" hid the file in this app only       | Removed      |
 
 T7 was found while checking those sentences and outranks the rest: it has its
 own record,
@@ -34,9 +35,11 @@ and sent it at once. T9 and T10 came out of the independent review of T7's
 fix: what an encrypted room does not encrypt, and images loaded from addresses
 other people chose.
 
-Findings T11 onward are the trust page's and the threat model's own sentences,
-checked one by one; they are in [the documents](#t11-onward-the-documents)
-below.
+T11 is three options in the composer's feature menu that said they protected
+a message, confirmed from a first reading of the app's strings. The trust
+page's and the threat model's own sentences are being checked one by one; what
+that first reading reported is listed under
+[Reported, not yet checked](#reported-not-yet-checked) below.
 
 ## T1. Tor transport and decoy traffic
 
@@ -465,7 +468,73 @@ A side effect worth knowing: in the timeline a member's `mxc://` avatar was
 being used as an image source as it was, which no browser can load. Avatars
 that never showed there will now show.
 
-## T11 onward: the documents
+## T11. Three composer options that said they protected a message
+
+**Claimed.** The composer's feature menu, under "Tier 3 • Advanced", offered:
+
+-   "Signed message preset", shown while on as "Signature: enabled", and
+    suggested whenever the text typed contained "sign".
+-   "Encryption preset", shown while on as "Encryption: preset".
+-   "Ephemeral drop", shown while on as "Ephemeral drop: on (view-once, 24h)".
+
+**Found.**
+
+-   The signing option signed nothing. It appended the words "— signed via
+    Blackout" to the message and put `co.blackout.signature: { enabled: true }`
+    in it, which nothing reads. Anyone can type those words, in any app, so a
+    reader who took them as proof of who wrote a message was misled. Matrix
+    already ties a message in an encrypted room to its sender's device; the
+    option added nothing to that.
+-   The encryption option changed nothing. It put
+    `co.blackout.encryption: { preset: 'enhanced' }` in the message, which
+    nothing reads. Whether a message is encrypted depends only on the room: in
+    an unencrypted room the message went out readable by the server while the
+    chip said "Encryption: preset".
+-   The ephemeral option put an expiry policy on the attached files
+    (`co.blackout.ephemeral`: 24 hours, one view). Only this app's timeline
+    acts on it, by hiding the file on each device. Nothing deletes the file
+    from the server, nothing redacts the message, and other apps show the file
+    for good. A comment in `features/ephemeral/ephemeralPolicy.ts` said the
+    sender's client redacts the message when it sees it expire; no code does.
+    In this app, a file limited to one view was not shown at all, to the
+    recipient or to the sender: the view is counted as the file mounts, and
+    the update that follows hides it. Reproduced: the file renders once and is
+    replaced, in the same update, by "Ephemeral file expired (view limit
+    reached)". A file limited only by time is shown until its time.
+
+**Done.**
+
+-   The three options are gone from the menu, the suggestions and the chips,
+    and the send path no longer adds the words, the two markers or the policy
+    (`features/room/MessageComposer.tsx`).
+-   Messages already sent with an expiry policy are still hidden as their
+    senders asked: changing that now would show files their senders asked to
+    be shown once. The notice in their place now says what hiding is: "Hidden
+    by this app: the sender set this file to be shown once. Hiding it here does
+    not delete it." (or "... set this file to expire."). The module's comment
+    is corrected.
+-   Tests: in `tests/unit/features/room/MessageComposer.test.tsx`, "options
+    that said they protected a message" (the menu, the suggestions, a sent
+    message, a sent file; the first two fail on the code before this change),
+    and `tests/unit/features/room/ephemeralGate.test.tsx` (the gate and its
+    notice; the two notice tests fail on the old text). Eleven mutations, each
+    bringing back one of the claims or weakening the gate: all caught.
+
+**Left as it is, and why.**
+
+-   Messages already sent keep what was added to them: the words "signed via
+    Blackout", the two markers, the policy. The words mean no more than any
+    other words typed, and nothing reads the markers. Recorded in
+    `KNOWN_LIMITATIONS.md` and `docs/legal/CHANGELOG.md`, with what someone
+    who relied on them should know.
+-   `sendMedia` in `plugins/matrix-adapters/hooks/useLegacyTimelineAdapter.ts`
+    still accepts a policy. Nothing passes one.
+-   The "Ephemeral Pro" entitlement (`ephemeral_pro`) unlocks nothing:
+    `ephemeralProEntitledAtom` is read by no screen. The marketplace stub in
+    this repository lists it as "Custom expiry windows (up to 30 days) and
+    view caps for ephemeral file drops". A decision for the operator, below.
+
+## Reported, not yet checked
 
 Not in this commit. The sentences of `TRUST.md` (beyond the paragraphs T1, T2,
 T7, T8 and T9 change), of `THREAT_MODEL.md`, of
@@ -473,7 +542,7 @@ T7, T8 and T9 change), of `THREAT_MODEL.md`, of
 and the "CI release gate" sentence of `KNOWN_LIMITATIONS.md` are being checked
 against the code one by one. Each finding is added here, with its fix or its
 explanation, in a commit that follows on the same branch. Until then this
-record covers T1 to T10 only.
+record covers T1 to T11 only.
 
 A first reading of those documents against the code reported the following.
 Each is a report, not yet a finding: none has been checked by a second look or
@@ -508,11 +577,6 @@ Other documents:
 
 Strings in the app:
 
--   The composer's "Signature: enabled" (adds the words "signed via Blackout",
-    signs nothing), "Encryption: preset" (a marker that changes nothing) and
-    "Ephemeral drop: view-once, 24h" (kept only by this app, per device; the
-    review of T7's fix also reports that the media under it is never shown,
-    because the gate counts the view as it mounts and hides it at once).
 -   The welcome steps' "messages are end-to-end encrypted", said of every den.
 -   The vault's "encrypts everything", the privacy tools' "always on".
 -   The glossary's definitions of a dead drop and of a digital good's
@@ -543,6 +607,17 @@ Strings in the app:
    homeserver keeps the addresses. Shortening or switching off that retention
    (`user_ips_max_age` in the homeserver configuration) is the operator's
    setting and is not changed here.
+5. **What "Ephemeral Pro" sells** (T11). The entitlement unlocks nothing, and
+   since T11 the composer offers no expiring files at all. The listing in this
+   repository's marketplace stub promises custom expiry windows and view caps;
+   the Free Black Market's real listing is outside this repository and should
+   be read against T11. As with the tier keys in decision 2, removing it is a
+   pricing statement and is left to the operator.
+6. **Whether to build any of T11's three for real.** A signature that means
+   something needs a key per person and a published way to check it; an
+   expiring file needs, at the least, the sender's app to redact the message
+   when it expires, and wording that says other apps and saved copies are
+   beyond its reach. Neither is started here.
 
 ## Not verified
 

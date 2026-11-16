@@ -26,6 +26,39 @@ should be described as a published privacy policy until that review lands.
 
 ---
 
+## 2026-11-16 — Three options beside the message box that said they protected a message
+
+**Why this entry exists:** the app offered "Signed message preset", "Encryption
+preset" and "Ephemeral drop: view-once, 24h" beside the message box. None did
+what its name said. The finding is T11 in
+[`docs/security/trust-claims-2026-11-16.md`](../security/trust-claims-2026-11-16.md).
+
+### Withdrawn
+
+-   **"Signature: enabled".** It added the words "— signed via Blackout" to the
+    message. Nothing was signed, and anyone can type those words.
+-   **"Encryption: preset".** It changed nothing. Whether a message is
+    encrypted depends only on whether the room is, and the lock beside the
+    message box says which.
+-   **"Ephemeral drop: view-once, 24h".** It asked this app to hide the files
+    sent with it after one viewing or a day. Only this app did, on each
+    device. The files stayed on the server, the messages stayed, and other
+    apps showed the files for good. In this app, a file limited to one viewing
+    was hidden before anyone saw it.
+
+### What a person relying on the old text should know
+
+-   **A message you sent "signed" carries the words "signed via Blackout" and
+    nothing more.** It proves nothing about who wrote it, and the same words
+    in someone else's message prove nothing either.
+-   **A message you sent with "Encryption: preset" in a room that was not
+    encrypted was not encrypted.** The server could read it then and can read
+    it now.
+-   **A file you sent as an ephemeral drop was not deleted.** It stays on the
+    server until the operator removes it, and anyone in the room using
+    another app could see it and keep it. Deleting the message makes Matrix
+    apps stop showing it; a copy someone already kept is beyond reach.
+
 ## 2026-11-16 — Dead drops: nobody can use one, and the room mode queued nothing
 
 **Why this entry exists:** the initial record below lists "dead-drop anonymity

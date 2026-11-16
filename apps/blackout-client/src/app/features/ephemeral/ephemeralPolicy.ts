@@ -1,9 +1,14 @@
 /**
- * Ephemeral file drops: a media message that auto-expires after a time limit
- * and/or a maximum number of views (OnionShare-style "dead drop"). The policy
- * rides on the event content under `co.blackout.ephemeral`; expiry is enforced
- * client-side at render time (the file is hidden once expired) and the sender's
- * client best-effort redacts the event when it observes expiry.
+ * An expiry policy on a media message: a time limit and/or a maximum number of
+ * views, under `co.blackout.ephemeral` in the event content.
+ *
+ * Only this app acts on it, and only by hiding the file in the timeline once
+ * the policy says so, with the view count kept on each device. Nothing deletes
+ * the file from the server, nothing redacts the message, and other apps ignore
+ * the policy. The composer offered it as "Ephemeral drop: view-once, 24h"
+ * until 2026-11-16 and no longer does (docs/security/trust-claims-2026-11-16.md,
+ * T11); this module remains so that messages already sent with a policy are
+ * still hidden as their senders asked.
  *
  * Pure + dependency-free so it's fully unit-testable.
  */
