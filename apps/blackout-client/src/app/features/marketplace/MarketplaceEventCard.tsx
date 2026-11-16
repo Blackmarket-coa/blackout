@@ -275,8 +275,12 @@ export function MarketplaceEventCard({ normalized }: { normalized: NormalizedMar
             return (
                 <Shell badge="delivery">
                     <div style={styles.title}>Your purchase is ready</div>
+                    {/* Until 2026-11-16: "Open it in Blackout before ...". Nothing in
+                        the app opens a dead drop; the file is in Library, and the
+                        date is when this room closes (trust-claims, T15). */}
                     <div style={styles.muted}>
-                        Open it in Blackout{d.expiresAt ? ` before ${d.expiresAt}` : ''}.
+                        Download it from Library in the black market.
+                        {d.expiresAt ? ` This delivery room closes ${d.expiresAt}.` : ''}
                     </div>
                 </Shell>
             );

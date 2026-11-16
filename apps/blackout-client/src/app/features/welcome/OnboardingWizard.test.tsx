@@ -74,6 +74,28 @@ describe('OnboardingWizard fallback steps', () => {
     });
 });
 
+// The steps every new person sees at the invite entry said "Blackout is an
+// end-to-end-encrypted, community-run space" and "messages are end-to-end
+// encrypted". A new canopy, a den with no canopy and a den in a public canopy
+// start public and not encrypted (KNOWN_LIMITATIONS.md, "New canopy and den
+// defaults"). docs/security/trust-claims-2026-11-16.md, T13.
+describe('the default steps', () => {
+    const text = DEFAULT_ONBOARDING_STEPS.map((step) => `${step.title}\n${step.content}`).join(
+        '\n'
+    );
+
+    it('do not say that every den or every message is end-to-end encrypted', () => {
+        expect(text).not.toMatch(/end-to-end-encrypted/i);
+        expect(text).not.toMatch(/messages are end-to-end encrypted/i);
+    });
+
+    it('say where to see whether this den is', () => {
+        expect(text).toContain(
+            'The lock beside it says whether this den is end-to-end encrypted. Not every den is.'
+        );
+    });
+});
+
 describe('OnboardingWizard selections', () => {
     beforeEach(() => {
         document.body.innerHTML = '';

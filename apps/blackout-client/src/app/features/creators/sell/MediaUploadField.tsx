@@ -8,8 +8,9 @@ import { stripImageMetadata } from '../../../utils/stripImageMetadata';
  * Preview-media uploader for the sell flow. Uploads image files to the Matrix
  * media repo (the same `uploadContent` path the composer uses) and collects the
  * resulting `mxc://` URIs into `mediaUrls`. These are *preview* images shown to
- * buyers — the sellable artifact bytes are a separate concern (delivered via the
- * marketplace's signed-bundle / dead-drop path), which the wizard states plainly.
+ * buyers — the sellable artifact bytes are a separate concern (the buyer gets them
+ * from Library through the marketplace's fulfillment endpoint), which the wizard
+ * states plainly.
  */
 interface MediaUploadFieldProps {
     value: string[];

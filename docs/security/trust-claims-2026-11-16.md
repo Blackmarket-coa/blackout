@@ -26,6 +26,9 @@ may decide what to say, and to whom, on the strength of it.
 | T10 | The room timeline, member panels, profile card, window and page            | (nothing said)                                                                   | Images were fetched from addresses other people chose                            | Fixed        |
 | T11 | The composer's feature menu                                                | "Signature: enabled", "Encryption: preset", "view-once, 24h"                     | Nothing was signed or encrypted; "view-once" hid the file in this app only       | Removed      |
 | T12 | The privacy tools panel                                                    | Metadata stripping and link cleaning are "always on"                             | Neither was: some uploads and formats kept metadata; links only in messages      | Fixed        |
+| T13 | The welcome steps at the invite entry                                      | "An end-to-end-encrypted space"; "messages are end-to-end encrypted"             | New canopies and most new dens start public and unencrypted                      | Fixed (copy) |
+| T14 | The vault panel (not mounted)                                              | "Your passphrase encrypts everything"; the server stores only ciphertext         | Labels go to the server as typed; the key needs this browser too                 | Fixed (copy) |
+| T15 | Glossary; the purchase delivery notice                                     | A digital good is "delivered via an encrypted dead-drop"; "Open it in Blackout"  | It is downloaded from Library; nothing opens a dead drop                         | Fixed (copy) |
 
 T7 was found while checking those sentences and outranks the rest: it has its
 own record,
@@ -36,9 +39,10 @@ and sent it at once. T9 and T10 came out of the independent review of T7's
 fix: what an encrypted room does not encrypt, and images loaded from addresses
 other people chose.
 
-T11 is three options in the composer's feature menu that said they protected
-a message, and T12 the privacy tools panel's "always on"; both were confirmed
-from a first reading of the app's strings. The trust
+T11 to T15 are strings in the app that a first reading reported and a second
+look confirmed: three composer options that said they protected a message, the
+privacy tools panel's "always on", the welcome steps, the vault, and the
+glossary with the purchase delivery notice. The trust
 page's and the threat model's own sentences are being checked one by one; what
 that first reading reported is listed under
 [Reported, not yet checked](#reported-not-yet-checked) below.
@@ -614,6 +618,81 @@ for the paid Advanced tier, "Perturb avatars against facial recognition
     `docs/legal/CHANGELOG.md` say what someone who relied on the old text
     should know.
 
+## T13. The welcome steps: "messages are end-to-end encrypted"
+
+**Claimed.** The steps every new person sees at the invite entry when a canopy
+has none of its own (`DEFAULT_ONBOARDING_STEPS` in
+`features/welcome/useWelcome.ts`): "Blackout is an end-to-end-encrypted,
+community-run space" and "Type in the composer at the bottom; messages are
+end-to-end encrypted."
+
+**Found.** In the Blackout app a new canopy, a den with no canopy and a den in
+a public canopy start public and not end-to-end encrypted
+(`KNOWN_LIMITATIONS.md`, "New canopy and den defaults"). The den a new person
+lands in can be one of those, and the steps told them otherwise.
+
+**Done.** The first step no longer says it; the third says "The lock beside it
+says whether this den is end-to-end encrypted. Not every den is." The lock is
+the composer's own (`MessageComposer.tsx`), which reads the room. Test:
+"the default steps" in `features/welcome/OnboardingWizard.test.tsx`, which
+fails on the old text. Entry in `docs/legal/CHANGELOG.md`.
+
+## T14. The vault: "Your passphrase encrypts everything"
+
+**Claimed.** "Your passphrase encrypts everything in the browser. The server
+only stores unreadable ciphertext — keep your passphrase safe, it cannot be
+recovered." (`features/vault/VaultPanel.tsx`.)
+
+**Found.**
+
+-   Each secret is encrypted (AES-GCM, key from PBKDF2), but its label is sent
+    to the API as typed (`createVaultItem({ label, ...ciphertext })`) and
+    stored so. A label such as "Safehouse door code" is readable by the
+    server.
+-   The key is derived from the passphrase and a salt kept in this browser's
+    storage (`getOrCreateVaultSalt`). Another browser, or this one after its
+    site data is cleared, derives a different key: the passphrase alone does
+    not open the vault, and the panel's error then said "Wrong passphrase".
+-   No screen mounts the panel. `vault_item` purchases add slots and templates
+    to it all the same.
+
+**Done.** The panel says what is encrypted and what is not, that the vault
+opens only in the browser it was made in, and that neither the passphrase nor
+that value can be recovered; the label field says "Label (not encrypted)"; the
+decrypt error names the other causes. Test:
+`tests/unit/features/vault/VaultPanel.test.tsx`, which fails on the old text.
+`KNOWN_LIMITATIONS.md` records the panel as not reachable. Encrypting labels
+needs a change to what the vault API stores; it is not made here.
+
+## T15. Dead drops in the glossary, and the purchase delivery notice
+
+**Claimed.** The glossary (`lib/blackoutTerminology.ts`): a dead drop is "a way
+to hide ephemeral messages inside images that disappear after delivery"; a
+digital good is "delivered after purchase via an encrypted dead-drop". The
+seller's form notes: "delivered via the encrypted dead-drop path". When the
+marketplace's Matrix bridge is on (`FBM_MATRIX_BRIDGE_ENABLED`, off in the
+example configuration), the bot posts "Your purchase is ready. Open it in
+Blackout before it expires." in a temporary encrypted room, and the app shows
+it as "Open it in Blackout before ...".
+
+**Found.** Nothing in the app sends or opens a dead drop (T8); hiding a message
+in an image is steganography, a separate feature; nothing disappears. A
+purchased file is downloaded from Library, from the marketplace API
+(`fetchFulfillmentAsset`), and the delivery room's notice offers no way to open
+anything; its date is when the room is closed, not when the purchase ends. The
+glossary entries are shown nowhere today (the only terms with a tooltip are
+canopy and den), so they were claims waiting for a screen.
+
+**Done.** The glossary says a dead drop is planned and nothing sends or opens
+one, and that a digital good is downloaded from Library; the seller notes say
+the same; the card and the bot's notice say "Download it from Library in the
+black market" and "This delivery room closes" with the date. The stub
+catalog's demo listing (used only with `FREEBLACKMARKET_STUB`) is corrected
+too. Tests: `tests/unit/lib/glossaryTruth.test.ts`, the delivery card case in
+`tests/unit/features/marketplace/marketplaceEventCard.test.tsx`, and the notice
+in `packages/api/test/fbm-matrix-bridge.integration.test.ts`; each fails on
+the old text.
+
 ## Reported, not yet checked
 
 Not in this commit. The sentences of `TRUST.md` (beyond the paragraphs T1, T2,
@@ -622,7 +701,7 @@ T7, T8 and T9 change), of `THREAT_MODEL.md`, of
 and the "CI release gate" sentence of `KNOWN_LIMITATIONS.md` are being checked
 against the code one by one. Each finding is added here, with its fix or its
 explanation, in a commit that follows on the same branch. Until then this
-record covers T1 to T12 only.
+record covers T1 to T15 only.
 
 A first reading of those documents against the code reported the following.
 Each is a report, not yet a finding: none has been checked by a second look or
@@ -654,13 +733,6 @@ Other documents:
     gate it describes.
 -   `TRUST.md`: "no timeline-read capability" for the bot, and the search it
     tells a reader to run.
-
-Strings in the app:
-
--   The welcome steps' "messages are end-to-end encrypted", said of every den.
--   The vault's "encrypts everything".
--   The glossary's definitions of a dead drop and of a digital good's
-    delivery.
 
 ## Decisions for the operator to confirm or veto
 

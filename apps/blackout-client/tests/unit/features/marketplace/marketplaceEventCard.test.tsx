@@ -256,4 +256,25 @@ describe('MarketplaceEventCard', () => {
         expect(text).toContain('Tomato blowout');
         expect(text).toContain('30%');
     });
+
+    // The card said "Open it in Blackout before ..." and offered no way to:
+    // nothing in the app opens a dead drop. A purchased file is downloaded
+    // from Library in the black market; the date is when this delivery room
+    // is closed, not when the purchase expires.
+    // docs/security/trust-claims-2026-11-16.md, T15.
+    it('a delivery card says where the purchase is, and what the date is', () => {
+        const text = render({
+            kind: 'deaddrop',
+            data: {
+                entitlementId: 'ent-1',
+                providerListingId: 'guide',
+                kind: 'vault_item',
+                expiresAt: '2026-11-19T12:00:00.000Z',
+            },
+        });
+        expect(text).not.toMatch(/open it in blackout/i);
+        expect(text).toContain('Your purchase is ready');
+        expect(text).toContain('Download it from Library in the black market.');
+        expect(text).toContain('This delivery room closes 2026-11-19T12:00:00.000Z.');
+    });
 });

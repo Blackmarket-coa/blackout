@@ -300,7 +300,7 @@ const SEEDED_LISTINGS: StubListing[] = [
             category: 'creator-asset',
             title: 'Seed Saving Field Guide (PDF)',
             description:
-                'Digital download delivered via an encrypted Matrix dead-drop. Exercises the §4.1 digital-delivery path.',
+                'Digital download: after purchase, download it from Library. Exercises the §4.1 digital-delivery path.',
             priceCents: 499,
             currency: 'USD',
             sellerId: 'stub-seller',

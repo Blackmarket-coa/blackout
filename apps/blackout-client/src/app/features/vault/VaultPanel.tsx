@@ -127,7 +127,9 @@ export const VaultPanel = (): JSX.Element => {
                 });
                 setRevealed((prev) => ({ ...prev, [item.id]: plaintext }));
             } catch {
-                setError('Wrong passphrase for this item, or it is corrupted.');
+                setError(
+                    'This item could not be decrypted: a different passphrase, an item added in another browser, or damaged data.'
+                );
             }
         },
         [key]
@@ -150,9 +152,19 @@ export const VaultPanel = (): JSX.Element => {
         return (
             <div style={containerStyle} data-testid="vault-panel">
                 <h3 style={{ margin: 0 }}>Encrypted vault</h3>
+                {/* Until 2026-11-16 this said the passphrase "encrypts everything"
+                    and the server "only stores unreadable ciphertext". Labels are
+                    sent as typed, and the key depends on a salt kept in this
+                    browser (vaultCrypto.ts). trust-claims-2026-11-16.md, T14. */}
                 <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0 }}>
-                    Your passphrase encrypts everything in the browser. The server only stores
-                    unreadable ciphertext — keep your passphrase safe, it cannot be recovered.
+                    Each secret is encrypted in this browser with a key made from your passphrase,
+                    and the server stores it encrypted. The label you give a secret is not
+                    encrypted: the server can read it, so keep secrets out of labels.
+                </p>
+                <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0 }}>
+                    The key also depends on a value kept in this browser: another browser, or this
+                    one after its site data is cleared, cannot open the vault, even with the
+                    passphrase. Neither can be recovered.
                 </p>
                 <input
                     type="password"
@@ -215,7 +227,7 @@ export const VaultPanel = (): JSX.Element => {
                 <input
                     data-testid="vault-item-label"
                     value={label}
-                    placeholder="Label (e.g. API key)"
+                    placeholder="Label (not encrypted)"
                     onChange={(e) => setLabel(e.target.value)}
                     style={inputStyle}
                 />

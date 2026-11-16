@@ -86,7 +86,11 @@ export const BLACKOUT_GLOSSARY: Readonly<Record<BlackoutGlossaryKey, string>> = 
     coalition:
         'A group of members with roles (Founder, Steward, Griot, Member) that runs drives, projects and mutual aid together across canopies. The map-first mutual-aid hub is the Commons.',
     coliseum: 'The competitive-event surface (rankings, brackets, arenas).',
-    deaddrop: 'A way to hide ephemeral messages inside images that disappear after delivery.',
+    // Until 2026-11-16: "A way to hide ephemeral messages inside images that
+    // disappear after delivery". Nothing sends or opens a dead drop (T8), and
+    // nothing disappears. docs/security/trust-claims-2026-11-16.md, T15.
+    deaddrop:
+        'A sealed message or file left for one person to collect later. Planned: nothing in the app sends or opens one yet.',
     stego: 'Steganography — hiding messages inside other content like images.',
     numbersStation: 'A broadcast surface that distributes short coded messages.',
     townhallSfu: 'A large-format voice/video room backed by an SFU server.',
@@ -97,7 +101,7 @@ export const BLACKOUT_GLOSSARY: Readonly<Record<BlackoutGlossaryKey, string>> = 
     blackoutProduct:
         'A digital artifact that unlocks features inside Blackout when purchased: a theme, plugin, cosmetic, sound pack, template, or privacy tool. Distinct from a plain digital download.',
     digitalGood:
-        'A plain digital file sold on the black market (an ebook, PDF, or zip) that does not unlock in-app features. Delivered after purchase via an encrypted dead-drop.',
+        'A plain digital file sold on the black market (an ebook, PDF, or zip) that does not unlock in-app features. After purchase, the buyer downloads it from Library in the black market.',
     entitlement:
         'What a buyer receives on purchase — the right to use the feature, asset, or download a listing grants.',
     featureKey:

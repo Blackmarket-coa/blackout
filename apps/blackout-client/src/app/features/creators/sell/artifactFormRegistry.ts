@@ -455,9 +455,11 @@ export const ARTIFACT_FORM_REGISTRY: Record<CreatorArtifactKind, ArtifactFormDes
 
 /**
  * The "Digital download" preset — a `vault_item` carrying a `files` payload. This
- * is the in-repo path for a plain digital good (an ebook/PDF/zip): on purchase it
- * is delivered through the encrypted Matrix dead-drop (see
- * `packages/api/src/services/fbmMatrixBridge/deadDropDelivery.ts`). It is the
+ * is the in-repo path for a plain digital good (an ebook/PDF/zip): on purchase the
+ * buyer downloads it from Library (the marketplace fulfillment endpoint). When the
+ * Matrix bridge is on, a notice in a temporary encrypted room also points there
+ * (`packages/api/src/services/fbmMatrixBridge/deadDropDelivery.ts`); no dead drop
+ * is sealed or opened (docs/security/trust-claims-2026-11-16.md, T15). It is the
  * "non-blackout digital good" a Blackout seller can list without leaving the app;
  * the true FBM `digital` listing-type is documented in
  * `docs/guides/non-blackout-digital-goods.md`.
@@ -484,7 +486,7 @@ export const DIGITAL_DOWNLOAD_DESCRIPTOR: ArtifactFormDescriptor = {
     defaults: { files: [] },
     example: { files: [{ name: 'guide.pdf', mime: 'application/pdf', base64: '' }] },
     buildPayload: (values) => ({ files: Array.isArray(values.files) ? values.files : [] }),
-    notes: 'Sold as a vault_item; delivered via the encrypted dead-drop path.',
+    notes: 'Sold as a vault_item; the buyer downloads it from Library after purchase.',
 };
 
 /** All sellable artifact kinds, in a stable display order (coalition_kit excluded). */

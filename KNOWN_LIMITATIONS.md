@@ -868,6 +868,27 @@ For the source-of-truth triage with tier/owner detail see
     SDK gate, the appservice's queue (its flush logs a line and delivers
     nothing), and the API's `POST /v1/deaddrop`, which stores the payload
     string it is given as it is.
+-   **A purchased digital file is not a dead drop.** The buyer downloads it
+    from Library in the black market, from the marketplace API. With the
+    marketplace's Matrix bridge on (`FBM_MATRIX_BRIDGE_ENABLED`), a notice in
+    a temporary encrypted room also points there. Until 2026-11-16 the
+    glossary, the seller's form and that notice called it an encrypted
+    dead-drop delivery (trust-claims T15).
+
+### The vault: not reachable from the app (2026-11-16)
+
+-   **Where:** `apps/blackout-client/src/app/features/vault/`. Record:
+    `docs/security/trust-claims-2026-11-16.md`, T14.
+-   **State:** no screen mounts the vault panel, though `vault_item`
+    purchases add slots and templates to it. Each secret in it is encrypted
+    in the browser (AES-GCM, key from PBKDF2), but the label of each secret is
+    sent to the API as typed and stored so, and the key also depends on a
+    salt kept in that browser's storage: another browser, or the same one
+    after its site data is cleared, cannot open the vault even with the
+    passphrase. Since 2026-11-16 the panel says so (it said "Your passphrase
+    encrypts everything"); its behaviour is unchanged.
+-   **To close it:** encrypt labels (a change to what the vault API stores),
+    and either mount the panel or stop selling slots for it.
 
 ### Photo metadata and link tracking: where they are removed (2026-11-16)
 

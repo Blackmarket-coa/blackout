@@ -61,13 +61,18 @@ const defaultOnboarding: OnboardingContent = {
  * `OnboardingPage` (the full-page invite entry) only — NOT by the in-app
  * `ClientLayout` modal, which stays opt-in so existing users in unconfigured
  * canopies aren't interrupted.
+ *
+ * Until 2026-11-16 these said Blackout was "end-to-end-encrypted" and that
+ * "messages are end-to-end encrypted", of every den. Most new dens start
+ * public and unencrypted; the steps now point to the lock beside the message
+ * box, which says which a den is (trust-claims-2026-11-16.md, T13).
  */
 export const DEFAULT_ONBOARDING_STEPS: OnboardingStep[] = [
     {
         type: 'rules',
         title: 'Welcome to Blackout',
         content:
-            "You're in. Blackout is an end-to-end-encrypted, community-run space.\n\n" +
+            "You're in. Blackout is a community-run space.\n\n" +
             'No central feed and no ads — just communities (canopies) and the channels ' +
             'inside them (dens). What you join is what you see.',
         requireAccept: false,
@@ -89,7 +94,8 @@ export const DEFAULT_ONBOARDING_STEPS: OnboardingStep[] = [
         content:
             'Quick orientation:\n\n' +
             '• The left rail lists the dens you can post in.\n' +
-            '• Type in the composer at the bottom; messages are end-to-end encrypted.\n' +
+            '• Type in the composer at the bottom. The lock beside it says whether this den is ' +
+            'end-to-end encrypted. Not every den is.\n' +
             '• Use the top bar for members, pins, search, and notifications.\n\n' +
             'That’s it — finish up and you’ll drop straight into the den.',
         requireAccept: false,

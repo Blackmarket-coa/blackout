@@ -26,6 +26,28 @@ should be described as a published privacy policy until that review lands.
 
 ---
 
+## 2026-11-16 — The welcome steps said every message is end-to-end encrypted
+
+**Why this entry exists:** the steps shown to a new person at an invite, when
+a canopy has none of its own, said "Blackout is an end-to-end-encrypted,
+community-run space" and "messages are end-to-end encrypted". Many dens are
+not. The finding is T13 in
+[`docs/security/trust-claims-2026-11-16.md`](../security/trust-claims-2026-11-16.md).
+
+### Withdrawn
+
+-   **"An end-to-end-encrypted space" and "messages are end-to-end
+    encrypted".** A new canopy, a den with no canopy and a den in a public
+    canopy start public and not end-to-end encrypted. The steps now say that
+    the lock beside the message box shows whether a den is encrypted, and
+    that not every den is.
+
+### What a person relying on the old text should know
+
+-   **A den is end-to-end encrypted only if the lock beside its message box
+    says so.** What you sent in a den that was not encrypted was readable by
+    the server, and still is.
+
 ## 2026-11-16 — Photo metadata and link tracking were not removed everywhere
 
 **Why this entry exists:** the privacy tools panel said that removing photo
