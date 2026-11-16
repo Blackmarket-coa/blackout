@@ -2,6 +2,7 @@ import React, { useCallback, useRef, useState, type CSSProperties } from 'react'
 import { useMatrixClientOrNull } from '../../../hooks/useMatrixClient';
 import { useMediaAuthentication } from '../../../hooks/useMediaAuthentication';
 import { uploadContent, mxcUrlToHttp } from '../../../utils/matrix';
+import { stripImageMetadata } from '../../../utils/stripImageMetadata';
 
 /**
  * Preview-media uploader for the sell flow. Uploads image files to the Matrix
@@ -62,7 +63,11 @@ export const MediaUploadField: React.FC<MediaUploadFieldProps> = ({
             setBusy(true);
             setError(null);
             const uploaded: string[] = [];
-            for (const file of Array.from(files)) {
+            for (const picked of Array.from(files)) {
+                // A listing photo is public: its metadata (for a phone photo,
+                // where it was taken) is removed before it is uploaded.
+                // eslint-disable-next-line no-await-in-loop
+                const file = await stripImageMetadata(picked);
                 // eslint-disable-next-line no-await-in-loop
                 await uploadContent(mx, file, {
                     name: file.name,

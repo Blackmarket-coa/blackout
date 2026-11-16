@@ -715,4 +715,76 @@ describe('MessageComposer', () => {
             expect(options.ephemeral ?? null).toBeNull();
         });
     });
+
+    // Metadata is removed only from JPEG, PNG and WebP pictures. Anything else
+    // a phone makes (a HEIC photo, a video) goes out with what it recorded,
+    // which can be where it was taken. The box says so before it is sent.
+    // docs/security/trust-claims-2026-11-16.md, T12.
+    describe('attachments sent with their metadata', () => {
+        const note = (container: HTMLElement) =>
+            container.querySelector('[data-testid="attachment-metadata-note"]');
+
+        it('are named before they are sent', async () => {
+            currentRoom = makeRoom(true);
+            const { container } = await mountComposer();
+            await attach(container, new File(['x'], 'IMG_0042.heic', { type: 'image/heic' }));
+
+            expect(note(container)?.textContent).toBe(
+                'Sent with any metadata in them: IMG_0042.heic. This app removes metadata only from JPEG, PNG and WebP pictures; a photo or video from a phone can record where and when it was taken.'
+            );
+        });
+
+        it('include a video', async () => {
+            currentRoom = makeRoom(true);
+            const { container } = await mountComposer();
+            await attach(container, new File(['x'], 'IMG_0043.MOV', { type: 'video/quicktime' }));
+            expect(note(container)?.textContent).toContain('IMG_0043.MOV');
+        });
+
+        it('are told apart from the other attachments', async () => {
+            currentRoom = makeRoom(true);
+            const { container } = await mountComposer();
+            await attach(container, new File(['x'], 'plan.txt', { type: 'text/plain' }));
+            await attach(container, new File(['x'], 'IMG_0042.heic', { type: 'image/heic' }));
+
+            expect(note(container)?.textContent).toContain('in them: IMG_0042.heic.');
+            expect(note(container)?.textContent).not.toContain('plan.txt');
+        });
+
+        it('do not include a file that is neither a picture nor a video', async () => {
+            currentRoom = makeRoom(true);
+            const { container } = await mountComposer();
+            await attach(container, new File(['x'], 'plan.txt', { type: 'text/plain' }));
+            expect(note(container)).toBeNull();
+        });
+
+        it('do not include a picture whose metadata was removed', async () => {
+            vi.stubGlobal(
+                'createImageBitmap',
+                vi.fn(async () => ({ width: 2, height: 2, close: vi.fn() }))
+            );
+            const getContext = vi
+                .spyOn(HTMLCanvasElement.prototype, 'getContext')
+                .mockReturnValue({ drawImage: vi.fn() } as unknown as CanvasRenderingContext2D);
+            const toBlob = vi
+                .spyOn(HTMLCanvasElement.prototype, 'toBlob')
+                .mockImplementation(function (
+                    this: HTMLCanvasElement,
+                    cb: BlobCallback,
+                    type?: string
+                ) {
+                    cb(new Blob([new Uint8Array([9])], { type: type ?? 'image/jpeg' }));
+                } as HTMLCanvasElement['toBlob']);
+            try {
+                currentRoom = makeRoom(true);
+                const { container } = await mountComposer();
+                await attach(container, new File(['x'], 'photo.jpg', { type: 'image/jpeg' }));
+                expect(note(container)).toBeNull();
+            } finally {
+                vi.unstubAllGlobals();
+                getContext.mockRestore();
+                toBlob.mockRestore();
+            }
+        });
+    });
 });

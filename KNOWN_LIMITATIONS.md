@@ -869,6 +869,31 @@ For the source-of-truth triage with tier/owner detail see
     nothing), and the API's `POST /v1/deaddrop`, which stores the payload
     string it is given as it is.
 
+### Photo metadata and link tracking: where they are removed (2026-11-16)
+
+-   **Where:** `apps/blackout-client/src/app/utils/stripImageMetadata.ts`,
+    `utils/sanitizeUrl.ts`, and the privacy tools panel
+    (`features/privacy-tools/PrivacyToolsSettings.tsx`). Record:
+    `docs/security/trust-claims-2026-11-16.md`, T12.
+-   **State:** until 2026-11-16 the panel said metadata stripping and link
+    cleaning were "always on". Metadata was removed only from JPEG, PNG and
+    WebP pictures attached in the message box and from avatars; a profile
+    banner, a listing photo, a role icon and a welcome image were uploaded as
+    picked, and with the avatar pattern on, the avatar was sent to the API with
+    its metadata before anything stripped it. Links were cleaned in the
+    message box only. All of those paths now strip or clean, and the panel
+    says where.
+-   **What remains:** metadata is removed from JPEG, PNG and WebP only. A
+    picture in another format (HEIC, which is what an iPhone takes, AVIF,
+    TIFF) and every video is sent with whatever it records, which for a phone
+    can be where and when it was taken; the message box names such
+    attachments before they are sent, and the other upload paths do not.
+    Emoji and stickers are uploaded as they are, because re-encoding would
+    flatten an animated one. The homeserver keeps every original as it was
+    uploaded. Files uploaded before the fix keep their metadata: replacing a
+    banner or a listing photo uploads a clean copy, and the old one stays on
+    the server until the operator removes it.
+
 ### Signed messages, an encryption preset and expiring files: withdrawn (2026-11-16)
 
 -   **Where:** the composer's feature menu

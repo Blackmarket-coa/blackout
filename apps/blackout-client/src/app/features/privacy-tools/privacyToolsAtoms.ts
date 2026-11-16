@@ -3,30 +3,31 @@ import { atomWithStorage } from 'jotai/utils';
 import { installedPluginsAtom } from '../monetization/install/installedPluginsAtom';
 
 /**
- * Persisted client settings for the Privacy Tools feature. EXIF stripping and
- * link sanitization are now native (always on, no toggle) — they're privacy
- * hygiene, not preferences. Only the "advanced" tier (perturbation + advanced
- * options) is settable here, and it's gated behind a purchased `privacy_tool`
- * entitlement (see `privacyToolsEntitledAtom`).
+ * Persisted client settings for the Privacy Tools feature. Metadata stripping
+ * and link cleaning have no setting: they run where the panel says they do
+ * (utils/stripImageMetadata.ts, utils/sanitizeUrl.ts), which is not
+ * everywhere. Only the "advanced" tier (the avatar pattern) is settable here,
+ * and it's gated behind a purchased `privacy_tool` entitlement (see
+ * `privacyToolsEntitledAtom`).
+ *
+ * Until 2026-11-16 the advanced tier also offered "Warn when a file type
+ * can't be stripped", which nothing read. It is gone, and the message box
+ * now says, for everyone, which attachments keep their metadata
+ * (docs/security/trust-claims-2026-11-16.md, T12). A value stored for it by
+ * an older version is ignored.
  */
-export interface PrivacyToolsAdvancedOptions {
-    /** Warn (instead of silently passing through) when a file type can't be stripped. */
-    nonStrippableWarning: boolean;
-}
-
 export interface PrivacyToolsSettingsState {
-    /** Anti-facial-recognition perturbation on avatar/image uploads (advanced). */
+    /**
+     * A faint pattern on avatar uploads (advanced). It does not stop current
+     * face recognition; see utils/perturbImage.ts.
+     */
     avatarPerturbationEnabled: boolean;
-    advancedOptions: PrivacyToolsAdvancedOptions;
 }
 
 export const privacyToolsSettingsAtom = atomWithStorage<PrivacyToolsSettingsState>(
     'blackout.settings.privacy-tools.v1',
     {
         avatarPerturbationEnabled: false,
-        advancedOptions: {
-            nonStrippableWarning: false,
-        },
     }
 );
 

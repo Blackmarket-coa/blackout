@@ -7,6 +7,7 @@ import {
     type AttachmentSource,
 } from '../../../features/media/utils/roomAttachment';
 import { assertRoomLoaded } from '../../../features/room/roomSendGuard';
+import { sanitizeMessageLinks } from '../../../utils/sanitizeUrl';
 import {
     buildEphemeralContent,
     type EphemeralPolicy,
@@ -125,6 +126,10 @@ export const useLegacySendMessageAdapter = (roomId: string) => {
             // Refuse a room that is not loaded: the SDK would send it
             // unencrypted. See features/room/roomSendGuard.ts.
             assertRoomLoaded(client, roomIdArg);
+            // Every text message this hook sends (the message box, forum
+            // posts and replies) leaves without tracking params in its links.
+            const outgoing =
+                eventType === 'm.room.message' ? sanitizeMessageLinks(content) : content;
             return (
                 client as unknown as {
                     sendEvent: (
@@ -133,7 +138,7 @@ export const useLegacySendMessageAdapter = (roomId: string) => {
                         c: Record<string, unknown>
                     ) => Promise<unknown>;
                 }
-            ).sendEvent(roomIdArg, eventType, content);
+            ).sendEvent(roomIdArg, eventType, outgoing);
         },
         [client]
     );

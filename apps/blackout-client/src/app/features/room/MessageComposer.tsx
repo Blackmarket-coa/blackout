@@ -52,7 +52,7 @@ import { emojis } from '../../plugins/emoji';
 import { EmojiPicker } from './EmojiPicker';
 import { createScheduledMessage } from './scheduledMessagesClient';
 import { sanitizeFormattedBody, sanitizeUrlsInText } from '../../utils/sanitizeUrl';
-import { stripImageMetadata } from '../../utils/stripImageMetadata';
+import { keepsMetadata, stripImageMetadata } from '../../utils/stripImageMetadata';
 import { SLOWMODE_STATE_EVENT_TYPE, evaluateSlowmode, parseSlowmodeConfig } from './slowmode';
 import {
     VERIFICATION_GATE_STATE_EVENT_TYPE,
@@ -547,6 +547,10 @@ const FormatMarkButton = ({
  */
 export const ENCRYPTED_ROOM_NOTICE =
     'End-to-end encrypted. Messages and files you send here are encrypted on this device, and the server cannot read them. It can still see who is in the room, when things are sent and how large they are, emoji reactions, and anything kept as part of the room itself: its name and settings, den documents and proposals.';
+/** Why some attachments keep their metadata; see utils/stripImageMetadata.ts. */
+export const ATTACHMENT_METADATA_REASON =
+    'This app removes metadata only from JPEG, PNG and WebP pictures; a photo or video from a phone can record where and when it was taken.';
+
 export const UNENCRYPTED_ROOM_NOTICE =
     'Not encrypted. Messages and files are stored unencrypted on the server. Enable encryption in room settings for private conversations.';
 
@@ -1910,6 +1914,22 @@ export const MessageComposer = ({
                                 </button>
                             </span>
                         ) : null}
+                    </div>
+                ) : null}
+
+                {attachments.some(keepsMetadata) ? (
+                    // Metadata is removed only from JPEG, PNG and WebP pictures.
+                    // Say which attachments go out with theirs before they are
+                    // sent (trust-claims-2026-11-16.md, T12).
+                    <div
+                        role="note"
+                        data-testid="attachment-metadata-note"
+                        style={{ marginTop: 6, fontSize: 12, color: 'var(--text-secondary)' }}
+                    >
+                        {`Sent with any metadata in them: ${attachments
+                            .filter(keepsMetadata)
+                            .map((file) => file.name)
+                            .join(', ')}. ${ATTACHMENT_METADATA_REASON}`}
                     </div>
                 ) : null}
 

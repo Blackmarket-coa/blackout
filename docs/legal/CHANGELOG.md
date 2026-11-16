@@ -26,6 +26,51 @@ should be described as a published privacy policy until that review lands.
 
 ---
 
+## 2026-11-16 — Photo metadata and link tracking were not removed everywhere
+
+**Why this entry exists:** the privacy tools panel said that removing photo
+metadata and link tracking parameters was "always on". It was not, for some
+uploads, some formats and some kinds of post. The finding is T12 in
+[`docs/security/trust-claims-2026-11-16.md`](../security/trust-claims-2026-11-16.md).
+
+### Withdrawn
+
+-   **"Image metadata (EXIF/GPS) stripping ... always on".** Metadata was
+    removed from JPEG, PNG and WebP pictures attached to messages, and from
+    avatars. Profile banners, marketplace listing photos, role icons and
+    welcome images were uploaded with their metadata. Pictures in other
+    formats, such as the HEIC photos an iPhone takes, and all videos were
+    sent with theirs everywhere.
+-   **"Link tracking-parameter removal ... always on".** It applied to
+    messages only. Forum posts, forum replies and wall posts kept the
+    tracking parameters in their links.
+-   **"Perturb avatars against facial recognition".** The pattern does not
+    stop current face recognition. It is now described as what it is.
+-   **"Warn when a file type can't be stripped" (Advanced).** Nothing read
+    this setting. It is gone; the message box now warns everyone.
+
+### Changed
+
+-   Banners, listing photos, role icons and welcome images are now uploaded
+    without their metadata, and so is an avatar sent for the pattern. Forum
+    posts, forum replies and wall posts now lose tracking parameters from
+    their links. The panel says where each runs and where it does not.
+
+### What a person relying on the old text should know
+
+-   **A photo you uploaded as a profile banner, a listing photo, a role icon
+    or a welcome image before this change kept its metadata,** which for a
+    photo from a phone can say where and when it was taken. Uploading it
+    again now sends a clean copy; the old one stays on the server until the
+    operator removes it.
+-   **A HEIC photo or a video you sent anywhere, at any time, went with its
+    metadata, and still does.** The message box now says so before it is
+    sent.
+-   **With the avatar pattern on, your avatar reached the Blackout API with
+    its metadata.** The API passes it to the pattern service; neither keeps
+    it, as far as the code in this repository shows, and the avatar that was
+    published had been re-encoded.
+
 ## 2026-11-16 — Three options beside the message box that said they protected a message
 
 **Why this entry exists:** the app offered "Signed message preset", "Encryption

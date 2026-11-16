@@ -17,6 +17,7 @@ import CircleMapBlock from './CircleMapBlock';
 import { fetchProfilePalettes } from './profileClient';
 import { syncStatusToPresence } from './customStatus';
 import { useProfileImageSrc } from './profileImage';
+import { stripImageMetadata } from '../../utils/stripImageMetadata';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { useMediaAuthentication } from '../../hooks/useMediaAuthentication';
 import { uploadMedia } from '../../utils/media';
@@ -187,8 +188,10 @@ export const ProfileEditor = ({ saveProfile = saveProfileDefault }: ProfileEdito
     const onImageUpload = async (field: 'banner' | 'avatarUrl', file?: File) => {
         if (!file) return;
         // Avatars carry faces — harden them (EXIF strip + optional perturbation)
-        // before they become the preview/upload source.
-        const prepared = field === 'avatarUrl' ? await hardenImage(file) : file;
+        // before they become the preview/upload source. A banner is public too:
+        // its metadata is removed as well (trust-claims-2026-11-16.md, T12).
+        const prepared =
+            field === 'avatarUrl' ? await hardenImage(file) : await stripImageMetadata(file);
         const apply = (url: string) =>
             setProfile((prev) =>
                 field === 'banner'

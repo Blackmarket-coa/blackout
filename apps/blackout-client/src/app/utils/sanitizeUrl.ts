@@ -85,3 +85,29 @@ const HREF_PATTERN = /href="([^"]*)"/g;
 /** Strip tracking params from `href="..."` values inside an HTML formatted body. */
 export const sanitizeFormattedBody = (html: string): string =>
     html.replace(HREF_PATTERN, (_match, href: string) => `href="${sanitizeUrl(href)}"`);
+
+/** The message types whose body is text someone wrote. */
+const TEXT_MSGTYPES = new Set(['m.text', 'm.notice', 'm.emote']);
+
+/**
+ * The content of an outgoing `m.room.message` with tracking params stripped
+ * from the links in its body and formatted body. Other message types are
+ * returned as they are (a file message's body is its name), and so is a
+ * message with nothing to strip, as the same object.
+ */
+export const sanitizeMessageLinks = <T extends Record<string, unknown>>(content: T): T => {
+    if (typeof content.msgtype !== 'string' || !TEXT_MSGTYPES.has(content.msgtype)) {
+        return content;
+    }
+    const body = typeof content.body === 'string' ? sanitizeUrlsInText(content.body) : content.body;
+    const formattedBody =
+        typeof content.formatted_body === 'string'
+            ? sanitizeFormattedBody(content.formatted_body)
+            : content.formatted_body;
+    if (body === content.body && formattedBody === content.formatted_body) return content;
+    return {
+        ...content,
+        ...(body !== content.body ? { body } : {}),
+        ...(formattedBody !== content.formatted_body ? { formatted_body: formattedBody } : {}),
+    };
+};

@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
+import { stripImageMetadata } from '../../utils/stripImageMetadata';
 import { useLegacyRoomAdapter as useRoom } from '../../plugins/matrix-adapters/hooks/useLegacyRoomAdapter';
 import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
 import { OnboardingWizard } from './OnboardingWizard';
@@ -58,7 +59,9 @@ export const WelcomeEditor = ({ spaceId }: { spaceId: string }) => {
             .filter((item): item is { roomId: string; label: string } => Boolean(item.roomId));
     }, [spaceRoom.data]);
 
-    const uploadBanner = async (file: File): Promise<string | undefined> => {
+    const uploadBanner = async (picked: File): Promise<string | undefined> => {
+        // Shown to everyone who joins: uploaded without its metadata.
+        const file = await stripImageMetadata(picked);
         const uploadResult = (await client.uploadContent(file, {
             includeFilename: true,
             type: file.type,

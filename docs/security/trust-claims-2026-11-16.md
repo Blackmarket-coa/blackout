@@ -25,6 +25,7 @@ may decide what to say, and to whom, on the strength of it.
 | T9  | `TRUST.md`, the composer in an encrypted room                              | Private rooms are end-to-end encrypted                                           | Documents, proposals, objectives and playbooks are room state, unencrypted       | Said         |
 | T10 | The room timeline, member panels, profile card, window and page            | (nothing said)                                                                   | Images were fetched from addresses other people chose                            | Fixed        |
 | T11 | The composer's feature menu                                                | "Signature: enabled", "Encryption: preset", "view-once, 24h"                     | Nothing was signed or encrypted; "view-once" hid the file in this app only       | Removed      |
+| T12 | The privacy tools panel                                                    | Metadata stripping and link cleaning are "always on"                             | Neither was: some uploads and formats kept metadata; links only in messages      | Fixed        |
 
 T7 was found while checking those sentences and outranks the rest: it has its
 own record,
@@ -36,7 +37,8 @@ fix: what an encrypted room does not encrypt, and images loaded from addresses
 other people chose.
 
 T11 is three options in the composer's feature menu that said they protected
-a message, confirmed from a first reading of the app's strings. The trust
+a message, and T12 the privacy tools panel's "always on"; both were confirmed
+from a first reading of the app's strings. The trust
 page's and the threat model's own sentences are being checked one by one; what
 that first reading reported is listed under
 [Reported, not yet checked](#reported-not-yet-checked) below.
@@ -534,6 +536,84 @@ that never showed there will now show.
     this repository lists it as "Custom expiry windows (up to 30 days) and
     view caps for ephemeral file drops". A decision for the operator, below.
 
+## T12. The privacy tools panel: "always on"
+
+**Claimed.** "Image metadata (EXIF/GPS) stripping and link tracking-parameter
+removal are now always on — they're privacy hygiene, not a toggle." Below it,
+for the paid Advanced tier, "Perturb avatars against facial recognition
+(Advanced, best-effort)" and "Warn when a file type can't be stripped
+(Advanced)".
+
+**Found.**
+
+-   Metadata was removed only from JPEG, PNG and WebP pictures
+    (`utils/stripImageMetadata.ts` re-encodes those three through a canvas and
+    passes anything else through), and only on two paths: pictures attached
+    in the message box, and avatars. A profile banner, a marketplace listing
+    photo, a role icon and a welcome-screen image were uploaded as picked,
+    and all four are public. A picture in any other format (HEIC, which is
+    what an iPhone takes, AVIF, TIFF) went out as it was on every path, and
+    so did every video. A photo or video from a phone can record where it was
+    taken.
+-   With the avatar pattern on, `hardenAvatarImage` sent the picture as it
+    was picked, metadata included, to the Blackout API
+    (`POST /v1/media/perturb`), and stripped nothing itself, on the reasoning
+    that the pattern re-encodes it afterwards.
+-   Tracking parameters were removed from links in the message box only.
+    Forum posts and forum replies (sent through the same hook, which did not
+    clean them) and wall posts (the profile wall and the home composer) kept
+    `utm_*`, `fbclid` and the rest.
+-   "Warn when a file type can't be stripped" was read by nothing: a paid
+    option that did nothing.
+-   The pattern's own code (`utils/perturbImage.ts`) and the sidecar's README
+    say it "does NOT defeat state-of-the-art facial-recognition models" and
+    that callers "must label it honestly". The label said "against facial
+    recognition".
+
+**Done.**
+
+-   The banner, listing photos, role icons and welcome images are stripped
+    before upload. With the avatar pattern on, the picture is stripped on the
+    device first and only the cleaned copy is sent or patterned.
+-   The message box names the attachments that will go out with their
+    metadata (any picture the stripper did not re-encode, and any video)
+    before they are sent, for everyone (`keepsMetadata` in
+    `utils/stripImageMetadata.ts`).
+-   The send hook cleans the links in every text message it sends, which
+    covers the message box, forum posts and forum replies
+    (`sanitizeMessageLinks` in `utils/sanitizeUrl.ts`), and `postWall` cleans
+    wall posts.
+-   The unread option is gone, with its stored setting.
+-   The panel now says where each protection runs and where it does not, and
+    the pattern's label says it "does not stop current face recognition".
+-   Tests: `tests/unit/utils/stripImageMetadata.test.ts` (`keepsMetadata`),
+    `tests/unit/features/privacy-tools/hardenAvatarImage.test.ts` (the
+    service gets the cleaned copy), `uploadsRemoveMetadata.test.tsx` (the
+    listing photo and the banner, and, on the parsed source, that the role
+    icon and the welcome image upload what the stripper returned),
+    `outgoingLinks.test.tsx` and `tests/unit/utils/sanitizeUrl.test.ts`
+    (forum post, forum reply, reply, plain message, wall post),
+    `PrivacyToolsSettings.test.tsx` (the wording), and, in
+    `MessageComposer.test.tsx`, "attachments sent with their metadata". Each
+    of the new tests that checks a fix fails on the code before it.
+
+**Left as it is, and why.**
+
+-   Formats the canvas cannot re-encode are still sent as they are. Making a
+    HEIC or a video safe needs a decoder or a container rewriter in the
+    browser; the message box says so instead.
+-   Emoji and sticker images are uploaded as they are: re-encoding flattens an
+    animated PNG or WebP to one frame. The panel says so.
+-   The legacy `features/room/message/MessageEditor.tsx` sends edits without
+    cleaning links; nothing mounts it.
+-   The homeserver stores and serves an uploaded original as it arrived;
+    Synapse reads EXIF only to orient thumbnails.
+    `docs/oss_manifest_packaging.md` lists a server-side scrub as a backstop;
+    there is none in this repository.
+-   Files already uploaded keep what they carried. `KNOWN_LIMITATIONS.md` and
+    `docs/legal/CHANGELOG.md` say what someone who relied on the old text
+    should know.
+
 ## Reported, not yet checked
 
 Not in this commit. The sentences of `TRUST.md` (beyond the paragraphs T1, T2,
@@ -542,7 +622,7 @@ T7, T8 and T9 change), of `THREAT_MODEL.md`, of
 and the "CI release gate" sentence of `KNOWN_LIMITATIONS.md` are being checked
 against the code one by one. Each finding is added here, with its fix or its
 explanation, in a commit that follows on the same branch. Until then this
-record covers T1 to T11 only.
+record covers T1 to T12 only.
 
 A first reading of those documents against the code reported the following.
 Each is a report, not yet a finding: none has been checked by a second look or
@@ -578,7 +658,7 @@ Other documents:
 Strings in the app:
 
 -   The welcome steps' "messages are end-to-end encrypted", said of every den.
--   The vault's "encrypts everything", the privacy tools' "always on".
+-   The vault's "encrypts everything".
 -   The glossary's definitions of a dead drop and of a digital good's
     delivery.
 
