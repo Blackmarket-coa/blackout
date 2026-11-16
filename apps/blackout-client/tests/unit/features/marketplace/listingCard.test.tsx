@@ -85,3 +85,50 @@ describe('ListingCard message-vendor entrypoint', () => {
         act(() => root.unmount());
     });
 });
+
+/**
+ * The "Unlocks:" line is on a purchase surface. A listing's feature keys come
+ * from the marketplace's catalog, which is not this repository's, and the card
+ * rendered every key as a bare label: a listing carrying
+ * `features.hardening.torTransport` read "Unlocks: Tor Transport" beside a
+ * price, for a capability with no implementation.
+ * docs/security/trust-claims-2026-11-16.md.
+ */
+describe('ListingCard "Unlocks" line', () => {
+    const unlocksLine = (container: HTMLElement): string =>
+        container.querySelector('[data-testid="listing-card-feature-keys"]')?.textContent ?? '';
+
+    it('says a capability that is not built is planned, not built yet', () => {
+        const { container, root } = mount(
+            <ListingCard
+                listing={listing({
+                    featureKeys: [
+                        'features.hardening.imagePerturbation',
+                        'features.hardening.torTransport',
+                        'features.hardening.decoyTraffic',
+                    ],
+                })}
+                providers={[]}
+                onPurchase={vi.fn()}
+            />
+        );
+        expect(unlocksLine(container)).toBe(
+            'Unlocks: Image Perturbation, Tor Transport (planned, not built yet), Decoy Traffic (planned, not built yet)'
+        );
+        act(() => root.unmount());
+    });
+
+    it('leaves every other key as its plain label', () => {
+        const { container, root } = mount(
+            <ListingCard
+                listing={listing({
+                    featureKeys: ['features.persona.rotation', 'features.transparency.auditExport'],
+                })}
+                providers={[]}
+                onPurchase={vi.fn()}
+            />
+        );
+        expect(unlocksLine(container)).toBe('Unlocks: Rotation, Audit Export');
+        act(() => root.unmount());
+    });
+});

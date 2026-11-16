@@ -685,6 +685,80 @@ For the source-of-truth triage with tier/owner detail see
 -   **Not there yet:** refusing `none` for id_tokens (it could break a
     compliant provider), and comparing `aud` with the client id.
 
+### Tor transport and decoy traffic: not built (2026-11-16)
+
+-   **Where:** the hardening capabilities assigned to the paid tiers
+    (`packages/blackout-protocol/src/hardening/entitlements.ts`).
+-   **State:** Not built. Paid tiers hold entitlement keys for anonymized (Tor)
+    transport and for decoy traffic, and there is no Tor, SOCKS or
+    onion-routing code and no cover-traffic generator anywhere in this
+    repository. Blackout routes nothing through Tor and sends no decoy traffic,
+    on any tier, so the server a person uses sees the IP address they connect
+    from. Image perturbation, the third capability of that group, is built.
+-   **What says so:** `HARDENING_CAPABILITY_IMPLEMENTED` in that file. The
+    Privacy pulse widget has listed the two as "planned" since 2026-09-09.
+    Since 2026-11-16 three more places read the same map: the widget gallery's
+    description of that widget; a marketplace listing's "Unlocks" line, which
+    says "planned, not built yet" beside either key; and the SDK's hardening
+    gate, which refuses a request for either on every tier
+    (`tor_not_implemented`, `decoy_not_implemented`) and suggests no tier to
+    upgrade to. `TRUST.md` no longer lists them among the tiered features.
+    Before that the trust page listed them, the gallery said "Live status of
+    your anonymized transport", a listing carrying the key read "Unlocks: Tor
+    Transport", and the gate answered `ok` to an entitled caller
+    ([`docs/security/trust-claims-2026-11-16.md`](docs/security/trust-claims-2026-11-16.md)).
+-   **Not in this repository:** what the Free Black Market's catalog says a
+    tier includes. A listing there that names either capability is not
+    corrected by any of this, except in how this app shows it.
+
+### Warrant canary (2026-11-16)
+
+-   **Where:** `GET /v1/transparency/canary`
+    (`packages/api/src/services/warrantCanary.ts`).
+-   **State:** The server reports the statement its operator issued, or says
+    that none has been issued. The operator issues one by setting
+    `BLACKOUT_CANARY_ISSUED_ON` to the day they make it. It stands for 35 days
+    (`BLACKOUT_CANARY_VALID_DAYS`), and after that the answer is `lapsed`,
+    with the dates it had. Until 2026-11-16 the server wrote the statement
+    itself on every request and dated it to the current month: it could not
+    lapse, and nobody had made it.
+-   **Limits:**
+    -   No deployment file in this repository sets an issue date, so a
+        deployment made from them answers `not_issued` until its operator
+        sets one.
+    -   The statement's wording is fixed in the code and has not been reviewed
+        by counsel (the Privacy Policy and Terms of Service are drafts too).
+    -   The signature is made with a key the server holds, as it answers. It
+        shows that the answer came from a holder of that key, not that a
+        person signed anything, and whoever controls the server controls the
+        key. No copy of the public key is published outside the answer, so
+        there is nothing to check it against yet. No deployment file here
+        sets the key; without it a production server sends the statement
+        unsigned.
+    -   Issuing is a setting, not a ceremony: whoever can change the server's
+        environment can set the date.
+    -   The app does not show the canary. Only the endpoint does.
+
+### Tips: no payment is taken (2026-11-16)
+
+-   **Where:** the tip button
+    (`apps/blackout-client/src/app/features/monetization/components/TipButton.tsx`),
+    shown in the livestream viewer (behind the `streamsViewer` flag, off by
+    default).
+-   **State:** Sending a tip records it on the API as `pending`. The app
+    opens no checkout for it, so nothing is charged and the recipient is paid
+    nothing; a tip is captured only when the Free Black Market reports a paid
+    order for it, or an operator captures it with the admin key, and nothing
+    in the app starts that order (`docs/coalitions/TASK0_AUDIT.md`: "the
+    money leg is missing today").
+    Since 2026-11-16 the popover says so. Until then it read "Sent $5.00 —
+    they'll receive $4.85".
+-   **Also:** the room header's tip button (`RoomTipButton.tsx`) posts a
+    `co.bmc.tip` message into the room when a tip is recorded, which would
+    announce to the room a tip nobody has paid. It cannot be reached today:
+    the room view it sits in is not mounted anywhere in the app. It has to be
+    put right before that view is mounted or tips are charged.
+
 ## Deferred multi-week workstreams
 
 These are tracked in

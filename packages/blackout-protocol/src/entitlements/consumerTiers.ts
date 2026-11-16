@@ -49,7 +49,9 @@ export const CONSUMER_TIER_DEFS: Record<ConsumerTier, ConsumerTierDef> = {
         entitlementTier: 'pro',
         productTier: 'Starter',
         fbmTier: 'signal',
-        tagline: 'Advanced per-person privacy: anonymized transport, persona roster, hardening.',
+        // No "anonymized transport" here: it is not built (see
+        // HARDENING_CAPABILITY_IMPLEMENTED in ../hardening/entitlements).
+        tagline: 'Advanced per-person privacy: persona roster, alias rotation, image perturbation.',
     },
     coalition: {
         id: 'coalition',

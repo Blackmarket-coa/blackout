@@ -23,24 +23,14 @@ import { betaUnlockAllEnabled } from '../../core/features/betaUnlock';
  * Whether the capability behind each hardening entitlement actually exists.
  *
  * The entitlement booleans this hook returns answer "does this plan grant it",
- * which is not the same question as "is it running". Image perturbation is
- * real; Tor transport and decoy cover traffic are sold as part of the tier but
- * have no implementation — there is no SOCKS or onion-routing code in the
- * repo, and `@blackout/sdk`'s hardening gate records the same.
- *
- * Any surface that reports hardening *status* to a member must read this
- * alongside the entitlement, because reporting anonymized transport as active
- * is a claim about network anonymity that someone may decide what to say, and
- * to whom, on the strength of. Flip a flag here only in the change that ships
- * the capability. See TRANSMUTATION_NOTES.md §4.
+ * which is not the same question as "is it built". The map now lives in
+ * `@blackout/protocol`, beside the entitlement keys, so that the SDK's
+ * hardening gate and the purchase surfaces read the same one; it is
+ * re-exported here for the surfaces that report hardening status. Any such
+ * surface must read it alongside the entitlement. See TRANSMUTATION_NOTES.md
+ * §4.
  */
-export const HARDENING_CAPABILITY_IMPLEMENTED = {
-    imagePerturbation: true,
-    torTransport: false,
-    decoyTraffic: false,
-} as const;
-
-export type HardeningCapability = keyof typeof HARDENING_CAPABILITY_IMPLEMENTED;
+export { HARDENING_CAPABILITY_IMPLEMENTED, type HardeningCapability } from '@blackout/protocol';
 
 export type HardeningFeaturesSnapshot = {
     tier: EntitlementTier;

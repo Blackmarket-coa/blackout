@@ -1,15 +1,27 @@
 import { createElement, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { categoryLabel, type NormalizedListing } from '@blackout/core';
+import { isUnbuiltHardeningKey } from '@blackout/protocol';
 import type { MarketplaceProviderSummary } from './marketplaceClient';
 import { resolveMarketplaceProvider } from './providerMetadata';
 import { PaywallCta, resolvePaywallState } from '../components/PaywallCta';
 
-/** Human label for a `features.*` key, e.g. `features.hardening.torTransport` → "Tor transport". */
-function featureKeyLabel(key: string): string {
+/** What a listing's line says of a capability that is not built. */
+export const UNBUILT_FEATURE_NOTE = 'planned, not built yet';
+
+/**
+ * Human label for a `features.*` key, e.g. `features.hardening.imagePerturbation`
+ * → "Image Perturbation". This line is on a purchase surface, so a key whose
+ * capability is not built says so: "Tor Transport (planned, not built yet)".
+ * A listing can carry such a key (the marketplace's catalog is not this
+ * repository's), and "Unlocks: Tor Transport" beside a price would sell
+ * network anonymity that does not exist.
+ */
+export function featureKeyLabel(key: string): string {
     const leaf = key.split('.').pop() ?? key;
     const spaced = leaf.replace(/[_-]+/g, ' ').replace(/([a-z])([A-Z])/g, '$1 $2');
-    return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+    const label = spaced.charAt(0).toUpperCase() + spaced.slice(1);
+    return isUnbuiltHardeningKey(key) ? `${label} (${UNBUILT_FEATURE_NOTE})` : label;
 }
 
 const cardStyle: Record<string, string | number> = {

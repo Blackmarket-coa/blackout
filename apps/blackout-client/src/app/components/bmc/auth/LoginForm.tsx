@@ -30,6 +30,16 @@ import {
 } from './styles';
 import type { LoginFlowsState, ResolvedHomeserver } from './types';
 
+/**
+ * The label of the account-number sign-up. It says what the sign-up is, an
+ * account made with no email, and not "anonymous", which it read until
+ * 2026-11-16: the account carries no name or email, but the homeserver keeps
+ * the IP addresses each device connects from (Synapse's `user_ips`, 28 days
+ * unless the operator changes `user_ips_max_age`), so the person behind it
+ * can be findable all the same. docs/security/trust-claims-2026-11-16.md, T6.
+ */
+export const NO_EMAIL_SIGNUP_LABEL = 'Create an account without an email';
+
 const SSO_RETURN_KEY = 'blackout.sso.pending';
 type SsoPending = { baseUrl: string };
 
@@ -516,7 +526,7 @@ export const LoginForm = ({
                         onClick={() => void handleCreateAnonymous()}
                         style={secondaryButtonStyle}
                     >
-                        {anonBusy ? 'Creating…' : 'Create an anonymous account (no email)'}
+                        {anonBusy ? 'Creating…' : NO_EMAIL_SIGNUP_LABEL}
                     </button>
                     <form
                         onSubmit={(e) => {

@@ -83,8 +83,9 @@ export function DataTransparencySettings({ requestClose }: DataTransparencySetti
                     <strong>Self-service transparency</strong>
                 </label>
                 <p style={{ margin: '6px 0 0', color: 'var(--text-secondary)', fontSize: 13 }}>
-                    The self-report below and the warrant canary are always available on your plan (
-                    {transparency.tier}). Org-scoped audit export
+                    The self-report below is always available on your plan ({transparency.tier}
+                    ). This app does not show the server&apos;s warrant canary yet; the server
+                    reports one only when its operator has issued it. Org-scoped audit export
                     {transparency.auditExport
                         ? ' is enabled.'
                         : ' requires the Team tier or higher.'}

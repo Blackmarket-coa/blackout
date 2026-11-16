@@ -624,7 +624,7 @@
             "uiEntry": "settings_toggle:feature-toggle-privacy-hardening",
             "owner": "privacy-eng",
             "testCoverage": "unit+integration",
-            "notes": "Image perturbation is enforced end-to-end: the /v1/media/perturb route gates on features.hardening.imagePerturbation for the caller's tier (back-compat OR with the legacy privacy_tool grant) and an improved clean-room perturbation kernel (chroma-weighted, edge-gated, amplitude-clamped) runs client-side. A checkHardeningEntitlements SDK gate and useHardeningFeatures hook surface the tier. torTransport and decoyTraffic remain planned sub-capabilities (keys + gate only), so status is partial.",
+            "notes": "Image perturbation is enforced end-to-end: the /v1/media/perturb route gates on features.hardening.imagePerturbation for the caller's tier (back-compat OR with the legacy privacy_tool grant) and an improved clean-room perturbation kernel (chroma-weighted, edge-gated, amplitude-clamped) runs client-side. A checkHardeningEntitlements SDK gate and useHardeningFeatures hook surface the tier. torTransport and decoyTraffic remain planned sub-capabilities with entitlement keys and no implementation (HARDENING_CAPABILITY_IMPLEMENTED in @blackout/protocol); since 2026-11-16 the gate refuses a request for either on every tier (tor_not_implemented, decoy_not_implemented) and a marketplace listing that carries either key labels it 'planned, not built yet', so status is partial.",
             "sourcePointers": [
                 "packages/api/src/routes/media.ts",
                 "apps/blackout-client/src/app/utils/perturbImage.ts",
@@ -768,7 +768,7 @@
             "uiEntry": "settings_toggle:feature-toggle-transparency-reports",
             "owner": "trust-eng",
             "testCoverage": "unit+integration",
-            "notes": "Self-service transparency is enforced end-to-end: GET /v1/transparency/me returns the server-held self-report (subscription, active burner count, effective entitlements) and GET /v1/transparency/canary returns a dated warrant-canary statement with a sha256 integrity digest AND an Ed25519 signature (operator key via BLACKOUT_CANARY_SIGNING_KEY, ephemeral in dev/test, graceful unsigned in prod-without-key; public key travels with the response) \u2014 both free. Org-scoped GET /v1/transparency/audit-export gates on features.transparency.auditExport (team+) and returns 402 audit_export_not_entitled otherwise. A checkTransparencyEntitlements SDK gate and useTransparencyFeatures hook surface the tier in the 'Your data' settings section.",
+            "notes": "Self-service transparency is enforced end-to-end: GET /v1/transparency/me returns the server-held self-report (subscription, active burner count, effective entitlements) and GET /v1/transparency/canary reports the warrant canary the operator has issued (BLACKOUT_CANARY_ISSUED_ON, standing 35 days unless BLACKOUT_CANARY_VALID_DAYS sets another length) as not_issued, current or lapsed; the server never writes or dates the statement itself (until 2026-11-16 it did, on every request, so it could not lapse: docs/security/trust-claims-2026-11-16.md). An issued statement carries a sha256 digest and an Ed25519 signature made with a key the server holds (BLACKOUT_CANARY_SIGNING_KEY, ephemeral in dev/test, unsigned in production without it) \u2014 both free. Org-scoped GET /v1/transparency/audit-export gates on features.transparency.auditExport (team+) and returns 402 audit_export_not_entitled otherwise. A checkTransparencyEntitlements SDK gate and useTransparencyFeatures hook surface the tier in the 'Your data' settings section.",
             "sourcePointers": [
                 "packages/api/src/routes/transparency.ts",
                 "packages/api/src/services/canarySigning.ts",
@@ -789,9 +789,10 @@
             "evidenceType": "code",
             "evidencePaths": [
                 "packages/api/test/transparency-routes.integration.test.ts",
+                "packages/api/test/warrant-canary.integration.test.ts",
                 "apps/blackout-client/tests/unit/sdk/transparencyGate.test.ts"
             ],
-            "lastVerifiedAt": "2026-06-13",
+            "lastVerifiedAt": "2026-11-16",
             "verifiedBy": "blackout-coa"
         },
         {

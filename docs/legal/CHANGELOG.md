@@ -26,6 +26,58 @@ should be described as a published privacy policy until that review lands.
 
 ---
 
+## 2026-11-16 — Two things this record and the trust page said that were not so: Tor and decoy traffic, and the warrant canary
+
+**Why this entry exists:** two statements are withdrawn, in plain words. Both
+were in the initial record below and on [`TRUST.md`](../../TRUST.md); neither
+was true when written. No protection that existed is removed. The findings are
+in
+[`docs/security/trust-claims-2026-11-16.md`](../security/trust-claims-2026-11-16.md).
+
+### Withdrawn
+
+-   **Tor transport and decoy traffic are not among the features a tier
+    provides, because they are not built.** The initial record listed them
+    with the privacy features that are tiered. There is no Tor or
+    onion-routing code and no cover-traffic generator in the app, and Blackout
+    routes nothing through Tor and sends no decoy traffic on any tier. The
+    tiers still hold the entitlement keys for both
+    ([`entitlements.ts`](../../packages/blackout-protocol/src/hardening/entitlements.ts)),
+    and the same file now records that neither capability exists. The rest of
+    that sentence stands: image perturbation, persona compartments and
+    rotation, dead-drop anonymity padding and decoys, mesh transport and
+    active defense are tiered.
+-   **The warrant canary was not "Ed25519-signed" in any deployment made from
+    this repository, and it was not a canary.** `GET /v1/transparency/canary`
+    wrote its statement on every request and dated it to the current month, so
+    it could never lapse and no person had made it; in production it was
+    unsigned unless an operator had set a key, which no deployment file here
+    does.
+
+### Changed
+
+-   **The warrant canary is the operator's statement, or there is none.** The
+    endpoint reports a statement only when the operator of the server has
+    issued one, with the date they issued it; it reports the statement as
+    lapsed when it has not been renewed (after 35 days unless the operator set
+    another length); and it says that none has been issued when none has. The
+    server never writes, dates or renews the statement itself
+    ([`warrantCanary.ts`](../../packages/api/src/services/warrantCanary.ts)).
+    It remains free at every tier. A signature, where there is one, is made
+    with a key the server holds as it answers: it shows that the answer came
+    from a holder of that key, not that a person signed it, and no copy of the
+    public key is published outside the answer yet.
+
+### What a person relying on the old text should know
+
+-   If you chose a paid tier for anonymized transport or decoy traffic: you
+    do not have either, and never did. The server you use sees the IP address
+    you connect from.
+-   If you read the canary as an assurance: until this change it said nothing
+    about whether the operator had received a secret order, because the
+    server produced it with no person involved. From this change on, read the
+    endpoint's `status`: `not_issued` means no assurance has been given.
+
 ## 2026-10-26 — Release keys: what the server keeps of them, and the export
 
 **Why this entry exists:** a new category of data the server keeps. Release keys

@@ -60,28 +60,140 @@ test('GET /v1/transparency/me returns a free-tier self-report', async () => {
     assert.equal(typeof body.counts.activeBurnerIdentities, 'number');
 });
 
-test('GET /v1/transparency/canary returns a dated statement with a stable sha256 digest', async () => {
+/** Set (or, with undefined, unset) canary settings for one test, and put them back after. */
+const canaryEnv = (
+    t: { after(fn: () => void): void },
+    settings: Record<string, string | undefined>
+): void => {
+    const before = Object.fromEntries(Object.keys(settings).map((k) => [k, process.env[k]]));
+    for (const [key, value] of Object.entries(settings)) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+    }
+    t.after(() => {
+        for (const [key, value] of Object.entries(before)) {
+            if (value === undefined) delete process.env[key];
+            else process.env[key] = value;
+        }
+    });
+};
+
+/** A UTC day, `offset` days from today, as YYYY-MM-DD. */
+const day = (offset: number): string =>
+    new Date(Date.now() + offset * 86_400_000).toISOString().slice(0, 10);
+
+/** The day `days` after `from` (YYYY-MM-DD). */
+const daysAfter = (from: string, days: number): string =>
+    new Date(Date.parse(`${from}T00:00:00.000Z`) + days * 86_400_000).toISOString().slice(0, 10);
+
+// These tests go through the route, whose clock is the real one, so each
+// keeps days away from the edge of a state: a UTC midnight between a test's
+// own reading of the date and the server's cannot change its result. The
+// edges themselves (the last day a statement stands, the day after) are in
+// warrant-canary.integration.test.ts, on a fixed clock.
+
+const fetchCanary = async (): Promise<Record<string, any>> => {
     const user = makeUser(`canary_${randomUUID().slice(0, 8)}`);
     const res = await app.request('/v1/transparency/canary', auth(user.token));
     assert.equal(res.status, 200);
-    const body = (await res.json()) as Record<string, any>;
-    assert.equal(body.digestAlgorithm, 'sha256');
-    assert.match(body.digest, /^[0-9a-f]{64}$/);
-    assert.ok(typeof body.statement === 'string' && body.statement.length > 0);
+    return (await res.json()) as Record<string, any>;
+};
 
-    // Same period ⇒ identical digest (tamper-evidence anchor).
-    const res2 = await app.request('/v1/transparency/canary', auth(user.token));
-    const body2 = (await res2.json()) as Record<string, any>;
-    assert.equal(body2.digest, body.digest);
+// Until 2026-11-16 the route wrote the statement itself on every request and
+// dated it to the current month, so a server nobody had touched for a year
+// still said "no secret orders" as of today. The first test here is that
+// case: with nothing set by the operator, there is no statement at all.
+test('GET /v1/transparency/canary makes no statement of its own: with no issue date set, none has been issued', async (t) => {
+    canaryEnv(t, { BLACKOUT_CANARY_ISSUED_ON: undefined, BLACKOUT_CANARY_VALID_DAYS: undefined });
+    const body = await fetchCanary();
+    assert.equal(body.status, 'not_issued');
+    assert.equal(body.reason, 'no_date');
+    assert.equal(body.statement, null, 'no affirmation is made');
+    assert.equal(body.issuedOn, null);
+    assert.equal(body.validUntil, null);
+    assert.equal(body.digest, null);
+    assert.equal(body.signature, null, 'and nothing is signed');
+    assert.equal(body.publicKey, null);
+    assert.match(body.detail, /No warrant canary has been issued for this server/);
+    // The fields of the self-renewing version are gone.
+    for (const gone of ['periodStart', 'periodEnd', 'generatedAt']) {
+        assert.equal(gone in body, false, `${gone} is not in the response`);
+    }
 });
 
-test('GET /v1/transparency/canary is Ed25519-signed and verifies against the returned key', async () => {
+test("GET /v1/transparency/canary serves the statement the operator issued, with their date and not today's, and a digest that does not change from one request to the next", async (t) => {
+    const issuedOn = day(-10);
+    canaryEnv(t, { BLACKOUT_CANARY_ISSUED_ON: issuedOn, BLACKOUT_CANARY_VALID_DAYS: undefined });
+    const body = await fetchCanary();
+    assert.equal(body.status, 'current');
+    assert.equal(body.issuedOn, issuedOn);
+    assert.equal(
+        body.validUntil,
+        daysAfter(issuedOn, 35),
+        '35 days from the issue date by default'
+    );
+    assert.ok(body.statement.startsWith(`As of ${issuedOn}, Blackout has not received`));
+    assert.equal(
+        new RegExp(`As of (?!${issuedOn})`).test(body.statement),
+        false,
+        'no other date is in it'
+    );
+    assert.equal(body.digestAlgorithm, 'sha256');
+    assert.match(body.digest, /^[0-9a-f]{64}$/);
+    assert.match(body.detail, new RegExp(`made this statement on ${issuedOn}`));
+
+    const again = await fetchCanary();
+    assert.equal(again.digest, body.digest);
+    assert.equal(again.statement, body.statement);
+});
+
+test('GET /v1/transparency/canary reports a statement the operator has not renewed as lapsed, with the dates it had', async (t) => {
+    const issuedOn = day(-60);
+    canaryEnv(t, { BLACKOUT_CANARY_ISSUED_ON: issuedOn, BLACKOUT_CANARY_VALID_DAYS: undefined });
+    const body = await fetchCanary();
+    assert.equal(body.status, 'lapsed');
+    assert.equal(body.issuedOn, issuedOn);
+    assert.equal(body.validUntil, daysAfter(issuedOn, 35));
+    assert.ok(body.statement.startsWith(`As of ${issuedOn},`), 'the old statement, not a new one');
+    assert.match(body.detail, /has not renewed it; it lapsed after/);
+});
+
+test('GET /v1/transparency/canary: BLACKOUT_CANARY_VALID_DAYS sets how long a statement stands', async (t) => {
+    const issuedOn = day(-20);
+    canaryEnv(t, { BLACKOUT_CANARY_ISSUED_ON: issuedOn, BLACKOUT_CANARY_VALID_DAYS: '7' });
+    const short = await fetchCanary();
+    assert.equal(short.status, 'lapsed', 'twenty days into a seven-day statement');
+    assert.equal(short.validUntil, daysAfter(issuedOn, 7));
+
+    process.env.BLACKOUT_CANARY_VALID_DAYS = '90';
+    const long = await fetchCanary();
+    assert.equal(long.status, 'current');
+    assert.equal(long.validUntil, daysAfter(issuedOn, 90));
+});
+
+test('GET /v1/transparency/canary treats an issue date that is not a date, or has not come, as no statement', async (t) => {
+    canaryEnv(t, { BLACKOUT_CANARY_ISSUED_ON: undefined, BLACKOUT_CANARY_VALID_DAYS: undefined });
+    for (const [value, reason] of [
+        ['yesterday', 'invalid_date'],
+        ['2026-02-31', 'invalid_date'],
+        ['2026-11-16T00:00:00Z', 'invalid_date'],
+        ['16/11/2026', 'invalid_date'],
+        [day(3), 'future_date'],
+    ] as const) {
+        process.env.BLACKOUT_CANARY_ISSUED_ON = value;
+        const body = await fetchCanary();
+        assert.equal(body.status, 'not_issued', value);
+        assert.equal(body.reason, reason, value);
+        assert.equal(body.statement, null, value);
+        assert.equal(body.signature, null, value);
+    }
+});
+
+test('GET /v1/transparency/canary signs an issued statement with its dates, and the signature verifies against the returned key', async (t) => {
     const { verify } = await import('node:crypto');
     const { createPublicKey } = await import('node:crypto');
-    const user = makeUser(`sig_${randomUUID().slice(0, 8)}`);
-    const res = await app.request('/v1/transparency/canary', auth(user.token));
-    assert.equal(res.status, 200);
-    const body = (await res.json()) as Record<string, any>;
+    canaryEnv(t, { BLACKOUT_CANARY_ISSUED_ON: day(-3), BLACKOUT_CANARY_VALID_DAYS: undefined });
+    const body = await fetchCanary();
 
     assert.equal(body.signatureAlgorithm, 'ed25519');
     // In the test env an ephemeral key signs the canary.
@@ -89,7 +201,7 @@ test('GET /v1/transparency/canary is Ed25519-signed and verifies against the ret
     assert.ok(typeof body.signature === 'string' && body.signature.length > 0);
     assert.ok(typeof body.publicKey === 'string' && body.publicKey.length > 0);
 
-    const canonical = `${body.statement}|${body.periodStart}|${body.periodEnd}`;
+    const canonical = `${body.statement}|${body.issuedOn}|${body.validUntil}`;
     const publicKey = createPublicKey({
         key: Buffer.from(body.publicKey, 'base64'),
         format: 'der',
@@ -111,6 +223,14 @@ test('GET /v1/transparency/canary is Ed25519-signed and verifies against the ret
         Buffer.from(body.signature, 'base64')
     );
     assert.equal(bad, false);
+    // So must the same statement with a later last day: the dates are signed.
+    const extended = verify(
+        null,
+        Buffer.from(`${body.statement}|${body.issuedOn}|${day(400)}`, 'utf8'),
+        publicKey,
+        Buffer.from(body.signature, 'base64')
+    );
+    assert.equal(extended, false);
 });
 
 test('GET /v1/transparency/audit-export returns 402 for an unentitled (free) caller', async () => {

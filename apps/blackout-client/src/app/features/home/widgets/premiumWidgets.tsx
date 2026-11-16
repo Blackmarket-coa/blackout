@@ -2,8 +2,8 @@
  * Entitled Town Square widgets — the monetization ↔ home-dashboard bridge.
  * These are core-defined widgets gated on `features.*` keys (see
  * `homeWidgets.tsx`); a Signal/Coalition tier (or an individual unlock) lights
- * them up. They render live-ish status from data the client already has, so a
- * subscriber sees immediate value on their home board.
+ * them up. The Privacy pulse renders status from data the client already has.
+ * The Coalition pulse has no data behind it yet and says so.
  */
 
 import type { ReactNode } from 'react';
@@ -80,7 +80,11 @@ export function PrivacyPulseWidget(): ReactNode {
     );
 }
 
-/** Coalition-tier: a compact governance/treasury health summary. */
+/**
+ * Coalition-tier: reserved for a compact governance/treasury health summary.
+ * Nothing feeds it yet: it reads no proposals, votes or treasury figures, so
+ * its text says that rather than describing data that will not appear.
+ */
 export function CoalitionPulseWidget(): ReactNode {
     return (
         <section
@@ -90,8 +94,8 @@ export function CoalitionPulseWidget(): ReactNode {
         >
             <header className={css.sectionLabel}>Coalition pulse</header>
             <p style={{ margin: 0, fontSize: 13, color: 'var(--text-secondary)' }}>
-                Governance activity and shared-treasury health across your coalitions surface here.
-                Open proposals and pending votes appear as they arrive.
+                This widget does not show any data yet. A summary of governance activity and
+                shared-treasury health across your coalitions is planned here.
             </p>
         </section>
     );

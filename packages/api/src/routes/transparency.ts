@@ -4,6 +4,7 @@ import { requireUser } from '../middleware/require-user';
 import { entitlementTierForUser, getSubscription } from '../services/subscriptions';
 import { listBurnersForOwner } from '../services/burnerIdentities';
 import { signCanary } from '../services/canarySigning';
+import { describeWarrantCanary, readWarrantCanary } from '../services/warrantCanary';
 import { TRANSPARENCY_ENTITLEMENT_KEYS, TRANSPARENCY_TIER_ENTITLEMENTS } from '@blackout/protocol';
 import type { EntitlementTier } from '@blackout/protocol';
 
@@ -54,42 +55,61 @@ transparency.get('/me', (c) => {
 });
 
 /**
- * Warrant canary (OSS-manifest G9). Returns a structured, dated affirmation,
- * a sha256 integrity digest, and an Ed25519 signature over the canonical
- * statement so clients can cryptographically verify authenticity (the public
- * key travels with the response for verification).
+ * Warrant canary (OSS-manifest G9). Reports the statement the operator has
+ * issued, never one of the server's own making (services/warrantCanary.ts
+ * says why, and how the operator issues one):
+ * - `current`: the statement, the day the operator made it and the last day
+ *   it stands;
+ * - `lapsed`: the same statement and dates, past that day, not renewed;
+ * - `not_issued`: none, with no statement, digest or signature.
+ *
+ * With a statement come a sha256 digest and an Ed25519 signature over
+ * `${statement}|${issuedOn}|${validUntil}`. What the signature shows is
+ * limited, and services/canarySigning.ts says so: the key is one this server
+ * holds and signs with as it answers, so it shows that the response came from
+ * a holder of that key, not that a person signed anything; and the public key
+ * in the response proves nothing by itself, because whoever answers chooses
+ * it. It is worth checking only against a copy of the key the operator has
+ * published somewhere else.
  */
 transparency.get('/canary', (c) => {
     const user = requireUser(c);
     if (user instanceof Response) return user;
 
     const now = new Date();
-    const periodStart = new Date(
-        Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)
-    ).toISOString();
-    const periodEnd = new Date(
-        Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)
-    ).toISOString();
+    const canary = readWarrantCanary(process.env, now);
+    const detail = describeWarrantCanary(canary);
+    if (canary.status === 'not_issued') {
+        return c.json({
+            status: canary.status,
+            reason: canary.reason,
+            detail,
+            statement: null,
+            issuedOn: null,
+            validUntil: null,
+            checkedAt: now.toISOString(),
+            digestAlgorithm: 'sha256',
+            digest: null,
+            signatureAlgorithm: 'ed25519',
+            signatureKeySource: null,
+            signature: null,
+            publicKey: null,
+        });
+    }
 
-    const statement = [
-        'As of the generation date below, Blackout has not received any National',
-        'Security Letter, FISA court order, gag order, or other secret request for',
-        'user data that we are prohibited from disclosing, and no warrant canary',
-        'we maintain has been compelled to be removed.',
-    ].join(' ');
-
-    const canonical = `${statement}|${periodStart}|${periodEnd}`;
-    const digest = createHash('sha256').update(canonical).digest('hex');
-    const signed = signCanary(canonical);
+    const digest = createHash('sha256').update(canary.canonical).digest('hex');
+    const signed = signCanary(canary.canonical);
 
     return c.json({
-        statement,
-        periodStart,
-        periodEnd,
-        generatedAt: now.toISOString(),
+        status: canary.status,
+        detail,
+        statement: canary.statement,
+        issuedOn: canary.issuedOn,
+        validUntil: canary.validUntil,
+        checkedAt: now.toISOString(),
         digestAlgorithm: 'sha256',
         digest,
-        // Ed25519 signature over `${statement}|${periodStart}|${periodEnd}`.
+        // Ed25519 signature over `${statement}|${issuedOn}|${validUntil}`.
         signatureAlgorithm: signed.algorithm,
         signatureKeySource: signed.keySource,
         signature: signed.signature,

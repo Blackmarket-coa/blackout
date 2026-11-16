@@ -1,12 +1,21 @@
 /**
  * Warrant-canary signing (OSS-manifest group G9).
  *
- * Signs the canonical canary statement with an Ed25519 key so clients can
- * cryptographically verify authenticity (not just the sha256 integrity digest).
- * The operator supplies a 32-byte Ed25519 seed via BLACKOUT_CANARY_SIGNING_KEY
- * (base64). In dev/test, an ephemeral per-process key is generated so the
- * endpoint always signs and is verifiable; in production without a configured
- * key, signing degrades gracefully to `unconfigured` (the digest still ships).
+ * Signs the canonical string of an issued canary (services/warrantCanary.ts)
+ * with an Ed25519 key. The operator supplies a 32-byte Ed25519 seed via
+ * BLACKOUT_CANARY_SIGNING_KEY (base64). In dev/test an ephemeral per-process
+ * key signs, so the signed shape can be exercised; in production without a
+ * configured key the statement goes out unsigned (`unconfigured`), with its
+ * digest.
+ *
+ * What the signature is worth. The key is held by the server and used as it
+ * answers each request, so a signature shows that the response came from a
+ * holder of this key. It does not show that a person signed anything, and
+ * whoever controls the server controls the key. The public key is sent with
+ * the response for convenience and proves nothing by itself, since whoever
+ * answers chooses it: a reader has to compare it with a copy the operator
+ * published somewhere else. What makes the canary the operator's own act is
+ * the issue date they set, not this signature.
  */
 
 import {
