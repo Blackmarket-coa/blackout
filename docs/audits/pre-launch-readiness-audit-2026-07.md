@@ -295,7 +295,7 @@ Fixes landed on branch `claude/pre-launch-app-audit-mp0yvg` (PR #857) after the 
 | --------- | -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | C1        | Dead-man's switch never fires autonomously   | ⚠️ Partly fixed — the sweep moves overdue switches to `triggered`; triggering sends nothing to anyone (re-checked 2026-10-12 and 2026-10-26, notes below) |
 | H1        | WS shims outside middleware / DoS            | ✅ Fixed — frame caps + unauthenticated idle timeout on Twitch/OBS shims                                                                                  |
-| H2        | Graceful shutdown only in postgres mode      | ⚠️ Partly fixed — exits without the flush if a connection outlives `SHUTDOWN_TIMEOUT_MS` (re-checked 2026-10-24, note below)                              |
+| H2        | Graceful shutdown only in postgres mode      | ✅ Fixed (2026-11-16) — the flush no longer waits for every connection: open ones are closed first (note below)                                           |
 | H4        | Background-loop double-processing at scale   | ✅ Fixed — Postgres advisory-lock leader election (fails safe)                                                                                            |
 | H5        | Rate limiter fails open                      | ✅ Fixed — auth bucket fails closed on store error                                                                                                        |
 | H6        | Default `file` DB mode in production         | ✅ Fixed — production refuses to boot unless `BLACKOUT_DB_MODE=postgres`                                                                                  |
@@ -377,6 +377,16 @@ open after `SHUTDOWN_TIMEOUT_MS` the API exits 0 without it. An SSE stream or
 a WebSocket client, such as an OBS overlay, does not close on its own; with
 either open and 15 s of writes queued, a write acknowledged with a 201 was
 lost. Checked by emulation, not against a deployment.
+
+**H2, 2026-11-16.** Fixed in `packages/api/src/httpShutdown.ts`. From the
+signal the API answers new requests 503 with `Connection: close`, lets the
+requests in flight finish (up to half of `SHUTDOWN_TIMEOUT_MS`), closes every
+connection, WebSockets included, and then drains. Measured with real
+PostgreSQL: four keep-alive clients signing up lost 76 to 129 acknowledged
+sign-ups per stop before, none after; a connection that had sent nothing, a
+WebSocket and an SSE stream each held the stop to the 10 s timeout before, and
+now the API drains and exits in about 20 ms (the SSE stream after the 5 s
+grace). `KNOWN_LIMITATIONS.md`, "Stopping the API", says what remains.
 
 **L8 correction (2026-10-11).** The ✅ above overstated it. That change made a boot failure visible (fail-fast, `api.log` artifact) and pointed the API at postgres, but production also refuses to boot without `MAIL_PROVIDER` (`initMailerFromEnv`, there since 2026-05-12). So from 2026-07-28, when the change reached `develop`, every nightly stopped at "Start API in background"; before that, `k6 — health` failed first and the later scripts were skipped. None of the 157 scheduled runs from 2026-05-07 to 2026-10-10 passed, and the auth, rate-limit and coalition-feed scripts never ran in CI at all. Replayed locally against a booted API, all four scripts then failed their thresholds on 429s. Every VU shared one per-address rate-limit bucket (`global:local`, 120 req/min; the auth bucket allows 10). And `rate-limit.js` scored `eventually_429` over the ten attempts where 401 is the right answer, which capped a correct limiter at 50% against `rate>0.90`; it also counted every 401/429 as a failed request. Fixed alongside this note:
 

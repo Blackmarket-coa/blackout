@@ -1,8 +1,10 @@
+import type { Server as HttpServer } from 'node:http';
 import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { API_ROOTS } from '@blackout/contracts';
 import { isOriginAllowed, readCorsRuntimeConfig } from './config/cors';
+import { createHttpShutdown } from './httpShutdown';
 import authRoutes from './routes/auth';
 import invitationRoutes from './routes/invitations';
 import identityRoutes from './routes/identities';
@@ -164,6 +166,11 @@ app.use(
         maxAge: corsConfig.maxAge,
     })
 );
+
+// Once a shutdown has begun, a request that arrives is answered 503 with
+// `Connection: close`, ahead of every other middleware (src/httpShutdown.ts).
+const httpShutdown = createHttpShutdown();
+app.use('*', httpShutdown.middleware);
 app.use('*', httpMetricsMiddleware);
 // Global request-body cap (M5): reject absurdly large bodies with 413 before
 // any route buffers them. Runs after CORS + security headers + metrics so the
@@ -390,6 +397,8 @@ app.onError((err, c) => {
 
 const PORT = parseInt(process.env.PORT ?? '3000', 10);
 const SHUTDOWN_TIMEOUT_MS = parseInt(process.env.SHUTDOWN_TIMEOUT_MS ?? '10000', 10);
+/** How long requests in flight at the signal may take; the drain gets the rest. */
+const SHUTDOWN_GRACE_MS = Math.floor(SHUTDOWN_TIMEOUT_MS / 2);
 const shouldListen =
     process.env.NODE_ENV !== 'test' && process.env.BLACKOUT_API_SKIP_LISTEN !== '1';
 
@@ -512,6 +521,9 @@ if (shouldListen) {
     const httpServer = serve({ fetch: app.fetch, port: PORT }, (info) => {
         log.info('blackout-server listening', { port: info.port });
     });
+    // Track requests and upgraded sockets from the first connection on, for
+    // the shutdown below.
+    httpShutdown.attach(httpServer as HttpServer);
 
     // The WebSocket endpoints: the Twitch-IRC, OBS-WebSocket and StreamElements
     // shims, behind the guard that answers and closes an upgrade none of them
@@ -519,10 +531,15 @@ if (shouldListen) {
     // guard is in place before the server accepts its first connection.
     void attachWebSocketShims(httpServer);
 
-    // Graceful shutdown for every runtime mode (not just postgres). Stop
-    // accepting new connections, let in-flight requests drain, flush the
-    // runtime store (a no-op unless BLACKOUT_DB_MODE=postgres), then exit. A
-    // hard timeout guarantees the process still exits if a connection hangs.
+    // Graceful shutdown for every runtime mode (not just postgres). Take no
+    // new request, let the ones in flight finish (up to SHUTDOWN_GRACE_MS),
+    // close every connection, flush the runtime store (a no-op unless
+    // BLACKOUT_DB_MODE=postgres), then exit. A hard timeout guarantees the
+    // process still exits if the drain hangs.
+    //
+    // Until 2026-11-16 the drain waited for httpServer.close() to call back,
+    // which an open connection held off until that timeout, and the process
+    // then exited with answered writes still in the queue (src/httpShutdown.ts).
     let shuttingDown = false;
     const shutdown = (signal: string) => {
         if (shuttingDown) return;
@@ -536,21 +553,29 @@ if (shouldListen) {
         // No new tick, and no retry for the leader lock, from here on.
         const loopsStopped = inProcessLoops?.stop();
 
-        httpServer.close(() => {
-            void (async () => {
-                try {
-                    await loopsStopped;
-                    await releaseBackgroundLeader();
-                    await drainRuntimeStore();
-                    log.info('runtime_store_drained', { signal });
-                } catch (err) {
-                    log.warn('runtime_store_drain_failed', { error: String(err) });
-                } finally {
-                    clearTimeout(forceTimer);
-                    process.exit(0);
+        void (async () => {
+            try {
+                const { settled, inFlight } = await httpShutdown.closeWhenSettled(
+                    SHUTDOWN_GRACE_MS
+                );
+                if (!settled) {
+                    log.warn('shutdown_requests_cut_off', {
+                        signal,
+                        inFlight,
+                        graceMs: SHUTDOWN_GRACE_MS,
+                    });
                 }
-            })();
-        });
+                await loopsStopped;
+                await releaseBackgroundLeader();
+                await drainRuntimeStore();
+                log.info('runtime_store_drained', { signal });
+            } catch (err) {
+                log.warn('runtime_store_drain_failed', { error: String(err) });
+            } finally {
+                clearTimeout(forceTimer);
+                process.exit(0);
+            }
+        })();
     };
     process.once('SIGTERM', () => shutdown('SIGTERM'));
     process.once('SIGINT', () => shutdown('SIGINT'));

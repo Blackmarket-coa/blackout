@@ -158,7 +158,10 @@ test('the API does not try for the lock again while a tick from before the loss 
     }
 });
 
-test('an API that does not get the lock at boot does not try again', async (t) => {
+// Until 2026-11-16 an API that did not get the lock at boot never tried again,
+// so once the process holding it was gone the loops ran nowhere, unless a
+// worker was on standby. It now stands by as it does after losing the lock.
+test('an API that does not get the lock at boot keeps trying, and runs the loops once it has the lock', async (t) => {
     const lines = captureLogs(t);
     const { lock, leadership } = standInLock(false);
     const { loops, startLoops } = countedLoops();
@@ -168,10 +171,15 @@ test('an API that does not get the lock at boot does not try again', async (t) =
             () => logged(lines, 'background_loops_skipped_not_leader').length === 1,
             'the boot attempt'
         );
+        await waitFor(() => lock.attempts >= 3, 'the API to keep trying');
+        assert.equal(loops.started, 0, 'no loop while another process holds the lock');
+
         lock.free = true;
-        await sleep(RETRY_MS * 6);
-        assert.equal(lock.attempts, 1);
-        assert.equal(loops.started, 0);
+        await waitFor(() => loops.started === 1, 'the loops to start once it has the lock');
+        assert.equal(lock.watches, 1, 'the lock it took is watched');
+        const attempts = lock.attempts;
+        await sleep(RETRY_MS * 5);
+        assert.equal(lock.attempts, attempts, 'no more attempts once it has the lock');
     } finally {
         await inProcess.stop();
     }
@@ -222,6 +230,32 @@ test('stop() during a lock attempt waits for it and starts nothing', async () =>
     await stopping;
     assert.equal(watches, 0, 'nothing watched');
     assert.equal(loops.started, 0, 'no loop started');
+});
+
+test('stop() during the boot attempt, which then fails, leaves no retries behind', async () => {
+    let refuse!: (granted: boolean) => void;
+    let attempts = 0;
+    const { loops, startLoops } = countedLoops();
+    const inProcess = runBackgroundLoopsWhileLeader({
+        leadership: {
+            tryAcquire: () => {
+                attempts += 1;
+                return new Promise<boolean>((resolve) => {
+                    refuse = resolve;
+                });
+            },
+            watch: () => () => undefined,
+        },
+        startLoops,
+        retryMs: RETRY_MS,
+    });
+    const stopping = inProcess.stop();
+    refuse(false);
+    await stopping;
+
+    await sleep(RETRY_MS * 6);
+    assert.equal(attempts, 1, 'no attempt after stop()');
+    assert.equal(loops.started, 0);
 });
 
 /**
