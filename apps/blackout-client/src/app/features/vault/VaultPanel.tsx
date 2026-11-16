@@ -6,12 +6,7 @@ import {
     fetchVaultItems,
     type VaultItemView,
 } from './vaultClient';
-import {
-    decryptSecret,
-    deriveVaultKey,
-    encryptSecret,
-    getOrCreateVaultSalt,
-} from './vaultCrypto';
+import { decryptSecret, deriveVaultKey, encryptSecret, getOrCreateVaultSalt } from './vaultCrypto';
 import { ownedVaultTemplatesAtom, vaultSlotCapacityAtom } from './vaultGoodsAtoms';
 
 const containerStyle: CSSProperties = {
@@ -167,7 +162,12 @@ export const VaultPanel = (): JSX.Element => {
                     onChange={(e) => setPassphrase(e.target.value)}
                     style={inputStyle}
                 />
-                <button type="button" style={buttonStyle} onClick={() => void unlock()} disabled={busy}>
+                <button
+                    type="button"
+                    style={buttonStyle}
+                    onClick={() => void unlock()}
+                    disabled={busy}
+                >
                     Unlock vault
                 </button>
                 {error ? (
@@ -243,7 +243,10 @@ export const VaultPanel = (): JSX.Element => {
                 </p>
             ) : null}
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }} data-testid="vault-list">
+            <div
+                style={{ display: 'flex', flexDirection: 'column', gap: 8 }}
+                data-testid="vault-list"
+            >
                 {items.length === 0 ? (
                     <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Vault is empty.</p>
                 ) : (
