@@ -1027,6 +1027,30 @@ For the source-of-truth triage with tier/owner detail see
     takes the server it is on, can sign bundles that builds pinning it will
     install.
 
+### Coalition data: who sees what (2026-11-17)
+
+-   **Where:** `packages/api/src/routes/coalition.ts`, rules in
+    `packages/api/src/services/coalitionVisibility.ts`. Record:
+    `docs/security/coalition-read-privacy-2026-11-17.md`.
+-   **Fixed 2026-11-17:** until then anyone, signed in or not, could read a
+    mutual-aid post's exact spot and address with its poster's id, every
+    private event, RSVP lists, ride offers naming the driver, and the people
+    behind every need, project, resource and contribution; and the location
+    consent text said the server kept no coarse position while access logs
+    recorded it. Now someone else's mutual-aid post is shown and searched only
+    as an area at least 500 m across, without poster or address; a non-public
+    event, its RSVPs and its rides are shown only to its organizer and people
+    who RSVP'd; nobody signed out is sent a person's id; positions and address
+    searches travel in request bodies. People who agreed to the old consent
+    text are asked again.
+-   **Still open:** nothing checks canopy membership, so any signed-in account
+    reads every canopy's needs, projects and resources with their authors and
+    pinned places, and ride drivers. The audiences in the field-operations plan
+    (public, coalition, ops, stewards) are not built. An event does not record
+    which community a `community` event is for, so such events are
+    organizer-only. Older clients send positions in the query string until
+    reloaded.
+
 ## Deferred multi-week workstreams
 
 These are tracked in

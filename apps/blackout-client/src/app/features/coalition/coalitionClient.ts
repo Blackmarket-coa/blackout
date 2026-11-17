@@ -67,13 +67,14 @@ export interface NearbyQuery {
     radiusKm: number;
 }
 
-function nearbyParams(nearby?: NearbyQuery): Record<string, string | undefined> {
-    if (!nearby) return {};
-    return {
-        lat: String(nearby.lat),
-        lng: String(nearby.lng),
-        radiusKm: String(nearby.radiusKm),
-    };
+/**
+ * A position goes in the body of a POST, never in the query string: an
+ * address is written to the access log of every server and proxy it passes
+ * through, beside the caller's network address, and the location consent text
+ * says the coarse position is not kept. Searches without a position stay GETs.
+ */
+function nearbyBody(nearby: NearbyQuery): NearbyQuery {
+    return { lat: nearby.lat, lng: nearby.lng, radiusKm: nearby.radiusKm };
 }
 
 export interface SellerLocationsResponse {
@@ -207,11 +208,17 @@ export function fetchMutualAid(
     nearby?: NearbyQuery,
     token: string | null = readBlackoutApiToken()
 ): Promise<MutualAidResponse> {
-    const path = appendQuery(`${COALITION_BASE}/mutual-aid`, {
-        denId: scope.denId,
-        ...nearbyParams(nearby),
-    });
-    return getJson<MutualAidResponse>(path, token);
+    if (nearby) {
+        return postJson<MutualAidResponse>(
+            `${COALITION_BASE}/mutual-aid/search`,
+            { ...nearbyBody(nearby), ...(scope.denId ? { denId: scope.denId } : {}) },
+            token
+        );
+    }
+    return getJson<MutualAidResponse>(
+        appendQuery(`${COALITION_BASE}/mutual-aid`, { denId: scope.denId }),
+        token
+    );
 }
 
 export interface NearbySignal {
@@ -227,7 +234,7 @@ export interface NearbySignalsResponse {
 }
 
 /**
- * Wraps `GET /v1/coalition/nearby` — unified count of located signals
+ * Wraps `POST /v1/coalition/nearby` — unified count of located signals
  * (mutual aid, events, sellers, spatial pins) around the viewer. Callers are
  * expected to pass privacy-coarsened coordinates; the response carries no
  * locations at all.
@@ -236,16 +243,21 @@ export function fetchNearbySignals(
     nearby: NearbyQuery,
     token: string | null = readBlackoutApiToken()
 ): Promise<NearbySignalsResponse> {
-    const path = appendQuery(`${COALITION_BASE}/nearby`, nearbyParams(nearby));
-    return getJson<NearbySignalsResponse>(path, token);
+    return postJson<NearbySignalsResponse>(`${COALITION_BASE}/nearby`, nearbyBody(nearby), token);
 }
 
 export function fetchSellerLocations(
     nearby?: NearbyQuery,
     token: string | null = readBlackoutApiToken()
 ): Promise<SellerLocationsResponse> {
-    const path = appendQuery(`${COALITION_BASE}/seller-locations`, nearbyParams(nearby));
-    return getJson<SellerLocationsResponse>(path, token);
+    if (nearby) {
+        return postJson<SellerLocationsResponse>(
+            `${COALITION_BASE}/seller-locations/search`,
+            nearbyBody(nearby),
+            token
+        );
+    }
+    return getJson<SellerLocationsResponse>(`${COALITION_BASE}/seller-locations`, token);
 }
 
 export interface CreateAidPostInput {
@@ -328,10 +340,9 @@ export function geocodeAddress(
     query: string,
     token: string | null = readBlackoutApiToken()
 ): Promise<GeocodeResponse> {
-    return getJson<GeocodeResponse>(
-        `${COALITION_BASE}/geocode?q=${encodeURIComponent(query)}`,
-        token
-    );
+    // In the body, so the address someone looked up is not written to an
+    // access log beside their network address.
+    return postJson<GeocodeResponse>(`${COALITION_BASE}/geocode`, { q: query }, token);
 }
 
 export interface CreateNeedInput {
