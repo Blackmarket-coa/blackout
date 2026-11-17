@@ -1,6 +1,6 @@
 import { atom } from 'jotai';
 import { atomWithStorage } from 'jotai/utils';
-import { installedPluginsAtom } from '../monetization/install/installedPluginsAtom';
+import { enabledPluginsAtom } from '../monetization/install/installedPluginsAtom';
 
 /**
  * Persisted client settings for the Privacy Tools feature. Metadata stripping
@@ -37,7 +37,7 @@ export const privacyToolsSettingsAtom = atomWithStorage<PrivacyToolsSettingsStat
  * source of truth is the entitlement, never a local toggle.
  */
 export const privacyToolsEntitledAtom = atom((get) =>
-    get(installedPluginsAtom).some((record) => record.privacyTier?.tier === 'advanced')
+    get(enabledPluginsAtom).some((record) => record.privacyTier?.tier === 'advanced')
 );
 
 /**
@@ -48,7 +48,7 @@ export const privacyToolsEntitledAtom = atom((get) =>
  */
 const hasFeatureAtom = (feature: import('./privacyGoods').PrivacyFeature) =>
     atom((get) =>
-        get(installedPluginsAtom).some((record) => record.privacyTier?.features?.includes(feature))
+        get(enabledPluginsAtom).some((record) => record.privacyTier?.features?.includes(feature))
     );
 
 export const perturbationEntitledAtom = hasFeatureAtom('perturbation');

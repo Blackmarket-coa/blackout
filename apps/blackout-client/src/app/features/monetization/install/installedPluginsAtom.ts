@@ -97,6 +97,17 @@ export const installedPluginsAtom = atomWithStorage<InstalledPluginRecord[]>(
     safeJsonStorage
 );
 
+/**
+ * The installed plugins whose goods apply: the enabled ones. A record that is
+ * disabled, pending, or failed its check when the app started (`error`; for
+ * instance a bundle signed with a key this build does not trust, which since
+ * 2026-11-17 includes every bundle signed with the development key in a
+ * production build) unlocks nothing until it is installed again.
+ */
+export const enabledPluginsAtom = atom((get) =>
+    get(installedPluginsAtom).filter((record) => record.status === 'enabled')
+);
+
 export const installedPluginByIdAtom = atom((get) => {
     const map = new Map<string, InstalledPluginRecord>();
     for (const record of get(installedPluginsAtom)) {

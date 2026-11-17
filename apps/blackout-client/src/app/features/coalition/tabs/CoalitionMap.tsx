@@ -264,9 +264,18 @@ export function CoalitionMap({
         map.on('load', () => {
             readyRef.current = true;
         });
-        // MapLibre adds `sourceId` to an error a source raised.
+        // MapLibre adds `sourceId` to an error a source raised. Listening here
+        // turns off its own console.error for every error, so the ones this
+        // does not handle are logged the way MapLibre would have logged them.
         map.on('error', (event) => {
-            if (isBasemapError(event, tilesBase)) setBasemapFailed(true);
+            if (isBasemapError(event, tilesBase)) {
+                setBasemapFailed(true);
+                // eslint-disable-next-line no-console
+                console.warn('[coalition map] the basemap did not load', event.error);
+                return;
+            }
+            // eslint-disable-next-line no-console
+            console.error(event.error ?? event);
         });
         mapRef.current = map;
         return () => {

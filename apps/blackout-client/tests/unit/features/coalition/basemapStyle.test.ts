@@ -44,7 +44,11 @@ describe('buildBasemapStyle', () => {
     it('names no address outside the tile server', () => {
         const addresses = serialized.match(/[a-z][a-z0-9+.-]*:\/\/[^"\s]+/gi) ?? [];
         expect(addresses.sort()).toEqual(
-            [`${BASE}/${BASEMAP_SOURCE_ID}`, `${BASE}/font/{fontstack}/{range}`].sort()
+            [
+                `${BASE}/${BASEMAP_SOURCE_ID}`,
+                `${BASE}/${BASEMAP_SOURCE_ID}/{z}/{x}/{y}`,
+                `${BASE}/font/{fontstack}/{range}`,
+            ].sort()
         );
     });
 
@@ -53,6 +57,8 @@ describe('buildBasemapStyle', () => {
         expect(style.sources[BASEMAP_SOURCE_ID]).toMatchObject({
             type: 'vector',
             url: `${BASE}/basemap`,
+            // Pinned, so a TileJSON answer naming another host is not followed.
+            tiles: [`${BASE}/basemap/{z}/{x}/{y}`],
         });
         expect(style.sprite).toBeUndefined();
     });
@@ -135,10 +141,14 @@ describe('resolveMapStyle', () => {
 });
 
 describe('isBasemapError', () => {
-    it('is the basemap source, or a request to it', () => {
+    it('is the basemap source failing to load, or its TileJSON request failing', () => {
         expect(isBasemapError({ sourceId: 'basemap' }, BASE)).toBe(true);
         expect(isBasemapError({ error: { url: `${BASE}/basemap` } }, BASE)).toBe(true);
-        expect(isBasemapError({ error: { url: `${BASE}/basemap/3/2/1` } }, BASE)).toBe(true);
+    });
+
+    it('is not one tile failing, which leaves the rest of the background drawn', () => {
+        expect(isBasemapError({ sourceId: 'basemap', tile: { tileID: {} } }, BASE)).toBe(false);
+        expect(isBasemapError({ error: { url: `${BASE}/basemap/3/2/1` } }, BASE)).toBe(false);
     });
 
     it('is not a font, another source, or a source whose name starts the same', () => {

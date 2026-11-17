@@ -10,26 +10,36 @@ background did not load.
 
 ## Getting one
 
-From `infra/single-server-baseline/`, on the server:
+The stack runs from a copy of `infra/single-server-baseline` (`deploy.sh`'s
+`$INFRA_DIR`, `/opt/blackout-infra` by default), so the basemap goes into
+that copy's `martin/pmtiles/`, and compose runs from there
+(`docs/runbooks/SPATIAL_LAYER_BASE.md`, 1.3):
 
 ```sh
+# In the repository checkout, from infra/single-server-baseline/.
 # An area: west,south,east,north in degrees. Fewer zoom levels are much
 # smaller; the map keeps zooming past the last one.
-./martin/fetch-basemap.sh --bbox -77.12,38.80,-76.91,38.99 --maxzoom 14
+./martin/fetch-basemap.sh --into /opt/blackout-infra \
+  --bbox -77.12,38.80,-76.91,38.99 --maxzoom 14
 # How big would it be? Nothing is downloaded:
-./martin/fetch-basemap.sh --bbox -77.12,38.80,-76.91,38.99 --dry-run
-docker compose up -d --force-recreate martin
+./martin/fetch-basemap.sh --into /opt/blackout-infra \
+  --bbox -77.12,38.80,-76.91,38.99 --dry-run
+# Then, from the live directory:
+cd /opt/blackout-infra
+docker compose up -d --no-deps --force-recreate martin
 docker compose exec martin wget -qO- http://127.0.0.1:3000/basemap
 ```
 
 The script needs `curl` and the `pmtiles` command
 ([go-pmtiles](https://github.com/protomaps/go-pmtiles), BSD-3-Clause). It
-extracts the area from the newest
+refuses a directory without a `docker-compose.yml` and a `.env`, and
+extracts the area from the newest version 4
 [Protomaps daily build](https://maps.protomaps.com/builds/) (the whole
 planet is about 140 GB; `pmtiles extract` reads only the parts it needs),
 writes `basemap.pmtiles.partial` and renames it when it is complete, so a
 failed run leaves the previous basemap in place. `--build YYYYMMDD` picks
-an older build; `--region area.geojson` takes a polygon instead of a box.
+an older version 4 build; `--region area.geojson` takes a polygon instead
+of a box.
 
 The client's style is Protomaps' own for its v4 tiles
 (`@protomaps/basemaps` 5.7.2), so the basemap has to be a Protomaps build

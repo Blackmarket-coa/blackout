@@ -19,7 +19,10 @@ Martin 0.14.2 (the version `docker-compose.yml` pins) will not start when a
 fonts directory it is given holds no font, and nginx resolves `martin` when it
 starts or reloads. Fetching the fonts as a setup step would leave a deployment
 that has not run it with a tile server that does not start. Checked in, they
-are there from the first `docker compose up`.
+are there from the first `docker compose up`. The stack runs from a copy of
+this folder, so the copy needs them too: `martin/check-fonts.sh <dir>` checks
+that the fonts are there and mounted, and `deploy.sh` runs it before
+recreating Martin.
 
 ## Where they come from
 

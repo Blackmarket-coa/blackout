@@ -1,5 +1,5 @@
 import { atom } from 'jotai';
-import { installedPluginsAtom } from '../monetization/install/installedPluginsAtom';
+import { enabledPluginsAtom } from '../monetization/install/installedPluginsAtom';
 import { availableDecorations } from './profileAtoms';
 import type { DecorationOption } from './profileTypes';
 import type { OwnedCosmetic } from './cosmeticTypes';
@@ -36,7 +36,7 @@ export const builtinBadges: OwnedCosmetic[] = [
 /** All cosmetics the current user owns (from installed profile_cosmetic records). */
 export const ownedCosmeticsAtom = atom<OwnedCosmetic[]>((get) => {
     const out: OwnedCosmetic[] = [];
-    for (const record of get(installedPluginsAtom)) {
+    for (const record of get(enabledPluginsAtom)) {
         if (record.cosmetic) out.push(record.cosmetic);
     }
     return out;

@@ -1,13 +1,13 @@
 import { atom } from 'jotai';
 import { atomWithStorage } from 'jotai/utils';
-import { installedPluginsAtom } from '../monetization/install/installedPluginsAtom';
+import { enabledPluginsAtom } from '../monetization/install/installedPluginsAtom';
 import { BUILTIN_VOICE_FILTERS, VOICE_FILTER_NONE, type VoiceFilterPreset } from './voiceFilter';
 import type { OwnedSoundPack, SoundClip } from './soundPackGoods';
 
 /** Sound packs the current user owns (from installed sound_pack entitlements). */
 export const ownedSoundPacksAtom = atom<OwnedSoundPack[]>((get) => {
     const out: OwnedSoundPack[] = [];
-    for (const record of get(installedPluginsAtom)) {
+    for (const record of get(enabledPluginsAtom)) {
         if (record.soundPack) out.push(record.soundPack);
     }
     return out;

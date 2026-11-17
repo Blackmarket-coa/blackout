@@ -7,6 +7,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {
     CLIENT_KEYS_FILE,
+    forgivingBase64,
     isEd25519PublicKey,
     main,
     parseKeyList,
@@ -151,4 +152,51 @@ test("reads the keys pinned in the client's source", () => {
     assert.deepEqual(readClientKeys(source), [{ keyId: 'fbm-2026-11', publicKey: key }]);
     // The real file parses (it pins nothing until an operator adds a key).
     assert.ok(Array.isArray(readClientKeys(fs.readFileSync(CLIENT_KEYS_FILE, 'utf8'))));
+});
+
+test('decodes base64 the way the client (atob) does', () => {
+    const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
+    const keys = parseKeyList(
+        `fbm-1:${publicKey.export({ type: 'spki', format: 'der' }).toString('base64')}`
+    );
+    const bundle = signBundle(privateKey, 'fbm-1');
+    const raw = Buffer.from(bundle.signature.signature, 'base64');
+
+    // atob takes it without padding and with whitespace...
+    const unpadded = raw.toString('base64').replace(/=+$/, '');
+    const spaced = unpadded.replace(/(.{8})/g, '$1 ');
+    for (const signature of [unpadded, spaced]) {
+        assert.equal(
+            verifyBundle({ ...bundle, signature: { ...bundle.signature, signature } }, keys).ok,
+            true
+        );
+    }
+    // ...but not base64url, which Node's Buffer would quietly accept.
+    const url = raw.toString('base64url');
+    assert.notEqual(url, raw.toString('base64'), 'this signature differs in base64url');
+    assert.equal(
+        verifyBundle({ ...bundle, signature: { ...bundle.signature, signature: url } }, keys)
+            .reason,
+        'verification-error: the signature is not base64'
+    );
+    assert.equal(
+        verifyBundle({ ...bundle, bundleBase64: `${bundle.bundleBase64}!` }, keys).reason,
+        'verification-error: the bundle is not base64'
+    );
+    assert.equal(forgivingBase64('a'), null, 'a length of 4n+1 is not base64');
+    assert.deepEqual(forgivingBase64('YQ'), Buffer.from('a'));
+});
+
+test('a commented-out pin is not read as pinned; a key with // in it still is', () => {
+    const prefix = Buffer.from('302a300506032b6570032100', 'hex');
+    const slashes = Buffer.concat([prefix, Buffer.alloc(32, 0xff)]).toString('base64');
+    assert.ok(slashes.includes('//') && isEd25519PublicKey(slashes));
+    const source = [
+        'export const PINNED_PUBLISHING_KEYS: readonly PluginPublishingKey[] = [',
+        `    // { keyId: 'old-key', publicKey: '${slashes}' },`,
+        `    /* { keyId: 'older-key', publicKey: '${slashes}' }, */`,
+        `    { keyId: 'fbm-2026-11', publicKey: '${slashes}' }, // the key FBM signs with`,
+        '];',
+    ].join('\n');
+    assert.deepEqual(readClientKeys(source), [{ keyId: 'fbm-2026-11', publicKey: slashes }]);
 });

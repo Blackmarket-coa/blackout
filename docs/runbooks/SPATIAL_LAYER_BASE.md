@@ -78,31 +78,62 @@ image is a normal restart, not a migration.
 ### 1.3 Download the basemap
 
 Martin starts with no PMTiles, and the coalition map then shows its
-pins on a plain background and says the background did not load. To
-give it one, extract an area from a Protomaps daily build into
-`martin/pmtiles/basemap.pmtiles` (the client asks for the source
-`basemap`), then recreate Martin, which reads its sources when it
-starts. Recreate rather than restart: a restarted container keeps its old
-definition, and one without the fonts mount stops Martin from starting,
-because `martin.yaml` names a fonts directory it then does not have:
+pins on a plain background and says the background did not load.
 
-```sh
-cd infra/single-server-baseline
-./martin/fetch-basemap.sh --bbox WEST,SOUTH,EAST,NORTH --maxzoom 14
-docker compose up -d --force-recreate martin
-```
+Two directories are involved. The repository checkout holds the scripts
+and the files to copy; the stack runs from a copy of this folder
+(`deploy.sh`'s `$INFRA_DIR`, `/opt/blackout-infra` by default), which
+holds the live `.env` and override. Compose run from the checkout would
+recreate the live containers (the project is `blackout-prod` either way)
+without that `.env`, so every compose command below runs from the live
+directory.
 
-`--dry-run` says how much would be downloaded first. The script needs
-`curl` and the `pmtiles` CLI (<https://github.com/protomaps/go-pmtiles>);
-details in `martin/pmtiles/README.md`. The whole planet is about 140 GB
-(<https://maps.protomaps.com/builds/>). Until 2026-11-17 this section
-said to run `pmtiles convert` on a Geofabrik `.osm.pbf`; that command
-converts MBTiles, and the client's style needs Protomaps' own tiles.
+1. Copy into the live directory what changed in the repository:
+   `martin/martin.yaml`, `martin/fonts/`, `nginx/sites-available/theblackout.app.conf`,
+   and the `martin` service's `./martin/fonts:/var/lib/martin/fonts:ro`
+   volume in `docker-compose.yml`. Then check that Martin will start
+   (`martin.yaml` names the fonts directory, and Martin 0.14.2 exits when it
+   is missing or empty):
+
+    ```sh
+    ./martin/check-fonts.sh /opt/blackout-infra
+    ```
+
+2. Extract an area from a Protomaps daily build into the live directory's
+   `martin/pmtiles/basemap.pmtiles` (the client asks for the source
+   `basemap`); `--dry-run` says how much would be downloaded first:
+
+    ```sh
+    cd infra/single-server-baseline   # in the repository checkout
+    ./martin/fetch-basemap.sh --into /opt/blackout-infra \
+      --bbox WEST,SOUTH,EAST,NORTH --maxzoom 14
+    ```
+
+3. From the live directory, recreate Martin alone, which reads its sources
+   when it starts (recreate rather than restart, so it takes the new fonts
+   mount; `--no-deps` leaves the database be), then reload nginx:
+
+    ```sh
+    cd /opt/blackout-infra
+    docker compose up -d --no-deps --force-recreate martin
+    docker compose exec reverse-proxy nginx -t && docker compose exec reverse-proxy nginx -s reload
+    ```
+
+`deploy.sh` runs the same check and then recreates Martin with the other
+services, so a deploy takes a changed Martin definition at once instead of
+at Martin's next restart. The script needs `curl` and the `pmtiles` CLI
+(<https://github.com/protomaps/go-pmtiles>); details in
+`martin/pmtiles/README.md`. It takes only builds of Protomaps' version 4
+schema, which the client's style is for. The whole planet is about 140 GB
+(<https://maps.protomaps.com/builds/>). Until 2026-11-17 this section said
+to run `pmtiles convert` on a Geofabrik `.osm.pbf`; that command converts
+MBTiles, and the client's style needs Protomaps' own tiles.
 
 ### 1.4 Smoke test
 
 ```sh
-# Internal — Martin itself (nginx's port 80 only redirects to https):
+# Internal — Martin itself, from the live directory (nginx's port 80 only
+# redirects to https):
 docker compose exec martin wget -qO- http://127.0.0.1:3000/catalog
 # Lists the pmtiles sources (basemap), the fonts (Noto Sans Regular,
 # Bold, Italic, Noto Sans Devanagari Regular) and any auto-published
@@ -175,8 +206,8 @@ application schema and Synapse. Existing backup tooling
 captures it at the cluster level — no separate procedure needed.
 
 PMTiles archives in `infra/single-server-baseline/martin/pmtiles/`
-are reproducible from upstream sources (Protomaps planet builds,
-Geofabrik OSM extracts). They are **not** backed up to the offsite
+are reproducible from upstream sources (Protomaps daily builds, through
+`martin/fetch-basemap.sh`). They are **not** backed up to the offsite
 vault by default; document the basemap source in deployment notes
 so it can be regenerated.
 

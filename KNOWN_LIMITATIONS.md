@@ -990,7 +990,8 @@ For the source-of-truth triage with tier/owner detail see
 -   **What it is:** a copy of OpenStreetMap as of the build the operator
     downloaded; it does not update itself. Running the script again replaces
     it. The tile server sees which areas each person looks at, as it sees the
-    rest of their traffic.
+    rest of their traffic, and so does a proxy in front of it that ends TLS
+    (the live host is served through Cloudflare).
 
 ### Plugins: no publishing key is pinned yet, so a production build installs none (2026-11-17)
 
@@ -1014,6 +1015,12 @@ For the source-of-truth triage with tier/owner detail see
     behind a production build gives the stub an Ed25519 key
     (`FREEBLACKMARKET_STUB_SIGNING_KEY_FILE`, `..._KEY_ID`) and pins it in
     that build.
+-   **Plugins installed before:** the app checks every installed bundle again
+    when it starts. One that fails (in a production build, every bundle signed
+    with the development key) is kept, marked as an error, and unlocks
+    nothing until it is installed again; until 2026-11-17 the goods it
+    unlocked stayed unlocked, because the parts of the app that read them did
+    not look at that mark.
 -   **What the key does not do:** it says who published a bundle, not what
     the code does; the sandbox and the capabilities the person grants are
     what limit it (`THREAT_MODEL.md` §6a). Whoever holds the private key, or

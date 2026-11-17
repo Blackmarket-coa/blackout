@@ -1,11 +1,11 @@
 import { atom } from 'jotai';
-import { installedPluginsAtom } from '../../monetization/install/installedPluginsAtom';
+import { enabledPluginsAtom } from '../../monetization/install/installedPluginsAtom';
 import type { OwnedStreamAsset } from './streamAssetGoods';
 
 /** Stream assets the current user owns (from installed stream_asset entitlements). */
 export const ownedStreamAssetsAtom = atom<OwnedStreamAsset[]>((get) => {
     const out: OwnedStreamAsset[] = [];
-    for (const record of get(installedPluginsAtom)) {
+    for (const record of get(enabledPluginsAtom)) {
         if (record.streamAsset) out.push(record.streamAsset);
     }
     return out;

@@ -134,6 +134,12 @@ export function buildBasemapStyle(tilesBase: string): StyleSpecification {
                 // TileJSON: Martin answers with the extract's bounds and zoom
                 // levels, so the map zooms in past the extract's last level.
                 url: `${tilesBase}/${BASEMAP_SOURCE_ID}`,
+                // The tile addresses are pinned here rather than taken from that
+                // answer, which Martin builds from the request's forwarded-host
+                // headers; a cached answer naming another host would send the
+                // area on screen there. MapLibre lets these options override the
+                // TileJSON's, and still reads its bounds and zoom levels.
+                tiles: [`${tilesBase}/${BASEMAP_SOURCE_ID}/{z}/{x}/{y}`],
                 attribution: '© OpenStreetMap contributors',
             },
         },
@@ -148,19 +154,21 @@ export function resolveMapStyle(env: MapStyleEnv = viteEnv): string | StyleSpeci
 }
 
 /**
- * Whether a MapLibre error event is the basemap failing to load: its TileJSON
- * or a tile. Martin answers 404 for a source it does not have and 204 for a
- * tile the extract does not cover, so a missing extract shows up here and an
- * edge of the extract does not.
+ * Whether a MapLibre error event means the basemap could not be loaded at all:
+ * its TileJSON request failed (Martin answers 404 for a source it does not
+ * have). A single tile that fails (a flaky network, Martin restarting) is not:
+ * MapLibre reports those with the `tile` they belong to, and the rest of the
+ * background still draws. A tile outside the extract is a 204, not an error.
  */
 export function isBasemapError(
-    event: { sourceId?: unknown; error?: unknown },
+    event: { sourceId?: unknown; error?: unknown; tile?: unknown },
     tilesBase: string
 ): boolean {
+    if (event.tile) return false;
     if (event.sourceId === BASEMAP_SOURCE_ID) return true;
     const { error } = event;
     const url = error && typeof error === 'object' ? (error as { url?: unknown }).url : undefined;
     if (typeof url !== 'string') return false;
     const source = `${tilesBase}/${BASEMAP_SOURCE_ID}`;
-    return url === source || url.startsWith(`${source}/`) || url.startsWith(`${source}?`);
+    return url === source || url.startsWith(`${source}?`);
 }

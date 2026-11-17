@@ -897,9 +897,11 @@ development key left out of production builds: decision 9.
 **Follow-up (2026-11-17).** Fixed in the client: a production build trusts
 only Ed25519 keys pinned when it is built, refuses HMAC, and leaves the
 development key out (its JavaScript does not contain it); with no key pinned
-it installs nothing and says so. `tools/plugins/publishing-key.mjs` makes or
+it installs nothing and says so. A bundle installed earlier is checked again
+when the app starts; one that fails is marked as an error and its goods stop
+applying (review finding R9). `tools/plugins/publishing-key.mjs` makes or
 reads the key and prints the line to pin. No key is pinned yet: that is the
-operator's step (`map-tiles-and-plugin-key-2026-11-17.md`, P).
+operator's step (`map-tiles-and-plugin-key-2026-11-17.md`, P and R).
 
 ## T23. Ballots and audit logs: "Hash chain + sigs", "tamper-evident", "WORM"
 

@@ -229,3 +229,88 @@ switch FBM, then drop the old entry. A key that leaks is dropped at once.
     repository: which key it signs with today, and under which key id, has to
     be read on the server. `verify` on a bundle FBM served is the check to run
     before shipping a build that pins its key.
+
+## R. Independent review of M and P (2026-11-17)
+
+A reviewer given only the code and this repository's rules read the change.
+It found no way for an HMAC key, a non-Ed25519 key or the development key to
+be trusted in a production build, and no third-party address in the map's
+style. It did find the following, all fixed or answered here.
+
+-   **R1. The basemap steps pointed at the checkout, not the stack.** The stack
+    runs from a copy of `infra/single-server-baseline` holding the live `.env`
+    and override (`deploy.sh`'s `$INFRA_DIR`); the script wrote the basemap
+    beside itself, and `docker compose up` run from the checkout would have
+    recreated the live Martin (project `blackout-prod`) without that `.env`,
+    and possibly the database with it. Now `fetch-basemap.sh --into DIR`
+    writes into the directory the stack runs from, refuses one without a
+    `docker-compose.yml` and a `.env` or without `martin/pmtiles`, and prints
+    `cd DIR` and `docker compose up -d --no-deps --force-recreate martin`; the
+    runbook lists the files to copy into that directory. Checked with a
+    stand-in `pmtiles` and stand-in directories.
+-   **R2. Two `Access-Control-Allow-Origin` headers on the API host's
+    `/tiles/`.** Martin 0.14.2 answers every request with its own (the
+    request's origin) and the block added `*`; browsers refuse a response
+    with two, so a desktop or mobile build (which asks that host) could not
+    load the map. The block now hides Martin's (`proxy_hide_header`). Before:
+    `access-control-allow-origin: tauri://localhost` and `*`; after: `*` only,
+    and a cross-origin fetch from a page on the chat origin succeeds in
+    Chromium.
+-   **R3. A deploy left Martin one restart from not starting.** `deploy.sh`
+    did not recreate Martin, so a new `martin.yaml` could meet an old
+    container without the fonts mount at the next restart; Martin then exits,
+    and nginx cannot start without the name `martin`. `martin/check-fonts.sh`
+    now checks that the fonts are present and that the martin service mounts
+    them (by rendering it with `docker compose config`); `deploy.sh` runs it
+    and then recreates Martin with the other services. Checked against four directory states: up to date (passes),
+    fonts missing and mount missing (each refused, saying what to copy), and
+    not yet updated (passes).
+-   **R4. A client could choose the host in the TileJSON.** Martin builds the
+    tile addresses from `X-Forwarded-Host` or `Forwarded` before `Host`, and
+    neither block cleared them; with the answer cacheable, a shared cache in
+    front could hand others a TileJSON naming another host. Both blocks now
+    set `X-Forwarded-Host $host` and clear `Forwarded`, and the client's style
+    pins the tile addresses (`tiles` beside `url`; MapLibre takes the bounds
+    and zoom levels from the TileJSON and the addresses from the style).
+    Before: `X-Forwarded-Host: tiles.attacker.example` came back in `tiles`;
+    after: the real host on both hosts. In Chromium the source still reports
+    zoom 0 to 14 and the extract's bounds, and zooming to 16.5 requests level
+    14 tiles only.
+-   **R5. Boundary 8 left out the proxy in front.** The live host is served
+    through Cloudflare, which ends TLS and sees each tile's address with the
+    viewer's network address. `THREAT_MODEL.md` §3 boundary 8 and
+    `KNOWN_LIMITATIONS.md` now say so.
+-   **R6. The notice could show while the background drew.** MapLibre reports
+    a failed tile (any status but 404) with the basemap's `sourceId`, so one
+    flaky tile showed the notice for good. It now shows only when the source
+    itself fails to load (an error without a `tile`, or the TileJSON request);
+    a test fires a 502 tile error and expects no notice.
+-   **R7. The error listener silenced MapLibre's console errors.** With a
+    listener attached MapLibre stops logging; errors the map does not handle
+    are now logged with `console.error` as MapLibre would, and the basemap
+    failure with a warning. Tested.
+-   **R8. `publishing-key.mjs verify` was not quite the client's check.** It
+    decoded base64 with Node's lenient decoder (a base64url signature
+    passed); it now decodes as `atob` does (whitespace and missing padding
+    accepted, anything else refused). Its source reader took commented-out
+    pins as pinned; comments are now stripped first, without breaking keys
+    that contain `//`. Tested.
+-   **R9. Goods from bundles that fail the new check stayed in effect.** When
+    the app starts it checks installed bundles again and marks a failure as
+    `error`, but the parts of the app that read goods (AI goods, cosmetics,
+    privacy tools, audio, vault, stream assets, templates) did not look at the
+    mark. They now read only enabled plugins (`enabledPluginsAtom`); a test
+    gives an `error`, a `disabled` and a `pending` record goods and expects
+    none of them to apply.
+-   **R10. The script took the newest build whatever its schema.** It now
+    takes the newest build of schema version 4 from Protomaps' build list,
+    and refuses a `--build` that is not one (the list also holds 0.x and 3.x
+    builds). Checked against the list's real format.
+-   **R11.** A runbook line still said the basemap can be rebuilt from
+    Geofabrik extracts; corrected.
+
+`nginx -t` passes on the changed configuration, and every location answers
+with the headers it did before: the chat origin's `/tiles/` the six of
+`security-headers.conf` plus `Expires` and `Cache-Control`, `/` and `/v1/`
+the six, the API host's `/tiles/` HSTS, its `Cache-Control` and one
+`Access-Control-Allow-Origin`.

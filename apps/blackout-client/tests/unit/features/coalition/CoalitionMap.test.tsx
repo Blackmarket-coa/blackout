@@ -322,7 +322,20 @@ describe('CoalitionMap background', () => {
     });
 
     it('says so when the background does not load, and only then', () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+        const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
         const container = render(<CoalitionMap pins={pins} onSelectPin={vi.fn()} />);
+        expect(notice(container)).toBeNull();
+
+        // One tile failing (a flaky network, the tile server restarting) is not
+        // a missing background: the rest of it still draws.
+        act(() =>
+            fire('error', {
+                sourceId: 'basemap',
+                tile: { tileID: {} },
+                error: { status: 502, url: `${mapTilesBaseUrl()}/basemap/12/1171/1566` },
+            })
+        );
         expect(notice(container)).toBeNull();
 
         act(() => fire('error', { sourceId: 'coalition-heat', error: { message: 'x' } }));
@@ -340,5 +353,12 @@ describe('CoalitionMap background', () => {
         expect(notice(container)).not.toBeNull();
         expect(notice(container)?.textContent).toBe(BASEMAP_MISSING_NOTICE);
         expect(notice(container)?.getAttribute('role')).toBe('status');
+
+        // Listening for errors turns off MapLibre's own logging, so the errors
+        // the map does not handle are still logged; the one it shows is a warning.
+        expect(error).toHaveBeenCalledTimes(3);
+        expect(warn).toHaveBeenCalledTimes(1);
+        warn.mockRestore();
+        error.mockRestore();
     });
 });

@@ -33,6 +33,46 @@ const ED25519_SPKI_PREFIX = Buffer.from('302a300506032b6570032100', 'hex');
 
 export class UsageError extends Error {}
 
+/**
+ * Base64 decoded the way the browser's atob() decodes it (WHATWG
+ * "forgiving-base64"): ASCII whitespace removed, at most two "=" of padding,
+ * nothing outside the standard alphabet. The client decodes bundles and
+ * signatures with atob, so the tool refuses what the client refuses (a
+ * base64url signature, for instance). Returns null where atob would throw.
+ */
+export function forgivingBase64(value) {
+    let text = String(value ?? '').replace(/[\t\n\f\r ]/g, '');
+    if (text.length % 4 === 0) text = text.replace(/={1,2}$/, '');
+    if (text.length % 4 === 1 || /[^A-Za-z0-9+/]/.test(text)) return null;
+    return Buffer.from(text, 'base64');
+}
+
+/** `source` without its line and block comments; quoted strings are left whole. */
+function withoutComments(source) {
+    let out = '';
+    let quote = null;
+    for (let i = 0; i < source.length; i += 1) {
+        const char = source[i];
+        if (quote) {
+            out += char;
+            if (char === '\\') {
+                out += source[i + 1] ?? '';
+                i += 1;
+            } else if (char === quote) quote = null;
+        } else if (char === "'" || char === '"' || char === '`') {
+            quote = char;
+            out += char;
+        } else if (char === '/' && source[i + 1] === '/') {
+            while (i < source.length && source[i] !== '\n') i += 1;
+            out += '\n';
+        } else if (char === '/' && source[i + 1] === '*') {
+            const end = source.indexOf('*/', i + 2);
+            i = end === -1 ? source.length : end + 1;
+        } else out += char;
+    }
+    return out;
+}
+
 /** Base64 SPKI of an Ed25519 key, from a private or public key PEM. */
 export function publicKeyFromPem(pem) {
     let key;
@@ -72,7 +112,9 @@ export function parseKeyList(value) {
 
 /** The entries of PINNED_PUBLISHING_KEYS in the client's publishingKeys.ts. */
 export function readClientKeys(source = fs.readFileSync(CLIENT_KEYS_FILE, 'utf8')) {
-    const list = source.slice(source.indexOf('PINNED_PUBLISHING_KEYS'));
+    // A commented-out entry is not pinned: the client's compiler ignores it too.
+    const code = withoutComments(source);
+    const list = code.slice(code.indexOf('PINNED_PUBLISHING_KEYS'));
     const keys = [];
     for (const match of list.matchAll(
         /\{\s*keyId:\s*'([^']*)',\s*publicKey:\s*'([^']*)',?\s*\}/g
@@ -119,8 +161,25 @@ export function verifyBundle(bundle, keys) {
     if (sha256Hex(canonicalJson(bundle.manifest)) !== signature.manifestSha256) {
         return { ok: false, reason: 'manifest-sha-mismatch', keyId: key.keyId };
     }
-    if (sha256Hex(Buffer.from(bundle.bundleBase64 ?? '', 'base64')) !== signature.sha256) {
+    const bundleBytes = forgivingBase64(bundle.bundleBase64);
+    if (!bundleBytes) {
+        // The client's installer cannot decode it, so it installs nothing.
+        return {
+            ok: false,
+            reason: 'verification-error: the bundle is not base64',
+            keyId: key.keyId,
+        };
+    }
+    if (sha256Hex(bundleBytes) !== signature.sha256) {
         return { ok: false, reason: 'bundle-sha-mismatch', keyId: key.keyId };
+    }
+    const signatureBytes = forgivingBase64(signature.signature);
+    if (!signatureBytes) {
+        return {
+            ok: false,
+            reason: 'verification-error: the signature is not base64',
+            keyId: key.keyId,
+        };
     }
     const publicKey = crypto.createPublicKey({
         key: Buffer.from(key.publicKey, 'base64'),
@@ -131,7 +190,7 @@ export function verifyBundle(bundle, keys) {
         null,
         Buffer.from(`${signature.manifestSha256}:${signature.sha256}`, 'utf8'),
         publicKey,
-        Buffer.from(String(signature.signature ?? ''), 'base64')
+        signatureBytes
     );
     return verified
         ? { ok: true, keyId: key.keyId }
