@@ -85,7 +85,10 @@ changed, how it was checked, and what was not checked.
     `https://theblackout.app/tiles/basemap/{z}/{x}/{y}`; a glyph range is
     `200 application/x-protobuf`; a range no font covers (CJK) is 200 and
     empty; an unknown font or source is 404; a tile outside the extract is
-    204; with no `.pmtiles` it starts, and `/basemap` is 404.
+    204; with no `.pmtiles` it starts, and `/basemap` is 404. With a fonts
+    path that does not exist (a container restarted, not recreated, after the
+    fonts mount was added) it exits: "Invalid font file ...". The runbook and
+    the script therefore say `docker compose up -d --force-recreate martin`.
 -   **nginx 1.24 with the baseline configuration** (a copy with the upstream
     hostnames pointed at 127.0.0.1, a self-signed certificate, and the
     `[::]` listens removed because the test machine has no IPv6). `nginx -t`

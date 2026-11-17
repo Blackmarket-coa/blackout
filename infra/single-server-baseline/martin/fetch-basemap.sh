@@ -20,9 +20,10 @@
 # (the whole planet is about 140 GB). The data is OpenStreetMap's, under the
 # ODbL; the map shows "© OpenStreetMap contributors".
 #
-# Run it on the server, from infra/single-server-baseline/, then restart
-# Martin, which reads its sources when it starts:
-#   docker compose restart martin
+# Run it on the server, from infra/single-server-baseline/, then recreate
+# Martin, which reads its sources when it starts (recreate rather than
+# restart, so it also picks up a changed definition, such as the fonts mount):
+#   docker compose up -d --force-recreate martin
 set -euo pipefail
 
 usage() {
@@ -105,6 +106,6 @@ fi
 mv -f "$partial" "$out"
 echo
 echo "Saved $out ($(du -h "$out" | cut -f1))."
-echo "Now restart Martin and check that it serves it:"
-echo "  docker compose restart martin"
+echo "Now recreate Martin and check that it serves it:"
+echo "  docker compose up -d --force-recreate martin"
 echo "  docker compose exec martin wget -qO- http://127.0.0.1:3000/basemap"

@@ -81,12 +81,15 @@ Martin starts with no PMTiles, and the coalition map then shows its
 pins on a plain background and says the background did not load. To
 give it one, extract an area from a Protomaps daily build into
 `martin/pmtiles/basemap.pmtiles` (the client asks for the source
-`basemap`), then restart Martin, which reads its sources when it starts:
+`basemap`), then recreate Martin, which reads its sources when it
+starts. Recreate rather than restart: a restarted container keeps its old
+definition, and one without the fonts mount stops Martin from starting,
+because `martin.yaml` names a fonts directory it then does not have:
 
 ```sh
 cd infra/single-server-baseline
 ./martin/fetch-basemap.sh --bbox WEST,SOUTH,EAST,NORTH --maxzoom 14
-docker compose restart martin
+docker compose up -d --force-recreate martin
 ```
 
 `--dry-run` says how much would be downloaded first. The script needs

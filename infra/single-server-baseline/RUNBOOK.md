@@ -601,6 +601,8 @@ Public access is via the nginx `/tiles/` location on the chat origin
 and on `api.theblackout.app`. The client's coalition map draws its
 background from `basemap.pmtiles` only, which `martin/fetch-basemap.sh`
 downloads; without it the map shows its pins on a plain background.
+`deploy.sh` does not recreate Martin: after a change to its definition or
+a new basemap, run `docker compose up -d --force-recreate martin`.
 
 Bootstrap, basemap download, and the existing-volume migration path
 live in `docs/runbooks/SPATIAL_LAYER_BASE.md`.

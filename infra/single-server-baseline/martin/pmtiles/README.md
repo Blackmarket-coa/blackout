@@ -18,7 +18,7 @@ From `infra/single-server-baseline/`, on the server:
 ./martin/fetch-basemap.sh --bbox -77.12,38.80,-76.91,38.99 --maxzoom 14
 # How big would it be? Nothing is downloaded:
 ./martin/fetch-basemap.sh --bbox -77.12,38.80,-76.91,38.99 --dry-run
-docker compose restart martin
+docker compose up -d --force-recreate martin
 docker compose exec martin wget -qO- http://127.0.0.1:3000/basemap
 ```
 
