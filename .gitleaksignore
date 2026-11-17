@@ -81,3 +81,14 @@ ea07ee8b939964a690efb0d1140e8c3abb52e6c0:packages/blackout-protocol/src/release/
 ea07ee8b939964a690efb0d1140e8c3abb52e6c0:packages/blackout-protocol/src/release/envelopeVectors.ts:generic-api-key:100
 ea07ee8b939964a690efb0d1140e8c3abb52e6c0:packages/blackout-protocol/src/release/envelopeVectors.ts:generic-api-key:105
 ea07ee8b939964a690efb0d1140e8c3abb52e6c0:packages/blackout-protocol/src/release/envelopeVectors.ts:generic-api-key:107
+
+# 8) The same synthetic HMAC fixture as entry 4
+#    (`00112233445566778899aabbccddeeff` twice), written as a literal in the
+#    plugin publishing-key test that the commit below adds. The next commit,
+#    ed06cdfec2, makes that test's HMAC key at run time, so the file holds no
+#    literal any more; this entry covers only the commit that added it, which
+#    is not rewritten. Pull requests land on develop as merge commits, so the
+#    commit keeps its hash and the fingerprint stays valid there. GitGuardian
+#    reported the same line. See the "Secret scans" note in section P of
+#    docs/security/map-tiles-and-plugin-key-2026-11-17.md.
+daeb5c2caa3e0754e70122eee646f4f38f0c1784:apps/blackout-client/tests/unit/features/monetization/pluginPublishingKeys.test.ts:generic-api-key:150

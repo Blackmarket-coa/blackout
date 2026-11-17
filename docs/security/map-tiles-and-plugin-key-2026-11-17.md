@@ -223,14 +223,23 @@ switch FBM, then drop the old entry. A key that leaks is dropped at once.
     `fbm-dev-hmac` nor its secret. The source maps still carry the original
     source text, as the repository does.
 
--   **Secret scan.** GitGuardian flagged the HMAC key in
-    `pluginPublishingKeys.test.ts` (commit `daeb5c2caa`) as a generic
-    high-entropy secret. It is the counting pattern `0011…eeff` that the test
-    suite uses as its HMAC test key in nine other files, not a credential, and
-    a production build refuses every HMAC key. The test now makes its key at
-    run time. That commit stays in history (it is not rewritten), so the
-    finding has to be closed in GitGuardian, as a test value, by someone with
-    access to that workspace.
+-   **Secret scans.** GitGuardian and Gitleaks (rule `generic-api-key`) both
+    flagged the HMAC key in `pluginPublishingKeys.test.ts` (commit
+    `daeb5c2caa`, line 150) as a generic high-entropy secret. It is the
+    counting pattern `0011…eeff` that the test suite uses as its HMAC test key
+    in nine other files, not a credential, and a production build refuses
+    every HMAC key. The test now makes its key at run time. That commit stays
+    in history (it is not rewritten), so each scanner needs the finding
+    closed:
+    -   **Gitleaks:** entry 8 in `.gitleaksignore` names that one finding by
+        its fingerprint, beside entry 4 for the same value in two older tests.
+        Checked with gitleaks built from the v8.21.2 source (the version CI
+        pins) over the pull request's range: one finding without the entry,
+        none with it.
+    -   **GitGuardian:** the finding has to be closed in GitGuardian, as a test
+        value, by someone with access to that workspace. `.gitguardian.yaml`
+        already lists `apps/blackout-client/tests/**/*.ts` under both of its
+        keys, and the check flagged the file anyway.
 
 ### Not checked
 
