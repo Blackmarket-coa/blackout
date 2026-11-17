@@ -848,6 +848,11 @@ applied; the deployed client serves no CSP that does (`KNOWN_LIMITATIONS.md`).
 **Done.** §3 gains boundaries 8 to 10. Whether to self-host tiles or ask
 before loading them is decision 8.
 
+**Follow-up (2026-11-17).** Self-hosted: the map draws its background from
+the deployment's own tile server and asks no one else, and without a basemap
+it says so rather than falling back (`map-tiles-and-plugin-key-2026-11-17.md`,
+M). Boundary 8 now describes that.
+
 ## T21. "Signed releases" and "reproducible builds"
 
 **Claimed.** `THREAT_MODEL.md` A8 ("signed releases"), A11 ("Yes —
@@ -980,6 +985,8 @@ did not report were read once, not checked one by one.
    are not mounted; mounting them, and enabling QR, is a product change.
 8. **Map tiles** (T20). Set `VITE_MAPLIBRE_STYLE_URL` to tiles the operator
    hosts, or add a step that asks before the map loads OpenStreetMap's.
+   Taken 2026-11-17: the tiles are self-hosted
+   (`map-tiles-and-plugin-key-2026-11-17.md`, M).
 9. **A plugin publishing keyset** (T22). Pin the marketplace's Ed25519
    publishing keys at build time and leave the development HMAC key out of
    production builds. Until then a bundle's signature is not a protection.

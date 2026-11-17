@@ -19,9 +19,13 @@ const mocks = vi.hoisted(() => {
     }> = [];
     const sources = new Map<string, { setData: (value: unknown) => void }>();
     const layers = new Set<string>();
+    // What each `new maplibregl.Map(...)` was given, and the handlers it was given.
+    const mapOptions: Array<{ style?: unknown }> = [];
+    const handlers = new Map<string, Array<(event?: unknown) => void>>();
     const mapInstance = {
         addControl: vi.fn(),
-        on: vi.fn((event: string, cb: () => void) => {
+        on: vi.fn((event: string, cb: (event?: unknown) => void) => {
+            handlers.set(event, [...(handlers.get(event) ?? []), cb]);
             if (event === 'load') cb();
         }),
         off: vi.fn(),
@@ -46,7 +50,7 @@ const mocks = vi.hoisted(() => {
             layers.delete(id);
         }),
     };
-    return { markerInstances, popupInstances, mapInstance };
+    return { markerInstances, popupInstances, mapInstance, mapOptions, handlers };
 });
 
 vi.mock('maplibre-gl/dist/maplibre-gl.css', () => ({}));
@@ -111,7 +115,8 @@ vi.mock('maplibre-gl', () => {
         }
     }
     class Map {
-        constructor() {
+        constructor(options: { style?: unknown }) {
+            mocks.mapOptions.push(options);
             return mocks.mapInstance as unknown as Map;
         }
     }
@@ -124,7 +129,12 @@ vi.mock('maplibre-gl', () => {
 });
 
 // eslint-disable-next-line import/first
-import { CoalitionMap } from '../../../../src/app/features/coalition/tabs/CoalitionMap';
+import {
+    BASEMAP_MISSING_NOTICE,
+    CoalitionMap,
+} from '../../../../src/app/features/coalition/tabs/CoalitionMap';
+// eslint-disable-next-line import/first
+import { mapTilesBaseUrl } from '../../../../src/app/features/coalition/tabs/basemapStyle';
 // eslint-disable-next-line import/first
 import { VIEWER_MARKER_COLOR } from '../../../../src/app/features/coalition/tabs/solarpunkMap';
 
@@ -150,6 +160,8 @@ afterEach(() => {
     document.body.innerHTML = '';
     mocks.markerInstances.length = 0;
     mocks.popupInstances.length = 0;
+    mocks.mapOptions.length = 0;
+    mocks.handlers.clear();
     vi.clearAllMocks();
 });
 
@@ -283,5 +295,50 @@ describe('CoalitionMap', () => {
         expect(mocks.mapInstance.addLayer).toHaveBeenCalledWith(
             expect.objectContaining({ id: 'coalition-heat-layer', type: 'heatmap' })
         );
+    });
+});
+
+describe('CoalitionMap background', () => {
+    const pins = [
+        { id: 'a', title: 'Farm stand', layer: 'vendors', latitude: 40.1, longitude: -74.2 },
+    ];
+    const fire = (event: string, payload: unknown) => {
+        for (const handler of mocks.handlers.get(event) ?? []) handler(payload);
+    };
+    const notice = (container: HTMLElement) =>
+        container.querySelector('[data-testid="coalition-map-basemap-missing"]');
+
+    // Until 2026-11-17 the map loaded https://tile.openstreetmap.org/... whenever
+    // no style was configured, telling OpenStreetMap who was looking where.
+    it("loads its background only from this deployment's tile server", () => {
+        render(<CoalitionMap pins={pins} onSelectPin={vi.fn()} />);
+        const serialized = JSON.stringify(mocks.mapOptions.at(-1)?.style);
+        const addresses = serialized.match(/[a-z][a-z0-9+.-]*:\/\/[^"\s]+/gi) ?? [];
+        expect(addresses.length).toBeGreaterThan(0);
+        for (const address of addresses) {
+            expect(address.startsWith(`${mapTilesBaseUrl()}/`)).toBe(true);
+        }
+        expect(serialized).not.toMatch(/openstreetmap\.org|protomaps\.github\.io/);
+    });
+
+    it('says so when the background does not load, and only then', () => {
+        const container = render(<CoalitionMap pins={pins} onSelectPin={vi.fn()} />);
+        expect(notice(container)).toBeNull();
+
+        act(() => fire('error', { sourceId: 'coalition-heat', error: { message: 'x' } }));
+        act(() =>
+            fire('error', { error: { url: `${mapTilesBaseUrl()}/font/Noto Sans Regular/0-255` } })
+        );
+        expect(notice(container)).toBeNull();
+
+        act(() =>
+            fire('error', {
+                sourceId: 'basemap',
+                error: { status: 404, url: `${mapTilesBaseUrl()}/basemap` },
+            })
+        );
+        expect(notice(container)).not.toBeNull();
+        expect(notice(container)?.textContent).toBe(BASEMAP_MISSING_NOTICE);
+        expect(notice(container)?.getAttribute('role')).toBe('status');
     });
 });

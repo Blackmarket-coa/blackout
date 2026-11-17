@@ -965,6 +965,33 @@ For the source-of-truth triage with tier/owner detail see
     entitlement unlocks nothing; what it is sold as is the operator's
     decision (T11).
 
+### The coalition map's background: from this server, once downloaded (2026-11-17)
+
+-   **Where:** `apps/blackout-client/src/app/features/coalition/tabs/basemapStyle.ts`,
+    `infra/single-server-baseline/martin/` and the nginx `/tiles/` route on
+    the chat origin. Record: `docs/security/map-tiles-and-plugin-key-2026-11-17.md`.
+-   **State:** the map asks the deployment's own tile server (Martin, at
+    `/tiles/`) for its background and asks no one else: a Protomaps extract
+    the operator downloads once (`martin/fetch-basemap.sh`) and the label
+    fonts checked in beside `martin.yaml`. Until 2026-11-17 it loaded
+    OpenStreetMap's public tiles whenever no style was configured, which no
+    deployment file did.
+-   **Until the operator acts:** with no `basemap.pmtiles`, or no `/tiles/`
+    route on the origin the client is served from, the map draws its pins on
+    a plain background and says the background did not load. Only
+    `infra/single-server-baseline` has a tile server and that route; the
+    other two nginx configurations here (`infra/nginx/`,
+    `deploy/docker/blackout-backend/`) have neither.
+-   **What it leaves out:** labels are drawn in Noto Sans (Latin, Greek,
+    Cyrillic) and Noto Sans Devanagari; a name in another script (Chinese,
+    Arabic, ...) is drawn without those characters. Points of interest and
+    every icon (one-way arrows, the shapes behind road numbers, town dots)
+    are left out, because Protomaps' icons come from its own site.
+-   **What it is:** a copy of OpenStreetMap as of the build the operator
+    downloaded; it does not update itself. Running the script again replaces
+    it. The tile server sees which areas each person looks at, as it sees the
+    rest of their traffic.
+
 ## Deferred multi-week workstreams
 
 These are tracked in

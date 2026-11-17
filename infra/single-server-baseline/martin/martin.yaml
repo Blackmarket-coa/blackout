@@ -12,6 +12,10 @@
 #   - auto-publish is enabled for the postgis schema `coalition` so
 #     Blackout-side migrations can introduce new sources without
 #     requiring a Martin restart for each.
+#   - base_path /tiles, so the TileJSON it answers names tile addresses
+#     under nginx's /tiles/ route rather than its own root.
+#   - fonts from /var/lib/martin/fonts (checked in, see fonts/README.md)
+#     for the coalition map's labels.
 #
 # Cross-references:
 #   - infra/single-server-baseline/docker-compose.yml (martin service)
@@ -20,6 +24,13 @@
 #   - infra/single-server-baseline/RUNBOOK.md §17
 
 listen_addresses: '0.0.0.0:3000'
+
+# nginx serves Martin under /tiles/ (on the chat origin and on the API
+# host). Martin builds the tile addresses in a TileJSON answer from this
+# path and the request's host, so the coalition map's basemap source
+# (`/tiles/basemap`) points its tiles back through the same route. It
+# changes no route Martin listens on.
+base_path: /tiles
 
 # CORS is handled at the nginx layer; let Martin emit permissive CORS
 # only for the health probe and let nginx own the policy on the public
@@ -50,9 +61,17 @@ postgres:
       connect_timeout: 5s
 
 # PMTiles basemap. Drop .pmtiles files into ./martin/pmtiles on the
-# host (bind-mounted to /var/lib/martin/pmtiles in the container).
-# Recommended source: Protomaps daily planet build, see
-# docs/runbooks/SPATIAL_LAYER_BASE.md.
+# host (bind-mounted to /var/lib/martin/pmtiles in the container); each
+# is a source named after its file. The coalition map reads the one
+# named basemap.pmtiles, which fetch-basemap.sh extracts from a
+# Protomaps daily build (docs/runbooks/SPATIAL_LAYER_BASE.md).
 pmtiles:
     paths:
         - /var/lib/martin/pmtiles
+
+# Label glyphs for the coalition map, served at /font/<names>/<range>.
+# Martin 0.14.2 will not start if a directory listed here holds no font,
+# which is why the fonts are checked in (fonts/README.md) rather than
+# fetched by fetch-basemap.sh.
+fonts:
+    - /var/lib/martin/fonts

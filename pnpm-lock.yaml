@@ -112,6 +112,9 @@ importers:
       '@matrix-org/matrix-sdk-crypto-wasm':
         specifier: ^18.0.0
         version: 18.0.0
+      '@protomaps/basemaps':
+        specifier: 5.7.2
+        version: 5.7.2
       '@tanstack/react-query':
         specifier: 5.24.1
         version: 5.24.1(react@18.2.0)
@@ -2017,6 +2020,10 @@ packages:
   '@playwright/test@1.58.2':
     resolution: {integrity: sha512-akea+6bHYBBfA9uQqSYmlJXn61cTa+jbO87xVLCWbTqbWadRVmhxlXATaOjOgcBaWU4ePo0wB41KMFv3o35IXA==}
     engines: {node: '>=18'}
+    hasBin: true
+
+  '@protomaps/basemaps@5.7.2':
+    resolution: {integrity: sha512-K1Yk6bWdULulYg+R2QRVXx4NzJZan5YQhpejEG0c1/sXruJrfPIPZuakpf3jwAgVmjIRVQwAv+yRafDeN0aaUQ==}
     hasBin: true
 
   '@react-aria/breadcrumbs@3.5.32':
@@ -8745,6 +8752,8 @@ snapshots:
   '@playwright/test@1.58.2':
     dependencies:
       playwright: 1.58.2
+
+  '@protomaps/basemaps@5.7.2': {}
 
   '@react-aria/breadcrumbs@3.5.32(react-dom@18.2.0(react@18.2.0))(react@18.2.0)':
     dependencies:

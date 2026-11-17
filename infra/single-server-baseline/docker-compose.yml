@@ -301,6 +301,7 @@ services:
         # Serves vector tiles from:
         #   - The PostGIS `spatial` database (Coalition working tables).
         #   - PMTiles archives mounted at ./martin/pmtiles (basemap).
+        # and the coalition map's label glyphs from ./martin/fonts.
         # Modifications: none — adoption is config-only via martin.yaml.
         # See docs/runbooks/SPATIAL_LAYER_BASE.md for bootstrap, basemap
         # download, and smoke test.
@@ -318,6 +319,7 @@ services:
         volumes:
             - ./martin/martin.yaml:/etc/martin/martin.yaml:ro
             - ./martin/pmtiles:/var/lib/martin/pmtiles:ro
+            - ./martin/fonts:/var/lib/martin/fonts:ro
         depends_on:
             postgres:
                 condition: service_healthy

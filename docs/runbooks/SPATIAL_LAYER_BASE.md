@@ -24,11 +24,18 @@ stateful service beyond Martin (which is stateless).
 nginx (443)
   └─ /tiles/ → martin:3000
                 ├─ postgres (spatial DB, postgis extension) — Coalition working tables
-                └─ /var/lib/martin/pmtiles — PMTiles basemap archives
+                ├─ /var/lib/martin/pmtiles — PMTiles basemap archives
+                └─ /var/lib/martin/fonts — label fonts (checked in)
 ```
 
 Martin is internal-only (no host port published). Public access is
-via the nginx `/tiles/` location on `api.theblackout.app`.
+via the nginx `/tiles/` location on the chat origin
+(`theblackout.app`, where the client asks for it, beside `/v1/`) and on
+`api.theblackout.app`. The client's coalition map draws its background
+from it and from nothing else: the basemap source `basemap` (§1.3) and
+the label glyphs at `/tiles/font/...` (`martin/fonts/README.md`).
+Martin's `base_path: /tiles` makes the TileJSON it answers point its
+tiles back through that route.
 
 ---
 
@@ -68,39 +75,46 @@ The Postgres image swap (`postgres:16-alpine` →
 the application schema are unaffected. The first start on the new
 image is a normal restart, not a migration.
 
-### 1.3 Drop in a basemap
+### 1.3 Download the basemap
 
-Martin starts with no PMTiles. To get a basemap working:
+Martin starts with no PMTiles, and the coalition map then shows its
+pins on a plain background and says the background did not load. To
+give it one, extract an area from a Protomaps daily build into
+`martin/pmtiles/basemap.pmtiles` (the client asks for the source
+`basemap`), then restart Martin, which reads its sources when it starts:
 
 ```sh
-# Build a regional extract from an OSM PBF. Requires the protomaps
-# pmtiles CLI:
-#   https://github.com/protomaps/go-pmtiles
-pmtiles convert north-america-latest.osm.pbf north-america.pmtiles
-mv north-america.pmtiles infra/single-server-baseline/martin/pmtiles/
+cd infra/single-server-baseline
+./martin/fetch-basemap.sh --bbox WEST,SOUTH,EAST,NORTH --maxzoom 14
 docker compose restart martin
 ```
 
-Or pull a daily Protomaps planet build (large, ~110 GB):
-<https://maps.protomaps.com/builds/>.
+`--dry-run` says how much would be downloaded first. The script needs
+`curl` and the `pmtiles` CLI (<https://github.com/protomaps/go-pmtiles>);
+details in `martin/pmtiles/README.md`. The whole planet is about 140 GB
+(<https://maps.protomaps.com/builds/>). Until 2026-11-17 this section
+said to run `pmtiles convert` on a Geofabrik `.osm.pbf`; that command
+converts MBTiles, and the client's style needs Protomaps' own tiles.
 
 ### 1.4 Smoke test
 
 ```sh
-# Internal — from the host:
-curl -sf http://localhost/tiles/catalog
-# Should list pmtiles sources and any auto-published coalition schema sources.
+# Internal — Martin itself (nginx's port 80 only redirects to https):
+docker compose exec martin wget -qO- http://127.0.0.1:3000/catalog
+# Lists the pmtiles sources (basemap), the fonts (Noto Sans Regular,
+# Bold, Italic, Noto Sans Devanagari Regular) and any auto-published
+# coalition schema sources.
 
-# Internal — round-trip a tile:
-curl -sf -o /tmp/tile.pbf \
-  http://localhost/tiles/north-america/0/0/0
-file /tmp/tile.pbf
-# Expected: "data" or "Vector tile data"; non-zero size.
-
-# External — same after DNS / cert:
-curl -sf -o /dev/null -w '%{http_code}\n' \
-  https://api.theblackout.app/tiles/catalog
+# External — through nginx, on the origin the client uses:
+curl -sf https://theblackout.app/tiles/basemap
+# TileJSON whose "tiles" is https://theblackout.app/tiles/basemap/{z}/{x}/{y}.
+curl -sf -o /dev/null -w '%{http_code} %{content_type}\n' \
+  'https://theblackout.app/tiles/font/Noto%20Sans%20Regular/0-255'
+# Expected: 200 application/x-protobuf.
 ```
+
+A tile outside the extract answers 204 (empty), which the map draws as
+nothing; a source Martin does not have answers 404.
 
 ---
 

@@ -1,13 +1,14 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 // maplibre-gl 6 dropped the default export (the CRITICAL XSS bypass
 // CVE-2026-85061 is only fixed in 6.x). Every use here is namespace-style —
 // `maplibregl.Map`, `.Marker`, `.Popup`, `.LngLatBounds`, `.NavigationControl`
 // — so a namespace import is the whole migration.
 import * as maplibregl from 'maplibre-gl';
-import type { LngLatLike, StyleSpecification } from 'maplibre-gl';
+import type { LngLatLike } from 'maplibre-gl';
 import { circleRingCoordinates } from '@blackout/core';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { buildCommunitiesPath } from '../../../pages/paths';
+import { isBasemapError, mapTilesBaseUrl, resolveMapStyle } from './basemapStyle';
 import {
     buildLayerIconSvg,
     ensureSolarpunkMapStyles,
@@ -98,29 +99,9 @@ function hexToRgba(hex: string, alpha: number): string {
     return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
-/**
- * No-key raster fallback so the map renders real geography out of the box.
- * Operators should set `VITE_MAPLIBRE_STYLE_URL` to their own vector/raster
- * style (e.g. a self-hosted tile server) to avoid hitting the public OSM tiles.
- */
-const OSM_RASTER_STYLE: StyleSpecification = {
-    version: 8,
-    sources: {
-        osm: {
-            type: 'raster',
-            tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
-            tileSize: 256,
-            attribution: '© OpenStreetMap contributors',
-        },
-    },
-    layers: [{ id: 'osm', type: 'raster', source: 'osm' }],
-};
-
-function resolveStyle(): string | StyleSpecification {
-    const env = (import.meta as unknown as { env?: { VITE_MAPLIBRE_STYLE_URL?: string } }).env;
-    const url = env?.VITE_MAPLIBRE_STYLE_URL;
-    return url && url.length > 0 ? url : OSM_RASTER_STYLE;
-}
+/** Shown over the map when its background does not load (see `basemapStyle.ts`). */
+export const BASEMAP_MISSING_NOTICE =
+    "This server's map background did not load, so pins are shown without streets or place names.";
 
 /**
  * A solarpunk marker: a warm botanical/solar glyph in a layer-colored badge
@@ -266,13 +247,15 @@ export function CoalitionMap({
     onDeselectRef.current = onDeselect;
     const insetsRef = useRef<MapOverlayInsets>(overlayInsets ?? DEFAULT_OVERLAY_INSETS);
     insetsRef.current = overlayInsets ?? DEFAULT_OVERLAY_INSETS;
+    const [basemapFailed, setBasemapFailed] = useState(false);
 
     useEffect(() => {
         if (!containerRef.current) return undefined;
         ensureSolarpunkMapStyles();
+        const tilesBase = mapTilesBaseUrl();
         const map = new maplibregl.Map({
             container: containerRef.current,
-            style: resolveStyle(),
+            style: resolveMapStyle(),
             center: [0, 20],
             zoom: 1.3,
             attributionControl: { compact: true },
@@ -280,6 +263,10 @@ export function CoalitionMap({
         map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
         map.on('load', () => {
             readyRef.current = true;
+        });
+        // MapLibre adds `sourceId` to an error a source raised.
+        map.on('error', (event) => {
+            if (isBasemapError(event, tilesBase)) setBasemapFailed(true);
         });
         mapRef.current = map;
         return () => {
@@ -493,12 +480,37 @@ export function CoalitionMap({
     }, [pins, showHeat]);
 
     return (
-        <div
-            ref={containerRef}
-            data-testid="coalition-map-gl"
-            className={SOLARPUNK_MAP_CLASS}
-            style={{ position: 'absolute', inset: 0 }}
-        />
+        <>
+            <div
+                ref={containerRef}
+                data-testid="coalition-map-gl"
+                className={SOLARPUNK_MAP_CLASS}
+                style={{ position: 'absolute', inset: 0 }}
+            />
+            {basemapFailed && (
+                <div
+                    role="status"
+                    data-testid="coalition-map-basemap-missing"
+                    style={{
+                        position: 'absolute',
+                        top: (overlayInsets ?? DEFAULT_OVERLAY_INSETS).top + 8,
+                        left: '50%',
+                        transform: 'translateX(-50%)',
+                        width: 'max-content',
+                        maxWidth: 'calc(100% - 32px)',
+                        padding: '8px 12px',
+                        borderRadius: 8,
+                        background: 'var(--bg-surface, #fffaf0)',
+                        color: 'var(--text-primary, #1b130a)',
+                        boxShadow: '0 1px 4px rgba(0,0,0,0.2)',
+                        fontSize: 12,
+                        pointerEvents: 'none',
+                    }}
+                >
+                    {BASEMAP_MISSING_NOTICE}
+                </div>
+            )}
+        </>
     );
 }
 
