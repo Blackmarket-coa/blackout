@@ -128,3 +128,101 @@ changed, how it was checked, and what was not checked.
     changed; a deployment using them shows the notice.
 -   **The full client** in a deployment: the map component's behaviour is
     covered by the unit tests, and the style by the browser check above.
+
+## P. The plugin publishing key
+
+### Found
+
+-   **Every build trusted a key anyone could sign with.** The client's only
+    publishing key was `fbm-dev-hmac`, an HMAC secret written in
+    `pluginSignature.ts`; its `process.env` override is undefined in a browser
+    build, so the literal shipped (T22). The comment beside it said real keys
+    rotated through `/.well-known/freeblackmarket-publishing-keys.json`; no code
+    fetched that.
+-   **Free Black Market already signs with Ed25519.** The API passes FBM's
+    envelope through unchanged (`issueSignedBundle` in
+    `integrations/marketplace/freeblackmarket.ts`), and its test signs the way
+    FBM's `signBlackoutEnvelope` does, with an Ed25519 key. The client could
+    verify Ed25519 already; it had no such key to verify against.
+-   **The client builds with no build arguments.** `deploy.sh` runs
+    `docker build -f apps/blackout-client/Dockerfile .` and the Dockerfile
+    takes none, so a key passed only at build time would reach no deployed
+    build.
+-   **A failed check showed its code.** The install dialog displayed
+    "Refusing to install — signature verification failed (unknown-key-id)".
+
+### Done
+
+-   **Client** (`features/monetization/install/`). The keys a bundle is
+    checked against are the Ed25519 keys in `publishingKeys.ts` (committed, so
+    every build, web, desktop and mobile, pins the same ones, and a change to
+    them is reviewed), any in `VITE_PLUGIN_PUBLISHING_KEYS` for one build, and,
+    in a development build only, `fbm-dev-hmac`. An entry that is not an
+    Ed25519 public key (SPKI with OID 1.3.101.112) under a plain key id is
+    ignored, so an HMAC secret cannot be pinned. Outside development an HMAC
+    key is refused even if it is in the list (`hmac-key-refused`), and an
+    empty list refuses everything (`no-publishing-key`). The install dialog
+    says why in words ("Not installed: this copy of the app trusts no plugin
+    publisher yet, so it installs no plugins.", and so on).
+-   **`tools/plugins/publishing-key.mjs`.** `generate` writes a new private key
+    (PKCS#8 PEM, mode 0600, never over an existing file) and prints the line
+    to pin; `public` prints it for an existing key, such as the one FBM signs
+    with now; `verify` checks a bundle the way a production client does,
+    against a key list or the keys pinned in the source. Its tests run in CI
+    (`plugin-publishing-key` in `ci.yml`).
+-   **The stub marketplace** signs with an Ed25519 key when
+    `FREEBLACKMARKET_STUB_SIGNING_KEY_FILE` and `..._KEY_ID` are set, so a
+    demo running it behind a production build can pin that key; without them
+    it signs with the development key, as before.
+-   **Documents.** `THREAT_MODEL.md` §6a (the mitigation and its residual
+    risk), `KNOWN_LIMITATIONS.md`, T22 and decision 9, the client's and the
+    backend's `.env.example`, `CONSOLIDATION.md`.
+
+### Where each half of the key goes
+
+The private key is Free Black Market's: its bundle-signing setting, signing
+under the key id that is pinned, readable by the process that signs and by
+nothing else. FBM runs on the same server as the API, so whoever takes that
+server can sign bundles; they could already change the web client it serves,
+but a desktop or mobile build that pins the key keeps trusting it until a new
+build drops it. The public key goes in `publishingKeys.ts`, in a reviewed
+commit. To rotate: pin the new key beside the old, ship builds with both,
+switch FBM, then drop the old entry. A key that leaks is dropped at once.
+
+### Checked
+
+-   **Client tests.** `tests/unit/features/monetization/pluginPublishingKeys.test.ts`
+    (11): a bundle signed with a generated Ed25519 key installs and one signed
+    with another key under the same id does not; the key list takes only
+    Ed25519 keys under plain ids (an HMAC secret, a P-256 key, an X25519 key
+    of the same length, a truncated key and a bad id are all refused); with
+    `DEV` false an HMAC key in the list is refused, the default list holds no
+    development key, an empty list installs nothing, keys from
+    `VITE_PLUGIN_PUBLISHING_KEYS` and from `publishingKeys.ts` (mocked) are
+    trusted and nothing else listed there; in development the stub's key still
+    works; each reason has its own sentence. Against the previous code seven of
+    the eleven fail; the four that pass cover what already worked (Ed25519
+    verification, the development key in development). The four existing
+    `pluginSignature.test.ts` cases pass. A mutation pass (12 mutants: the
+    empty-list refusal, the HMAC refusal, the development condition, each key
+    source, the id and key checks, the OID and length checks, the messages)
+    failed the suite every time; one of them, by breaking compilation.
+-   **API tests.** `test/freeblackmarket-stub-signer.test.ts` (4): the default
+    HMAC signature; an Ed25519 signature under the configured id that
+    `crypto.verify` accepts; a missing or bad key id and a non-Ed25519 key
+    refused; a whole stub bundle checked as the client checks it. The existing
+    stub and signed-bundle suites pass (17 in all).
+-   **Together.** A key made by `generate` (file mode 0600), a bundle the stub
+    signed with it, `verify` on that bundle, and the client's own
+    `verifySignedBundle` in a production setting (`DEV` false, the key in
+    `VITE_PLUGIN_PUBLISHING_KEYS`) all agree: accepted.
+-   **The production build** (`vite build`): the JavaScript contains neither
+    `fbm-dev-hmac` nor its secret. The source maps still carry the original
+    source text, as the repository does.
+
+### Not checked
+
+-   **Free Black Market's side.** Its signing configuration is outside this
+    repository: which key it signs with today, and under which key id, has to
+    be read on the server. `verify` on a bundle FBM served is the check to run
+    before shipping a build that pins its key.

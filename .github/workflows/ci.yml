@@ -123,6 +123,19 @@ jobs:
             - run: node tools/ci/build-trust-page.mjs --check
             - run: node --test tools/ci/build-trust-page.test.mjs
 
+    plugin-publishing-key:
+        # tools/plugins/publishing-key.mjs makes the Ed25519 keys the client pins
+        # for marketplace plugin bundles and checks a bundle the way the client
+        # does; its tests keep that check in step with the client's.
+        name: Plugin publishing key tool
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+            - run: node --test tools/plugins/publishing-key.test.mjs
+
     deaddrop-envelope-parity:
         # Audit M18: execute BOTH envelope validators (protocol source of truth +
         # appservice runtime guard) against a shared adversarial corpus and fail

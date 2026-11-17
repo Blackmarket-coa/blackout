@@ -50,9 +50,10 @@ verdicts, decisions, and the ordered roadmap — is `docs/REPO_CONSOLIDATION_REV
     this repo's wire format at publish, no translation). Marketplace version writes are
     SemVer-gated (`400 invalid_version`) with the same rule as FBM's registry. Registry reads
     need `FREEBLACKMARKET_PUBLISHABLE_KEY` (Medusa gates `/store/*`); the in-process stub keeps
-    dev/CI serving. Deferred: the client's pinned dev-HMAC publishing key flips to FBM's
-    published Ed25519 keys (`/.well-known/freeblackmarket-publishing-keys.json`) at release —
-    operator item; `code_plugin` sandbox runtime remains pre-existing M19, not W3. Blackout's
+    dev/CI serving. Since 2026-11-17 a production client build trusts only Ed25519 publishing
+    keys pinned at build time (`publishingKeys.ts`, `VITE_PLUGIN_PUBLISHING_KEYS`) and refuses the
+    dev HMAC key; pinning FBM's key (`tools/plugins/publishing-key.mjs`) is the operator item.
+    `code_plugin` sandbox runtime remains pre-existing M19, not W3. Blackout's
     slots/panels model and FBM's author-side webhook hooks are complementary surfaces, not a
     conflict — no reconciliation needed.
 -   **Reputation (decision D7, W4)**: the canonical economic-reputation log is FBM's

@@ -992,6 +992,34 @@ For the source-of-truth triage with tier/owner detail see
     it. The tile server sees which areas each person looks at, as it sees the
     rest of their traffic.
 
+### Plugins: no publishing key is pinned yet, so a production build installs none (2026-11-17)
+
+-   **Where:** `apps/blackout-client/src/app/features/monetization/install/`
+    (`pluginSignature.ts`, `publishingKeys.ts`) and
+    `tools/plugins/publishing-key.mjs`. Record:
+    `docs/security/map-tiles-and-plugin-key-2026-11-17.md`, P.
+-   **State:** a production build installs a marketplace bundle only if it is
+    signed by an Ed25519 key pinned when the build was made, and refuses
+    every HMAC key. The list in `publishingKeys.ts` is empty, and no
+    deployment file here sets `VITE_PLUGIN_PUBLISHING_KEYS`, so today a
+    production build installs no plugin, and the install dialog says so.
+    Until 2026-11-17 every build trusted a development key written in the
+    client's source, which anyone could sign with.
+-   **Operator action:** pin Free Black Market's public key. On the server
+    that holds the private key, `tools/plugins/publishing-key.mjs` prints the
+    line for `publishingKeys.ts`: `public --key <key.pem> --key-id <id>` for
+    the key FBM signs with, or `generate` for a new pair. Free Black Market
+    must sign with that key under that key id. A development build (the Vite dev server) still
+    trusts the stub marketplace's development key. A demo that runs the stub
+    behind a production build gives the stub an Ed25519 key
+    (`FREEBLACKMARKET_STUB_SIGNING_KEY_FILE`, `..._KEY_ID`) and pins it in
+    that build.
+-   **What the key does not do:** it says who published a bundle, not what
+    the code does; the sandbox and the capabilities the person grants are
+    what limit it (`THREAT_MODEL.md` §6a). Whoever holds the private key, or
+    takes the server it is on, can sign bundles that builds pinning it will
+    install.
+
 ## Deferred multi-week workstreams
 
 These are tracked in

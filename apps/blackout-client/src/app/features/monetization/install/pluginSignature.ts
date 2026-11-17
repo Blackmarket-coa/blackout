@@ -1,31 +1,105 @@
 import type { PluginSignatureEnvelope } from '@blackout/sdk';
+import { PINNED_PUBLISHING_KEYS } from './publishingKeys';
 
 /**
- * Pinned publishing keys for marketplace artifacts. The blackout client
- * refuses to install any bundle whose signature cannot be matched to one
- * of these public keys. Real values rotate via the
- * /.well-known/freeblackmarket-publishing-keys.json endpoint and are
- * expected to be embedded into the build at release time.
+ * The keys a marketplace bundle's signature is checked against. The client
+ * refuses to install any bundle whose signature does not check out against
+ * one of them.
+ *
+ * - `publishingKeys.ts`: Ed25519 keys pinned in the source, in every build.
+ * - `VITE_PLUGIN_PUBLISHING_KEYS`: more Ed25519 keys for one build, read when
+ *   it is built, as `keyId:base64-SPKI` entries separated by commas or spaces
+ *   (`tools/plugins/publishing-key.mjs` prints them).
+ * - `fbm-dev-hmac`: in a development build only (the Vite dev server and the
+ *   tests), the HMAC secret the API's stub marketplace signs with. It is
+ *   written in this file, so anyone could sign with it; a production build
+ *   leaves it out and refuses every HMAC key (`hmac-key-refused`).
+ *
+ * Until 2026-11-17 the development key was the only key, in every build, and
+ * the comment here said the real keys rotated through a well-known URL; no
+ * code fetched one. A production build with no pinned key now installs
+ * nothing (`no-publishing-key`).
  */
 export interface PluginPublishingKey {
-    /** Stable identifier (e.g. `fbm-2026-q2`). */
+    /** Stable identifier the envelope names (e.g. `fbm-2026-11`). */
     keyId: string;
-    /** Base64 SPKI Ed25519 or HMAC fallback (`hmac:<hex>`). */
+    /** Base64 Ed25519 SubjectPublicKeyInfo, or `hmac:<hex>` in development. */
     publicKey: string;
 }
 
+/** DER prefix of an Ed25519 SubjectPublicKeyInfo (RFC 8410); 32 key bytes follow. */
+const ED25519_SPKI_PREFIX = [
+    0x30, 0x2a, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x70, 0x03, 0x21, 0x00,
+];
+const ED25519_SPKI_LENGTH = ED25519_SPKI_PREFIX.length + 32;
+const KEY_ID = /^[A-Za-z0-9._-]{1,64}$/;
+
+/** Whether `value` is the base64 of an Ed25519 public key (SPKI DER). */
+export function isEd25519PublicKey(value: string): boolean {
+    if (!/^[A-Za-z0-9+/]+={0,2}$/.test(value)) return false;
+    let bytes: Uint8Array;
+    try {
+        bytes = base64ToBytes(value);
+    } catch {
+        return false;
+    }
+    return (
+        bytes.length === ED25519_SPKI_LENGTH &&
+        ED25519_SPKI_PREFIX.every((byte, index) => bytes[index] === byte)
+    );
+}
+
+/**
+ * Parse `keyId:base64` entries (the `VITE_PLUGIN_PUBLISHING_KEYS` format).
+ * Anything that is not an Ed25519 public key under a plain key id is left out
+ * and listed in `rejected`, so an HMAC secret can never be pinned this way.
+ */
+export function parsePublishingKeys(value: string | undefined): {
+    keys: PluginPublishingKey[];
+    rejected: string[];
+} {
+    const keys: PluginPublishingKey[] = [];
+    const rejected: string[] = [];
+    for (const entry of (value ?? '').split(/[\s,]+/).filter(Boolean)) {
+        const colon = entry.indexOf(':');
+        const keyId = colon > 0 ? entry.slice(0, colon) : '';
+        const publicKey = colon > 0 ? entry.slice(colon + 1) : '';
+        if (KEY_ID.test(keyId) && isEd25519PublicKey(publicKey)) keys.push({ keyId, publicKey });
+        else rejected.push(entry);
+    }
+    return { keys, rejected };
+}
+
+const buildKeys = parsePublishingKeys(
+    import.meta.env.VITE_PLUGIN_PUBLISHING_KEYS as string | undefined
+);
+if (buildKeys.rejected.length > 0) {
+    // eslint-disable-next-line no-console
+    console.warn(
+        `[plugins] VITE_PLUGIN_PUBLISHING_KEYS: ignored ${buildKeys.rejected.length} entr${
+            buildKeys.rejected.length === 1 ? 'y' : 'ies'
+        } that are not keyId:<base64 Ed25519 public key>`
+    );
+}
+
+/** The pinned keys that are Ed25519 keys; anything else in the list is ignored. */
+const pinnedKeys = PINNED_PUBLISHING_KEYS.filter(
+    (key) => KEY_ID.test(key.keyId) && isEd25519PublicKey(key.publicKey)
+);
+
+// `import.meta.env.DEV` is a constant in a production build, so the secret
+// below is not in it.
 const DEFAULT_KEYS: PluginPublishingKey[] = [
-    {
-        keyId: 'fbm-dev-hmac',
-        publicKey:
-            typeof process !== 'undefined' && process.env?.BLACKOUT_PLUGIN_DEV_HMAC
-                ? `hmac:${process.env.BLACKOUT_PLUGIN_DEV_HMAC}`
-                : 'hmac:6465762d68616d63', // ascii "dev-hamc" — replaced at release.
-    },
+    ...pinnedKeys,
+    ...buildKeys.keys,
+    ...(import.meta.env.DEV
+        ? [{ keyId: 'fbm-dev-hmac', publicKey: 'hmac:6465762d68616d63' /* "dev-hamc" */ }]
+        : []),
 ];
 
 let registeredKeys = [...DEFAULT_KEYS];
 
+/** Tests only: replace the keys; an empty list restores the build's own. */
 export function setPluginPublishingKeys(keys: PluginPublishingKey[]): void {
     registeredKeys = keys.length > 0 ? [...keys] : [...DEFAULT_KEYS];
 }
@@ -100,8 +174,14 @@ export interface VerifyBundleResult {
 
 export async function verifySignedBundle(input: VerifyBundleInput): Promise<VerifyBundleResult> {
     const keys = input.keys ?? registeredKeys;
+    if (keys.length === 0) return { ok: false, reason: 'no-publishing-key' };
     const key = keys.find((entry) => entry.keyId === input.signature.keyId);
     if (!key) return { ok: false, reason: 'unknown-key-id' };
+    // An HMAC "public key" is a shared secret; outside development it is
+    // refused however it got into the list.
+    if (key.publicKey.startsWith('hmac:') && !import.meta.env.DEV) {
+        return { ok: false, reason: 'hmac-key-refused', keyId: key.keyId };
+    }
 
     const manifestSha = await canonicalManifestSha256(input.manifest);
     if (manifestSha !== input.signature.manifestSha256) {

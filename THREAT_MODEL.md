@@ -128,11 +128,15 @@ loaded by `apps/blackout-client/src/app/features/monetization/install/pluginInst
     canonical manifest hash and the bundle SHA-256. The blackout client
     refuses to install if the key id is not on its pinned keyset
     (`apps/blackout-client/src/app/features/monetization/install/pluginSignature.ts`).
-    **Not in effect:** the only key the client pins is a development HMAC
-    secret written in its source (`fbm-dev-hmac`), which the API's stub
-    marketplace signs with too. Anyone with the client can sign a bundle it
-    will install, so the check catches a damaged download, not a forged one,
-    until a real publishing keyset is pinned (trust-claims T22).
+    A production build trusts only Ed25519 keys pinned when it is built
+    (`publishingKeys.ts` beside it, or `VITE_PLUGIN_PUBLISHING_KEYS` for one
+    build) and refuses every HMAC key; the HMAC key the API's stub
+    marketplace signs with (`fbm-dev-hmac`) is in development builds only.
+    **No key is pinned yet:** until the operator pins Free Black Market's
+    public key (`tools/plugins/publishing-key.mjs`), a production build
+    installs no plugin. Until 2026-11-17 that development key was the only
+    one, in every build, so anyone with the client could sign a bundle it
+    would install (trust-claims T22).
 -   **Privilege escalation inside the host**: plugin code attempts to read
     cookies, call host APIs, or open Matrix sessions. Mitigated by hosting
     bundles in a `sandbox="allow-scripts"` `srcdoc` iframe with no host
@@ -159,9 +163,11 @@ allow-top-navigation-by-user-activation"`; the host only relays
 **Residual risk**: a plugin that is granted broad capabilities (e.g.
 `message.compose`) can still misbehave within those capabilities. The
 manifest is shown to the user before install and capabilities can be
-revoked from Settings → Plugins. Production releases must pin the
-freeblackmarket publishing keyset at build time (no
-`BLACKOUT_PLUGIN_DEV_HMAC` shortcut); no build does today.
+revoked from Settings → Plugins. Whoever holds the private publishing key
+can sign bundles every build pinning it will install. Free Black Market runs
+on the same server as the API, so whoever takes that server can sign them,
+as they could already change the web client it serves; a desktop or mobile
+build keeps trusting a pinned key until a new build drops it.
 
 ### 6b. FBM-hosted subscription management (manage session)
 

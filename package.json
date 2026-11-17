@@ -65,6 +65,7 @@
         "guard:embed-proxy-framing": "node tools/ci/check-embed-proxy-framing.mjs",
         "test:guard:embed-proxy-framing": "node --test tools/ci/check-embed-proxy-framing.test.mjs",
         "test:guard:deaddrop-parity": "node --import tsx --test tools/ci/deaddrop-envelope-parity.test.ts",
+        "test:plugins:publishing-key": "node --test tools/plugins/publishing-key.test.mjs",
         "guard:cors-allowlist": "node tools/ci/check-cors-allowlist.mjs",
         "guard:room-encryption": "node tools/ci/check-room-encryption.mjs",
         "build:trust-page": "node tools/ci/build-trust-page.mjs",
