@@ -147,7 +147,9 @@ describe('parsePublishingKeys (VITE_PLUGIN_PUBLISHING_KEYS)', () => {
 
 describe('outside development (a production build)', () => {
     it('refuses an HMAC key, even one in the list', async () => {
-        const secret = '00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff';
+        // Made at run time: a key written in the source reads as a leaked secret
+        // to a secret scanner (GitGuardian flagged the literal this replaced).
+        const secret = toHex(crypto.getRandomValues(new Uint8Array(32)).buffer);
         const bundle = await signedBundle('test-key', (text) => hmacSign(secret, text));
         const keys = [{ keyId: 'test-key', publicKey: `hmac:${secret}` }];
         expect((await verifySignedBundle({ ...bundle, keys })).ok).toBe(true);

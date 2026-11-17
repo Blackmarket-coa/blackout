@@ -223,6 +223,15 @@ switch FBM, then drop the old entry. A key that leaks is dropped at once.
     `fbm-dev-hmac` nor its secret. The source maps still carry the original
     source text, as the repository does.
 
+-   **Secret scan.** GitGuardian flagged the HMAC key in
+    `pluginPublishingKeys.test.ts` (commit `daeb5c2caa`) as a generic
+    high-entropy secret. It is the counting pattern `0011…eeff` that the test
+    suite uses as its HMAC test key in nine other files, not a credential, and
+    a production build refuses every HMAC key. The test now makes its key at
+    run time. That commit stays in history (it is not rewritten), so the
+    finding has to be closed in GitGuardian, as a test value, by someone with
+    access to that workspace.
+
 ### Not checked
 
 -   **Free Black Market's side.** Its signing configuration is outside this
