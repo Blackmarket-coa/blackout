@@ -7,11 +7,11 @@ row "Spatial layer integration (PostGIS + Martin + PMTiles) — base".
 The spatial layer is OSS-leverage scaffolding. We adopt three upstream
 projects with minimal modification:
 
-| Component | Upstream | License | Modification |
-|---|---|---|---|
-| PostGIS | <https://postgis.net> via [`postgis/postgis`](https://github.com/postgis/docker-postgis) image | GPL-2.0 (server) + various | Image swap on the existing Postgres service; `coalition` schema added |
-| MapLibre Martin | <https://github.com/maplibre/martin> | Apache-2.0 / MIT | Config-only adoption via `martin/martin.yaml` |
-| PMTiles | <https://github.com/protomaps/PMTiles> format + Protomaps planet builds | BSD-3-Clause (format) / ODbL (data) | None — drop-in basemap |
+| Component       | Upstream                                                                                       | License                             | Modification                                                          |
+| --------------- | ---------------------------------------------------------------------------------------------- | ----------------------------------- | --------------------------------------------------------------------- |
+| PostGIS         | <https://postgis.net> via [`postgis/postgis`](https://github.com/postgis/docker-postgis) image | GPL-2.0 (server) + various          | Image swap on the existing Postgres service; `coalition` schema added |
+| MapLibre Martin | <https://github.com/maplibre/martin>                                                           | Apache-2.0 / MIT                    | Config-only adoption via `martin/martin.yaml`                         |
+| PMTiles         | <https://github.com/protomaps/PMTiles> format + Protomaps planet builds                        | BSD-3-Clause (format) / ODbL (data) | None — drop-in basemap                                                |
 
 The three plug into the single-server-baseline stack with no new
 stateful service beyond Martin (which is stateless).
@@ -119,12 +119,12 @@ Martin restart required.
 
 Recommended table conventions:
 
-- A single geometry column per table, named `geom`, with SRID 4326
-  (WGS84). Martin handles the projection on the wire.
-- Indexable. Add `CREATE INDEX ... USING GIST (geom)` so tile
-  bounding-box queries don't sequential-scan.
-- `ALTER TABLE ... CLUSTER ON <gist_index>` for tables that are
-  read-heavy and write-rare.
+-   A single geometry column per table, named `geom`, with SRID 4326
+    (WGS84). Martin handles the projection on the wire.
+-   Indexable. Add `CREATE INDEX ... USING GIST (geom)` so tile
+    bounding-box queries don't sequential-scan.
+-   `ALTER TABLE ... CLUSTER ON <gist_index>` for tables that are
+    read-heavy and write-rare.
 
 ---
 
@@ -170,15 +170,15 @@ so it can be regenerated.
 Sized for the consolidated DL360 host described in
 [`../AGGRESSIVE_OPERATIONS_GUIDE.md` §2.4 + §4.1](../AGGRESSIVE_OPERATIONS_GUIDE.md).
 
-- Martin's resident memory is dominated by `cache_size_mb` (256 MB).
-  Idle: ~50 MB. Worst case under heavy basemap load: ~400 MB. Fits
-  trivially on the host.
-- PostGIS adds ~150 MB to the Postgres image size on disk. Working
-  set growth depends on `coalition.*` table sizes; an empty schema
-  adds nothing measurable.
-- Tile request rate at the Foundation milestone is expected to be
-  low (Coalition page renders only). Martin can serve thousands of
-  tiles per second on this host before nginx becomes the bottleneck.
+-   Martin's resident memory is dominated by `cache_size_mb` (256 MB).
+    Idle: ~50 MB. Worst case under heavy basemap load: ~400 MB. Fits
+    trivially on the host.
+-   PostGIS adds ~150 MB to the Postgres image size on disk. Working
+    set growth depends on `coalition.*` table sizes; an empty schema
+    adds nothing measurable.
+-   Tile request rate at the Foundation milestone is expected to be
+    low (Coalition page renders only). Martin can serve thousands of
+    tiles per second on this host before nginx becomes the bottleneck.
 
 Capacity bands for the spatial layer are deliberately not set;
 follow the same posture as `RUNBOOK.md` §13 — set bands once
@@ -188,9 +188,9 @@ operating telemetry exists.
 
 ## 6) Cross-references
 
-- [`../AGGRESSIVE_OPERATIONS_GUIDE.md` §2.4](../AGGRESSIVE_OPERATIONS_GUIDE.md) — unified deployment topology
-- [`../AGGRESSIVE_OPERATIONS_GUIDE.md` §9.2](../AGGRESSIVE_OPERATIONS_GUIDE.md) — Spatial layer integration row
-- [`../../infra/single-server-baseline/docker-compose.yml`](../../infra/single-server-baseline/docker-compose.yml) — postgres + martin services
-- [`../../infra/single-server-baseline/martin/martin.yaml`](../../infra/single-server-baseline/martin/martin.yaml) — Martin config
-- [`../../infra/single-server-baseline/postgres/initdb/01-spatial-database.sql`](../../infra/single-server-baseline/postgres/initdb/01-spatial-database.sql) — fresh-init script
-- [`../../infra/single-server-baseline/RUNBOOK.md`](../../infra/single-server-baseline/RUNBOOK.md) §17 — operator notes + hardening backlog
+-   [`../AGGRESSIVE_OPERATIONS_GUIDE.md` §2.4](../AGGRESSIVE_OPERATIONS_GUIDE.md) — unified deployment topology
+-   [`../AGGRESSIVE_OPERATIONS_GUIDE.md` §9.2](../AGGRESSIVE_OPERATIONS_GUIDE.md) — Spatial layer integration row
+-   [`../../infra/single-server-baseline/docker-compose.yml`](../../infra/single-server-baseline/docker-compose.yml) — postgres + martin services
+-   [`../../infra/single-server-baseline/martin/martin.yaml`](../../infra/single-server-baseline/martin/martin.yaml) — Martin config
+-   [`../../infra/single-server-baseline/postgres/initdb/01-spatial-database.sql`](../../infra/single-server-baseline/postgres/initdb/01-spatial-database.sql) — fresh-init script
+-   [`../../infra/single-server-baseline/RUNBOOK.md`](../../infra/single-server-baseline/RUNBOOK.md) §17 — operator notes + hardening backlog
