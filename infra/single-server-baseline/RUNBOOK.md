@@ -595,9 +595,16 @@ available for the dedicated `spatial` database created by
 Tile serving is via MapLibre Martin
 (`ghcr.io/maplibre/martin:v0.14.2`), config-only-adopted via
 `martin/martin.yaml`. Martin reads the `coalition` schema from the
-spatial database and any `.pmtiles` archives dropped under
-`martin/pmtiles/`. Public access is via the nginx `/tiles/` location
-on `api.theblackout.app`.
+spatial database, any `.pmtiles` archives dropped under
+`martin/pmtiles/`, and the label fonts checked in under `martin/fonts/`.
+Public access is via the nginx `/tiles/` location on the chat origin
+and on `api.theblackout.app`. The client's coalition map draws its
+background from `basemap.pmtiles` only, which `martin/fetch-basemap.sh`
+downloads; without it the map shows its pins on a plain background.
+`deploy.sh` checks that Martin's fonts are in `$INFRA_DIR` and mounted
+(`martin/check-fonts.sh`), then recreates Martin with the other services.
+After a new basemap, from `$INFRA_DIR`:
+`docker compose up -d --no-deps --force-recreate martin`.
 
 Bootstrap, basemap download, and the existing-volume migration path
 live in `docs/runbooks/SPATIAL_LAYER_BASE.md`.

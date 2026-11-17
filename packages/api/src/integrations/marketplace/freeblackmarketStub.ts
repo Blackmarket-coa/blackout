@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import fs from 'node:fs';
 import type {
     CatalogQuery,
     CheckoutInput,
@@ -550,6 +551,43 @@ function getDevHmacHex(env = process.env): string {
     return env.BLACKOUT_PLUGIN_DEV_HMAC ?? DEFAULT_DEV_HMAC_HEX;
 }
 
+export interface StubBundleSigner {
+    keyId: string;
+    /** Signature over `${manifestSha256}:${sha256}`, in the envelope's encoding. */
+    sign(payload: string): string;
+}
+
+/**
+ * How the stub signs plugin bundles. By default with the development HMAC key
+ * (`fbm-dev-hmac`), which only a development build of the client trusts: a
+ * production build refuses HMAC. A demo that runs the stub behind a production
+ * build gives it an Ed25519 key instead, and pins the public half in that build
+ * (`VITE_PLUGIN_PUBLISHING_KEYS`; `tools/plugins/publishing-key.mjs` makes both):
+ *   FREEBLACKMARKET_STUB_SIGNING_KEY_FILE  PKCS#8 PEM of an Ed25519 private key
+ *   FREEBLACKMARKET_STUB_SIGNING_KEY_ID    the key id the build pins it under
+ */
+export function createStubBundleSigner(env: NodeJS.ProcessEnv = process.env): StubBundleSigner {
+    const file = env.FREEBLACKMARKET_STUB_SIGNING_KEY_FILE;
+    if (!file) {
+        const secret = getDevHmacHex(env);
+        return { keyId: STUB_KEY_ID, sign: (payload) => hmacHex(secret, payload) };
+    }
+    const keyId = env.FREEBLACKMARKET_STUB_SIGNING_KEY_ID;
+    if (!keyId || !/^[A-Za-z0-9._-]{1,64}$/.test(keyId)) {
+        throw new Error(
+            'FREEBLACKMARKET_STUB_SIGNING_KEY_ID must name the key (letters, digits, . _ -) when FREEBLACKMARKET_STUB_SIGNING_KEY_FILE is set'
+        );
+    }
+    const key = crypto.createPrivateKey(fs.readFileSync(file));
+    if (key.asymmetricKeyType !== 'ed25519') {
+        throw new Error('FREEBLACKMARKET_STUB_SIGNING_KEY_FILE must hold an Ed25519 private key');
+    }
+    return {
+        keyId,
+        sign: (payload) => crypto.sign(null, Buffer.from(payload, 'utf8'), key).toString('base64'),
+    };
+}
+
 export interface FreeblackmarketStubInternals {
     /** Look up a session by its id (used by the stub embed page). */
     getSession(sessionId: string): StubSession | undefined;
@@ -603,6 +641,7 @@ export function createFreeblackmarketStubProvider(): MarketplaceProvider {
     const apiBaseUrl =
         process.env.BLACKOUT_PUBLIC_API_BASE_URL ?? process.env.PUBLIC_API_BASE_URL ?? '';
     const enabled = envBool('FREEBLACKMARKET_ENABLED', true);
+    const signer = createStubBundleSigner();
 
     const listings = new Map<string, StubListing>();
     for (const seed of SEEDED_LISTINGS) listings.set(seed.listing.providerListingId, { ...seed });
@@ -665,14 +704,13 @@ export function createFreeblackmarketStubProvider(): MarketplaceProvider {
         const bundleSha = sha256Hex(bundleBytes);
         manifest.sha256 = bundleSha;
         const manifestSha = sha256Hex(canonicalJson(manifest));
-        const devKey = getDevHmacHex();
-        const signature = hmacHex(devKey, `${manifestSha}:${bundleSha}`);
+        const signature = signer.sign(`${manifestSha}:${bundleSha}`);
 
         return {
             manifest,
             bundleBase64: bundleBytes.toString('base64'),
             signature: {
-                keyId: STUB_KEY_ID,
+                keyId: signer.keyId,
                 signature,
                 manifestSha256: manifestSha,
                 sha256: bundleSha,

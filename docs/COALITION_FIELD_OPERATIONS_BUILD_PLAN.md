@@ -32,7 +32,7 @@ Additional release gates:
 -   Verify BO-1 (`DecryptionError`) resolution and user-visible failure handling. Encrypted check-ins or alerts must not fail silently.
 -   Confirm whether the Coalition network is deployed; the September audit reportedly said coded but not deployed.
 -   Verify Matrix client + homeserver support for encrypted live-location events, retention, key rotation, and revoked access before selecting that transport.
--   Replace third-party default map tile/style requests with a controlled/self-hosted option for sensitive use. If `VITE_MAPLIBRE_STYLE_URL` is unset, audit whether fallback requests disclose viewed map regions to public OSM services.
+-   Replace third-party default map tile/style requests with a controlled/self-hosted option for sensitive use. If `VITE_MAPLIBRE_STYLE_URL` is unset, audit whether fallback requests disclose viewed map regions to public OSM services. **Done 2026-11-17:** they did; the fallback is removed and the map draws its background from the deployment's own Martin only (`THREAT_MODEL.md` §3, boundary 8; `docs/security/map-tiles-and-plugin-key-2026-11-17.md`).
 -   Review the threat model: homeserver metadata visibility, device seizure exclusions, server logs, backups, push notifications, and client caches. Encryption is not a promise of zero metadata or zero retained copies.
 
 ## Phased implementation, in dependency order

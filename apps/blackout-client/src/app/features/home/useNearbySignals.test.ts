@@ -12,7 +12,11 @@ vi.mock('../coalition/coalitionClient', () => ({
 }));
 
 import { coarsen, useNearbySignals, type NearbySignalsState } from './useNearbySignals';
-import { DEFAULT_LOCATION_CONSENT, locationConsentAtom } from '../location/locationConsent';
+import {
+    DEFAULT_LOCATION_CONSENT,
+    LOCATION_DISCLOSURE_VERSION,
+    locationConsentAtom,
+} from '../location/locationConsent';
 
 const flush = async () => {
     for (let i = 0; i < 6; i++) await Promise.resolve();
@@ -100,7 +104,7 @@ describe('useNearbySignals', () => {
         expect(hook.current.disclosureOpen).toBe(false);
         const stored = JSON.parse(localStorage.getItem('blackout.location.consent.v1') ?? '{}');
         expect(stored.status).toBe('granted');
-        expect(stored.disclosureVersion).toBe(1);
+        expect(stored.disclosureVersion).toBe(LOCATION_DISCLOSURE_VERSION);
     });
 
     it('cancelEnable closes the disclosure and leaves location off', async () => {
@@ -122,7 +126,7 @@ describe('useNearbySignals', () => {
         getDefaultStore().set(locationConsentAtom, {
             status: 'granted',
             grantedAt: 1,
-            disclosureVersion: 1,
+            disclosureVersion: LOCATION_DISCLOSURE_VERSION,
         });
         geolocationMock.getCurrentPosition.mockImplementation((onSuccess: PositionCallback) => {
             onSuccess({ coords: { latitude: 1, longitude: 2 } } as GeolocationPosition);

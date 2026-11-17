@@ -1,5 +1,5 @@
 import { atom } from 'jotai';
-import { installedPluginsAtom } from '../monetization/install/installedPluginsAtom';
+import { enabledPluginsAtom } from '../monetization/install/installedPluginsAtom';
 import type { OwnedVaultGrant } from './vaultGoods';
 
 const BASE_VAULT_SLOTS = 5;
@@ -7,7 +7,7 @@ const BASE_VAULT_SLOTS = 5;
 /** Vault grants the current user owns (from installed vault_item entitlements). */
 export const ownedVaultGrantsAtom = atom<OwnedVaultGrant[]>((get) => {
     const out: OwnedVaultGrant[] = [];
-    for (const record of get(installedPluginsAtom)) {
+    for (const record of get(enabledPluginsAtom)) {
         if (record.vaultGrant) out.push(record.vaultGrant);
     }
     return out;

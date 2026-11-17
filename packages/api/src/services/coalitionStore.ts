@@ -17,6 +17,7 @@ import {
     type SpatialFeedItem,
 } from '@blackout/core';
 import { db } from '../db/store';
+import { canSeeEvent } from './coalitionVisibility';
 
 const NOW_ISO = () => new Date().toISOString();
 
@@ -91,6 +92,11 @@ export function newFeedCommentId(): string {
 export interface SpatialFilter {
     layers?: string[];
     canopyId?: string;
+    /**
+     * Who is asking. Events they may not see (coalitionVisibility.ts) are left
+     * out; with no viewer, only public events are listed.
+     */
+    viewerId?: string | null;
 }
 
 /** Project a scheduled event onto its map pin using its soonest live/upcoming occurrence. */
@@ -126,6 +132,9 @@ export function listSpatialItems(filter: SpatialFilter = {}): SpatialFeedItem[] 
         const now = Date.now();
         for (const event of db.listCoalitionEvents()) {
             if (event.status === 'cancelled') continue;
+            // Until 2026-11-17 every event that was not cancelled was listed,
+            // private ones included, to anyone.
+            if (!canSeeEvent(event, filter.viewerId ?? null, db.listEventRsvps(event.id))) continue;
             items.push(eventToSpatialItem(event, now));
         }
     }

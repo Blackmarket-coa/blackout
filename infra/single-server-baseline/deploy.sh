@@ -26,8 +26,14 @@ cd "$SCRIPT_DIR" && docker build -f Dockerfile.blackout-api-pg -t blackout-api:s
 cd "$REPO_DIR" && docker build -f infra/single-server-baseline/Dockerfile.blackout-api-hono -t blackout-api:hono .
 cd "$REPO_DIR/apps/blackout-server" && DOCKER_BUILDKIT=1 docker build -f docker/Dockerfile -t blackout-synapse:stable .
 
+# Martin is recreated too, so a change to its definition (such as the fonts
+# mount) takes effect now rather than at its next restart. First make sure it
+# will start: nginx cannot start while the name `martin` does not resolve.
+echo "==> Checking Martin's fonts in $INFRA_DIR..."
+"$SCRIPT_DIR/martin/check-fonts.sh" "$INFRA_DIR"
+
 echo "==> Redeploying from $INFRA_DIR..."
-cd "$INFRA_DIR" && docker compose up -d --force-recreate frontend api synapse reverse-proxy
+cd "$INFRA_DIR" && docker compose up -d --force-recreate frontend api synapse martin reverse-proxy
 
 echo "==> Done!"
 docker compose ps

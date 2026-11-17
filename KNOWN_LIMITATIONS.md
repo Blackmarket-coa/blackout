@@ -965,6 +965,92 @@ For the source-of-truth triage with tier/owner detail see
     entitlement unlocks nothing; what it is sold as is the operator's
     decision (T11).
 
+### The coalition map's background: from this server, once downloaded (2026-11-17)
+
+-   **Where:** `apps/blackout-client/src/app/features/coalition/tabs/basemapStyle.ts`,
+    `infra/single-server-baseline/martin/` and the nginx `/tiles/` route on
+    the chat origin. Record: `docs/security/map-tiles-and-plugin-key-2026-11-17.md`.
+-   **State:** the map asks the deployment's own tile server (Martin, at
+    `/tiles/`) for its background and asks no one else: a Protomaps extract
+    the operator downloads once (`martin/fetch-basemap.sh`) and the label
+    fonts checked in beside `martin.yaml`. Until 2026-11-17 it loaded
+    OpenStreetMap's public tiles whenever no style was configured, which no
+    deployment file did.
+-   **Until the operator acts:** with no `basemap.pmtiles`, or no `/tiles/`
+    route on the origin the client is served from, the map draws its pins on
+    a plain background and says the background did not load. Only
+    `infra/single-server-baseline` has a tile server and that route; the
+    other two nginx configurations here (`infra/nginx/`,
+    `deploy/docker/blackout-backend/`) have neither.
+-   **What it leaves out:** labels are drawn in Noto Sans (Latin, Greek,
+    Cyrillic) and Noto Sans Devanagari; a name in another script (Chinese,
+    Arabic, ...) is drawn without those characters. Points of interest and
+    every icon (one-way arrows, the shapes behind road numbers, town dots)
+    are left out, because Protomaps' icons come from its own site.
+-   **What it is:** a copy of OpenStreetMap as of the build the operator
+    downloaded; it does not update itself. Running the script again replaces
+    it. The tile server sees which areas each person looks at, as it sees the
+    rest of their traffic, and so does a proxy in front of it that ends TLS
+    (the live host is served through Cloudflare).
+
+### Plugins: no publishing key is pinned yet, so a production build installs none (2026-11-17)
+
+-   **Where:** `apps/blackout-client/src/app/features/monetization/install/`
+    (`pluginSignature.ts`, `publishingKeys.ts`) and
+    `tools/plugins/publishing-key.mjs`. Record:
+    `docs/security/map-tiles-and-plugin-key-2026-11-17.md`, P.
+-   **State:** a production build installs a marketplace bundle only if it is
+    signed by an Ed25519 key pinned when the build was made, and refuses
+    every HMAC key. The list in `publishingKeys.ts` is empty, and no
+    deployment file here sets `VITE_PLUGIN_PUBLISHING_KEYS`, so today a
+    production build installs no plugin, and the install dialog says so.
+    Until 2026-11-17 every build trusted a development key written in the
+    client's source, which anyone could sign with.
+-   **Operator action:** pin Free Black Market's public key. On the server
+    that holds the private key, `tools/plugins/publishing-key.mjs` prints the
+    line for `publishingKeys.ts`: `public --key <key.pem> --key-id <id>` for
+    the key FBM signs with, or `generate` for a new pair. Free Black Market
+    must sign with that key under that key id. A development build (the Vite dev server) still
+    trusts the stub marketplace's development key. A demo that runs the stub
+    behind a production build gives the stub an Ed25519 key
+    (`FREEBLACKMARKET_STUB_SIGNING_KEY_FILE`, `..._KEY_ID`) and pins it in
+    that build.
+-   **Plugins installed before:** the app checks every installed bundle again
+    when it starts. One that fails (in a production build, every bundle signed
+    with the development key) is kept, marked as an error, and unlocks
+    nothing until it is installed again; until 2026-11-17 the goods it
+    unlocked stayed unlocked, because the parts of the app that read them did
+    not look at that mark.
+-   **What the key does not do:** it says who published a bundle, not what
+    the code does; the sandbox and the capabilities the person grants are
+    what limit it (`THREAT_MODEL.md` §6a). Whoever holds the private key, or
+    takes the server it is on, can sign bundles that builds pinning it will
+    install.
+
+### Coalition data: who sees what (2026-11-17)
+
+-   **Where:** `packages/api/src/routes/coalition.ts`, rules in
+    `packages/api/src/services/coalitionVisibility.ts`. Record:
+    `docs/security/coalition-read-privacy-2026-11-17.md`.
+-   **Fixed 2026-11-17:** until then anyone, signed in or not, could read a
+    mutual-aid post's exact spot and address with its poster's id, every
+    private event, RSVP lists, ride offers naming the driver, and the people
+    behind every need, project, resource and contribution; and the location
+    consent text said the server kept no coarse position while access logs
+    recorded it. Now someone else's mutual-aid post is shown and searched only
+    as an area at least 500 m across, without poster or address; a non-public
+    event, its RSVPs and its rides are shown only to its organizer and people
+    who RSVP'd; nobody signed out is sent a person's id; positions and address
+    searches travel in request bodies. People who agreed to the old consent
+    text are asked again.
+-   **Still open:** nothing checks canopy membership, so any signed-in account
+    reads every canopy's needs, projects and resources with their authors and
+    pinned places, and ride drivers. The audiences in the field-operations plan
+    (public, coalition, ops, stewards) are not built. An event does not record
+    which community a `community` event is for, so such events are
+    organizer-only. Older clients send positions in the query string until
+    reloaded.
+
 ## Deferred multi-week workstreams
 
 These are tracked in

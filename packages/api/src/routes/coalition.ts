@@ -120,6 +120,12 @@ import { relaySubject } from '../services/relayStore';
 import { matrixClient } from '../integrations/matrix-client';
 import { readJsonBody } from '../middleware/validate';
 import { getAuthUser, requireUser } from '../middleware/require-user';
+import {
+    aidPostForViewer,
+    canSeeEvent,
+    rsvpsForViewer,
+    withoutPeopleWhenSignedOut,
+} from '../services/coalitionVisibility';
 import { createRateLimit } from '../middleware/rate-limit';
 import { geocode } from '../services/geocoder';
 
@@ -146,6 +152,27 @@ const feedQuerySchema = z.object({
     model: z.enum(['coalition_social_v1', 'recency_only', 'importance_only']).optional(),
     limit: z.coerce.number().int().min(1).max(100).optional(),
 });
+
+/** The signed-in user's id, or null: who the coalition reads answer for. */
+const viewerOf = (c: Parameters<typeof getAuthUser>[0]): string | null =>
+    getAuthUser(c)?.sub ?? null;
+
+/**
+ * The event if `viewerId` may see it, otherwise null, so a caller answers 404
+ * and does not reveal that a non-public event exists (services/coalitionVisibility.ts).
+ */
+function visibleEvent(eventId: string, viewerId: string | null) {
+    const event = getEvent(eventId);
+    if (!event) return null;
+    return canSeeEvent(event, viewerId, listEventRsvps(event.id)) ? event : null;
+}
+
+/** The events `viewerId` may see, organizer ids left out for someone signed out. */
+function visibleEvents(events: ReturnType<typeof listEvents>, viewerId: string | null) {
+    return events
+        .filter((event) => canSeeEvent(event, viewerId, listEventRsvps(event.id)))
+        .map((event) => withoutPeopleWhenSignedOut(event, viewerId, ['organizerId'] as const));
+}
 
 coalition.get('/feed', (c) => {
     const parsed = feedQuerySchema.safeParse(c.req.query());
@@ -346,7 +373,11 @@ coalition.get('/spatial-feed', (c) => {
         return c.json({ code: 'invalid_request', message: 'Invalid spatial query' }, 400);
     }
     const layers = parsed.data.layers ? parsed.data.layers.split(',') : undefined;
-    const items = listSpatialItems({ layers, canopyId: parsed.data.canopyId });
+    const items = listSpatialItems({
+        layers,
+        canopyId: parsed.data.canopyId,
+        viewerId: viewerOf(c),
+    });
     return c.json({
         generatedAt: new Date().toISOString(),
         layers: SPATIAL_LAYER_KEYS,
@@ -375,10 +406,35 @@ function parseNearby(c: {
     return { viewer: { latitude: lat, longitude: lng }, radiusMeters: radiusKm * 1000 };
 }
 
-coalition.get('/mutual-aid', (c) => {
-    const denId = c.req.query('denId');
-    let posts = listAidPosts({ denId });
-    const nearby = parseNearby(c);
+/**
+ * A position and radius sent in the body of a request rather than its
+ * address, so they are not written to the access log of anything the
+ * request passes through (the location consent text says so). The GET forms
+ * that take them in the query string still answer, for clients loaded before
+ * 2026-11-17.
+ */
+const nearbyBodySchema = z.object({
+    lat: z.number().min(-90).max(90),
+    lng: z.number().min(-180).max(180),
+    radiusKm: z.number().positive().max(20_000),
+});
+
+type NearbyFilter = NonNullable<ReturnType<typeof parseNearby>>;
+
+const nearbyFromBody = (body: z.infer<typeof nearbyBodySchema>): NearbyFilter => ({
+    viewer: { latitude: body.lat, longitude: body.lng },
+    radiusMeters: body.radiusKm * 1000,
+});
+
+function aidPostsFor(
+    viewerId: string | null,
+    denId: string | undefined,
+    nearby: NearbyFilter | null
+) {
+    // Each post as this viewer may see it: someone else's is a coarse cell, and
+    // the radius test below runs on that cell, so smaller and smaller circles
+    // cannot find the spot.
+    let posts = listAidPosts({ denId }).map((post) => aidPostForViewer(post, viewerId));
     if (nearby) {
         // A post with no coordinates is *unknown*, not *outside* — a mirrored
         // FreeBlackMarket ask carries a coarse locality and no pin. A radius
@@ -391,7 +447,17 @@ coalition.get('/mutual-aid', (c) => {
                 isWithinRadiusMeters(post.location, nearby.viewer, nearby.radiusMeters)
         );
     }
-    return c.json({ posts });
+    return posts;
+}
+
+coalition.get('/mutual-aid', (c) =>
+    c.json({ posts: aidPostsFor(viewerOf(c), c.req.query('denId'), parseNearby(c)) })
+);
+
+coalition.post('/mutual-aid/search', async (c) => {
+    const parsed = await readJsonBody(c, nearbyBodySchema.extend({ denId: z.string().optional() }));
+    if (parsed instanceof Response) return parsed;
+    return c.json({ posts: aidPostsFor(viewerOf(c), parsed.denId, nearbyFromBody(parsed)) });
 });
 
 const createAidSchema = z.object({
@@ -432,16 +498,26 @@ coalition.post('/mutual-aid', async (c) => {
     return c.json({ post }, 201);
 });
 
-coalition.get('/seller-locations', (c) => {
-    const onlyVisible = c.req.query('onlyVisible') !== 'false';
-    let locations = listSellerLocations({ onlyVisible });
-    const nearby = parseNearby(c);
+function sellerLocationsFor(nearby: NearbyFilter | null) {
+    // Only sellers who show themselves on the map. Until 2026-11-17 a caller
+    // could pass onlyVisible=false and be shown the ones who had hidden.
+    let locations = listSellerLocations({ onlyVisible: true });
     if (nearby) {
         locations = locations.filter((location) =>
             isWithinRadiusMeters(location.coordinates, nearby.viewer, nearby.radiusMeters)
         );
     }
-    return c.json({ locations });
+    return locations;
+}
+
+coalition.get('/seller-locations', (c) =>
+    c.json({ locations: sellerLocationsFor(parseNearby(c)) })
+);
+
+coalition.post('/seller-locations/search', async (c) => {
+    const parsed = await readJsonBody(c, nearbyBodySchema);
+    if (parsed instanceof Response) return parsed;
+    return c.json({ locations: sellerLocationsFor(nearbyFromBody(parsed)) });
 });
 
 // GET /v1/coalition/nearby — unified "signals nearby" count for the Home
@@ -450,22 +526,17 @@ coalition.get('/seller-locations', (c) => {
 // spatial feed. The response deliberately carries no coordinates — kind,
 // id, and title only — so the coarse viewer position the client sends is the
 // only location that ever crosses this endpoint. lat/lng/radiusKm required.
-coalition.get('/nearby', (c) => {
-    const nearby = parseNearby(c);
-    if (!nearby) {
-        return c.json(
-            { code: 'invalid_request', message: 'lat, lng, and radiusKm are required' },
-            400
-        );
-    }
-
+function nearbySignalsFor(viewerId: string | null, nearby: NearbyFilter) {
     const within = (location: { latitude: number; longitude: number }): boolean =>
         isWithinRadiusMeters(location, nearby.viewer, nearby.radiusMeters);
 
     // The spatial feed already projects events and public rings onto pins, so
     // one pass over it covers those layers without double-counting listEvents.
+    // Mutual-aid posts are counted at the cell each viewer is shown, and events
+    // only where the viewer may see them (services/coalitionVisibility.ts).
     const signals = [
         ...listAidPosts({})
+            .map((post) => aidPostForViewer(post, viewerId))
             .filter(
                 (post) => post.status === 'open' && hasCoordinates(post) && within(post.location)
             )
@@ -477,16 +548,33 @@ coalition.get('/nearby', (c) => {
                 id: location.id,
                 title: location.city ? `${location.city} stall` : 'Local stall',
             })),
-        ...listSpatialItems({})
+        ...listSpatialItems({ viewerId })
             .filter((item) => within(item))
             .map((item) => ({ kind: item.layer, id: item.id, title: item.title })),
     ];
-
-    return c.json({
+    return {
         generatedAt: new Date().toISOString(),
         count: signals.length,
         signals: signals.slice(0, 50),
-    });
+    };
+}
+
+coalition.get('/nearby', (c) => {
+    const nearby = parseNearby(c);
+    if (!nearby) {
+        return c.json(
+            { code: 'invalid_request', message: 'lat, lng, and radiusKm are required' },
+            400
+        );
+    }
+    return c.json(nearbySignalsFor(viewerOf(c), nearby));
+});
+
+// The same, with the position in the body (see nearbyBodySchema).
+coalition.post('/nearby', async (c) => {
+    const parsed = await readJsonBody(c, nearbyBodySchema);
+    if (parsed instanceof Response) return parsed;
+    return c.json(nearbySignalsFor(viewerOf(c), nearbyFromBody(parsed)));
 });
 
 coalition.get('/tasks', (c) => {
@@ -594,11 +682,11 @@ const applyPlacePatch = (place: z.infer<typeof placePatchSchema>) =>
  * 503 when unconfigured. There is no default provider, so an operator who has
  * not chosen one sends nothing anywhere.
  */
-coalition.get('/geocode', geocodeRateLimit, async (c) => {
-    const user = requireUser(c, 'Sign in to search for an address');
-    if (user instanceof Response) return user;
-
-    const query = (c.req.query('q') ?? '').trim();
+async function geocodeAnswer(
+    c: Parameters<typeof getAuthUser>[0],
+    rawQuery: string
+): Promise<Response> {
+    const query = rawQuery.trim();
     if (query.length < 3) {
         return c.json(
             { code: 'bad_request', message: 'Enter at least 3 characters to search.' },
@@ -622,13 +710,34 @@ coalition.get('/geocode', geocodeRateLimit, async (c) => {
             : c.json({ code: 'upstream_error', message: outcome.message }, 502);
     }
     return c.json({ results: outcome.results });
+}
+
+coalition.get('/geocode', geocodeRateLimit, async (c) => {
+    const user = requireUser(c, 'Sign in to search for an address');
+    if (user instanceof Response) return user;
+    return geocodeAnswer(c, c.req.query('q') ?? '');
+});
+
+// The same, with the address in the body, so the address someone looked up
+// is not written to an access log beside their network address.
+coalition.post('/geocode', geocodeRateLimit, async (c) => {
+    const user = requireUser(c, 'Sign in to search for an address');
+    if (user instanceof Response) return user;
+    const parsed = await readJsonBody(c, z.object({ q: z.string() }));
+    if (parsed instanceof Response) return parsed;
+    return geocodeAnswer(c, parsed.q);
 });
 
 // --- Coalition Needs Board ---
 
 coalition.get('/needs', (c) => {
     const canopyId = c.req.query('canopyId');
-    return c.json({ needs: listNeeds({ canopyId }) });
+    const viewerId = viewerOf(c);
+    return c.json({
+        needs: listNeeds({ canopyId }).map((need) =>
+            withoutPeopleWhenSignedOut(need, viewerId, ['authorId'] as const)
+        ),
+    });
 });
 
 const createNeedSchema = z.object({
@@ -690,8 +799,9 @@ coalition.get('/projects', (c) => {
     const nowMs = Date.now();
     // Decorate each project-backed entry with its live Momentum so callers can
     // rank surging + near-completion projects up (the prosocial "Heat").
+    const viewerId = viewerOf(c);
     const projects = listProjects({ canopyId }).map((project) => ({
-        ...project,
+        ...withoutPeopleWhenSignedOut(project, viewerId, ['leadId'] as const),
         momentum: projectMomentum(project.id, nowMs),
     }));
     return c.json({ projects });
@@ -761,7 +871,14 @@ coalition.get('/projects/:id', (c) => {
     if (!view) {
         return c.json({ code: 'not_found', message: 'Project not found' }, 404);
     }
-    return c.json(view);
+    const viewerId = viewerOf(c);
+    return c.json({
+        ...view,
+        project: withoutPeopleWhenSignedOut(view.project, viewerId, ['leadId'] as const),
+        recentSupporters: view.recentSupporters.map((supporter) =>
+            withoutPeopleWhenSignedOut(supporter, viewerId, ['supporterUserId'] as const)
+        ),
+    });
 });
 
 coalition.get('/projects/:id/supporters', (c) => {
@@ -769,7 +886,12 @@ coalition.get('/projects/:id/supporters', (c) => {
         return c.json({ code: 'not_found', message: 'Project not found' }, 404);
     }
     const limit = Math.min(Number(c.req.query('limit') ?? '50') || 50, 200);
-    return c.json({ supporters: listProjectSupporters(c.req.param('id'), { limit }) });
+    const viewerId = viewerOf(c);
+    return c.json({
+        supporters: listProjectSupporters(c.req.param('id'), { limit }).map((supporter) =>
+            withoutPeopleWhenSignedOut(supporter, viewerId, ['supporterUserId'] as const)
+        ),
+    });
 });
 
 const updateProjectSchema = z
@@ -887,7 +1009,12 @@ coalition.post('/notifications/:id/read', (c) => {
 
 coalition.get('/resources', (c) => {
     const canopyId = c.req.query('canopyId');
-    return c.json({ resources: listResources({ canopyId }) });
+    const viewerId = viewerOf(c);
+    return c.json({
+        resources: listResources({ canopyId }).map((resource) =>
+            withoutPeopleWhenSignedOut(resource, viewerId, ['stewardId'] as const)
+        ),
+    });
 });
 
 const createResourceSchema = z.object({
@@ -958,7 +1085,7 @@ const DAY_MS = 1000 * 60 * 60 * 24;
 coalition.get('/events', (c) => {
     const denId = c.req.query('denId');
     const now = Date.now();
-    const events = listEvents({ denId }).map((event) => ({
+    const events = visibleEvents(listEvents({ denId }), viewerOf(c)).map((event) => ({
         ...event,
         rsvpSummary: rsvpSummaryFor(event.id),
         nextOccurrence: nextOccurrence(event, now),
@@ -979,10 +1106,14 @@ coalition.get('/events', (c) => {
 coalition.get('/events/shows', (c) => {
     const now = Date.now();
     const days = Math.min(Math.max(Number.parseInt(c.req.query('days') ?? '7', 10) || 7, 1), 90);
-    const slots = showSchedule(listEvents(), now, now + DAY_MS * days, now).map((slot) => ({
+    const viewerId = viewerOf(c);
+    const visible = listEvents().filter((event) =>
+        canSeeEvent(event, viewerId, listEventRsvps(event.id))
+    );
+    const slots = showSchedule(visible, now, now + DAY_MS * days, now).map((slot) => ({
         eventId: slot.event.id,
         title: slot.event.title,
-        organizerId: slot.event.organizerId,
+        ...(viewerId ? { organizerId: slot.event.organizerId } : {}),
         // Null rather than absent: a show that has not wired up its stream yet
         // is a normal state, and the client says so instead of hiding the row.
         streamId: slot.event.streamId ?? null,
@@ -996,7 +1127,8 @@ coalition.get('/events/shows', (c) => {
 });
 
 coalition.get('/events/:id', (c) => {
-    const event = getEvent(c.req.param('id'));
+    const viewerId = viewerOf(c);
+    const event = visibleEvent(c.req.param('id'), viewerId);
     if (!event) {
         return c.json({ code: 'not_found', message: 'Event not found' }, 404);
     }
@@ -1006,9 +1138,10 @@ coalition.get('/events/:id', (c) => {
     const horizon = Math.max(now, Date.parse(event.startsAt)) + DAY_MS * 365;
     const occurrences = expandOccurrences(event, now - DAY_MS, horizon, now).slice(0, 50);
     return c.json({
-        event,
+        event: withoutPeopleWhenSignedOut(event, viewerId, ['organizerId'] as const),
         rsvpSummary: rsvpSummaryFor(event.id),
-        rsvps: listEventRsvps(event.id),
+        // The organizer sees every RSVP; anyone else, only their own.
+        rsvps: rsvpsForViewer(event, viewerId, listEventRsvps(event.id)),
         occurrences,
     });
 });
@@ -1108,7 +1241,7 @@ const rsvpSchema = z.object({ status: z.enum(RSVP_STATUSES) });
 coalition.post('/events/:id/rsvp', async (c) => {
     const user = requireUser(c, 'Sign in to RSVP');
     if (user instanceof Response) return user;
-    const event = getEvent(c.req.param('id'));
+    const event = visibleEvent(c.req.param('id'), user.sub);
     if (!event) {
         return c.json({ code: 'not_found', message: 'Event not found' }, 404);
     }
@@ -1187,7 +1320,12 @@ coalition.post('/events/:id/volunteer-slots', async (c) => {
 });
 
 coalition.get('/events/:id/volunteer-slots', (c) => {
+    const user = requireUser(c, 'Sign in to see volunteer slots');
+    if (user instanceof Response) return user;
     const eventId = c.req.param('id');
+    if (!visibleEvent(eventId, user.sub)) {
+        return c.json({ code: 'not_found', message: 'Event not found' }, 404);
+    }
     const signups = listVolunteerSignups(eventId);
     const slots = listVolunteerSlots(eventId)
         .filter((slot) => slot.status === 'open')
@@ -1202,6 +1340,9 @@ coalition.post('/events/:id/volunteer-slots/:slotId/signup', async (c) => {
     const user = requireUser(c, 'Sign in to volunteer');
     if (user instanceof Response) return user;
     const eventId = c.req.param('id');
+    if (!visibleEvent(eventId, user.sub)) {
+        return c.json({ code: 'not_found', message: 'Event not found' }, 404);
+    }
     const slot = getVolunteerSlot(c.req.param('slotId'));
     if (!slot || slot.eventId !== eventId) {
         return c.json({ code: 'not_found', message: 'Volunteer slot not found' }, 404);
@@ -1226,6 +1367,9 @@ coalition.post('/events/:id/volunteer-slots/:slotId/withdraw', async (c) => {
     const user = requireUser(c, 'Sign in to withdraw');
     if (user instanceof Response) return user;
     const eventId = c.req.param('id');
+    if (!visibleEvent(eventId, user.sub)) {
+        return c.json({ code: 'not_found', message: 'Event not found' }, 404);
+    }
     const slot = getVolunteerSlot(c.req.param('slotId'));
     if (!slot || slot.eventId !== eventId) {
         return c.json({ code: 'not_found', message: 'Volunteer slot not found' }, 404);
@@ -1252,7 +1396,7 @@ const createRideSchema = z.object({
 coalition.post('/events/:id/rides', async (c) => {
     const user = requireUser(c, 'Sign in to offer a ride');
     if (user instanceof Response) return user;
-    const event = getEvent(c.req.param('id'));
+    const event = visibleEvent(c.req.param('id'), user.sub);
     if (!event) return c.json({ code: 'not_found', message: 'Event not found' }, 404);
     const parsed = await readJsonBody(c, createRideSchema);
     if (parsed instanceof Response) return parsed;
@@ -1270,7 +1414,13 @@ coalition.post('/events/:id/rides', async (c) => {
 });
 
 coalition.get('/events/:id/rides', (c) => {
+    // A ride offer names its driver and where they leave from.
+    const user = requireUser(c, 'Sign in to see rides');
+    if (user instanceof Response) return user;
     const eventId = c.req.param('id');
+    if (!visibleEvent(eventId, user.sub)) {
+        return c.json({ code: 'not_found', message: 'Event not found' }, 404);
+    }
     const claims = listRideClaims(eventId);
     const offers = listRideOffers(eventId)
         .filter((offer) => offer.status === 'open')
@@ -1285,6 +1435,9 @@ coalition.post('/events/:id/rides/:offerId/claim', async (c) => {
     const user = requireUser(c, 'Sign in to claim a seat');
     if (user instanceof Response) return user;
     const eventId = c.req.param('id');
+    if (!visibleEvent(eventId, user.sub)) {
+        return c.json({ code: 'not_found', message: 'Event not found' }, 404);
+    }
     const offer = getRideOffer(c.req.param('offerId'));
     if (!offer || offer.eventId !== eventId) {
         return c.json({ code: 'not_found', message: 'Ride offer not found' }, 404);
@@ -1309,6 +1462,9 @@ coalition.post('/events/:id/rides/:offerId/release', async (c) => {
     const user = requireUser(c, 'Sign in to release a seat');
     if (user instanceof Response) return user;
     const eventId = c.req.param('id');
+    if (!visibleEvent(eventId, user.sub)) {
+        return c.json({ code: 'not_found', message: 'Event not found' }, 404);
+    }
     const offer = getRideOffer(c.req.param('offerId'));
     if (!offer || offer.eventId !== eventId) {
         return c.json({ code: 'not_found', message: 'Ride offer not found' }, 404);

@@ -36,7 +36,11 @@ export interface LocationConsentState {
  * an older disclosure is treated as off until they acknowledge the new one, so
  * we never rely on stale consent.
  */
-export const LOCATION_DISCLOSURE_VERSION = 1;
+// 2 (2026-11-17): version 1 said the server kept no coarse position, while
+// it travelled in the request's address, which access logs record with the
+// caller's network address; and that a mutual-aid post is shown at the
+// coordinates chosen, which others now see only as an area.
+export const LOCATION_DISCLOSURE_VERSION = 2;
 
 export const DEFAULT_LOCATION_CONSENT: LocationConsentState = {
     status: 'off',
@@ -64,13 +68,14 @@ export const LOCATION_DISCLOSURE = {
     anonymityEffects: [
         'Sharing any location weakens anonymity: it narrows down roughly where you are.',
         'Your device reveals a precise position to the browser. Before anything leaves this device it is coarsened to a ~1 km grid — enough for a neighbourhood, not an address.',
-        'Anything you deliberately post with a location (a mutual-aid pin, a geo-tagged story) is stored on the server and shown to others at the coordinates you choose. That is separate from this setting and always up to you.',
+        'Anything you deliberately post with a location is stored on the server. That is separate from this setting and always up to you. A need, project or resource you pin is shown to anyone at the place you choose. A mutual-aid post is shown to others only as an area at least 500 m across; only you see its exact spot and address.',
     ],
     /** Exactly what is retained, and where. */
     retention: [
         'On this device: your on/off choice and the time you turned it on, stored in local storage so the app remembers it. Clearing site data or turning it off removes it.',
-        'Sent to the server: only a ~1 km-coarse position, used to compute a count. Raw coordinates are never transmitted, and the response contains no locations.',
-        'The server does not store your coarse position or build a location history from it.',
+        'Sent to the server: only a ~1 km-coarse position, used to count what is near you and to filter the map. Raw coordinates are never sent.',
+        'It travels in the body of the request, not its address, so it is not written to the access logs of the servers it passes through. The server does not keep it or build a location history from it.',
+        'Anything that can read the traffic on its way sees it as it passes, including a proxy in front of the server that decrypts it: the live service runs behind Cloudflare.',
     ],
 } as const;
 

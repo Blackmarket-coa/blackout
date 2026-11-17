@@ -35,7 +35,7 @@ may decide what to say, and to whom, on the strength of it.
 | T19 | `THREAT_MODEL.md` §3, R4: tokens                                           | "Tokens are short-lived"                                                         | API: 24 h, refresh 30 days renewed on use; Matrix refresh: no expiry             | Fixed (copy) |
 | T20 | `THREAT_MODEL.md` §3: boundaries                                           | The trust boundaries, listed                                                     | OpenStreetMap, reCAPTCHA, the FBM store and GIF hosts were missing               | Fixed (copy) |
 | T21 | `THREAT_MODEL.md` A8, A11, §3, R5                                          | Signed releases, reproducible builds                                             | Signing never ran (no tag, no release); updater key is a placeholder             | Fixed (copy) |
-| T22 | `THREAT_MODEL.md` §6a: plugins                                             | Bundles must carry a signature from a pinned key                                 | The only pinned key is a development secret in the client source                 | Said         |
+| T22 | `THREAT_MODEL.md` §6a: plugins                                             | Bundles must carry a signature from a pinned key                                 | The only pinned key is a development secret in the client source                 | Fixed        |
 | T23 | `THREAT_MODEL.md` §4, §5                                                   | Ballots: "Hash chain + sigs"; audit logs: "tamper-evident", "WORM"               | Ordinary rows; nothing chains, signs or write-protects them                      | Fixed (copy) |
 | T24 | `docs/security/key-transparency.md`                                        | "Atomically rewritten"; witnesses on replicas; a cross-process test              | Rewritten in place; no witness setup; the test runs in one process               | Fixed (copy) |
 | T25 | `docs/security/webauthn-passkeys.md`                                       | "Status: shipped"                                                                | Server only, off by default, no app calls it, no session                         | Fixed (copy) |
@@ -848,6 +848,11 @@ applied; the deployed client serves no CSP that does (`KNOWN_LIMITATIONS.md`).
 **Done.** §3 gains boundaries 8 to 10. Whether to self-host tiles or ask
 before loading them is decision 8.
 
+**Follow-up (2026-11-17).** Self-hosted: the map draws its background from
+the deployment's own tile server and asks no one else, and without a basemap
+it says so rather than falling back (`map-tiles-and-plugin-key-2026-11-17.md`,
+M). Boundary 8 now describes that.
+
 ## T21. "Signed releases" and "reproducible builds"
 
 **Claimed.** `THREAT_MODEL.md` A8 ("signed releases"), A11 ("Yes —
@@ -888,6 +893,15 @@ what remains between such a bundle and the person is the sandbox (a
 **Said, not fixed.** §6a now says the mitigation is not in effect. A real fix
 needs the marketplace's Ed25519 publishing keyset pinned at build time and the
 development key left out of production builds: decision 9.
+
+**Follow-up (2026-11-17).** Fixed in the client: a production build trusts
+only Ed25519 keys pinned when it is built, refuses HMAC, and leaves the
+development key out (its JavaScript does not contain it); with no key pinned
+it installs nothing and says so. A bundle installed earlier is checked again
+when the app starts; one that fails is marked as an error and its goods stop
+applying (review finding R9). `tools/plugins/publishing-key.mjs` makes or
+reads the key and prints the line to pin. No key is pinned yet: that is the
+operator's step (`map-tiles-and-plugin-key-2026-11-17.md`, P and R).
 
 ## T23. Ballots and audit logs: "Hash chain + sigs", "tamper-evident", "WORM"
 
@@ -980,9 +994,13 @@ did not report were read once, not checked one by one.
    are not mounted; mounting them, and enabling QR, is a product change.
 8. **Map tiles** (T20). Set `VITE_MAPLIBRE_STYLE_URL` to tiles the operator
    hosts, or add a step that asks before the map loads OpenStreetMap's.
+   Taken 2026-11-17: the tiles are self-hosted
+   (`map-tiles-and-plugin-key-2026-11-17.md`, M).
 9. **A plugin publishing keyset** (T22). Pin the marketplace's Ed25519
    publishing keys at build time and leave the development HMAC key out of
    production builds. Until then a bundle's signature is not a protection.
+   Taken 2026-11-17: the client side is built; pinning Free Black Market's
+   key is the remaining step (`map-tiles-and-plugin-key-2026-11-17.md`, P).
 10. **The first signed release** (T21). Set a real updater public key, then
     push a `v*` tag so `release.yml` signs something; until then nothing
     downloadable is signed.
