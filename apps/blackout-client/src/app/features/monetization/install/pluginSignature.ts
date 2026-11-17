@@ -59,10 +59,7 @@ function timingSafeEqual(a: Uint8Array, b: Uint8Array): boolean {
 }
 
 async function sha256Hex(bytes: Uint8Array): Promise<string> {
-    const buffer = await crypto.subtle.digest(
-        'SHA-256',
-        bytes as globalThis.BufferSource
-    );
+    const buffer = await crypto.subtle.digest('SHA-256', bytes as globalThis.BufferSource);
     return bytesToHex(new Uint8Array(buffer));
 }
 
@@ -80,9 +77,7 @@ function canonicalJson(value: unknown): string {
     }
     const obj = value as Record<string, unknown>;
     const keys = Object.keys(obj).sort();
-    return `{${keys
-        .map((key) => `${JSON.stringify(key)}:${canonicalJson(obj[key])}`)
-        .join(',')}}`;
+    return `{${keys.map((key) => `${JSON.stringify(key)}:${canonicalJson(obj[key])}`).join(',')}}`;
 }
 
 export async function canonicalManifestSha256(manifest: unknown): Promise<string> {
@@ -132,11 +127,7 @@ export async function verifySignedBundle(input: VerifyBundleInput): Promise<Veri
             ['sign', 'verify']
         );
         const expected = new Uint8Array(
-            await crypto.subtle.sign(
-                'HMAC',
-                cryptoKey,
-                signedPayload as globalThis.BufferSource
-            )
+            await crypto.subtle.sign('HMAC', cryptoKey, signedPayload as globalThis.BufferSource)
         );
         const provided = hexToBytes(input.signature.signature);
         return timingSafeEqual(expected, provided)
@@ -164,9 +155,7 @@ export async function verifySignedBundle(input: VerifyBundleInput): Promise<Veri
     } catch (error) {
         return {
             ok: false,
-            reason: `verification-error: ${
-                error instanceof Error ? error.message : String(error)
-            }`,
+            reason: `verification-error: ${error instanceof Error ? error.message : String(error)}`,
             keyId: key.keyId,
         };
     }
