@@ -20,6 +20,7 @@ export type CreatorArtifactKind =
     | 'community_template'
     | 'stream_asset'
     | 'vault_item'
+    // Retained for reading historical listings; new persona sales are retired.
     | 'ai_persona'
     | 'automation_recipe'
     | 'privacy_tool';
@@ -224,6 +225,7 @@ export function validateArtifactPayload(kind: CreatorArtifactKind, payload: unkn
 export function parseCreatorListingDraft(input: unknown): CreatorListingDraft {
     if (!isRecord(input)) throw new Error('draft must be an object');
     const artifactKind = oneOf(input.artifactKind, artifactKinds, 'artifactKind');
+    if (artifactKind === 'ai_persona') throw new Error('AI persona sales have been removed.');
     const category = oneOf(input.category, categories, 'category');
     const entitlementKind = oneOf(input.entitlementKind, entitlementKinds, 'entitlementKind');
     const priceRaw = input.priceCents;

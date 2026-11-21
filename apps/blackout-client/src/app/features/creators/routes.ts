@@ -8,11 +8,11 @@ import {
 import CreatorDashboard from './CreatorDashboard';
 import CreatorListings from './CreatorListings';
 import CreatorStorefront from './CreatorStorefront';
-import { SellProductWizard } from './sell';
+import { SellProductRoute } from './sell/SellProductWizard';
 
 export const creatorsListingsRoutes: FeatureRoute[] = [
     { path: CREATOR_LISTINGS_PATH, component: CreatorListings },
-    { path: CREATOR_SELL_PATH, component: SellProductWizard },
+    { path: CREATOR_SELL_PATH, component: SellProductRoute },
 ];
 
 export const creatorsStorefrontRoutes: FeatureRoute[] = [

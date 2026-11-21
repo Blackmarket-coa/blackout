@@ -1,10 +1,19 @@
 import { createElement } from 'react';
-import { Navigate } from 'react-router';
+import { Navigate, useSearchParams } from 'react-router';
 import type { FeatureRoute } from '../../core/features/types';
 import { CREATOR_HUB_PATH, STREAMING_PATH } from '../../pages/paths';
 import StreamingView from './StreamingView';
 
-const StreamingRoutePage = () => createElement(StreamingView);
+const StreamingRoutePage = () => {
+    const [search] = useSearchParams();
+    const compose = search.get('compose');
+    const kind =
+        compose === 'guide' || compose === 'article' || compose === 'video' ? compose : undefined;
+    return createElement(StreamingView, {
+        initialTab: kind ? 'overview' : undefined,
+        initialContentKind: kind,
+    });
+};
 
 // `/creator-hub` is the rebranded alias; the shell itself stays mounted on
 // STREAMING_PATH so the persisted tab state and shell mobile-tab id keep working.

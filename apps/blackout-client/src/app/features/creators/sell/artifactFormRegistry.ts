@@ -390,38 +390,6 @@ export const ARTIFACT_FORM_REGISTRY: Record<CreatorArtifactKind, ArtifactFormDes
         buildPayload: (values) => ({ vaultKind: str(values.vaultKind) }),
         notes: 'To sell a plain downloadable file instead, use the "Digital download" template.',
     }),
-    ai_persona: guidedDescriptor({
-        kind: 'ai_persona',
-        summary: 'AI persona or prompt pack, confined to AI dens.',
-        docAnchor: '#ai_persona',
-        fields: [
-            {
-                key: 'personaName',
-                label: 'Persona name',
-                help: 'Display name for the persona.',
-                control: 'text',
-                required: true,
-                placeholder: 'Mentor',
-            },
-            {
-                key: 'personaSystemPrompt',
-                label: 'System prompt',
-                help: 'The persona’s system prompt.',
-                control: 'textarea',
-                required: true,
-                placeholder: 'You are a patient tutor.',
-            },
-        ],
-        defaults: { personaName: 'Mentor', personaSystemPrompt: 'You are a patient tutor.' },
-        example: { persona: { name: 'Mentor', systemPrompt: 'You are a patient tutor.' } },
-        buildPayload: (values) => ({
-            persona: {
-                name: str(values.personaName),
-                systemPrompt: str(values.personaSystemPrompt),
-            },
-        }),
-        notes: 'AI personas can only be installed at den scope inside an AI den.',
-    }),
     privacy_tool: guidedDescriptor({
         kind: 'privacy_tool',
         summary: 'Advanced privacy/security toolkit exposed as an entitlement.',
@@ -499,7 +467,6 @@ export const SELL_TEMPLATE_ORDER: CreatorArtifactKind[] = [
     'manifest_plugin',
     'code_plugin',
     'community_template',
-    'ai_persona',
     'automation_recipe',
     'privacy_tool',
     'vault_item',
@@ -520,5 +487,7 @@ export function listSellTemplates(): ArtifactFormDescriptor[] {
 /** Look up a descriptor by its tile id (artifact kind or a preset id). */
 export function getSellTemplate(id: string): ArtifactFormDescriptor | undefined {
     if (id === DIGITAL_DOWNLOAD_DESCRIPTOR.id) return DIGITAL_DOWNLOAD_DESCRIPTOR;
-    return (ARTIFACT_FORM_REGISTRY as Record<string, ArtifactFormDescriptor>)[id];
+    return Object.prototype.hasOwnProperty.call(ARTIFACT_FORM_REGISTRY, id)
+        ? (ARTIFACT_FORM_REGISTRY as Record<string, ArtifactFormDescriptor>)[id]
+        : undefined;
 }

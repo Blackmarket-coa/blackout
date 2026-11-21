@@ -184,10 +184,10 @@ function ContentCard({ item, onChanged }: { item: CreatorContent; onChanged: () 
     );
 }
 
-export function CreatorHubContent() {
+export function CreatorHubContent({ initialKind }: { initialKind?: ContentKind } = {}) {
     const [items, setItems] = useState<CreatorContent[]>([]);
     const [error, setError] = useState<string | null>(null);
-    const [kind, setKind] = useState<ContentKind>('video');
+    const [kind, setKind] = useState<ContentKind>(initialKind ?? 'video');
     const [title, setTitle] = useState('');
     const [body, setBody] = useState('');
     const [mediaUrl, setMediaUrl] = useState('');
@@ -240,7 +240,7 @@ export function CreatorHubContent() {
     );
 
     return (
-        <section style={sectionStyle} data-testid="creator-hub-content">
+        <section id="creator-content" style={sectionStyle} data-testid="creator-hub-content">
             <header style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                 <h3 style={{ margin: 0, fontSize: 16 }}>Content</h3>
                 <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
@@ -268,6 +268,7 @@ export function CreatorHubContent() {
                         onChange={(event) => setTitle(event.target.value)}
                         placeholder="Title"
                         data-testid="creator-content-title"
+                        autoFocus={Boolean(initialKind)}
                         style={inputStyle}
                     />
                 </div>

@@ -3,6 +3,18 @@
 ## Scope
 Translate Blackout product simplification (simple-by-default, powerful-by-option) into concrete engineering work orders with owners, effort, contracts, compatibility, telemetry, and reliability guardrails.
 
+**Navigation requirements update (2026-11-20):** [Blackout app plan](product/BLACKOUT_APP_PLAN.md) owns the target global and nested navigation. Its migration map, contribution requirements, source evidence, and delivery acceptance extend these work packages. Existing tier/preset names below are historical implementation vocabulary, not authorization to reinstate recurring platform plans; enhancements use one-time purchases.
+
+### App navigation work package
+
+- Inventory every existing route, tab, subview, contextual tool, feature flag, role gate, and legacy link against the app plan's migration map. Resolve remaining entries before removing a navigation control.
+- Implement stable Home / Coalition / Coliseum / You destinations with search, activity inbox, and a create launcher as actions. At most one local selector is visible on a screen; no nested tab strips or equivalent dropdown chains.
+- Preserve chronological Circle/Reach and keep Discover separate. Rank/recognition changes must not silently change feed ordering or permissions.
+- Reuse Coalition's map/toolbag, introduce a synchronized permitted list view, and migrate coordinates explicitly where records lack structured places. Consolidate boards visually without merging unrelated storage, balances, or permission scopes.
+- Move Coliseum interaction to topic/event/match details. Keep challenge records without a topic reachable. Move creator-owned work to Studio, audience browsing to Home/Coliseum, and connection settings/status into per-connection detail.
+- Keep old routes and persisted selections through adapters; preserve return context, drafts, player state, and access-denied behavior. Expose tools through relevant items, searchable tool access, and user-pinned shortcuts.
+- Validate three complete journeys: newcomer discovery, meaningful crowd participation, and creator-to-community outcome. Include role/permission parity, legacy-link replay, physical-device behavior, keyboard/screen-reader access, and rollback. Documentation or route presence alone cannot pass acceptance.
+
 ---
 
 ## 1) Feature flag matrix

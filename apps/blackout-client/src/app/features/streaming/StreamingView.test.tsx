@@ -66,7 +66,9 @@ vi.mock('./sections/SplitContracts', () => ({
     SplitContracts: () => <div data-testid="stub-splits" />,
 }));
 vi.mock('./sections/CreatorHubContent', () => ({
-    CreatorHubContent: () => <div data-testid="stub-creator-content" />,
+    CreatorHubContent: ({ initialKind }: { initialKind?: string }) => (
+        <div data-testid="stub-creator-content" data-kind={initialKind} />
+    ),
 }));
 vi.mock('./sections/CreatorHubPostBounty', () => ({
     CreatorHubPostBounty: () => <div data-testid="stub-post-bounty" />,
@@ -127,6 +129,19 @@ describe('StreamingView', () => {
     beforeEach(() => {
         document.body.innerHTML = '';
         localStorage.clear();
+    });
+
+    it('opens a guide prompt on Overview without trapping subsequent navigation', async () => {
+        localStorage.setItem('bmc-streaming-tab', JSON.stringify('integrations'));
+        const { container } = await mountView({
+            initialTab: 'overview',
+            initialContentKind: 'guide',
+        });
+        expect(container.querySelector('[data-testid="streaming-tab-overview"]')).not.toBeNull();
+        const composer = container.querySelector('[data-testid="stub-creator-content"]');
+        expect(composer?.getAttribute('data-kind')).toBe('guide');
+        await clickTab(container, 'kits');
+        expect(container.querySelector('[data-testid="stub-kits"]')).not.toBeNull();
     });
 
     it('renders the consolidated hub tabs and defaults to the Overview tab', async () => {

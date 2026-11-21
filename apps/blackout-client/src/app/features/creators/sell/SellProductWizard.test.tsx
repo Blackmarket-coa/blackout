@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import React from 'react';
+import { MemoryRouter } from 'react-router';
 import { act } from 'react-dom/test-utils';
 import ReactDOM from 'react-dom/client';
 
@@ -22,7 +23,7 @@ vi.mock('./MediaUploadField', () => ({
     default: () => null,
 }));
 
-import { SellProductWizard } from './SellProductWizard';
+import { SellProductWizard, SellProductRoute } from './SellProductWizard';
 
 const flush = async () => {
     await Promise.resolve();
@@ -41,12 +42,16 @@ const setInputValue = (el: HTMLInputElement | HTMLTextAreaElement, value: string
     el.dispatchEvent(new Event('input', { bubbles: true }));
 };
 
-const mount = async () => {
+const mount = async (initialTemplateId?: string) => {
     const container = document.createElement('div');
     document.body.appendChild(container);
     const root = ReactDOM.createRoot(container);
     await act(async () => {
-        root.render(<SellProductWizard />);
+        root.render(
+            <MemoryRouter>
+                <SellProductWizard initialTemplateId={initialTemplateId} />
+            </MemoryRouter>
+        );
         await flush();
     });
     return container;
@@ -68,6 +73,29 @@ describe('SellProductWizard', () => {
                 },
             ],
         });
+    });
+
+    it('opens a prompted product in its actual editor and rejects retired or invalid templates', async () => {
+        const container = document.createElement('div');
+        document.body.appendChild(container);
+        const root = ReactDOM.createRoot(container);
+        await act(async () => {
+            root.render(
+                <MemoryRouter initialEntries={['/creator/sell?template=asset_bundle']}>
+                    <SellProductRoute />
+                </MemoryRouter>
+            );
+            await flush();
+        });
+        expect(container.querySelector('[data-testid="sell-title"]')).not.toBeNull();
+        await act(async () => root.unmount());
+        for (const template of ['ai_persona', '__proto__', 'constructor', 'missing']) {
+            const invalid = await mount(template);
+            expect(
+                invalid.querySelector('[data-testid="sell-template-digital_download"]')
+            ).not.toBeNull();
+            expect(invalid.querySelector('[data-testid="sell-template-ai_persona"]')).toBeNull();
+        }
     });
 
     it('offers both a digital-download and blackout-feature templates', async () => {

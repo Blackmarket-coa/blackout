@@ -19,10 +19,10 @@ import {
 import { categoryForArtifact, entitlementForArtifact } from '../creatorArtifactMap';
 
 describe('artifactFormRegistry', () => {
-    it('covers all 12 sellable kinds plus the digital-download preset', () => {
-        expect(SELL_TEMPLATE_ORDER).toHaveLength(12);
+    it('covers all 11 sellable kinds plus the digital-download preset', () => {
+        expect(SELL_TEMPLATE_ORDER).toHaveLength(11);
         const templates = listSellTemplates();
-        expect(templates).toHaveLength(13);
+        expect(templates).toHaveLength(12);
         expect(templates[0]).toBe(DIGITAL_DOWNLOAD_DESCRIPTOR);
     });
 
@@ -89,5 +89,8 @@ describe('artifactFormRegistry', () => {
         expect(getSellTemplate('theme')).toBe(ARTIFACT_FORM_REGISTRY.theme);
         expect(getSellTemplate(DIGITAL_DOWNLOAD_DESCRIPTOR.id)).toBe(DIGITAL_DOWNLOAD_DESCRIPTOR);
         expect(getSellTemplate('nope')).toBeUndefined();
+        expect(getSellTemplate('ai_persona')).toBeUndefined();
+        expect(getSellTemplate('__proto__')).toBeUndefined();
+        expect(getSellTemplate('constructor')).toBeUndefined();
     });
 });

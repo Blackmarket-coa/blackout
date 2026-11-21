@@ -1,4 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { Link, useSearchParams } from 'react-router';
+import { CREATOR_LISTINGS_PATH, buildMarketListingPath } from '../../../pages/paths';
 import { FeatureGuide } from '../../../components/feature-guide/FeatureGuide';
 import {
     createCreatorListing,
@@ -119,10 +121,15 @@ function statusColor(status: CreatorListingView['status']): string {
     }
 }
 
-export const SellProductWizard: React.FC = () => {
-    const [step, setStep] = useState<WizardStep>('choose');
-    const [templateId, setTemplateId] = useState<string | null>(null);
-    const [payloadValues, setPayloadValues] = useState<Record<string, unknown>>({});
+export const SellProductWizard: React.FC<{ initialTemplateId?: string }> = ({
+    initialTemplateId,
+}) => {
+    const initialTemplate = getSellTemplate(initialTemplateId ?? '');
+    const [step, setStep] = useState<WizardStep>(initialTemplate ? 'details' : 'choose');
+    const [templateId, setTemplateId] = useState<string | null>(initialTemplate?.id ?? null);
+    const [payloadValues, setPayloadValues] = useState<Record<string, unknown>>(() => ({
+        ...initialTemplate?.defaults,
+    }));
     const [details, setDetails] = useState<DetailsState>(DEFAULT_DETAILS);
     const [mediaUrls, setMediaUrls] = useState<string[]>([]);
     const [providers, setProviders] = useState<CreatorProviderSummary[]>([]);
@@ -509,6 +516,20 @@ export const SellProductWizard: React.FC = () => {
                             >
                                 Set up payouts
                             </button>
+                            <Link to={CREATOR_LISTINGS_PATH} style={ghostButton}>
+                                Manage your products
+                            </Link>
+                            {created.status === 'published' && created.providerListingId ? (
+                                <Link
+                                    to={buildMarketListingPath(
+                                        created.providerId,
+                                        created.providerListingId
+                                    )}
+                                    style={ghostButton}
+                                >
+                                    View product
+                                </Link>
+                            ) : null}
                             <button type="button" style={ghostButton} onClick={resetAll}>
                                 List another
                             </button>
@@ -561,5 +582,12 @@ export const SellProductWizard: React.FC = () => {
         </section>
     );
 };
+
+/** Route adapter validates the requested template through the wizard registry. */
+export function SellProductRoute() {
+    const [search] = useSearchParams();
+    const template = search.get('template') ?? undefined;
+    return <SellProductWizard key={template ?? 'choose'} initialTemplateId={template} />;
+}
 
 export default SellProductWizard;

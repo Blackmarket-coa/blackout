@@ -32,7 +32,7 @@ and the per-type reference in
 
 |                     | Blackout product                                                                                                 | Non-blackout digital good                                                                                                                    |
 | ------------------- | ---------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| What it is          | A theme, plugin, cosmetic, sound pack, community template, stream asset, AI persona, automation, or privacy tool | A plain file — an ebook, PDF, zip, audio                                                                                                     |
+| What it is          | A theme, plugin, cosmetic, sound pack, community template, stream asset, automation, or privacy tool | A plain file — an ebook, PDF, zip, audio                                                                                                     |
 | What the buyer gets | An **entitlement** that unlocks a feature/asset inside Blackout (via `feature_keys` → `features.*`)              | A **download**, delivered after purchase                                                                                                     |
 | How you author it   | The per-type form in the guided flow (see [`creating-blackout-products.md`](creating-blackout-products.md))      | The **Digital download** template (a `vault_item` carrying your file) — see [`non-blackout-digital-goods.md`](non-blackout-digital-goods.md) |
 

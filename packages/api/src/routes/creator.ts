@@ -47,7 +47,6 @@ const draftSchema = z.object({
         'community_template',
         'stream_asset',
         'vault_item',
-        'ai_persona',
         'automation_recipe',
         'privacy_tool',
     ]),
@@ -162,7 +161,7 @@ creator.get('/orders', (c) => {
             acc.netCents += t.netCents;
             return acc;
         },
-        { capturedCount: 0, grossCents: 0, feeCents: 0, netCents: 0 },
+        { capturedCount: 0, grossCents: 0, feeCents: 0, netCents: 0 }
     );
 
     return c.json({
@@ -196,7 +195,10 @@ creator.post('/listings', async (c) => {
     }
     if (!provider.createCreatorListing) {
         return c.json(
-            { code: 'creator_unsupported', message: 'Provider does not support creator publishing' },
+            {
+                code: 'creator_unsupported',
+                message: 'Provider does not support creator publishing',
+            },
             400
         );
     }
@@ -206,7 +208,7 @@ creator.post('/listings', async (c) => {
     // Coalition kit manifests are applied via the coalition-kit-manifests flow,
     // not sold through external marketplace providers. Rejecting here also
     // narrows draft.artifactKind to the provider-sellable kinds below.
-    if (draft.artifactKind === 'coalition_kit') {
+    if (draft.artifactKind === 'coalition_kit' || draft.artifactKind === 'ai_persona') {
         return c.json(
             {
                 code: 'unsupported_artifact',
@@ -240,10 +242,7 @@ creator.post('/listings', async (c) => {
             error: error instanceof Error ? error.message : String(error),
         });
         incrementCounter('creator_listing_upstream_failed_total', { providerId: provider.id });
-        return c.json(
-            { code: 'upstream_failed', message: 'Provider rejected the listing' },
-            502
-        );
+        return c.json({ code: 'upstream_failed', message: 'Provider rejected the listing' }, 502);
     }
 
     const record = createCreatorListingRecord({
@@ -270,12 +269,15 @@ creator.post('/listings/:id/publish', async (c) => {
     if (!record || record.sellerUserId !== user.sub) {
         return c.json({ code: 'listing_not_found', message: 'No such listing' }, 404);
     }
-    const provider = pickProvider(record.providerId);
-    if (!provider?.publishCreatorListing) {
+    if (record.artifactKind === 'ai_persona') {
         return c.json(
-            { code: 'creator_unsupported', message: 'Provider cannot publish' },
+            { code: 'unsupported_artifact', message: 'AI persona sales have been removed.' },
             400
         );
+    }
+    const provider = pickProvider(record.providerId);
+    if (!provider?.publishCreatorListing) {
+        return c.json({ code: 'creator_unsupported', message: 'Provider cannot publish' }, 400);
     }
     if (!record.providerListingId) {
         return c.json(
@@ -313,10 +315,7 @@ creator.delete('/listings/:id', async (c) => {
     const provider = pickProvider(record.providerId);
     if (provider?.archiveCreatorListing && record.providerListingId) {
         try {
-            await provider.archiveCreatorListing(
-                record.providerListingId,
-                record.sellerUserId
-            );
+            await provider.archiveCreatorListing(record.providerListingId, record.sellerUserId);
         } catch (error) {
             logEvent('creator.listing.archive_failed', {
                 id: record.id,
@@ -388,7 +387,7 @@ creator.get('/content', (c) => {
     const status = c.req.query('status');
     const statusFilter =
         status && (CONTENT_STATUSES as readonly string[]).includes(status)
-            ? (status as (typeof CONTENT_STATUSES)[number])
+            ? (status as typeof CONTENT_STATUSES[number])
             : undefined;
     return c.json({ content: listContent({ creatorId: user.sub, status: statusFilter }) });
 });
@@ -502,7 +501,7 @@ creator.post('/content/:id/distribute', async (c) => {
                         target: parsed.target,
                     },
                 },
-                { txnId: `dist-${distribution.id}` },
+                { txnId: `dist-${distribution.id}` }
             )
             .catch(() => undefined);
     }

@@ -246,28 +246,6 @@ const SEEDED_LISTINGS: StubListing[] = [
     {
         listing: {
             providerId: PROVIDER_ID,
-            providerListingId: 'stub-ai-mentor-persona',
-            category: 'ai-automation',
-            title: 'Study Mentor AI Persona',
-            description: 'AI persona confined to AI dens. Exercises the ai_persona path.',
-            priceCents: 199,
-            currency: 'USD',
-            sellerId: 'stub-seller',
-            sellerDisplayName: 'Stub Seller',
-            mediaUrls: [],
-            entitlementKind: 'plugin_flag',
-            tags: ['ai', 'persona', 'demo'],
-        },
-        sellerUserId: null,
-        artifactKind: 'ai_persona',
-        artifactPayload: { persona: { name: 'Mentor', systemPrompt: 'You are a patient tutor.' } },
-        publicSlug: 'study-mentor-ai-persona',
-        status: 'published',
-        createdAt: '2026-05-01T00:00:00.000Z',
-    },
-    {
-        listing: {
-            providerId: PROVIDER_ID,
             providerListingId: 'stub-privacy-tools-advanced',
             category: 'security-tool',
             title: 'Privacy Tools — Advanced',

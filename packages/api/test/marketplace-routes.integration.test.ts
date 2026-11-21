@@ -8,11 +8,10 @@ process.env.JWT_SECRET_PRIMARY =
 process.env.JWT_ISSUER = process.env.JWT_ISSUER ?? 'blackout-api-test';
 process.env.JWT_AUDIENCE = process.env.JWT_AUDIENCE ?? 'blackout-client-test';
 process.env.AUTH_RATE_LIMIT_MAX = process.env.AUTH_RATE_LIMIT_MAX ?? '1000';
-process.env.FREEBLACKMARKET_BASE_URL =
-    process.env.FREEBLACKMARKET_BASE_URL ?? 'https://api.freeblackmarket.test';
-process.env.FREEBLACKMARKET_API_KEY = process.env.FREEBLACKMARKET_API_KEY ?? 'test-api-key';
-process.env.FREEBLACKMARKET_WEBHOOK_SECRET =
-    process.env.FREEBLACKMARKET_WEBHOOK_SECRET ?? 'test-webhook-secret';
+// Loopback only even if an ambient deployment URL is present; fetch is mocked below.
+process.env.FREEBLACKMARKET_BASE_URL = 'http://127.0.0.1:9';
+process.env.FREEBLACKMARKET_API_KEY = 'test-api-key';
+process.env.FREEBLACKMARKET_WEBHOOK_SECRET = 'test-webhook-secret';
 // URL assertions below expect the default commerce prefix; an ambient value
 // (e.g. a deploy .env loaded into the shell) must not leak into the suite.
 delete process.env.FREEBLACKMARKET_API_PREFIX;
@@ -350,9 +349,7 @@ test('FREEBLACKMARKET_API_PREFIX rewrites outbound commerce paths', async () => 
         assert.equal(defaulted.status, 200);
         assert.ok(
             fetchCalls.some((call) =>
-                call.url.startsWith(
-                    `https://api.freeblackmarket.test${COMMERCE_BASE}/catalog/listings`
-                )
+                call.url.startsWith(`http://127.0.0.1:9${COMMERCE_BASE}/catalog/listings`)
             )
         );
 
@@ -368,11 +365,7 @@ test('FREEBLACKMARKET_API_PREFIX rewrites outbound commerce paths', async () => 
         assert.equal(prefixed.status, 200);
         const catalogCall = fetchCalls.find((call) => call.url.includes('/catalog/listings'));
         assert.ok(catalogCall, 'expected an outbound catalog fetch');
-        assert.ok(
-            catalogCall.url.startsWith(
-                'https://api.freeblackmarket.test/custom/mount/catalog/listings'
-            )
-        );
+        assert.ok(catalogCall.url.startsWith('http://127.0.0.1:9/custom/mount/catalog/listings'));
     } finally {
         if (saved === undefined) delete process.env.FREEBLACKMARKET_API_PREFIX;
         else process.env.FREEBLACKMARKET_API_PREFIX = saved;
@@ -382,14 +375,30 @@ test('FREEBLACKMARKET_API_PREFIX rewrites outbound commerce paths', async () => 
 
 test('checkout records counter and returns redirect from freeblackmarket', async () => {
     resetForEachTest();
-    fetchHandler = () =>
-        new Response(
+    fetchHandler = (url) => {
+        if (url.includes('/catalog/listings/')) {
+            return new Response(
+                JSON.stringify({
+                    id: 'listing-checkout',
+                    category: 'emoji-sticker',
+                    title: 'Stickers',
+                    description: 'A pack',
+                    priceCents: 199,
+                    currency: 'USD',
+                    entitlementKind: 'asset_bundle',
+                    artifactKind: 'asset_bundle',
+                }),
+                { headers: { 'content-type': 'application/json' } }
+            );
+        }
+        return new Response(
             JSON.stringify({
                 id: 'sess-1',
-                url: 'https://api.freeblackmarket.test/checkout/sess-1',
+                url: 'http://127.0.0.1:9/checkout/sess-1',
             }),
             { headers: { 'content-type': 'application/json' } }
         );
+    };
 
     const response = await app.request('/v1/marketplace/checkout', {
         method: 'POST',
@@ -412,6 +421,49 @@ test('checkout records counter and returns redirect from freeblackmarket', async
     assert.notEqual(checkoutCall, undefined);
     const idemHeader = (checkoutCall!.init?.headers as Record<string, string>)['idempotency-key'];
     assert.equal(typeof idemHeader, 'string');
+});
+
+test('retired personas remain identifiable but cannot be browsed or purchased', async () => {
+    resetForEachTest();
+    const retired = {
+        id: 'retired-persona',
+        category: 'ai-automation',
+        title: 'Retired persona',
+        description: 'Retired',
+        priceCents: 199,
+        currency: 'USD',
+        entitlementKind: 'plugin_flag',
+        artifactKind: 'ai_persona',
+    };
+    const approved = {
+        ...retired,
+        id: 'approved-recipe',
+        title: 'Recipe',
+        artifactKind: 'automation_recipe',
+    };
+    fetchHandler = (url) =>
+        new Response(
+            JSON.stringify(
+                url.includes('/catalog/listings/') ? retired : { listings: [retired, approved] }
+            ),
+            { headers: { 'content-type': 'application/json' } }
+        );
+    const catalog = await app.request('/v1/marketplace/listings?q=retirement-regression');
+    assert.equal(catalog.status, 200);
+    const body = (await catalog.json()) as { listings: Array<{ providerListingId: string }> };
+    assert.deepEqual(
+        body.listings.map((l) => l.providerListingId),
+        ['approved-recipe']
+    );
+    const detail = await app.request('/v1/marketplace/listings/freeblackmarket/retired-persona');
+    assert.equal(detail.status, 404);
+    const purchase = await app.request('/v1/marketplace/checkout', {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({ providerId: 'freeblackmarket', listingId: 'retired-persona' }),
+    });
+    assert.equal(purchase.status, 404);
+    assert.equal(fetchCalls.filter((call) => call.url.includes('/checkout/sessions')).length, 0);
 });
 
 test('startup secret guard refuses production with missing freeblackmarket secrets', async () => {

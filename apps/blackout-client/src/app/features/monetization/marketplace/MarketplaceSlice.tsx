@@ -7,6 +7,7 @@ import {
     type NormalizedEntitlement,
     type NormalizedListing,
 } from '@blackout/core';
+import { CreatorParticipationPrompt } from '../../creators/CreatorParticipationPrompt';
 import { useNavigate } from 'react-router';
 import {
     fetchEntitlements,
@@ -72,7 +73,6 @@ const kindTabs: { id: KindFilter; label: string }[] = [
     { id: 'theme', label: 'Themes' },
     { id: 'sound_pack', label: 'Sound packs' },
     { id: 'profile_cosmetic', label: 'Cosmetics' },
-    { id: 'ai_persona', label: 'AI personas' },
     { id: 'stream_asset', label: 'Stream assets' },
     { id: 'privacy_tool', label: 'Privacy tools' },
     { id: 'community_template', label: 'Templates' },
@@ -359,7 +359,11 @@ export function MarketplaceSlice() {
     );
 
     const visibleListings = useMemo(
-        () => listings.filter((listing) => matchesKindFilter(listing, kindFilter)),
+        () =>
+            listings.filter(
+                (listing) =>
+                    listing.artifactKind !== 'ai_persona' && matchesKindFilter(listing, kindFilter)
+            ),
         [listings, kindFilter]
     );
 
@@ -440,6 +444,7 @@ export function MarketplaceSlice() {
             { style: { margin: 0, color: 'var(--text-secondary)' } },
             'Browse federated listings from connected marketplaces. Provider badges, payout cadence, refund terms, and support policies are shown before checkout.'
         ),
+        view === 'catalog' ? createElement(CreatorParticipationPrompt) : null,
         viewSwitch,
         checkoutNotice
             ? createElement(

@@ -2,7 +2,9 @@
 
 **Added:** November 15, 2026  
 **Status:** Product requirements and proposed delivery sequence. This document records the new direction; it does not claim application code or production behavior has changed.  
-**Companions:** [Participation strategy](../BLACKOUT_HABIT_AND_PARTICIPATION_STRATEGY.md) · [Whole-product MVP](../BLACKOUT_WHOLE_PRODUCT_MVP.md) · [Roadmap](../../ROADMAP.md)
+**Companions:** [App plan and nested-tab migration](BLACKOUT_APP_PLAN.md) · [Participation strategy](../BLACKOUT_HABIT_AND_PARTICIPATION_STRATEGY.md) · [Whole-product MVP](../BLACKOUT_WHOLE_PRODUCT_MVP.md) · [Roadmap](../../ROADMAP.md)
+
+**App organization update (2026-11-20):** The [app plan](BLACKOUT_APP_PLAN.md) owns the target Home / Coalition / Coliseum / You structure and the replacement of nested tabs with filters, item-level actions, and contextual tools. Creator Hub is a private Studio reached from You. The requirements below remain applicable within that structure; they do not require separate permanent tabs for each activity.
 
 ## 1. Product direction
 
@@ -64,6 +66,8 @@ Feed curation is a primary control available during browsing, not buried in acco
 
 Users can filter by network, group, topic, place, date, content format, and activity type; choose following, chronological, discovery, or saved views where supported; mute topics/accounts; request more or less of a content type; and reset recommendations. Let users save several feed presets and switch quickly.
 
+Apply these controls according to the surface's contract. Home's Circle/Reach feed retains human-selected relays and chronological ordering; recommendations and ranked exploration belong to the separate Discover surface. Contribution standing does not reorder Circle/Reach. Coalition uses the map/toolbag foundation with a synchronized list alternative; a masonry option is a presentation of the chosen collection, not another permanent tab. See the [app plan](BLACKOUT_APP_PLAN.md) for the contribution model, full migration map, cold-start flow, and verification gaps.
+
 Show active filters and offer one-action clearing. Explain recommendations briefly when requested. User-selected filters take precedence over personalization, and empty results should invite an explicit adjustment rather than silently broadening the feed.
 
 ## 5. Account creation and short visual onboarding
@@ -108,6 +112,8 @@ Characters should personify users and evolve as they gain ranks and achieve goal
 Progress is recognition of chosen participation. Core privacy and community access remain usable without reward grinding. Optional breaks should not erase achievements.
 
 ## 7. Creator Hub: a complete campaign workspace
+
+Use the [creator-economy plan](BLACKOUT_CREATOR_ECONOMY.md) for the approved product catalogue, participation prompts, and create-to-sale wiring acceptance. AI personas are excluded. A usable maker journey must link the relevant editor, actual deliverable, reviewed listing, audience, buyer ownership, and creator earnings; the documented production artifact-upload gap remains open.
 
 During onboarding, creators should be able to define a target audience and campaign goal without repeating basic account setup. Creator setup is a contextual branch that can also be opened later.
 

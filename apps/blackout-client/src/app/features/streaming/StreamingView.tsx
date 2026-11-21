@@ -1,4 +1,12 @@
-import React, { lazy, Suspense, type CSSProperties, useCallback, useMemo } from 'react';
+import React, {
+    lazy,
+    Suspense,
+    type CSSProperties,
+    useCallback,
+    useEffect,
+    useMemo,
+    useState,
+} from 'react';
 import { useAtom, useSetAtom } from 'jotai';
 import {
     DEFAULT_STREAMING_TAB,
@@ -51,10 +59,13 @@ export interface StreamingViewProps {
      * matching sub-view selected. Falls back to the persisted tab.
      */
     initialTab?: StreamingTabId | LegacyStreamingTabId;
+    initialContentKind?: 'video' | 'article' | 'guide';
 }
 
-export function StreamingView({ initialTab }: StreamingViewProps) {
+export function StreamingView({ initialTab, initialContentKind }: StreamingViewProps) {
     const [storedTab, setTab] = useAtom(streamingTabAtom);
+    const [useInitial, setUseInitial] = useState(true);
+    useEffect(() => setUseInitial(true), [initialTab, initialContentKind]);
     const setContentView = useSetAtom(streamingContentViewAtom);
     const setEarningsView = useSetAtom(streamingEarningsViewAtom);
     const setIntegrationsView = useSetAtom(streamingIntegrationsViewAtom);
@@ -65,13 +76,14 @@ export function StreamingView({ initialTab }: StreamingViewProps) {
     );
 
     const activeTab = useMemo<StreamingTabId>(() => {
-        if (initial) return initial.tab;
+        if (initial && useInitial) return initial.tab;
         if (isValidStreamingTab(storedTab)) return storedTab;
         return DEFAULT_STREAMING_TAB;
-    }, [initial, storedTab]);
+    }, [initial, storedTab, useInitial]);
 
     const handleSelect = useCallback(
         (tab: StreamingTabId, view?: StreamingHubViewId) => {
+            setUseInitial(false);
             setTab(tab);
             if (isContentView(view)) setContentView(view);
             else if (isEarningsView(view)) setEarningsView(view);
@@ -101,7 +113,10 @@ export function StreamingView({ initialTab }: StreamingViewProps) {
                         {runtimeFeatureFlags.creatorContent ? (
                             <Suspense fallback={null}>
                                 <div style={{ padding: 16 }}>
-                                    <CreatorHubContent />
+                                    <CreatorHubContent
+                                        key={initialContentKind ?? 'default'}
+                                        initialKind={initialContentKind}
+                                    />
                                 </div>
                             </Suspense>
                         ) : null}
