@@ -3,6 +3,7 @@
 **Status:** Proposed product-level MVP definition; not an assertion of deployment readiness.  
 **Date:** 2026-11-03  
 **Requirements update:** 2026-11-15 — [agency, community, character, and creator growth](product/BLACKOUT_AGENCY_COMMUNITY_CHARACTER_AND_CREATOR_GROWTH.md)  
+**App organization update:** 2026-11-20 — [app plan and nested-tab migration](product/BLACKOUT_APP_PLAN.md); target navigation below is updated accordingly.
 **Scope:** Entire Blackout experience, not just Coalition.  
 **Companions:** [Feature inventory](features/OVERVIEW.md) · [Known limitations](../KNOWN_LIMITATIONS.md) · [Participation strategy](BLACKOUT_HABIT_AND_PARTICIPATION_STRATEGY.md) · [Coalition field operations MVP](COALITION_FIELD_OPERATIONS_MVP.md)
 
@@ -75,13 +76,12 @@ The goal is a credible alternative for everyday communication, community, discov
 
 ## MVP navigation
 
-- **Home:** Feed/discovery and recent activity.
-- **Dens:** Messages, friend groups, and Canopies.
-- **Create:** Post/share media and launch a discussion.
-- **Coliseum:** Debates and challenges.
-- **Profile:** Identity, creator presence, privacy, settings.
+- **Home:** Chronological Circle/Reach feed; separate Discover entry and format filters.
+- **Coalition:** Map-first community/activity discovery, synchronized list alternative, games, coordination, and contextual toolbag.
+- **Coliseum:** Topic/event discovery, live and asynchronous participation, debates, challenges, and results.
+- **You:** Character/profile, contribution progress, saved items, rewards, private Studio, and settings.
 
-Creator tools, governance, events, and Coalition operations can be contextual entry points rather than permanent global tabs. Maintain a consistent mobile and desktop information architecture.
+Search, inbox, and Create are consistently reachable actions rather than extra bottom tabs. Existing Dens, friend groups, and Canopies remain reachable through community/conversation entry points with their membership and encryption rules intact. Creator tools, governance, events, and Coalition operations open in context. Use at most one local selector per screen; replace deeper tab strips with filters, item details, and focused tools according to the [full migration map](product/BLACKOUT_APP_PLAN.md#4-nested-tab-migration-map). Maintain compatible routes and a consistent mobile/desktop information architecture. This defines the target structure, not an assertion that the shell or deeper integrations have shipped.
 
 ## Release priorities
 

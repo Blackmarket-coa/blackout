@@ -2,6 +2,8 @@
 
 This guide explains how to build and run the mobile application in the current Blackout repository state.
 
+For product behavior and navigation, use the [Blackout app plan](docs/product/BLACKOUT_APP_PLAN.md). It defines four stable destinations, nested-tab migration, contribution and crowd-participation flows, contextual creator tools, and native acceptance. This build guide does not establish App Store/Play Store readiness or completion of those planned flows.
+
 ## 1) Choose the right mobile path
 
 Mobile builds are handled by:
