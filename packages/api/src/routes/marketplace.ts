@@ -191,7 +191,7 @@ marketplace.get('/listings', async (c) => {
         })
     );
 
-    const listings = results.flat();
+    const listings = results.flat().filter((listing) => listing.artifactKind !== 'ai_persona');
     return c.json({ listings, providerIds: targets.map((provider) => provider.id) });
 });
 
@@ -206,7 +206,7 @@ marketplace.get('/listings/:providerId/:listingId', async (c) => {
         return c.json({ code: 'provider_disabled', message: 'Provider is disabled' }, 404);
     }
     const listing = await provider.getListing(listingId);
-    if (!listing) {
+    if (!listing || listing.artifactKind === 'ai_persona') {
         return c.json({ code: 'listing_not_found', message: 'Listing not found' }, 404);
     }
     return c.json({ listing });
@@ -311,6 +311,14 @@ marketplace.post('/checkout', async (c) => {
     const provider = getMarketplaceProvider(providerId);
     if (!provider || !provider.enabled) {
         return c.json({ code: 'provider_disabled', message: 'Provider is disabled' }, 404);
+    }
+
+    const listing = await provider.getListing(listingId);
+    if (!listing || listing.artifactKind === 'ai_persona') {
+        return c.json(
+            { code: 'listing_not_found', message: 'Listing not available for purchase' },
+            404
+        );
     }
 
     const idempotencyKey = `${providerId}:${user.sub}:${listingId}:${crypto.randomUUID()}`;

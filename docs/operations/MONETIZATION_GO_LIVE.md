@@ -1,5 +1,7 @@
 # Monetization Go-Live Runbook
 
+> **Product and integration update:** Apply the [creator-economy plan](../product/BLACKOUT_CREATOR_ECONOMY.md) before using this historical runbook. Recurring platform enhancements and AI persona offers are excluded. Production creator artifact transfer, signed-bundle association, and actual buyer delivery require verification; configuration and a metadata-only listing create do not establish an end-to-end sale.
+
 This runbook flips the Blackout monetization surface from "built but dark" to
 live: a discoverable marketplace of individual items and package subscriptions,
 with real payments and real entitlement gating.
@@ -85,7 +87,7 @@ pnpm medusa exec ./src/scripts/seed-blackout-catalog.ts
 ```
 
 The seed publishes the candidate items (privacy tools, cosmetics, templates,
-AI persona, automation) and the three package subscriptions (**Signal**,
+automation) and the three package subscriptions (**Signal**,
 **Coalition**, **Sovereign**), each with `feature_keys` and, for tiers, a
 `metadata.tier`.
 

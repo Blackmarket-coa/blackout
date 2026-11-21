@@ -7,6 +7,8 @@
 
 ## 1. Product promise and scope
 
+**Creator-economy update:** [Products, participation surfaces, and wiring requirements](BLACKOUT_CREATOR_ECONOMY.md) removes AI personas from sale, records the monetization catalogue, defines contextual creation prompts, and tracks production delivery blockers. Use it with this navigation plan.
+
 Blackout is an everyday social app for discovering, expressing, connecting, competing, learning, organizing, and earning. It brings together the everyday activities people associate with X, Substack, TikTok, Instagram, Snapchat, and Facebook through one identity, community network, and coherent interface. These are product ambitions; complete replacement of each service is not a launch claim.
 
 People build standing through meaningful contribution and outcomes. Audience participation is a first-class activity: connecting someone with useful information, asking a good question, supporting a team, or completing a community task can matter without an existing audience. People reached is an impact measure; follower count is not the status ladder.

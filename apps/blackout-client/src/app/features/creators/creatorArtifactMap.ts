@@ -31,7 +31,6 @@ export function categoryForArtifact(kind: CreatorArtifactKind): CreatorListingCa
             return 'creator-asset';
         case 'vault_item':
             return 'security-tool';
-        case 'ai_persona':
         case 'automation_recipe':
             return 'ai-automation';
         case 'privacy_tool':
@@ -58,7 +57,6 @@ export function entitlementForArtifact(kind: CreatorArtifactKind): CreatorEntitl
             return 'stream_asset';
         case 'vault_item':
             return 'vault_item';
-        case 'ai_persona':
         case 'automation_recipe':
             return 'plugin_flag';
         case 'privacy_tool':
@@ -77,7 +75,6 @@ export const CREATOR_ARTIFACT_LABELS: Record<CreatorArtifactKind, string> = {
     community_template: 'Community template',
     stream_asset: 'Stream asset',
     vault_item: 'Security item',
-    ai_persona: 'AI persona',
     automation_recipe: 'Automation recipe',
     privacy_tool: 'Privacy tool',
 };

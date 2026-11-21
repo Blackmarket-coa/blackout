@@ -1,5 +1,7 @@
 # BLACKOUT 14-Stream Revenue Implementation Plan
 
+> **Historical plan:** Use the [current creator-economy plan](product/BLACKOUT_CREATOR_ECONOMY.md) and [app plan](product/BLACKOUT_APP_PLAN.md) for product decisions. Native enhancements use one-time purchases; historical recurring platform tiers and fee splits below are not approved pricing. AI personas are excluded. The current plan records creation prompts and unresolved production file-delivery wiring.
+
 - **Repository:** `github.com/Blackmarket-coa/blackout`
 - **Date:** March 2026
 - **Scope:** 14 revenue streams mapped to concrete code changes across 7 phases (~30 weeks)

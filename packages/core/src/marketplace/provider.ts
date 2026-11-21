@@ -157,7 +157,6 @@ export interface CreatorListingDraftInput {
         | 'community_template'
         | 'stream_asset'
         | 'vault_item'
-        | 'ai_persona'
         | 'automation_recipe'
         | 'privacy_tool';
     category: MarketplaceCategory;

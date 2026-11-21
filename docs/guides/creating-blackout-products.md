@@ -1,7 +1,7 @@
 # Creating blackout products
 
 A **blackout product** is a digital artifact that unlocks something _inside_
-Blackout when purchased. This is the reference for the twelve sellable product
+Blackout when purchased. This is the reference for the eleven sellable product
 types: what each one is, the **payload** it needs, and a worked example. It backs
 the per-type forms in the guided sell flow
 ([`selling-on-the-black-market.md`](selling-on-the-black-market.md)) — the form
@@ -47,7 +47,6 @@ app. This is what makes a purchase actually _do_ something in Blackout.
 | [`manifest_plugin`](#manifest_plugin)       | `plugin-curated`     | `plugin_flag`              | a `FeatureCustomizationManifest`      |
 | [`code_plugin`](#code_plugin)               | `plugin-curated`     | `software_license`         | `{ manifest, bundleBase64, sha256 }`  |
 | [`community_template`](#community_template) | `community-template` | `community_template`       | `{ template: { … } }`                 |
-| [`ai_persona`](#ai_persona)                 | `ai-automation`      | `plugin_flag`              | `{ persona: { name, systemPrompt } }` |
 | [`automation_recipe`](#automation_recipe)   | `ai-automation`      | `plugin_flag`              | `{ triggers: [...], actions: [...] }` |
 | [`privacy_tool`](#privacy_tool)             | `security-tool`      | `privacy_tool`             | `{ tier, features: [...] }`           |
 | [`vault_item`](#vault_item)                 | `security-tool`      | `vault_item`               | `{ vaultKind }` or `{ files: [...] }` |
@@ -151,17 +150,6 @@ JSON.
 { "template": { "dens": ["lobby", "study"], "roles": ["mentor", "student"] } }
 ```
 
-## ai_persona
-
-An AI persona or prompt pack.
-
-```json
-{ "persona": { "name": "Mentor", "systemPrompt": "You are a patient tutor." } }
-```
-
-> **AI-den only.** AI personas can only be installed at den scope inside an AI
-> den (`packages/core/src/marketplace/aiGate.ts`).
-
 ## automation_recipe
 
 A declarative trigger/action automation. Authored as JSON.
@@ -218,7 +206,7 @@ picture, including Free Black Market's own `digital` listing type.
 
 ## Not sold here: `coalition_kit`
 
-There's a thirteenth artifact kind, `coalition_kit`, that is **rejected** by the
+The separate artifact kind, `coalition_kit`, that is **rejected** by the
 create endpoint (`packages/api/src/routes/creator.ts`). Coalition kit manifests
 are published through the coalition-kit-manifests flow, not the marketplace — so
 it does not appear as a sell template.

@@ -7,11 +7,10 @@ process.env.JWT_SECRET_PRIMARY =
 process.env.JWT_ISSUER = process.env.JWT_ISSUER ?? 'blackout-api-test';
 process.env.JWT_AUDIENCE = process.env.JWT_AUDIENCE ?? 'blackout-client-test';
 process.env.AUTH_RATE_LIMIT_MAX = process.env.AUTH_RATE_LIMIT_MAX ?? '1000';
-process.env.FREEBLACKMARKET_BASE_URL =
-    process.env.FREEBLACKMARKET_BASE_URL ?? 'https://api.freeblackmarket.test';
-process.env.FREEBLACKMARKET_API_KEY = process.env.FREEBLACKMARKET_API_KEY ?? 'test-api-key';
-process.env.FREEBLACKMARKET_WEBHOOK_SECRET =
-    process.env.FREEBLACKMARKET_WEBHOOK_SECRET ?? 'test-webhook-secret';
+// Loopback only even if an ambient deployment URL is present; fetch is mocked below.
+process.env.FREEBLACKMARKET_BASE_URL = 'http://127.0.0.1:9';
+process.env.FREEBLACKMARKET_API_KEY = 'test-api-key';
+process.env.FREEBLACKMARKET_WEBHOOK_SECRET = 'test-webhook-secret';
 process.env.BLACKOUT_DB_MODE = process.env.BLACKOUT_DB_MODE ?? 'memory';
 // URL assertions below expect the default commerce prefix; an ambient value
 // (e.g. a deploy .env loaded into the shell) must not leak into the suite.
@@ -41,7 +40,9 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
 
 const { default: app } = await import('../src/index');
 const { signJwt } = await import('../src/services/auth');
-const { _resetCreatorListingsForTest } = await import('../src/services/creatorListings');
+const { _resetCreatorListingsForTest, createCreatorListingRecord } = await import(
+    '../src/services/creatorListings'
+);
 
 const USER_ID = 'creator-user-1';
 const USERNAME = 'creator-tester';
@@ -57,6 +58,54 @@ function resetForEachTest(): void {
     _resetCreatorListingsForTest();
     fetchCalls.length = 0;
 }
+
+test('AI persona listings are rejected before contacting the commerce provider', async () => {
+    resetForEachTest();
+    const response = await app.request('/v1/creator/listings', {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({
+            providerId: 'freeblackmarket',
+            artifactKind: 'ai_persona',
+            category: 'ai-automation',
+            entitlementKind: 'plugin_flag',
+            title: 'Retired persona',
+            description: 'Not a sellable product',
+            priceCents: 199,
+            currency: 'USD',
+            artifactPayload: { persona: { name: 'Persona', systemPrompt: 'Example' } },
+        }),
+    });
+    assert.equal(response.status, 400);
+    assert.equal(fetchCalls.length, 0);
+});
+
+test('historical persona drafts cannot be republished', async () => {
+    resetForEachTest();
+    const listing = createCreatorListingRecord({
+        sellerUserId: USER_ID,
+        providerId: 'freeblackmarket',
+        providerListingId: 'retired',
+        publicSlug: null,
+        status: 'draft',
+        draft: {
+            artifactKind: 'ai_persona',
+            category: 'ai-automation',
+            entitlementKind: 'plugin_flag',
+            title: 'Retired',
+            description: 'Historical record',
+            priceCents: 199,
+            currency: 'USD',
+            artifactPayload: { persona: { name: 'Retired', systemPrompt: 'Historical' } },
+        },
+    });
+    const response = await app.request(`/v1/creator/listings/${listing.id}/publish`, {
+        method: 'POST',
+        headers: authHeaders(),
+    });
+    assert.equal(response.status, 400);
+    assert.equal(fetchCalls.length, 0);
+});
 
 test('GET /v1/creator/providers lists creator-write providers', async () => {
     resetForEachTest();
@@ -341,7 +390,7 @@ test('POST /v1/creator/payouts/onboarding returns the provider onboarding handle
         if (url.endsWith('/v1/integrations/blackout/commerce/seller/onboarding')) {
             return new Response(
                 JSON.stringify({
-                    url: 'https://api.freeblackmarket.test/onboard/abc',
+                    url: 'http://127.0.0.1:9/onboard/abc',
                     expiresAt: '2026-01-01T00:00:00Z',
                 }),
                 { headers: { 'content-type': 'application/json' } }
@@ -357,16 +406,32 @@ test('POST /v1/creator/payouts/onboarding returns the provider onboarding handle
     assert.equal(response.status, 200);
     // Pins the field name the client reads (`onboardingUrl`, not `redirectUrl`).
     const json = (await response.json()) as { onboardingUrl?: string; expiresAt?: string };
-    assert.equal(json.onboardingUrl, 'https://api.freeblackmarket.test/onboard/abc');
+    assert.equal(json.onboardingUrl, 'http://127.0.0.1:9/onboard/abc');
     assert.equal(json.expiresAt, '2026-01-01T00:00:00Z');
 });
 
 test('POST /v1/marketplace/checkout passes embed flag to provider', async () => {
     resetForEachTest();
     fetchHandler = (url) => {
+        if (url.includes('/catalog/listings/')) {
+            return new Response(
+                JSON.stringify({
+                    id: 'lst-1',
+                    category: 'emoji-sticker',
+                    title: 'Stickers',
+                    description: 'A pack',
+                    priceCents: 199,
+                    currency: 'USD',
+                    entitlementKind: 'asset_bundle',
+                    artifactKind: 'asset_bundle',
+                }),
+                { headers: { 'content-type': 'application/json' } }
+            );
+        }
+
         if (url.includes('/v1/integrations/blackout/commerce/checkout/sessions')) {
             return new Response(
-                JSON.stringify({ url: 'https://api.freeblackmarket.test/embed/x', id: 'sess-1' }),
+                JSON.stringify({ url: 'http://127.0.0.1:9/embed/x', id: 'sess-1' }),
                 { headers: { 'content-type': 'application/json' } }
             );
         }

@@ -113,6 +113,8 @@ Progress is recognition of chosen participation. Core privacy and community acce
 
 ## 7. Creator Hub: a complete campaign workspace
 
+Use the [creator-economy plan](BLACKOUT_CREATOR_ECONOMY.md) for the approved product catalogue, participation prompts, and create-to-sale wiring acceptance. AI personas are excluded. A usable maker journey must link the relevant editor, actual deliverable, reviewed listing, audience, buyer ownership, and creator earnings; the documented production artifact-upload gap remains open.
+
 During onboarding, creators should be able to define a target audience and campaign goal without repeating basic account setup. Creator setup is a contextual branch that can also be opened later.
 
 | Stage | Required tools |

@@ -6,6 +6,7 @@ import {
     EVENTS_PATH,
     MONETIZATION_EARNINGS_PATH,
 } from '../../../pages/paths';
+import { CreatorParticipationPrompt } from '../../creators/CreatorParticipationPrompt';
 import { listStreams } from '../../streams';
 import { fetchMyAmbassador, fetchMyReferrals } from '../../growth';
 import { creatorSubsApi } from '../../monetization/monetizationApi';
@@ -210,6 +211,7 @@ export const CreatorHubOverview = ({ onSelectTab }: CreatorHubOverviewProps): JS
             testId="creator-hub-overview"
             shellRegion="creator-hub-overview"
         >
+            <CreatorParticipationPrompt />
             {insights ? <InsightsStrip summary={insights} /> : null}
             <div style={hubGridStyle} data-testid="creator-hub-overview-grid">
                 <button
