@@ -1,5 +1,7 @@
 # Monetization Go-Live Runbook
 
+> **November 21, 2026 policy update:** Historical operating instructions. Do not execute subscription seeding/renewal or charge-enable steps from this runbook for the new one-time product model. [Current monetization policy](../product/BLACKOUT_MONETIZATION_PLAN.md) and [creator-economy delivery blockers](../product/BLACKOUT_CREATOR_ECONOMY.md) supersede configuration-only readiness claims. Real payload delivery, restoration, refunds, settlement and permitted native billing require verification.
+
 > **Product and integration update:** Apply the [creator-economy plan](../product/BLACKOUT_CREATOR_ECONOMY.md) before using this historical runbook. Recurring platform enhancements and AI persona offers are excluded. Production creator artifact transfer, signed-bundle association, and actual buyer delivery require verification; configuration and a metadata-only listing create do not establish an end-to-end sale.
 
 This runbook flips the Blackout monetization surface from "built but dark" to
@@ -203,3 +205,4 @@ provider.
    under `/creator/listings`; payout onboarding returns a real FBM URL.
 7. An **unsigned** POST to `/v1/marketplace/webhooks/freeblackmarket` is
    rejected (signature verification live).
+

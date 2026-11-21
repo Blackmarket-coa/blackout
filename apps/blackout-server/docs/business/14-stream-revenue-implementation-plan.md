@@ -1,5 +1,7 @@
 # BLACKOUT: 14-Stream Revenue Implementation Plan
 
+> **November 21, 2026 policy update:** Use the repository's [current monetization plan](../../../../docs/product/BLACKOUT_MONETIZATION_PLAN.md). Subscription tiers, 95/5 splits and historical revenue estimates below are not current approved pricing or projected income.
+
 **Monetization features mapped to code changes across 7 phases**  
 Repository: `github.com/Blackmarket-coa/blackout`  
 Date: March 2026
@@ -209,3 +211,4 @@ Build physical mesh-node revenue stream with software + firmware integration.
   - Phase 3 can run alongside Phase 2.
   - Phase 5 can start once governance widgets exist.
   - Phase 6 hardware design can begin independently while software phases proceed.
+

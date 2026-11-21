@@ -1,5 +1,7 @@
 # BLACKOUT 14-Stream Revenue Implementation Plan
 
+> **November 21, 2026 policy update:** Use [current monetization policy](product/BLACKOUT_MONETIZATION_PLAN.md), [creator-economy requirements](product/BLACKOUT_CREATOR_ECONOMY.md) and the linked ecosystem forecast. The subscription tiers, fee splits and revenue figures below are historical and excluded from the November 21, 2026 model.
+
 > **Historical plan:** Use the [current creator-economy plan](product/BLACKOUT_CREATOR_ECONOMY.md) and [app plan](product/BLACKOUT_APP_PLAN.md) for product decisions. Native enhancements use one-time purchases; historical recurring platform tiers and fee splits below are not approved pricing. AI personas are excluded. The current plan records creation prompts and unresolved production file-delivery wiring.
 
 - **Repository:** `github.com/Blackmarket-coa/blackout`
@@ -228,3 +230,4 @@ Phase 0 (billing) → Phase 1 (steg tiers) → Phase 2 (governance) → Phase 4 
 - Phase 3 (community economics) can run alongside Phase 2.
 - Phase 5 (modules) can start once governance widgets exist.
 - Phase 6 (hardware) is largely independent and can begin during software phases.
+
