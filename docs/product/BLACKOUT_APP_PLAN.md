@@ -104,6 +104,8 @@ Home accommodates short posts, questions, photos, polls, videos, articles, guide
 
 ## 6. Coalition: the world and the tools you carry
 
+**Game reuse direction (2026-11-21):** The [Coalition game plan](BLACKOUT_COALITION_GAME_PLAN.md) evaluates Pokemon Walk gameplay, PraxisMapper spatial services where needed, and optional LocAR.js camera encounters. It defines original companions, cooperative quests, creator-made packs, licensing/maintenance boundaries, and phased integration acceptance. Keep Coalition as the map foundation; adoption and a working game remain future implementation work.
+
 Build on the existing map-first `CoalitionView` and toolbag. Use the existing map/place/area services rather than a parallel map backend. Add an accessible list alternative that respects the same scope, permissions, filters, and chosen network; remote communities remain usable without granting location access.
 
 The map legend controls activity layers. Tapping a pin opens the actual event, project, need, resource, or offering and a relevant action. Public locations are permission-safe, consented records; private homes and live member positions are not public markers.

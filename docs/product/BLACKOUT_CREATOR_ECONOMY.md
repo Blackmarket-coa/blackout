@@ -35,6 +35,8 @@ First-party product sales, the agreed platform share of transaction fees, sponso
 
 ## 3. Participation surfaces and prompts
 
+The [Coalition game plan](BLACKOUT_COALITION_GAME_PLAN.md) extends this loop to original companion assets, cosmetics, reusable quest/learning packs, and commissioned community content. It defines contextual maker prompts and the required pack-manifest, licensing, review, delivery, entitlement, and installation contracts. Those game-specific editors and commercial integrations are planned; generic asset/download templates do not establish readiness. AI personas remain excluded.
+
 The marketplace needs a creation loop as well as a buying loop. People should discover something manageable they can make, start with a relevant template, retain their work, and see what happened after publication.
 
 Keep prompts contextual, short, optional, and tied to a working action. Show one relevant prompt or compact choice set rather than adding another navigation tab. No earnings guarantees, fabricated demand, forced onboarding purchases, or rewards for repetitive empty uploads.

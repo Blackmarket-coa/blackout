@@ -2,6 +2,8 @@
 
 This guide explains how to build and run the mobile application in the current Blackout repository state.
 
+The [Coalition game plan](docs/product/BLACKOUT_COALITION_GAME_PLAN.md) records Pokemon Walk/PraxisMapper reuse evaluation and optional LocAR.js AR. Game-engine embedding, camera/orientation/location behavior, and asset delivery require separate native verification; the build commands below do not establish game or AR readiness.
+
 For product behavior and navigation, use the [Blackout app plan](docs/product/BLACKOUT_APP_PLAN.md). It defines four stable destinations, nested-tab migration, contribution and crowd-participation flows, contextual creator tools, and native acceptance. This build guide does not establish App Store/Play Store readiness or completion of those planned flows.
 
 ## 1) Choose the right mobile path

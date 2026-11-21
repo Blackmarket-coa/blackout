@@ -1,5 +1,7 @@
 # Coalition geocaching, hidden drops and meeting places: design (2026-11-17)
 
+**Companion update (2026-11-21):** The [Coalition game plan](../product/BLACKOUT_COALITION_GAME_PLAN.md) adds open-source reuse evaluation, original collectible companions, cooperative quests, creator-made content, and optional AR. It preserves this document's consent/audience rules, code-versus-GPS choice, placement protections, gamification banlist, and separate play ledger. Existing unresolved policy questions below remain open.
+
 **Status:** proposed. Nothing in this document is built yet. It turns the
 operator's request of 2026-11-17 into a plan, and records the decisions the
 operator took that day. It builds on `docs/BLACKOUT_HABIT_AND_PARTICIPATION_STRATEGY.md`
