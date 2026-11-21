@@ -1,5 +1,7 @@
 # Blackout creator economy: products, participation, and connected delivery
 
+**Financial companion (November 21, 2026):** [Current monetization plan](BLACKOUT_MONETIZATION_PLAN.md) records consolidated revenue scenarios, counting rules and candidate price tests. It supersedes historical recurring platform-tier forecasts without changing billing or claiming delivery is complete.
+
 **Updated:** November 20, 2026
 
 **Status:** Product requirements plus source-level wiring review. Code changes described below are proposed in the app-plan pull request; production checkout, fulfillment, and payouts have not been verified.
@@ -101,3 +103,4 @@ Do not claim the entire loop is wired until the production payload and content/o
 - Validate the path on iOS/Android, including storage permissions, interrupted upload, login return, and keyboard/screen-reader use.
 
 Measure prompt-to-draft starts, drafts resumed, valid completed products, review acceptance, actual delivery, repeat purchasers, creator net earnings, useful contributions, and abandoned steps. Completion and economic benefit matter more than prompt impressions or raw upload volume.
+

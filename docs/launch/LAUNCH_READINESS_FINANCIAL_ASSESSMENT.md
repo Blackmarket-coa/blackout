@@ -1,5 +1,7 @@
 # Launch Readiness & Financial Assessment
 
+> **November 21, 2026 policy update:** Historical source assessment. Its readiness and revenue assertions are not a refreshed production audit. Use [current monetization policy and ecosystem forecast](../product/BLACKOUT_MONETIZATION_PLAN.md) with the newer [creator-economy wiring review](../product/BLACKOUT_CREATOR_ECONOMY.md). Unverified new game/content delivery cannot be forecast as already live.
+
 > **Date:** 2026-06-03 · **Branch of record:** `claude/launch-readiness-financial-ofb2f`
 > **Question answered:** *"The repo is structured through Phase 2 — are we ready to launch, how do we get
 > users, and what does success look like financially?"*
@@ -196,3 +198,4 @@ investments, Blackstar vending, asset sharing, logistics automation, advanced go
 
 When 1 + 2 are done, you can both **open the doors** and **prove the economy is working** — which is the only
 signal (per your own framing) that justifies building Phase 3+.
+
