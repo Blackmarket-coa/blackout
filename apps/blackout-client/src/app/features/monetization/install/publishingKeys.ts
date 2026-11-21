@@ -5,7 +5,8 @@ import type { PluginPublishingKey } from './pluginSignature';
  * of the Ed25519 keys Free Black Market signs marketplace bundles with. A
  * bundle installs only if its signature checks out against one of these (or
  * one named in `VITE_PLUGIN_PUBLISHING_KEYS` when the app was built); while
- * this list is empty, a production build installs no plugin at all.
+ * this list is empty, a production build installs nothing bought from the
+ * marketplace: every kind of item passes this check, not only plugins.
  *
  * To add one, on the server that holds the private key:
  *

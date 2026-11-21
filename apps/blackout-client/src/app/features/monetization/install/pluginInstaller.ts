@@ -167,17 +167,17 @@ export interface InstallResult {
 export function signatureFailureMessage(reason: string): string {
     switch (reason) {
         case 'no-publishing-key':
-            return 'Not installed: this copy of the app trusts no plugin publisher yet, so it installs no plugins.';
+            return 'Not installed: this copy of the app trusts no marketplace publisher yet, so it installs nothing bought from the marketplace.';
         case 'unknown-key-id':
-            return 'Not installed: the plugin is signed with a key this copy of the app does not trust.';
+            return 'Not installed: the item is signed with a key this copy of the app does not trust.';
         case 'hmac-key-refused':
-            return 'Not installed: the plugin is signed with a development key, which this copy of the app refuses.';
+            return 'Not installed: the item is signed with a development key, which this copy of the app refuses.';
         case 'manifest-sha-mismatch':
         case 'bundle-sha-mismatch':
         case 'signature-mismatch':
-            return "Not installed: the plugin's signature does not match its contents.";
+            return "Not installed: the item's signature does not match its contents.";
         default:
-            return "Not installed: the plugin's signature could not be checked.";
+            return "Not installed: the item's signature could not be checked.";
     }
 }
 
