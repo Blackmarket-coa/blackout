@@ -165,8 +165,11 @@ changed, how it was checked, and what was not checked.
     ignored, so an HMAC secret cannot be pinned. Outside development an HMAC
     key is refused even if it is in the list (`hmac-key-refused`), and an
     empty list refuses everything (`no-publishing-key`). The install dialog
-    says why in words ("Not installed: this copy of the app trusts no plugin
-    publisher yet, so it installs no plugins.", and so on).
+    says why in words ("Not installed: this copy of the app trusts no
+    marketplace publisher yet, so it installs nothing bought from the
+    marketplace.", and so on). Until 2026-11-21 these messages said "plugin",
+    although every kind of purchase (theme, cosmetic, sound pack, template and
+    the rest) passes the same check.
 -   **`tools/plugins/publishing-key.mjs`.** `generate` writes a new private key
     (PKCS#8 PEM, mode 0600, never over an existing file) and prints the line
     to pin; `public` prints it for an existing key, such as the one FBM signs

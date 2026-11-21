@@ -253,7 +253,7 @@ describe('what the install dialog says', () => {
             name: 'PluginInstallError',
             reason: 'no-publishing-key',
             message:
-                'Not installed: this copy of the app trusts no plugin publisher yet, so it installs no plugins.',
+                'Not installed: this copy of the app trusts no marketplace publisher yet, so it installs nothing bought from the marketplace.',
         });
     });
 

@@ -117,7 +117,7 @@ Native enhancements and supported content packs are one-time purchases. Hosted s
 
 Preserve processing-fees-first and the flat 3% coalition commission on FBM sales; do not add a duplicate Blackout transaction cut. Sponsored events, learning activities, and cooperative challenges can fund creators or communities without injecting paid ranking into chronological Circle/Reach.
 
-The [creator-economy wiring review](BLACKOUT_CREATOR_ECONOMY.md#5-wiring-review-and-release-blockers) still applies: production listing creation currently sends metadata only, durable wizard resume and general content-to-offer association remain gaps, and actual file delivery/settlement must be proven. A purchased game-pack listing is not a working game installation until its bytes, version, entitlement, and runtime application are all verified.
+The [creator-economy wiring review](BLACKOUT_CREATOR_ECONOMY.md#5-wiring-review-and-release-blockers) still applies: production listing creation currently sends metadata only, durable wizard resume and general content-to-offer association remain gaps, and actual file delivery/settlement must be proven. A purchased game-pack listing is not a working game installation until its bytes, version, entitlement, and runtime application are all verified. Production builds also install no purchased bundle of any kind until Free Black Market's Ed25519 publishing key is pinned in `apps/blackout-client/src/app/features/monetization/install/publishingKeys.ts` (none is pinned today; `KNOWN_LIMITATIONS.md`), so no pack can install before that.
 
 ## 8. Phased delivery and acceptance
 

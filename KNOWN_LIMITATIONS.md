@@ -993,7 +993,7 @@ For the source-of-truth triage with tier/owner detail see
     rest of their traffic, and so does a proxy in front of it that ends TLS
     (the live host is served through Cloudflare).
 
-### Plugins: no publishing key is pinned yet, so a production build installs none (2026-11-17)
+### Marketplace items: no publishing key is pinned yet, so a production build installs none (2026-11-17)
 
 -   **Where:** `apps/blackout-client/src/app/features/monetization/install/`
     (`pluginSignature.ts`, `publishingKeys.ts`) and
@@ -1003,7 +1003,9 @@ For the source-of-truth triage with tier/owner detail see
     signed by an Ed25519 key pinned when the build was made, and refuses
     every HMAC key. The list in `publishingKeys.ts` is empty, and no
     deployment file here sets `VITE_PLUGIN_PUBLISHING_KEYS`, so today a
-    production build installs no plugin, and the install dialog says so.
+    production build installs nothing bought from the marketplace (themes,
+    cosmetics, sound packs, templates and every other kind pass the same
+    check as plugins), and the install dialog says so.
     Until 2026-11-17 every build trusted a development key written in the
     client's source, which anyone could sign with.
 -   **Operator action:** pin Free Black Market's public key. On the server

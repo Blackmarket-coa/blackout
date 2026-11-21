@@ -135,7 +135,7 @@ loaded by `apps/blackout-client/src/app/features/monetization/install/pluginInst
     marketplace signs with (`fbm-dev-hmac`) is in development builds only.
     **No key is pinned yet:** until the operator pins Free Black Market's
     public key (`tools/plugins/publishing-key.mjs`), a production build
-    installs no plugin. Until 2026-11-17 that development key was the only
+    installs nothing bought from the marketplace, plugin or otherwise. Until 2026-11-17 that development key was the only
     one, in every build, so anyone with the client could sign a bundle it
     would install (trust-claims T22).
 -   **Privilege escalation inside the host**: plugin code attempts to read
