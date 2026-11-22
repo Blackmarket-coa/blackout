@@ -31,7 +31,6 @@ import {
     reportCache,
     viewForViewer,
 } from '../services/coalitionCaches';
-import { cacheForPlacer } from '../services/coalitionVisibility';
 
 const caches = new Hono();
 
@@ -64,8 +63,22 @@ caches.use('*', async (c, next) => {
     await next();
 });
 
-const requireConsentingUser = (c: Context) => {
+/**
+ * A signed-in person whose account still exists. A token outlives the account
+ * it was issued to (deletion revokes only the token that confirmed it), and
+ * data written under a deleted account would never be erased.
+ */
+const requireExistingUser = (c: Context) => {
     const user = requireUser(c, 'Sign in required');
+    if (user instanceof Response) return user;
+    if (!db.getUserById(user.sub)) {
+        return c.json({ code: 'unauthorized', message: 'Sign in required' }, 401);
+    }
+    return user;
+};
+
+const requireConsentingUser = (c: Context) => {
+    const user = requireExistingUser(c);
     if (user instanceof Response) return user;
     if (!hasCurrentConsent(user.sub, 'coalition-caches')) {
         return c.json(
@@ -172,7 +185,7 @@ caches.post('/', placeRateLimit, async (c) => {
     const { cache, code } = await createCache(user.sub, body);
     return c.json(
         {
-            cache: cacheForPlacer(cache, 0),
+            cache: viewForViewer(cache, user.sub),
             // Shown once: only its salted hash is kept.
             code: code ? formatCacheCode(code) : null,
         },
@@ -191,7 +204,7 @@ caches.get('/:id', (c) => {
 });
 
 caches.delete('/:id', (c) => {
-    const user = requireUser(c, 'Sign in required');
+    const user = requireExistingUser(c);
     if (user instanceof Response) return user;
     // No consent check: someone who withdrew must still be able to take down what they placed.
     if (!removeOwnCache(c.req.param('id'), user.sub)) return notFound(c);

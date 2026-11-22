@@ -9,10 +9,11 @@
 
 -- A public cache. latitude/longitude are the exact spot the placer chose: only
 -- the placer and moderators are sent them; everyone else gets the centre of a
--- 50 m cell. A cache is shown to others from `visible_from` (placement + 2 h)
--- while `status` is 'active'. 'hidden' keeps it from everyone but its placer
--- (`held_reason` says why: a report, or an exclusion zone, which the placer is
--- not told); 'removed' keeps it from everyone. The code a finder types is never
+-- 50 m cell. A cache is shown to others from `visible_from` (placement + 2 h
+-- and a random part of an hour) while `status` is 'active' and it lies outside
+-- every exclusion zone (zones are applied when caches are read, not stored
+-- here). 'hidden' keeps it from everyone but its placer (`held_reason`:
+-- 'report'); 'removed' keeps it from everyone. The code a finder types is never
 -- stored: `code_hash` is scrypt(code, code_salt), and both are null for a cache
 -- confirmed by GPS check-in instead.
 CREATE TABLE coalition_caches (

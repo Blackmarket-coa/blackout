@@ -2021,8 +2021,11 @@ export interface CoalitionCacheRecord {
     codeSalt: string | null;
     codeHash: string | null;
     status: 'active' | 'hidden' | 'removed';
-    /** Why a hidden cache is hidden. 'exclusion' is never shown to the placer. */
-    heldReason: 'report' | 'exclusion' | null;
+    /**
+     * Why a hidden cache is hidden: a report. Exclusion zones are not stored on
+     * the cache; they are applied when caches are read.
+     */
+    heldReason: 'report' | null;
     visibleFrom: string;
     removedBy: string | null;
     moderationNote: string | null;

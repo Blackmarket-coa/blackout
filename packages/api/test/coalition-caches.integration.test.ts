@@ -5,7 +5,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 
 process.env.NODE_ENV = process.env.NODE_ENV ?? 'test';
 process.env.BLACKOUT_DB_MODE = process.env.BLACKOUT_DB_MODE ?? 'memory';
@@ -23,12 +23,16 @@ const { db } = await import('../src/db/store');
 const { coarsenPoint, CACHE_AREA_CELL_METERS } = await import(
     '../src/services/coalitionVisibility'
 );
-const { PUBLIC_CACHE_DELAY_MS } = await import('../src/services/coalitionCaches');
+const { PUBLIC_CACHE_DELAY_MS, PUBLIC_CACHE_JITTER_MS } = await import(
+    '../src/services/coalitionCaches'
+);
 const { exportUserData, requestAccountDeletion, confirmAccountDeletion } = await import(
     '../src/services/accountLifecycle'
 );
+const { cacheDisclosureText } = await import('@blackout/core');
 
-const TEXT_SHA256 = 'a'.repeat(64);
+/** The SHA-256 of the disclosure text the client shows (@blackout/core). */
+const TEXT_SHA256 = createHash('sha256').update(cacheDisclosureText(), 'utf8').digest('hex');
 const METERS_PER_DEGREE_LATITUDE = 111_320;
 const north = (p: { latitude: number; longitude: number }, meters: number) => ({
     latitude: p.latitude + meters / METERS_PER_DEGREE_LATITUDE,
@@ -85,7 +89,7 @@ const place = async (user: string, body: Record<string, unknown> = {}) => {
     return json<{ cache: CacheRow; code: string | null }>(response);
 };
 
-/** The 2-hour delay, passed: move visibleFrom into the past. */
+/** The delay, passed: move visibleFrom into the past. */
 const passDelay = (id: string) => {
     const cache = db.getCoalitionCache(id)!;
     db.upsertCoalitionCache({ ...cache, visibleFrom: new Date(Date.now() - 1000).toISOString() });
@@ -94,11 +98,54 @@ const passDelay = (id: string) => {
 const list = async (user: string) =>
     (await json<{ caches: CacheRow[] }>(await call('GET', '/coalition/caches', user))).caches;
 
+/** An account that exists, has not agreed to anything yet. */
+const makeAccount = (prefix: string, id = `${prefix}-${randomUUID().slice(0, 8)}`) => {
+    db.createUser({
+        id,
+        username: id,
+        email: `${id}@example.com`,
+        passwordHash: 'unused',
+        reputationScore: 0,
+        reputationTier: 'member',
+        pubkeyEd25519: 'pk',
+    });
+    return id;
+};
+
+/** An account that has agreed to the caches disclosure. */
 const newUser = async (prefix: string) => {
-    const user = `${prefix}-${randomUUID().slice(0, 8)}`;
+    const user = makeAccount(prefix);
     assert.equal((await agree(user)).status, 201);
     return user;
 };
+
+type QueueEntry = {
+    cache: Record<string, unknown> & { id: string };
+    insideExclusionZone: boolean;
+    reports: unknown[];
+};
+const queue = async () =>
+    (
+        await json<{ queue: QueueEntry[] }>(
+            await call('GET', '/coalition/caches/moderation', 'cache-mod')
+        )
+    ).queue;
+
+const addZone = async (
+    label: string,
+    position: { latitude: number; longitude: number },
+    radiusMeters: number
+) => {
+    const response = await call('POST', '/coalition/caches/exclusions', 'cache-mod', {
+        label,
+        position,
+        radiusMeters,
+    });
+    assert.equal(response.status, 201);
+    return (await json<{ zone: { id: string } }>(response)).zone.id;
+};
+const removeZone = (id: string) =>
+    call('DELETE', `/coalition/caches/exclusions/${id}`, 'cache-mod');
 
 test('nothing answers while the feature is off', async () => {
     process.env.BLACKOUT_COALITION_CACHES = '0';
@@ -110,17 +157,19 @@ test('nothing answers while the feature is off', async () => {
     }
 });
 
-test('the disclosure comes first: current wording, and the 18+ statement', async () => {
-    const user = `consent-${randomUUID().slice(0, 8)}`;
+test('the disclosure comes first: the current text, the current version, and the 18+ statement', async () => {
+    const user = makeAccount('consent');
     const blocked = await call('GET', '/coalition/caches', user);
     assert.equal(blocked.status, 403);
     assert.equal((await json<{ code: string }>(blocked)).code, 'consent_required');
 
     const noAge = await agree(user, { ageConfirmed: false });
-    assert.equal(noAge.status, 400);
     assert.equal((await json<{ code: string }>(noAge)).code, 'age_required');
     const stale = await agree(user, { version: 2 });
     assert.equal((await json<{ code: string }>(stale)).code, 'stale_version');
+    const otherText = await agree(user, { textSha256: '0'.repeat(64) });
+    assert.equal(otherText.status, 400);
+    assert.equal((await json<{ code: string }>(otherText)).code, 'wrong_text');
     assert.equal((await call('GET', '/coalition/caches', user)).status, 403);
 
     assert.equal((await agree(user)).status, 201);
@@ -137,7 +186,13 @@ test('the disclosure comes first: current wording, and the 18+ statement', async
     assert.equal(history.filter((c) => c.withdrawnAt === null).length, 1);
 });
 
-test('the code is shown once and never stored; others see nothing for 2 hours, then an area', async () => {
+test('a token whose account does not exist gets nothing', async () => {
+    const ghost = `ghost-${randomUUID().slice(0, 8)}`;
+    assert.equal((await agree(ghost)).status, 401);
+    assert.equal((await call('GET', '/coalition/caches', ghost)).status, 401);
+});
+
+test('the code is shown once and never stored; others see nothing for 2 to 3 hours, then an area', async () => {
     const placer = await newUser('placer');
     const other = await newUser('other');
     const before = Date.now();
@@ -149,7 +204,11 @@ test('the code is shown once and never stored; others see nothing for 2 hours, t
     assert.ok(!JSON.stringify(stored).includes(plain), 'the code is not in the stored record');
     assert.match(stored.codeHash ?? '', /^[0-9a-f]{64}$/);
     const delay = Date.parse(stored.visibleFrom) - before;
-    assert.ok(delay >= PUBLIC_CACHE_DELAY_MS - 1000 && delay <= PUBLIC_CACHE_DELAY_MS + 5000);
+    assert.ok(delay >= PUBLIC_CACHE_DELAY_MS - 1000, `at least 2 hours (${delay})`);
+    assert.ok(
+        delay <= PUBLIC_CACHE_DELAY_MS + PUBLIC_CACHE_JITTER_MS + 5000,
+        `at most 3 (${delay})`
+    );
 
     // The placer sees it whole at once; nobody else sees it yet.
     assert.deepEqual(cache.position, SPOT);
@@ -174,9 +233,25 @@ test('the code is shown once and never stored; others see nothing for 2 hours, t
         'codeHash',
         'codeSalt',
         'status',
+        'heldReason',
     ]) {
         assert.ok(!(key in seen), `others are not sent ${key}`);
     }
+});
+
+test('when a cache appears does not date the visit to the minute', async () => {
+    const placer = await newUser('jitter');
+    const delays: number[] = [];
+    for (let i = 0; i < 6; i += 1) {
+        const before = Date.now();
+        const { cache } = await place(placer);
+        delays.push(Date.parse(db.getCoalitionCache(cache.id)!.visibleFrom) - before);
+    }
+    const spread = Math.max(...delays) - Math.min(...delays);
+    assert.ok(
+        spread > 60_000,
+        `six caches placed together appear over more than a minute (${spread} ms)`
+    );
 });
 
 test('a radius search tests what each viewer is shown, so it cannot find the exact spot', async () => {
@@ -229,24 +304,32 @@ test('finding by code: any case or spacing works, a wrong code does not, one fin
     assert.deepEqual(Object.keys(finds[0]!).sort(), ['cacheId', 'finderId', 'foundAt', 'id']);
 });
 
-test('finding by GPS: within 50 m of the exact spot, and the position is not kept', async () => {
+test('finding by GPS: checked against the area everyone is shown, so it cannot locate the spot; nothing kept', async () => {
     const placer = await newUser('gps-placer');
-    const finder = await newUser('gps-finder');
     const { cache, code } = await place(placer, { proof: 'gps' });
     assert.equal(code, null);
     passDelay(cache.id);
+    const attempt = async (position: { latitude: number; longitude: number }) => {
+        const finder = await newUser('gps-finder');
+        const response = await call('POST', `/coalition/caches/${cache.id}/find`, finder, {
+            position,
+        });
+        return response.status === 200 ? 'found' : (await json<{ code: string }>(response)).code;
+    };
+    // The spot is 20 m north of the centre. Two points 74 m from the centre,
+    // one 54 m from the spot and one 94 m from it, get the same answer: the
+    // answer depends only on the centre, which everyone is already shown.
+    assert.equal(await attempt(north(CENTRE, 74)), 'found');
+    assert.equal(await attempt(north(CENTRE, -74)), 'found');
+    assert.equal(await attempt(north(CENTRE, 80)), 'too_far');
+    assert.equal(await attempt(north(CENTRE, -80)), 'too_far');
 
-    const far = north(SPOT, 80);
-    const tooFar = await call('POST', `/coalition/caches/${cache.id}/find`, finder, {
-        position: far,
-    });
-    assert.equal((await json<{ code: string }>(tooFar)).code, 'too_far');
-    const near = north(SPOT, 30);
-    const ok = await call('POST', `/coalition/caches/${cache.id}/find`, finder, { position: near });
-    assert.equal(ok.status, 200);
+    const near = north(CENTRE, -30);
+    assert.equal(await attempt(near), 'found');
     const everything = JSON.stringify([
         ...db.coalitionCacheFinds.values(),
         ...db.coalitionCaches.values(),
+        ...db.coalitionCacheReports.values(),
     ]);
     assert.ok(
         !everything.includes(String(near.latitude)),
@@ -261,14 +344,11 @@ test('a report hides the cache from everyone but its placer until a moderator ac
     const { cache } = await place(placer);
     passDelay(cache.id);
 
-    assert.equal(
-        (
-            await call('POST', `/coalition/caches/${cache.id}/report`, reporter, {
-                reason: 'This is a school',
-            })
-        ).status,
-        201
-    );
+    const report = () =>
+        call('POST', `/coalition/caches/${cache.id}/report`, reporter, {
+            reason: 'This is a school',
+        });
+    assert.equal((await report()).status, 201);
     assert.ok(!(await list(bystander)).some((c) => c.id === cache.id), 'hidden from others');
     assert.ok(!(await list(reporter)).some((c) => c.id === cache.id), 'and from the reporter');
     assert.equal(
@@ -278,23 +358,23 @@ test('a report hides the cache from everyone but its placer until a moderator ac
 
     // Members cannot see the queue; the moderator sees the exact spot and the report.
     assert.equal((await call('GET', '/coalition/caches/moderation', reporter)).status, 403);
-    const queue = (
-        await json<{ queue: Array<{ cache: Record<string, unknown>; reports: unknown[] }> }>(
-            await call('GET', '/coalition/caches/moderation', 'cache-mod')
-        )
-    ).queue;
-    const entry = queue.find((e) => e.cache.id === cache.id);
+    const entry = (await queue()).find((e) => e.cache.id === cache.id);
     assert.ok(entry);
     assert.equal(entry.cache.latitude, SPOT.latitude);
     assert.equal(entry.reports.length, 1);
     assert.ok(!('codeHash' in entry.cache) && !('codeSalt' in entry.cache));
 
-    // Restore: visible again, report closed.
+    // Restore: visible again, report closed, and the same reporter cannot hide it again.
     await call('POST', `/coalition/caches/${cache.id}/moderate`, 'cache-mod', {
         action: 'restore',
     });
     assert.ok((await list(bystander)).some((c) => c.id === cache.id));
     assert.equal(db.listCoalitionCacheReports({ cacheId: cache.id, resolved: false }).length, 0);
+    assert.equal((await report()).status, 201);
+    assert.ok(
+        (await list(bystander)).some((c) => c.id === cache.id),
+        'a reviewed reporter does not hide it again'
+    );
 
     // Remove: gone for others; the placer is told, with the note.
     await call('POST', `/coalition/caches/${cache.id}/moderate`, 'cache-mod', {
@@ -307,17 +387,27 @@ test('a report hides the cache from everyone but its placer until a moderator ac
     assert.equal(mine.moderationNote, 'Too close to a school entrance');
 });
 
-test('inside an exclusion zone: accepted, told nothing different, never shown to others', async () => {
-    const zoneCentre = { latitude: 48.8566, longitude: 2.3522 };
-    const zone = await call('POST', '/coalition/caches/exclusions', 'cache-mod', {
-        label: 'Shelter',
-        position: zoneCentre,
-        radiusMeters: 200,
+test('a placer taking a reported cache down closes its reports and takes it out of the queue', async () => {
+    const placer = await newUser('down-placer');
+    const reporter = await newUser('down-reporter');
+    const { cache } = await place(placer);
+    passDelay(cache.id);
+    await call('POST', `/coalition/caches/${cache.id}/report`, reporter, {
+        reason: 'Private land',
     });
-    assert.equal(zone.status, 201);
-    const zoneId = (await json<{ zone: { id: string } }>(zone)).zone.id;
+    assert.ok((await queue()).some((e) => e.cache.id === cache.id));
+    assert.equal((await call('DELETE', `/coalition/caches/${cache.id}`, placer)).status, 204);
+    assert.ok(!(await queue()).some((e) => e.cache.id === cache.id));
+    assert.equal(db.listCoalitionCacheReports({ cacheId: cache.id, resolved: false }).length, 0);
+});
+
+test('inside an exclusion zone: nothing the placer can see differs, and nothing a moderator does publishes it', async () => {
+    const zoneCentre = { latitude: 48.8566, longitude: 2.3522 };
+    const zoneId = await addZone('Shelter', zoneCentre, 200);
+    const zoneIds = [zoneId];
     try {
-        const placer = await newUser('zone-placer');
+        const placer = makeAccount('zone-placer');
+        assert.equal((await agree(placer)).status, 201);
         const other = await newUser('zone-other');
         assert.equal((await call('GET', '/coalition/caches/exclusions', placer)).status, 403);
 
@@ -328,36 +418,70 @@ test('inside an exclusion zone: accepted, told nothing different, never shown to
             status: r.cache.status,
             hasCode: r.code !== null,
         });
-        assert.deepEqual(shape(inside), shape(outside), 'the placer cannot tell them apart');
-        assert.equal((await list(placer)).find((c) => c.id === inside.cache.id)?.status, 'placed');
-
+        assert.deepEqual(shape(inside), shape(outside), 'the placement answer is the same');
         passDelay(inside.cache.id);
         passDelay(outside.cache.id);
+
+        const placerView = async (id: string) => (await list(placer)).find((c) => c.id === id);
+        const exportStatus = (id: string) =>
+            exportUserData(placer)!.coalitionCaches.find((c) => c.id === id)?.status;
+        assert.equal((await placerView(inside.cache.id))?.status, 'placed');
+        assert.equal(
+            exportStatus(inside.cache.id),
+            exportStatus(outside.cache.id),
+            'the export too'
+        );
+        assert.equal(exportStatus(inside.cache.id), 'placed');
+
         const seen = (await list(other)).map((c) => c.id);
         assert.ok(seen.includes(outside.cache.id));
         assert.ok(!seen.includes(inside.cache.id), 'held');
-        const queue = (
-            await json<{ queue: Array<{ cache: { id: string; heldReason: string } }> }>(
-                await call('GET', '/coalition/caches/moderation', 'cache-mod')
-            )
-        ).queue;
         assert.equal(
-            queue.find((e) => e.cache.id === inside.cache.id)?.cache.heldReason,
-            'exclusion'
+            (await call('GET', `/coalition/caches/${inside.cache.id}`, other)).status,
+            404
         );
+
+        // The moderator sees it flagged; a restore does not publish it.
+        const entry = (await queue()).find((e) => e.cache.id === inside.cache.id);
+        assert.equal(entry?.insideExclusionZone, true);
+        await call('POST', `/coalition/caches/${inside.cache.id}/moderate`, 'cache-mod', {
+            action: 'restore',
+        });
+        assert.ok(
+            !(await list(other)).some((c) => c.id === inside.cache.id),
+            'restore: still held'
+        );
+        // A removal reads as "placed" to the placer, with no note: it can only have come from the zone.
+        await call('POST', `/coalition/caches/${inside.cache.id}/moderate`, 'cache-mod', {
+            action: 'remove',
+            note: 'Inside the shelter zone',
+        });
+        const afterRemoval = await placerView(inside.cache.id);
+        assert.equal(afterRemoval?.status, 'placed');
+        assert.equal(afterRemoval?.moderationNote, null);
+        assert.equal(exportStatus(inside.cache.id), 'placed');
 
         // A zone added later hides the active caches already inside it.
         const later = await place(placer, { position: north(zoneCentre, 9000) });
         passDelay(later.cache.id);
         assert.ok((await list(other)).some((c) => c.id === later.cache.id));
-        await call('POST', '/coalition/caches/exclusions', 'cache-mod', {
-            label: 'Clinic',
-            position: north(zoneCentre, 9000),
-            radiusMeters: 50,
-        });
+        zoneIds.push(await addZone('Clinic', north(zoneCentre, 9000), 50));
         assert.ok(!(await list(other)).some((c) => c.id === later.cache.id));
+
+        // Reported first, zone added after, then restored: still not shown.
+        const reporter = await newUser('zone-reporter');
+        const reported = await place(placer, { position: north(zoneCentre, 20000) });
+        passDelay(reported.cache.id);
+        await call('POST', `/coalition/caches/${reported.cache.id}/report`, reporter, {
+            reason: 'Odd',
+        });
+        zoneIds.push(await addZone('School', north(zoneCentre, 20000), 50));
+        await call('POST', `/coalition/caches/${reported.cache.id}/moderate`, 'cache-mod', {
+            action: 'restore',
+        });
+        assert.ok(!(await list(other)).some((c) => c.id === reported.cache.id));
     } finally {
-        await call('DELETE', `/coalition/caches/exclusions/${zoneId}`, 'cache-mod');
+        for (const id of zoneIds) await removeZone(id);
     }
 });
 
@@ -379,17 +503,7 @@ test('withdrawing stops the feature, and the placer can still take their caches 
 });
 
 test("the account export includes the person's caches, finds, reports and consents; deletion erases them", async () => {
-    const id = randomUUID();
-    db.createUser({
-        id,
-        username: `cacher-${id.slice(0, 8)}`,
-        email: `cacher-${id.slice(0, 8)}@example.com`,
-        passwordHash: 'unused',
-        reputationScore: 0,
-        reputationTier: 'member',
-        pubkeyEd25519: 'pk',
-    });
-    assert.equal((await agree(id)).status, 201);
+    const id = await newUser('cacher');
     const other = await newUser('erase-other');
     const mine = await place(id);
     const theirs = await place(other);
@@ -400,6 +514,7 @@ test("the account export includes the person's caches, finds, reports and consen
     await call('POST', `/coalition/caches/${theirs.cache.id}/report`, id, {
         reason: 'Private garden',
     });
+    await call('POST', `/coalition/caches/${mine.cache.id}/report`, other, { reason: 'Odd spot' });
 
     const exported = exportUserData(id)!;
     assert.equal(exported.consents.length, 1);
@@ -425,8 +540,17 @@ test("the account export includes the person's caches, finds, reports and consen
         0,
         'finds on their cache'
     );
+    assert.equal(
+        db.listCoalitionCacheReports({ cacheId: mine.cache.id }).length,
+        0,
+        'reports on it'
+    );
     assert.equal(db.listCoalitionCacheFinds({ finderId: id }).length, 0);
     assert.equal(db.listCoalitionCacheReports({ reporterId: id }).length, 0);
     assert.equal(db.listUserConsents(id).length, 0);
     assert.ok(db.getCoalitionCache(theirs.cache.id), "someone else's cache stays");
+
+    // A token issued before the deletion gets nothing, and can write nothing.
+    assert.equal((await call('GET', '/coalition/caches', id)).status, 401);
+    assert.equal((await agree(id)).status, 401);
 });

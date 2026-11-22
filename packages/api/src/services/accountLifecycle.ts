@@ -3,6 +3,7 @@ import type { ReleaseIdentity } from '@blackout/protocol';
 import { db } from '../db/store';
 import type { UserRecord } from '../db/types';
 import { recordToReleaseIdentity } from './releaseIdentities';
+import { placerStatusForExport } from './coalitionCaches';
 import { matrixUserIdFor } from './userIdentity';
 
 const DELETE_TOKEN_BYTES = 32;
@@ -260,7 +261,9 @@ export const exportUserData = (userId: string): AccountExport | null => {
             proof: cache.proof,
             latitude: cache.latitude,
             longitude: cache.longitude,
-            status: cache.status,
+            // What the placer is told, never the stored status: a stored
+            // status would say which spots are inside an exclusion zone.
+            status: placerStatusForExport(cache),
             visibleFrom: cache.visibleFrom,
             createdAt: cache.createdAt,
         }));

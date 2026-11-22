@@ -2,17 +2,25 @@
 // check it and the person can see their own history
 // (docs/coalitions/GEOCACHING_DESIGN.md §3).
 //
-// The disclosure text lives in the client, which sends the version it showed
-// and the SHA-256 of that text. An agreement counts only at the version the
-// server expects now: when the wording changes, the version goes up here and
-// in the client, and everyone is asked again.
-import { randomUUID } from 'node:crypto';
+// The disclosure text is shared with the client (@blackout/core), which shows
+// it and sends the version and the SHA-256 of the text it showed. An agreement
+// counts only for the current version and only when that hash is the hash of
+// the current text: when the wording changes, the version goes up, and
+// everyone is asked again.
+import { createHash, randomUUID } from 'node:crypto';
+import { CACHE_DISCLOSURE, cacheDisclosureText } from '@blackout/core';
 import { db } from '../db/store';
 import type { UserConsentRecord } from '../db/types';
 
+const sha256Hex = (text: string): string => createHash('sha256').update(text, 'utf8').digest('hex');
+
 export const CONSENT_KINDS = {
     /** Placing, finding and seeing public geocaches; includes the 18+ statement. */
-    'coalition-caches': { currentVersion: 1, requiresAge: true },
+    'coalition-caches': {
+        currentVersion: CACHE_DISCLOSURE.version,
+        textSha256: sha256Hex(cacheDisclosureText()),
+        requiresAge: true,
+    },
 } as const;
 
 export type ConsentKind = keyof typeof CONSENT_KINDS;
@@ -36,7 +44,15 @@ export const hasCurrentConsent = (userId: string, kind: ConsentKind): boolean =>
 
 export type RecordConsentResult =
     | { ok: true; consent: UserConsentRecord }
-    | { ok: false; reason: 'unknown_kind' | 'stale_version' | 'age_required' | 'bad_text_hash' };
+    | {
+          ok: false;
+          reason:
+              | 'unknown_kind'
+              | 'stale_version'
+              | 'age_required'
+              | 'bad_text_hash'
+              | 'wrong_text';
+      };
 
 export const recordConsent = (
     userId: string,
@@ -47,12 +63,12 @@ export const recordConsent = (
     if (input.version !== spec.currentVersion) return { ok: false, reason: 'stale_version' };
     if (spec.requiresAge && !input.ageConfirmed) return { ok: false, reason: 'age_required' };
     if (!SHA256_HEX.test(input.textSha256)) return { ok: false, reason: 'bad_text_hash' };
+    if (input.textSha256 !== spec.textSha256) return { ok: false, reason: 'wrong_text' };
 
     const now = new Date().toISOString();
-    // A new agreement replaces the previous one of the same kind, which stays
+    // A new agreement replaces every earlier one of the same kind, which stays
     // in the history as withdrawn at the moment it was replaced.
-    const previous = activeConsent(userId, input.kind);
-    if (previous) db.withdrawUserConsent(previous.id, now);
+    withdrawAllActive(userId, input.kind, now);
     const consent = db.createUserConsent({
         id: randomUUID(),
         userId,
@@ -66,12 +82,21 @@ export const recordConsent = (
     return { ok: true, consent };
 };
 
-/** Withdraw the person's active agreement of this kind. Undefined when there is none. */
+/**
+ * Mark every active agreement of this kind withdrawn. Normally there is one;
+ * two writers racing could leave two, and a withdrawal must end them all.
+ */
+const withdrawAllActive = (userId: string, kind: ConsentKind, at: string): UserConsentRecord[] =>
+    db
+        .listUserConsents(userId)
+        .filter((c) => c.kind === kind && c.withdrawnAt === null)
+        .map((c) => db.withdrawUserConsent(c.id, at))
+        .filter((c): c is UserConsentRecord => c !== undefined);
+
+/** Withdraw the person's active agreements of this kind; the newest is returned. Undefined when there is none. */
 export const withdrawConsent = (
     userId: string,
     kind: ConsentKind
 ): UserConsentRecord | undefined => {
-    const active = activeConsent(userId, kind);
-    if (!active) return undefined;
-    return db.withdrawUserConsent(active.id, new Date().toISOString());
+    return withdrawAllActive(userId, kind, new Date().toISOString())[0];
 };
