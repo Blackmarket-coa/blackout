@@ -1,4 +1,5 @@
 import type { AidPost, CoalitionEvent, EventRsvp } from '@blackout/core';
+import type { CoalitionCacheRecord } from '../db/types';
 
 /**
  * What the coalition read routes show to whom (`routes/coalition.ts`).
@@ -107,4 +108,102 @@ export function withoutPeopleWhenSignedOut<T extends object, K extends keyof T>(
     const copy = { ...record };
     for (const key of keys) delete copy[key];
     return copy;
+}
+
+// --- public geocaches (docs/security/coalition-caches-2026-11-22.md) ---
+
+/** A public cache is shown to others in a cell this wide, never at the exact spot. */
+export const CACHE_AREA_CELL_METERS = 50;
+
+/**
+ * Whether `viewerId` may see a cache at `now` (epoch ms). Its placer always
+ * does, unless they removed it themselves. Anyone else does only while it is
+ * active and its delay has passed: a hidden cache (reported, or inside an
+ * exclusion zone) and a removed one are seen by nobody but the placer.
+ */
+export function canSeeCache(cache: CoalitionCacheRecord, viewerId: string, now: number): boolean {
+    if (cache.placerId === viewerId) {
+        return !(cache.status === 'removed' && cache.removedBy === viewerId);
+    }
+    return cache.status === 'active' && Date.parse(cache.visibleFrom) <= now;
+}
+
+/**
+ * What a placer is told about the state of their own cache. A cache held for
+ * an exclusion zone reads as `placed`, like any other: telling the placer
+ * would let anyone map the zones, which may mark shelters, by placing caches
+ * and watching which are held. The placement screen says, in general, that
+ * caches in some places never appear and that the app will not say which.
+ */
+export type CachePlacerStatus = 'placed' | 'hidden_after_report' | 'removed_by_moderator';
+
+export interface CacheView {
+    id: string;
+    title: string;
+    hint: string | null;
+    note: string | null;
+    photoMxc: string | null;
+    proof: 'code' | 'gps';
+    findCount: number;
+    mine: boolean;
+}
+
+/** The placer's view: the exact spot, when it appears to others, and its state. */
+export interface PlacerCacheView extends CacheView {
+    mine: true;
+    position: { latitude: number; longitude: number };
+    visibleFrom: string;
+    status: CachePlacerStatus;
+    moderationNote: string | null;
+}
+
+/** Everyone else's view: an area, no placer, no times. */
+export interface OthersCacheView extends CacheView {
+    mine: false;
+    area: { latitude: number; longitude: number; radiusMeters: number };
+    foundByMe: boolean;
+}
+
+export function cacheForPlacer(cache: CoalitionCacheRecord, findCount: number): PlacerCacheView {
+    const status: CachePlacerStatus =
+        cache.status === 'removed'
+            ? 'removed_by_moderator'
+            : cache.status === 'hidden' && cache.heldReason === 'report'
+            ? 'hidden_after_report'
+            : 'placed';
+    return {
+        id: cache.id,
+        title: cache.title,
+        hint: cache.hint,
+        note: cache.note,
+        photoMxc: cache.photoMxc,
+        proof: cache.proof,
+        findCount,
+        mine: true,
+        position: { latitude: cache.latitude, longitude: cache.longitude },
+        visibleFrom: cache.visibleFrom,
+        status,
+        moderationNote: status === 'removed_by_moderator' ? cache.moderationNote : null,
+    };
+}
+
+export function cacheForOthers(
+    cache: CoalitionCacheRecord,
+    findCount: number,
+    foundByMe: boolean
+): OthersCacheView {
+    const centre = coarsenPoint(cache.latitude, cache.longitude, CACHE_AREA_CELL_METERS);
+    return {
+        id: cache.id,
+        title: cache.title,
+        hint: cache.hint,
+        note: cache.note,
+        photoMxc: cache.photoMxc,
+        proof: cache.proof,
+        findCount,
+        mine: false,
+        // Every point in a cell is within half its diagonal of the centre.
+        area: { ...centre, radiusMeters: Math.ceil((CACHE_AREA_CELL_METERS * Math.SQRT2) / 2) },
+        foundByMe,
+    };
 }
