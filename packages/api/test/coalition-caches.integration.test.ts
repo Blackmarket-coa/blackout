@@ -44,9 +44,20 @@ const north = (p: { latitude: number; longitude: number }, meters: number) => ({
 const CENTRE = coarsenPoint(51.5007, -0.1246, CACHE_AREA_CELL_METERS);
 const SPOT = north(CENTRE, 20);
 
+// Each test person gets their own address, so the app-wide limit (120 a
+// minute per address) counts them separately, as it would real people.
+const addresses = new Map<string, string>();
+const addressOf = (user: string) => {
+    if (!addresses.has(user)) {
+        const n = addresses.size + 1;
+        addresses.set(user, `10.77.${Math.floor(n / 250)}.${(n % 250) + 1}`);
+    }
+    return addresses.get(user)!;
+};
 const headers = (user: string) => ({
     authorization: `Bearer ${signJwt(user, user, 600)}`,
     'content-type': 'application/json',
+    'x-forwarded-for': addressOf(user),
 });
 const call = (method: string, path: string, user: string, body?: unknown) =>
     app.request(`/v1${path}`, {
@@ -297,6 +308,20 @@ test('finding by code: any case or spacing works, a wrong code does not, one fin
     assert.equal((await json<{ findCount: number }>(found)).findCount, 1);
     const again = await call('POST', `/coalition/caches/${cache.id}/find`, finder, { code });
     assert.equal((await json<{ findCount: number }>(again)).findCount, 1);
+    // Once found, a person gets their find back without another comparison.
+    const later = await call('POST', `/coalition/caches/${cache.id}/find`, finder, {
+        code: 'AAAA-BBBB-CC',
+    });
+    assert.equal(later.status, 200);
+    // And the store keeps one find per person, even for two writes at once.
+    const first = db.listCoalitionCacheFinds({ cacheId: cache.id, finderId: finder })[0]!;
+    const second = db.addCoalitionCacheFind({
+        ...first,
+        id: randomUUID(),
+        foundAt: new Date().toISOString(),
+    });
+    assert.equal(second.id, first.id);
+    assert.equal(db.listCoalitionCacheFinds({ cacheId: cache.id }).length, 1);
 
     const row = (await list(finder)).find((c) => c.id === cache.id)!;
     assert.equal(row.foundByMe, true);
