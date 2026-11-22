@@ -52,8 +52,10 @@ test('every descriptor maps to a real table with columns', async () => {
     // and coalition_campaign_attribution (what a share produced), then by
     // voice_room_sanctions (mutes and removals that outlive the connection),
     // then by invitation_admissions (the use an account-number sign-up spent)
-    // and release_identities (the public keys people publish for releases).
-    assert.equal(TABLE_DESCRIPTORS.length, 156);
+    // and release_identities (the public keys people publish for releases),
+    // then by coalition_caches (public geocaches, their finds, reports and
+    // exclusion zones, and the consent records that gate them).
+    assert.equal(TABLE_DESCRIPTORS.length, 161);
     await pg.query('SELECT 1');
 });
 

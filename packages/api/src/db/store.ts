@@ -14,6 +14,11 @@ import type {
     CircleEdgeRecord,
     CommunityAssetRecord,
     CommunityAssetReportRecord,
+    CoalitionCacheRecord,
+    CoalitionCacheFindRecord,
+    CoalitionCacheReportRecord,
+    CoalitionExclusionZoneRecord,
+    UserConsentRecord,
     MemberProfileRecord,
     ProfileWallPostRecord,
     RelayEdgeRecord,
@@ -342,6 +347,11 @@ type PersistedState = {
     relayEdges: RelayEdgeRecord[];
     communityAssets: CommunityAssetRecord[];
     communityAssetReports: CommunityAssetReportRecord[];
+    coalitionCaches?: CoalitionCacheRecord[];
+    coalitionCacheFinds?: CoalitionCacheFindRecord[];
+    coalitionCacheReports?: CoalitionCacheReportRecord[];
+    coalitionExclusionZones?: CoalitionExclusionZoneRecord[];
+    userConsents?: UserConsentRecord[];
     memberProfiles: MemberProfileRecord[];
     profileWallPosts: ProfileWallPostRecord[];
     pluginInstallations: PluginInstallationRecord[];
@@ -591,6 +601,16 @@ class InMemoryDb {
     communityAssets = new Map<string, CommunityAssetRecord>();
     /** Reports on approved assets, keyed by `${assetId}::${reporterId}`. */
     communityAssetReports = new Map<string, CommunityAssetReportRecord>();
+    /** Public geocaches, keyed by cache id. */
+    coalitionCaches = new Map<string, CoalitionCacheRecord>();
+    /** Finds, keyed by `${cacheId}::${finderId}`. */
+    coalitionCacheFinds = new Map<string, CoalitionCacheFindRecord>();
+    /** Reports on caches, keyed by `${cacheId}::${reporterId}`. */
+    coalitionCacheReports = new Map<string, CoalitionCacheReportRecord>();
+    /** Circles public caches are kept out of, keyed by zone id. */
+    coalitionExclusionZones = new Map<string, CoalitionExclusionZoneRecord>();
+    /** Disclosure agreements, keyed by consent id. */
+    userConsents = new Map<string, UserConsentRecord>();
     /** Member profiles, keyed by user id. */
     memberProfiles = new Map<string, MemberProfileRecord>();
     /** Wall posts, keyed by post id. */
@@ -5154,6 +5174,154 @@ class InMemoryDb {
         return record;
     }
 
+    // --- coalition geocaches (docs/coalitions/GEOCACHING_DESIGN.md) ---
+
+    getCoalitionCache(id: string): CoalitionCacheRecord | undefined {
+        return this.coalitionCaches.get(id);
+    }
+
+    listCoalitionCaches(
+        filter: { placerId?: string; status?: CoalitionCacheRecord['status'] } = {}
+    ): CoalitionCacheRecord[] {
+        return [...this.coalitionCaches.values()]
+            .filter((c) => (filter.placerId ? c.placerId === filter.placerId : true))
+            .filter((c) => (filter.status ? c.status === filter.status : true))
+            .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    }
+
+    /** Upsert by id. `placerId` and `createdAt` are never rewritten once set. */
+    upsertCoalitionCache(
+        input: Omit<CoalitionCacheRecord, 'createdAt' | 'updatedAt'>
+    ): CoalitionCacheRecord {
+        const existing = this.coalitionCaches.get(input.id);
+        const now = nowIso();
+        const record: CoalitionCacheRecord = {
+            ...input,
+            placerId: existing?.placerId ?? input.placerId,
+            createdAt: existing?.createdAt ?? now,
+            updatedAt: now,
+        };
+        this.coalitionCaches.set(record.id, record);
+        return record;
+    }
+
+    listCoalitionCacheFinds(
+        filter: { cacheId?: string; finderId?: string } = {}
+    ): CoalitionCacheFindRecord[] {
+        return [...this.coalitionCacheFinds.values()]
+            .filter((f) => (filter.cacheId ? f.cacheId === filter.cacheId : true))
+            .filter((f) => (filter.finderId ? f.finderId === filter.finderId : true))
+            .sort((a, b) => b.foundAt.localeCompare(a.foundAt));
+    }
+
+    /** Record a find once per (cache, finder): a second find returns the first. */
+    addCoalitionCacheFind(input: CoalitionCacheFindRecord): CoalitionCacheFindRecord {
+        const key = `${input.cacheId}::${input.finderId}`;
+        const existing = this.coalitionCacheFinds.get(key);
+        if (existing) return existing;
+        this.coalitionCacheFinds.set(key, input);
+        return input;
+    }
+
+    listCoalitionCacheReports(
+        filter: { cacheId?: string; reporterId?: string; resolved?: boolean } = {}
+    ): CoalitionCacheReportRecord[] {
+        return [...this.coalitionCacheReports.values()]
+            .filter((r) => (filter.cacheId ? r.cacheId === filter.cacheId : true))
+            .filter((r) => (filter.reporterId ? r.reporterId === filter.reporterId : true))
+            .filter((r) => (filter.resolved === undefined ? true : r.resolved === filter.resolved))
+            .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    }
+
+    /** Idempotent per (cache, reporter): reporting again updates the reason. */
+    upsertCoalitionCacheReport(
+        input: Omit<CoalitionCacheReportRecord, 'createdAt' | 'updatedAt'>
+    ): CoalitionCacheReportRecord {
+        const key = `${input.cacheId}::${input.reporterId}`;
+        const existing = this.coalitionCacheReports.get(key);
+        const now = nowIso();
+        const record: CoalitionCacheReportRecord = {
+            ...input,
+            id: existing?.id ?? input.id,
+            createdAt: existing?.createdAt ?? now,
+            updatedAt: now,
+        };
+        this.coalitionCacheReports.set(key, record);
+        return record;
+    }
+
+    listCoalitionExclusionZones(): CoalitionExclusionZoneRecord[] {
+        return [...this.coalitionExclusionZones.values()].sort((a, b) =>
+            a.createdAt.localeCompare(b.createdAt)
+        );
+    }
+
+    createCoalitionExclusionZone(
+        input: CoalitionExclusionZoneRecord
+    ): CoalitionExclusionZoneRecord {
+        this.coalitionExclusionZones.set(input.id, input);
+        return input;
+    }
+
+    deleteCoalitionExclusionZone(id: string): boolean {
+        return this.coalitionExclusionZones.delete(id);
+    }
+
+    listUserConsents(userId: string): UserConsentRecord[] {
+        return [...this.userConsents.values()]
+            .filter((c) => c.userId === userId)
+            .sort((a, b) => b.grantedAt.localeCompare(a.grantedAt));
+    }
+
+    createUserConsent(input: UserConsentRecord): UserConsentRecord {
+        this.userConsents.set(input.id, input);
+        return input;
+    }
+
+    /** Mark an agreement withdrawn. Returns the updated record, or undefined if none. */
+    withdrawUserConsent(id: string, withdrawnAt: string): UserConsentRecord | undefined {
+        const existing = this.userConsents.get(id);
+        if (!existing || existing.withdrawnAt) return undefined;
+        const record: UserConsentRecord = { ...existing, withdrawnAt };
+        this.userConsents.set(id, record);
+        return record;
+    }
+
+    /**
+     * Account deletion: the person's caches (with the finds and reports on
+     * them), their own finds and reports, and their consent records.
+     */
+    eraseCoalitionCacheDataForUser(userId: string): number {
+        let removed = 0;
+        const placed = new Set<string>();
+        for (const [id, cache] of this.coalitionCaches) {
+            if (cache.placerId === userId) placed.add(id);
+        }
+        for (const [key, find] of this.coalitionCacheFinds) {
+            if (find.finderId === userId || placed.has(find.cacheId)) {
+                this.coalitionCacheFinds.delete(key);
+                removed += 1;
+            }
+        }
+        for (const [key, report] of this.coalitionCacheReports) {
+            if (report.reporterId === userId || placed.has(report.cacheId)) {
+                this.coalitionCacheReports.delete(key);
+                removed += 1;
+            }
+        }
+        for (const id of placed) {
+            this.coalitionCaches.delete(id);
+            removed += 1;
+        }
+        for (const [id, consent] of this.userConsents) {
+            if (consent.userId === userId) {
+                this.userConsents.delete(id);
+                removed += 1;
+            }
+        }
+        return removed;
+    }
+
     // --- member profiles and walls ---
 
     getMemberProfile(userId: string): MemberProfileRecord | undefined {
@@ -6215,6 +6383,23 @@ export class FileBackedDb extends InMemoryDb {
                 ])
             );
         }
+        this.coalitionCaches = new Map((parsed.coalitionCaches ?? []).map((row) => [row.id, row]));
+        this.coalitionCacheFinds = new Map(
+            (parsed.coalitionCacheFinds ?? []).map((row) => [
+                `${row.cacheId}::${row.finderId}`,
+                row,
+            ])
+        );
+        this.coalitionCacheReports = new Map(
+            (parsed.coalitionCacheReports ?? []).map((row) => [
+                `${row.cacheId}::${row.reporterId}`,
+                row,
+            ])
+        );
+        this.coalitionExclusionZones = new Map(
+            (parsed.coalitionExclusionZones ?? []).map((row) => [row.id, row])
+        );
+        this.userConsents = new Map((parsed.userConsents ?? []).map((row) => [row.id, row]));
         if (parsed.memberProfiles) {
             this.memberProfiles = new Map(parsed.memberProfiles.map((row) => [row.userId, row]));
         }
@@ -6469,6 +6654,11 @@ export class FileBackedDb extends InMemoryDb {
             relayEdges: [...this.relayEdges.values()],
             communityAssets: [...this.communityAssets.values()],
             communityAssetReports: [...this.communityAssetReports.values()],
+            coalitionCaches: [...this.coalitionCaches.values()],
+            coalitionCacheFinds: [...this.coalitionCacheFinds.values()],
+            coalitionCacheReports: [...this.coalitionCacheReports.values()],
+            coalitionExclusionZones: [...this.coalitionExclusionZones.values()],
+            userConsents: [...this.userConsents.values()],
             memberProfiles: [...this.memberProfiles.values()],
             profileWallPosts: [...this.profileWallPosts.values()],
             pluginInstallations: [...this.pluginInstallations.values()],
@@ -7896,6 +8086,60 @@ export class FileBackedDb extends InMemoryDb {
         const created = super.createCoalitionAidPost(input);
         this.persist();
         return created;
+    }
+
+    override upsertCoalitionCache(
+        input: Omit<CoalitionCacheRecord, 'createdAt' | 'updatedAt'>
+    ): CoalitionCacheRecord {
+        const written = super.upsertCoalitionCache(input);
+        this.persist();
+        return written;
+    }
+
+    override addCoalitionCacheFind(input: CoalitionCacheFindRecord): CoalitionCacheFindRecord {
+        const written = super.addCoalitionCacheFind(input);
+        this.persist();
+        return written;
+    }
+
+    override upsertCoalitionCacheReport(
+        input: Omit<CoalitionCacheReportRecord, 'createdAt' | 'updatedAt'>
+    ): CoalitionCacheReportRecord {
+        const written = super.upsertCoalitionCacheReport(input);
+        this.persist();
+        return written;
+    }
+
+    override createCoalitionExclusionZone(
+        input: CoalitionExclusionZoneRecord
+    ): CoalitionExclusionZoneRecord {
+        const written = super.createCoalitionExclusionZone(input);
+        this.persist();
+        return written;
+    }
+
+    override deleteCoalitionExclusionZone(id: string): boolean {
+        const removed = super.deleteCoalitionExclusionZone(id);
+        if (removed) this.persist();
+        return removed;
+    }
+
+    override createUserConsent(input: UserConsentRecord): UserConsentRecord {
+        const written = super.createUserConsent(input);
+        this.persist();
+        return written;
+    }
+
+    override withdrawUserConsent(id: string, withdrawnAt: string): UserConsentRecord | undefined {
+        const written = super.withdrawUserConsent(id, withdrawnAt);
+        if (written) this.persist();
+        return written;
+    }
+
+    override eraseCoalitionCacheDataForUser(userId: string): number {
+        const removed = super.eraseCoalitionCacheDataForUser(userId);
+        if (removed > 0) this.persist();
+        return removed;
     }
 
     override upsertCoalitionAidPostByOrigin(

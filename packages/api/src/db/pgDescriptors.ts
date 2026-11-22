@@ -138,6 +138,14 @@ const OVERRIDES: Record<string, DescriptorOverride> = {
         keyOf: (r) => `${r.assetId}::${r.reporterId}`,
         conflictColumns: ['asset_id', 'reporter_id'],
     },
+    coalitionCacheFinds: {
+        keyOf: (r) => `${r.cacheId}::${r.finderId}`,
+        conflictColumns: ['cache_id', 'finder_id'],
+    },
+    coalitionCacheReports: {
+        keyOf: (r) => `${r.cacheId}::${r.reporterId}`,
+        conflictColumns: ['cache_id', 'reporter_id'],
+    },
     memberProfiles: {
         keyOf: (r) => String(r.userId),
         conflictColumns: ['user_id'],
@@ -500,6 +508,11 @@ const ALL_MAP_NAMES = [
     'relayEdges',
     'communityAssets',
     'communityAssetReports',
+    'coalitionCaches',
+    'coalitionCacheFinds',
+    'coalitionCacheReports',
+    'coalitionExclusionZones',
+    'userConsents',
     'memberProfiles',
     'profileWallPosts',
     'canopyDirectoryEntries',
@@ -1102,6 +1115,29 @@ export const MUTATOR_SPECS: Record<string, MutatorSpec> = {
     upsertRelayEdge: upsert('relayEdges'),
     upsertCommunityAsset: upsert('communityAssets'),
     upsertCommunityAssetReport: upsert('communityAssetReports'),
+    upsertCoalitionCache: upsert('coalitionCaches'),
+    addCoalitionCacheFind: upsert('coalitionCacheFinds'),
+    upsertCoalitionCacheReport: upsert('coalitionCacheReports'),
+    createCoalitionExclusionZone: upsert('coalitionExclusionZones'),
+    deleteCoalitionExclusionZone: deleteById('coalitionExclusionZones'),
+    createUserConsent: upsert('userConsents'),
+    withdrawUserConsent: upsert('userConsents'),
+    // Account deletion: finds and reports on the person's caches go before the
+    // caches themselves, so the subqueries still see them.
+    eraseCoalitionCacheDataForUser: targeted(
+        deleteWhere(
+            'coalitionCacheFinds',
+            'finder_id = $1 OR cache_id IN (SELECT id FROM coalition_caches WHERE placer_id = $1)',
+            (c) => [c.args[0]]
+        ),
+        deleteWhere(
+            'coalitionCacheReports',
+            'reporter_id = $1 OR cache_id IN (SELECT id FROM coalition_caches WHERE placer_id = $1)',
+            (c) => [c.args[0]]
+        ),
+        deleteWhere('coalitionCaches', 'placer_id = $1', (c) => [c.args[0]]),
+        deleteWhere('userConsents', 'user_id = $1', (c) => [c.args[0]])
+    ),
     upsertMemberProfile: upsert('memberProfiles'),
     createProfileWallPost: upsert('profileWallPosts'),
     upsertCanopyDirectoryEntry: upsert('canopyDirectoryEntries'),
