@@ -79,10 +79,10 @@ what you are consenting to."
     telling us"). It is versioned; a change of wording asks again.
 -   **Before every share**, a summary built from what will actually be sent,
     so it cannot drift from the code. Examples:
-    -   Public cache: "Anyone on Blackout can see this photo and the spot you
-        put it, to within about 50 m. The photo's hidden location data has
-        been removed. It will appear in 2 hours. Placing it shows people you
-        were here."
+    -   Public cache: "Members who agreed to caches can see this photo and an
+        area about 70 m across around the spot you put it. The photo's hidden
+        location data has been removed. It will appear in 2 to 3 hours.
+        Placing it shows people someone was here."
     -   Private cache: "Only members of Riverside Crew will see this. It is
         end-to-end encrypted: this server cannot read the photo or the spot."
     -   Direct drop: "Only Maya and Jordan can find this. They need the code
@@ -106,8 +106,9 @@ what you are consenting to."
     (`utils/stripImageMetadata.ts`). Formats it cannot strip (HEIC, AVIF,
     TIFF) are converted or refused, never uploaded as they are. No video caches
     until video stripping exists.
--   **Public caches** appear 2 hours after they are placed, so placing one
-    does not say where someone is right now. Any member can place one and
+-   **Public caches** appear 2 hours after they are placed, plus a random
+    part of an hour so the moment one appears does not date the visit, so
+    placing one does not say where someone is right now. Any member can place one and
     nothing is approved first, so what keeps caches away from places that must
     not hold one (homes, schools, shelters, clinics, places of worship) is
     placement guidance shown at the moment of placing, an operator-maintained
@@ -162,8 +163,9 @@ always shows the summary in §3 and waits for confirmation.
     (`packages/blackout-protocol/src/deaddrop/`) is the starting point; today
     its drops are addressed to one recipient's key.
 -   **GPS check-in:** the finder's position goes in a request body, once; the
-    server checks it is within 50 m and keeps only "found at this time by this
-    person".
+    server checks it is within 75 m of the centre of the area everyone is
+    shown (not of the exact spot, which repeated answers would otherwise give
+    away) and keeps only "found at this time by this person".
 
 ## 7. Gameplay, inside the banlist
 

@@ -1068,12 +1068,30 @@ For the source-of-truth triage with tier/owner detail see
     formats it cannot strip, and the placement guidance; an exclusion list for
     the deployment's area, kept by administrators.
 -   **Known residuals, by design:** a cache at a bad spot outside every
-    exclusion zone is visible from its 2nd hour until the first report;
-    someone with two accounts can test whether a place is excluded, one
-    placement and 2 hours per test; several accounts can keep caches hidden
-    with reports until an administrator looks; age is the person's own
-    statement; GPS check-ins can be spoofed. Moderators are the
-    administrators in `BLACKOUT_ADMIN_USERS`.
+    exclusion zone is visible from the end of its delay until the first
+    report; someone polling the list can tell when a cache appeared, which
+    puts the visit in an hour-long window 2 to 3 hours earlier; someone with
+    two accounts can test whether a place is excluded, one placement and 2 to
+    3 hours per test; when an administrator adds a zone, the caches already
+    in it vanish together (add zones before people start placing); several
+    accounts can keep a cache hidden with reports until an administrator
+    looks; age is the person's own statement; GPS check-ins can be spoofed; a
+    cache's photo stays in the homeserver's media store after the cache or
+    the account is gone. Moderators are the administrators in
+    `BLACKOUT_ADMIN_USERS`.
+
+### Account deletion leaves earlier access tokens working (found 2026-11-22)
+
+-   **Where:** `packages/api/src/services/accountLifecycle.ts`
+    (`confirmAccountDeletion`), `packages/api/src/middleware/auth.ts`.
+    Record: `docs/security/coalition-caches-2026-11-22.md`, "Found on the
+    way".
+-   **State:** deleting an account removes its user record and sign-in
+    artifacts, but an access token issued to it before, on another device for
+    instance, is still accepted until it expires. Checked: such a token still
+    creates a mutual-aid post after the deletion. Only the cache and consent
+    routes check that the account still exists. Data written this way belongs
+    to no account, so no later deletion erases it.
 
 ## Deferred multi-week workstreams
 

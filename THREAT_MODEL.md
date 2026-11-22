@@ -69,7 +69,7 @@ Blackout is a federated, end-to-end-encrypted communication platform built on th
 -   Attachment plaintext, and for files sent before 2026-11-16 the files themselves, which the media repository holds unencrypted.
 -   Deaddrop payload plaintext (no shipped flow creates one; see §5).
 -   Dead-man switch records (owner, room, recipients, timing, label, payload as the owner sent it).
--   Public geocache records (behind `BLACKOUT_COALITION_CACHES`, off): the exact spot each placer chose, which only the placer and administrators are sent; others see a 50 m area, from 2 hours after placing, with no placer or times. Exclusion zones, which may mark shelters and clinics, are never revealed to members. Consent records, including the person's own 18+ statement. Adversary A14 applies; `docs/security/coalition-caches-2026-11-22.md`.
+-   Public geocache records (behind `BLACKOUT_COALITION_CACHES`, off): the exact spot each placer chose, which only the placer and administrators are sent; others see a 50 m area, from 2 to 3 hours after placing (random per cache), with no placer or times. Exclusion zones, which may mark shelters and clinics, are never revealed to members. Consent records, including the person's own 18+ statement. Adversary A14 applies; `docs/security/coalition-caches-2026-11-22.md`.
 -   Release identities: the public halves each person publishes to the API, the private halves on their devices and in their recovery files, and each device's record of whom its owner compared safety codes with.
 -   Cross-signing master / self-signing / user-signing keys.
 -   Per-device Megolm/Olm keys and key backup.
