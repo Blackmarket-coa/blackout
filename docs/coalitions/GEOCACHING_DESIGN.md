@@ -147,7 +147,10 @@ always shows the summary in §3 and waits for confirmation.
     and answers who may see it with the same rules as the coalition reads
     (`services/coalitionVisibility.ts`). The coalition data has no spatial
     index today; a geohash or PostGIS index comes with the first layer that
-    needs it.
+    needs it. Built on 2026-11-22, off behind `BLACKOUT_COALITION_CACHES`:
+    others see a 50 m area, the server makes the code and keeps only its
+    scrypt hash, and consent is recorded server-side
+    (`docs/security/coalition-caches-2026-11-22.md`).
 -   **Private and direct:** the cache is a Matrix event (for instance
     `co.blackout.cache`) in the group's or the named people's encrypted room,
     with the photo as an encrypted attachment (`roomAttachment.ts`). Members'
@@ -186,7 +189,9 @@ always shows the summary in §3 and waits for confirmation.
    summaries and the consent record; public, private and hybrid profiles;
    public caches with a code at the spot; the photo composer with mandatory
    stripping; a caches layer on the map; reports and a moderation queue; the
-   delay and exclusion list.
+   delay and exclusion list. The server side (consent records, public caches,
+   reports, moderation, exclusion zones, the delay) is built and off; the
+   client and the profiles come next.
 2. **Private and direct caches; finder-key drops.**
 3. **Areas, pings and meeting places.**
 4. **Play:** collections, badges, group hunts, quest steps, FBM sponsor drops.

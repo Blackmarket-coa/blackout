@@ -1053,6 +1053,28 @@ For the source-of-truth triage with tier/owner detail see
     organizer-only. Older clients send positions in the query string until
     reloaded.
 
+### Public geocaches: server side only, and off (2026-11-22)
+
+-   **Where:** `packages/api/src/services/coalitionCaches.ts`,
+    `routes/coalitionCaches.ts` (`/v1/coalition/caches`),
+    `routes/consents.ts` (`/v1/consents`). Record:
+    `docs/security/coalition-caches-2026-11-22.md`.
+-   **State:** the API for public caches and consent records exists, behind
+    `BLACKOUT_COALITION_CACHES` (unset: every cache route answers 404). The
+    client does not use it yet: there is no disclosure screen, composer or map
+    layer, so turning it on gives people nothing to use.
+-   **Before turning it on:** the client half (geocaching phase 1, pull
+    request B) with the 18+ disclosure, the photo composer that refuses
+    formats it cannot strip, and the placement guidance; an exclusion list for
+    the deployment's area, kept by administrators.
+-   **Known residuals, by design:** a cache at a bad spot outside every
+    exclusion zone is visible from its 2nd hour until the first report;
+    someone with two accounts can test whether a place is excluded, one
+    placement and 2 hours per test; several accounts can keep caches hidden
+    with reports until an administrator looks; age is the person's own
+    statement; GPS check-ins can be spoofed. Moderators are the
+    administrators in `BLACKOUT_ADMIN_USERS`.
+
 ## Deferred multi-week workstreams
 
 These are tracked in
