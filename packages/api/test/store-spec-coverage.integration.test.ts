@@ -326,6 +326,35 @@ const U6_CALLS: Record<string, (db: any) => () => void> = (() => {
             }
             return () => db.revokeEmailVerificationTokensForUser('u6', 'superseded');
         },
+        deleteCoalitionExclusionZone: byId(
+            'coalitionExclusionZones',
+            'deleteCoalitionExclusionZone'
+        ),
+        eraseCoalitionCacheDataForUser: (db) => {
+            // u6's own cache and someone else's, finds and reports on both by
+            // both, and a consent each: everything touching u6 goes.
+            db.coalitionCaches.set('c-u6', { id: 'c-u6', placerId: 'u6' });
+            db.coalitionCaches.set('c-other', { id: 'c-other', placerId: 'other' });
+            for (const [cacheId, by] of [
+                ['c-u6', 'other'],
+                ['c-other', 'u6'],
+                ['c-other', 'other'],
+            ]) {
+                db.coalitionCacheFinds.set(`${cacheId}::${by}`, {
+                    id: id(),
+                    cacheId,
+                    finderId: by,
+                });
+                db.coalitionCacheReports.set(`${cacheId}::${by}`, {
+                    id: id(),
+                    cacheId,
+                    reporterId: by,
+                });
+            }
+            db.userConsents.set('consent-u6', { id: 'consent-u6', userId: 'u6' });
+            db.userConsents.set('consent-other', { id: 'consent-other', userId: 'other' });
+            return () => db.eraseCoalitionCacheDataForUser('u6');
+        },
         deleteInvitationAdmissionsForUser: (db) => {
             for (const rec of [
                 { claimedByUserId: 'u6' },

@@ -2002,6 +2002,84 @@ export interface CommunityAssetReportRecord {
 }
 
 /**
+ * A public geocache on the Coalition map (migration 106). `latitude` and
+ * `longitude` are the exact spot: only the placer and moderators are sent
+ * them (services/coalitionVisibility.ts). `codeHash` is scrypt(code,
+ * codeSalt); the code itself is never stored, and both are null when finds
+ * are confirmed by GPS check-in.
+ */
+export interface CoalitionCacheRecord {
+    id: UUID;
+    placerId: string;
+    latitude: number;
+    longitude: number;
+    title: string;
+    hint: string | null;
+    note: string | null;
+    photoMxc: string | null;
+    proof: 'code' | 'gps';
+    codeSalt: string | null;
+    codeHash: string | null;
+    status: 'active' | 'hidden' | 'removed';
+    /**
+     * Why a hidden cache is hidden: a report. Exclusion zones are not stored on
+     * the cache; they are applied when caches are read.
+     */
+    heldReason: 'report' | null;
+    visibleFrom: string;
+    removedBy: string | null;
+    moderationNote: string | null;
+    createdAt: string;
+    updatedAt: string;
+}
+
+/** A find: who and when, never where. Keyed in-memory by `${cacheId}::${finderId}`. */
+export interface CoalitionCacheFindRecord {
+    id: UUID;
+    cacheId: string;
+    finderId: string;
+    foundAt: string;
+}
+
+/** A report on a cache. Keyed in-memory by `${cacheId}::${reporterId}`. */
+export interface CoalitionCacheReportRecord {
+    id: UUID;
+    cacheId: string;
+    reporterId: string;
+    reason: string;
+    resolved: boolean;
+    createdAt: string;
+    updatedAt: string;
+}
+
+/** A circle the operator keeps public caches out of. Administrators only. */
+export interface CoalitionExclusionZoneRecord {
+    id: UUID;
+    label: string;
+    latitude: number;
+    longitude: number;
+    radiusMeters: number;
+    createdBy: string;
+    createdAt: string;
+}
+
+/**
+ * One agreement to a disclosure: the kind, the version of the wording, the
+ * SHA-256 of the text the person's app showed, and whether they confirmed
+ * their age. Kept after withdrawal so the history stays visible to them.
+ */
+export interface UserConsentRecord {
+    id: UUID;
+    userId: string;
+    kind: string;
+    version: number;
+    textSha256: string;
+    ageConfirmed: boolean;
+    grantedAt: string;
+    withdrawnAt: string | null;
+}
+
+/**
  * A member profile row.
  *
  * The shapes live in `services/profileStore.ts` alongside the sanitizers that

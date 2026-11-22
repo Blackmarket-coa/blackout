@@ -78,6 +78,8 @@ import rtmpFanoutRoutes from './routes/rtmpFanout';
 import matrixAppserviceRoutes from './routes/matrixAppservice';
 import matrixRoutes from './routes/matrix';
 import coalitionRoutes from './routes/coalition';
+import coalitionCacheRoutes from './routes/coalitionCaches';
+import consentRoutes from './routes/consents';
 import coalitionsRoutes from './routes/coalitions';
 import coalitionCreditsRoutes from './routes/coalitionCredits';
 import bountyRoutes from './routes/bounties';
@@ -279,7 +281,10 @@ for (const root of apiRoots) {
     app.route(`${root}/integrations/twitch/extensions`, twitchExtensionRoutes);
     app.route(`${root}/integrations/obs-ws/passwords`, obsWsPasswordRoutes);
     app.route(`${root}/integrations/simulcast/fanout`, rtmpFanoutRoutes);
+    // Before /coalition, so its paths are not read as coalition routes.
+    app.route(`${root}/coalition/caches`, coalitionCacheRoutes);
     app.route(`${root}/coalition`, coalitionRoutes);
+    app.route(`${root}/consents`, consentRoutes);
     // Coalitions network (plural) — multi-member groups replacing the friends list.
     app.route(`${root}/coalitions`, coalitionsRoutes);
     app.route(`${root}/coalition-credits`, coalitionCreditsRoutes);

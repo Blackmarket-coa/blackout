@@ -3,6 +3,7 @@ import type { ReleaseIdentity } from '@blackout/protocol';
 import { db } from '../db/store';
 import type { UserRecord } from '../db/types';
 import { recordToReleaseIdentity } from './releaseIdentities';
+import { placerStatusForExport } from './coalitionCaches';
 import { matrixUserIdFor } from './userIdentity';
 
 const DELETE_TOKEN_BYTES = 32;
@@ -93,6 +94,33 @@ export interface AccountExport {
         supersededAt?: string;
         identity: ReleaseIdentity;
     }>;
+    /** Agreements to disclosures, current and withdrawn, with the wording's hash. */
+    consents: Array<{
+        kind: string;
+        version: number;
+        textSha256: string;
+        ageConfirmed: boolean;
+        grantedAt: string;
+        withdrawnAt: string | null;
+    }>;
+    /** Public geocaches this user placed, with the exact spot (their own data). Codes are not kept. */
+    coalitionCaches: Array<{
+        id: string;
+        title: string;
+        hint: string | null;
+        note: string | null;
+        photoMxc: string | null;
+        proof: 'code' | 'gps';
+        latitude: number;
+        longitude: number;
+        status: string;
+        visibleFrom: string;
+        createdAt: string;
+    }>;
+    /** Caches this user found: which and when. No position is stored for a find. */
+    coalitionCacheFinds: Array<{ cacheId: string; foundAt: string }>;
+    /** Reports this user made on caches. */
+    coalitionCacheReports: Array<{ cacheId: string; reason: string; createdAt: string }>;
     refreshTokensCount: number;
     passwordResetTokensCount: number;
     emailVerificationTokensCount: number;
@@ -214,6 +242,38 @@ export const exportUserData = (userId: string): AccountExport | null => {
             createdAt: sw.createdAt,
         }));
 
+    const consents: AccountExport['consents'] = db.listUserConsents(userId).map((c) => ({
+        kind: c.kind,
+        version: c.version,
+        textSha256: c.textSha256,
+        ageConfirmed: c.ageConfirmed,
+        grantedAt: c.grantedAt,
+        withdrawnAt: c.withdrawnAt,
+    }));
+    const coalitionCaches: AccountExport['coalitionCaches'] = db
+        .listCoalitionCaches({ placerId: userId })
+        .map((cache) => ({
+            id: cache.id,
+            title: cache.title,
+            hint: cache.hint,
+            note: cache.note,
+            photoMxc: cache.photoMxc,
+            proof: cache.proof,
+            latitude: cache.latitude,
+            longitude: cache.longitude,
+            // What the placer is told, never the stored status: a stored
+            // status would say which spots are inside an exclusion zone.
+            status: placerStatusForExport(cache),
+            visibleFrom: cache.visibleFrom,
+            createdAt: cache.createdAt,
+        }));
+    const coalitionCacheFinds: AccountExport['coalitionCacheFinds'] = db
+        .listCoalitionCacheFinds({ finderId: userId })
+        .map((f) => ({ cacheId: f.cacheId, foundAt: f.foundAt }));
+    const coalitionCacheReports: AccountExport['coalitionCacheReports'] = db
+        .listCoalitionCacheReports({ reporterId: userId })
+        .map((r) => ({ cacheId: r.cacheId, reason: r.reason, createdAt: r.createdAt }));
+
     const releaseIdentities: AccountExport['releaseIdentities'] = db
         .listReleaseIdentitiesForAccount(userId)
         .map((record) => ({
@@ -247,6 +307,10 @@ export const exportUserData = (userId: string): AccountExport | null => {
         scheduledMessages,
         deadmanSwitches,
         releaseIdentities,
+        consents,
+        coalitionCaches,
+        coalitionCacheFinds,
+        coalitionCacheReports,
         refreshTokensCount,
         passwordResetTokensCount,
         emailVerificationTokensCount,
@@ -329,6 +393,9 @@ export const confirmAccountDeletion = (
     for (const identity of db.listReleaseIdentitiesForAccount(record.userId)) {
         db.eraseReleaseIdentity(identity.id);
     }
+    // Geocaches: the caches the account placed (with the finds and reports on
+    // them), its own finds and reports, and its consent records.
+    db.eraseCoalitionCacheDataForUser(record.userId);
     db.purgeUserAuthArtifacts(record.userId);
     db.deleteUser(record.userId);
     return { kind: 'ok', userId: record.userId };

@@ -54,6 +54,18 @@ on real places, at different times, from templates organizers can reuse
    are about to share, every time it is location, a photo, metadata or
    anything public, and nothing is shared until they confirm (§3).
 
+Decisions of 2026-11-22 (questions 1, 2, 3 and 5 in §9):
+
+7. **A public cache appears 2 hours after it is placed.**
+8. **Any signed-in member may place a public cache.**
+9. **Public caches are reviewed after reports, not approved first.** A
+   reported cache is hidden from everyone but its placer until a moderator
+   looks at it, so a cache at a bad spot stays visible only until the first
+   report.
+10. **The location features are for people 18 and older.** Blackout cannot
+    check anyone's age: the disclosure asks people to confirm they are 18 or
+    older, and says plainly that this is their own statement.
+
 ## 3. Consent
 
 The operator's words: "Consent is key. The key to consent is understanding
@@ -62,14 +74,15 @@ what you are consenting to."
 -   **Before first use**, a disclosure in the style of the location one
     (`apps/blackout-client/src/app/features/location/locationConsent.ts`): what
     the feature collects, who can see it, how long it is kept, how to stop.
-    Nothing location-based works until the person agrees. It is versioned; a
-    change of wording asks again.
+    Nothing location-based works until the person agrees, which includes
+    confirming they are 18 or older ("Blackout does not check this; you are
+    telling us"). It is versioned; a change of wording asks again.
 -   **Before every share**, a summary built from what will actually be sent,
     so it cannot drift from the code. Examples:
-    -   Public cache: "Anyone on Blackout can see this photo and the spot you
-        put it, to within about 50 m. The photo's hidden location data has
-        been removed. It will appear in 2 hours. Placing it shows people you
-        were here."
+    -   Public cache: "Members who agreed to caches can see this photo and an
+        area about 70 m across around the spot you put it. The photo's hidden
+        location data has been removed. It will appear in 2 to 3 hours.
+        Placing it shows people someone was here."
     -   Private cache: "Only members of Riverside Crew will see this. It is
         end-to-end encrypted: this server cannot read the photo or the spot."
     -   Direct drop: "Only Maya and Jordan can find this. They need the code
@@ -93,11 +106,14 @@ what you are consenting to."
     (`utils/stripImageMetadata.ts`). Formats it cannot strip (HEIC, AVIF,
     TIFF) are converted or refused, never uploaded as they are. No video caches
     until video stripping exists.
--   **Public caches** appear after a delay (proposed: 2 hours), so placing one
-    does not say where someone is right now. Places that must not hold one
-    (homes, schools, shelters, clinics, places of worship) are covered by
-    placement guidance, an operator-maintained exclusion list, reporting and
-    moderation.
+-   **Public caches** appear 2 hours after they are placed, plus a random
+    part of an hour so the moment one appears does not date the visit, so
+    placing one does not say where someone is right now. Any member can place one and
+    nothing is approved first, so what keeps caches away from places that must
+    not hold one (homes, schools, shelters, clinics, places of worship) is
+    placement guidance shown at the moment of placing, an operator-maintained
+    exclusion list checked by the server before a cache is accepted, and
+    reports: a reported cache is hidden until a moderator reviews it.
 -   **Meeting places** show an area until close to the time; the exact place
     goes only to confirmed attendees; the organizer sees the list; capacity is
     enforced; anyone can report.
@@ -132,7 +148,10 @@ always shows the summary in §3 and waits for confirmation.
     and answers who may see it with the same rules as the coalition reads
     (`services/coalitionVisibility.ts`). The coalition data has no spatial
     index today; a geohash or PostGIS index comes with the first layer that
-    needs it.
+    needs it. Built on 2026-11-22, off behind `BLACKOUT_COALITION_CACHES`:
+    others see a 50 m area, the server makes the code and keeps only its
+    scrypt hash, and consent is recorded server-side
+    (`docs/security/coalition-caches-2026-11-22.md`).
 -   **Private and direct:** the cache is a Matrix event (for instance
     `co.blackout.cache`) in the group's or the named people's encrypted room,
     with the photo as an encrypted attachment (`roomAttachment.ts`). Members'
@@ -144,8 +163,9 @@ always shows the summary in §3 and waits for confirmation.
     (`packages/blackout-protocol/src/deaddrop/`) is the starting point; today
     its drops are addressed to one recipient's key.
 -   **GPS check-in:** the finder's position goes in a request body, once; the
-    server checks it is within 50 m and keeps only "found at this time by this
-    person".
+    server checks it is within 75 m of the centre of the area everyone is
+    shown (not of the exact spot, which repeated answers would otherwise give
+    away) and keeps only "found at this time by this person".
 
 ## 7. Gameplay, inside the banlist
 
@@ -171,7 +191,9 @@ always shows the summary in §3 and waits for confirmation.
    summaries and the consent record; public, private and hybrid profiles;
    public caches with a code at the spot; the photo composer with mandatory
    stripping; a caches layer on the map; reports and a moderation queue; the
-   delay and exclusion list.
+   delay and exclusion list. The server side (consent records, public caches,
+   reports, moderation, exclusion zones, the delay) is built and off; the
+   client and the profiles come next.
 2. **Private and direct caches; finder-key drops.**
 3. **Areas, pings and meeting places.**
 4. **Play:** collections, badges, group hunts, quest steps, FBM sponsor drops.
@@ -181,10 +203,14 @@ needs it; the web app covers phases 1 and 2.
 
 ## 9. Questions for the operator
 
-1. The delay before a public cache appears (proposed: 2 hours).
-2. Who may place public caches: any member, or members with some standing?
-3. Moderation of public caches: approved before they appear, or reviewed after
-   reports?
+Answered on 2026-11-22 (§2, decisions 7 to 10):
+
+1. The delay before a public cache appears: 2 hours.
+2. Who may place public caches: any signed-in member.
+3. Moderation of public caches: reviewed after reports.
+4. A minimum age for the location features: 18, self-declared.
+
+Still open (neither is needed before phase 2):
+
 4. Physical drops: later, after legal review, or never?
-5. A minimum age for the location features.
-6. What FBM sponsor rewards may be (coupons, digital goods, credits).
+5. What FBM sponsor rewards may be (coupons, digital goods, credits).

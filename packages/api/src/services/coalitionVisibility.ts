@@ -1,4 +1,5 @@
 import type { AidPost, CoalitionEvent, EventRsvp } from '@blackout/core';
+import type { CoalitionCacheRecord } from '../db/types';
 
 /**
  * What the coalition read routes show to whom (`routes/coalition.ts`).
@@ -107,4 +108,126 @@ export function withoutPeopleWhenSignedOut<T extends object, K extends keyof T>(
     const copy = { ...record };
     for (const key of keys) delete copy[key];
     return copy;
+}
+
+// --- public geocaches (docs/security/coalition-caches-2026-11-22.md) ---
+
+/** A public cache is shown to others in a cell this wide, never at the exact spot. */
+export const CACHE_AREA_CELL_METERS = 50;
+
+/**
+ * Whether `viewerId` may see a cache at `now` (epoch ms). Its placer always
+ * does, unless they removed it themselves. Anyone else does only while it is
+ * active, its delay has passed, and it is outside every exclusion zone
+ * (`insideZone`, worked out against the zones as they are now, so no change of
+ * status, a moderator's restore included, can publish a cache inside one).
+ */
+export function canSeeCache(
+    cache: CoalitionCacheRecord,
+    viewerId: string,
+    now: number,
+    insideZone: boolean
+): boolean {
+    if (cache.placerId === viewerId) {
+        return !(cache.status === 'removed' && cache.removedBy === viewerId);
+    }
+    return !insideZone && cache.status === 'active' && Date.parse(cache.visibleFrom) <= now;
+}
+
+/**
+ * What a placer is told about the state of their own cache. Nothing in it may
+ * depend on the exclusion zones: telling a placer that a spot is excluded
+ * would let anyone map the zones, which may mark shelters, by placing caches.
+ * A cache inside a zone reads as `placed`, like any other, and so does one an
+ * administrator removed while it sat in a zone without ever being reported
+ * (its removal can only have come from the zone). The placement screen says,
+ * in general, that caches in some places never appear and that the app will
+ * not say which.
+ */
+export type CachePlacerStatus = 'placed' | 'hidden_after_report' | 'removed_by_moderator';
+
+/** The placer's status, plus `removed_by_you` for the data export of a cache they took down. */
+export function placerStatusOf(
+    cache: CoalitionCacheRecord,
+    context: { insideZone: boolean; everReported: boolean }
+): CachePlacerStatus | 'removed_by_you' {
+    if (cache.status === 'removed') {
+        if (cache.removedBy === cache.placerId) return 'removed_by_you';
+        if (context.insideZone && !context.everReported) return 'placed';
+        return 'removed_by_moderator';
+    }
+    if (cache.status === 'hidden' && cache.heldReason === 'report') return 'hidden_after_report';
+    return 'placed';
+}
+
+export interface CacheView {
+    id: string;
+    title: string;
+    hint: string | null;
+    note: string | null;
+    photoMxc: string | null;
+    proof: 'code' | 'gps';
+    findCount: number;
+    mine: boolean;
+}
+
+/** The placer's view: the exact spot, when it appears to others, and its state. */
+export interface PlacerCacheView extends CacheView {
+    mine: true;
+    position: { latitude: number; longitude: number };
+    visibleFrom: string;
+    status: CachePlacerStatus;
+    moderationNote: string | null;
+}
+
+/** Everyone else's view: an area, no placer, no times. */
+export interface OthersCacheView extends CacheView {
+    mine: false;
+    area: { latitude: number; longitude: number; radiusMeters: number };
+    foundByMe: boolean;
+}
+
+export function cacheForPlacer(
+    cache: CoalitionCacheRecord,
+    findCount: number,
+    context: { insideZone: boolean; everReported: boolean }
+): PlacerCacheView {
+    const computed = placerStatusOf(cache, context);
+    // A placer's own take-down is never listed back to them (canSeeCache).
+    const status: CachePlacerStatus = computed === 'removed_by_you' ? 'placed' : computed;
+    return {
+        id: cache.id,
+        title: cache.title,
+        hint: cache.hint,
+        note: cache.note,
+        photoMxc: cache.photoMxc,
+        proof: cache.proof,
+        findCount,
+        mine: true,
+        position: { latitude: cache.latitude, longitude: cache.longitude },
+        visibleFrom: cache.visibleFrom,
+        status,
+        moderationNote: status === 'removed_by_moderator' ? cache.moderationNote : null,
+    };
+}
+
+export function cacheForOthers(
+    cache: CoalitionCacheRecord,
+    findCount: number,
+    foundByMe: boolean
+): OthersCacheView {
+    const centre = coarsenPoint(cache.latitude, cache.longitude, CACHE_AREA_CELL_METERS);
+    return {
+        id: cache.id,
+        title: cache.title,
+        hint: cache.hint,
+        note: cache.note,
+        photoMxc: cache.photoMxc,
+        proof: cache.proof,
+        findCount,
+        mine: false,
+        // Every point in a cell is within half its diagonal of the centre.
+        area: { ...centre, radiusMeters: Math.ceil((CACHE_AREA_CELL_METERS * Math.SQRT2) / 2) },
+        foundByMe,
+    };
 }
