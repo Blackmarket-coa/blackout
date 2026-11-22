@@ -54,6 +54,18 @@ on real places, at different times, from templates organizers can reuse
    are about to share, every time it is location, a photo, metadata or
    anything public, and nothing is shared until they confirm (§3).
 
+Decisions of 2026-11-22 (questions 1, 2, 3 and 5 in §9):
+
+7. **A public cache appears 2 hours after it is placed.**
+8. **Any signed-in member may place a public cache.**
+9. **Public caches are reviewed after reports, not approved first.** A
+   reported cache is hidden from everyone but its placer until a moderator
+   looks at it, so a cache at a bad spot stays visible only until the first
+   report.
+10. **The location features are for people 18 and older.** Blackout cannot
+    check anyone's age: the disclosure asks people to confirm they are 18 or
+    older, and says plainly that this is their own statement.
+
 ## 3. Consent
 
 The operator's words: "Consent is key. The key to consent is understanding
@@ -62,8 +74,9 @@ what you are consenting to."
 -   **Before first use**, a disclosure in the style of the location one
     (`apps/blackout-client/src/app/features/location/locationConsent.ts`): what
     the feature collects, who can see it, how long it is kept, how to stop.
-    Nothing location-based works until the person agrees. It is versioned; a
-    change of wording asks again.
+    Nothing location-based works until the person agrees, which includes
+    confirming they are 18 or older ("Blackout does not check this; you are
+    telling us"). It is versioned; a change of wording asks again.
 -   **Before every share**, a summary built from what will actually be sent,
     so it cannot drift from the code. Examples:
     -   Public cache: "Anyone on Blackout can see this photo and the spot you
@@ -93,11 +106,13 @@ what you are consenting to."
     (`utils/stripImageMetadata.ts`). Formats it cannot strip (HEIC, AVIF,
     TIFF) are converted or refused, never uploaded as they are. No video caches
     until video stripping exists.
--   **Public caches** appear after a delay (proposed: 2 hours), so placing one
-    does not say where someone is right now. Places that must not hold one
-    (homes, schools, shelters, clinics, places of worship) are covered by
-    placement guidance, an operator-maintained exclusion list, reporting and
-    moderation.
+-   **Public caches** appear 2 hours after they are placed, so placing one
+    does not say where someone is right now. Any member can place one and
+    nothing is approved first, so what keeps caches away from places that must
+    not hold one (homes, schools, shelters, clinics, places of worship) is
+    placement guidance shown at the moment of placing, an operator-maintained
+    exclusion list checked by the server before a cache is accepted, and
+    reports: a reported cache is hidden until a moderator reviews it.
 -   **Meeting places** show an area until close to the time; the exact place
     goes only to confirmed attendees; the organizer sees the list; capacity is
     enforced; anyone can report.
@@ -181,10 +196,14 @@ needs it; the web app covers phases 1 and 2.
 
 ## 9. Questions for the operator
 
-1. The delay before a public cache appears (proposed: 2 hours).
-2. Who may place public caches: any member, or members with some standing?
-3. Moderation of public caches: approved before they appear, or reviewed after
-   reports?
+Answered on 2026-11-22 (§2, decisions 7 to 10):
+
+1. The delay before a public cache appears: 2 hours.
+2. Who may place public caches: any signed-in member.
+3. Moderation of public caches: reviewed after reports.
+4. A minimum age for the location features: 18, self-declared.
+
+Still open (neither is needed before phase 2):
+
 4. Physical drops: later, after legal review, or never?
-5. A minimum age for the location features.
-6. What FBM sponsor rewards may be (coupons, digital goods, credits).
+5. What FBM sponsor rewards may be (coupons, digital goods, credits).
