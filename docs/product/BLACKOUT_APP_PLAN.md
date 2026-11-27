@@ -83,7 +83,8 @@ Current source already consolidates parts of Coalition and Coliseum. Creator Hub
 | Creator `integrations` with `broadcast`, `connections`, `bridges`, `health` | Studio → Connections | One connection list; each connection exposes supported settings, status, failures, and broadcast controls |
 | Governance, roles, proposals, treasury | Relevant community | Decision and management actions; official decisions remain distinct from contest voting |
 | Profile, character, contribution, saved collections, rewards | You | Profile content and focused pages opened through labeled actions |
-| Existing plugin and advanced privacy/admin surfaces | Relevant tool, settings, or permitted workspace | Searchable contextual entry; explicit permissions and feature gates remain in force |
+| Existing privacy and advanced organization protection | Existing You → Settings → Privacy; contextual Blackmask handoff | Preserve six-section privacy controls; Blackmask consolidates advanced private collaboration/security without deleting working Blackout controls |
+| Technical plugin/preset/integration/hosting authoring | Persistent Forge hub near Settings/Privacy and contextual Forge links | Forge owns advanced editors and configuration; ordinary apply/use/revoke actions stay in the consuming app; role/runtime gates and return context required |
 
 Keep legacy routes, stored selections, enabled-tab gates, and shared links working through route adapters. A removed tab maps to its new location; it does not delete records or make permitted specialist tools unreachable.
 
@@ -271,6 +272,22 @@ Add optional Privacy View with hold-to-reveal, concealed identifying context, im
 The plan inventories current source for blocking/DM choices, separate display/sending receipt and typing controls, location consent, supported-format metadata removal, tracking-link cleanup, Shield detection, transparency/export and selected local cleanup. It also specifies private interests/audiences, remote-content consent, connected-tool access and identity separation. Current avatar perturbation is not proven face-recognition protection; Panic Wipe retains Matrix IndexedDB message history and decryption keys. Source presence does not establish production enforcement.
 
 Blackmask reuses appropriate UX and host-level controls while retaining its independent Bitwarden-derived vault lock and Blackout-owned Matrix communication. Verify both mobile WebViews and all transitions. Core privacy, recovery and accessibility remain independent of purchases or rewards. The companion plan supplies inventory evidence, platform boundaries, delivery order and acceptance checks; this update changes documentation only.
+
+
+## 15. Software-map alignment: Blackmask and Forge (2026-11-27)
+
+The [Blackmask software map](https://github.com/Blackmarket-coa/blackmask/blob/main/docs/black-mask/software-map.md) consolidates 36 proposed individual/organization privacy-security workflows under Chats/Spaces/Vault and the six existing Privacy sections. Blackout remains the owner of public/social publishing, Coalition, Coliseum and Matrix transport/room authority; retain current permitted communication and local privacy controls during any transition.
+
+| Blackout context | Everyday action | Advanced handoff |
+| --- | --- | --- |
+| Privacy, conversation or private group | Use current supported controls; review identity, audience and encryption | Open the authorized Blackmask protection/Space context for shared-vault, guest/access review, document-intake or incident workflows where implemented |
+| Community, appearance or enhancement | Apply/use a compatible result and manage normal community participation | Author/edit a technical enhancement/preset in Forge |
+| Go live, stream sharing or hosting status | Start/stop the intended live, choose a prepared destination and see actual state | Context-specific stream/embed/domain/federation/server setup in Forge |
+| Settings/account navigation | Find the relevant configured project/tool | Persistent Forge entry near Settings and Privacy with a lightweight app-native hub |
+
+The [Forge software map](https://github.com/Blackmarket-coa/Forge/blob/master/SOFTWARE_MAP.md) defines technical ownership, capability discovery, platform/role gating and return paths. Do not pass decrypted chat/vault content, raw tokens or deployment keys in handoff URLs. Reauthorize the destination and preserve intent when signed out, denied or unavailable. Account linking does not grant private-content access or correlate identities by default.
+
+The 136-repository privacy/security catalogue remains research, including archived/restricted holds. Organization administration does not grant personal vaults or unrelated conversations. New workflows, native capture limits and offboarding/recovery remain subject to their implementation and verification gates; no release readiness or UI behavior changes through this map update.
 
 ## Live room placement and completion map — November 27, 2026
 

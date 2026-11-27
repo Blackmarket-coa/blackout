@@ -167,3 +167,21 @@ Wires the "Reward" edge of the loop into the existing growth-engine ledger, reco
 
 **Deliberately not in this slice:** actual payout settlement (the `settle` hook is the integration seam for an
 FBM tip / Coalition-credit transfer — deferred exactly like the referral/quest settlement), and persistence.
+
+
+## Privacy/security and technical ownership map (2026-11-27)
+
+This addendum aligns privacy/security ownership with the existing build specification; prior commerce, bounty and service contracts remain with their recorded owners.
+
+| Responsibility | Everyday product owner | Authoritative backend / advanced configuration |
+| --- | --- | --- |
+| Public discovery, publishing, Coalition and Coliseum | Blackout | Existing Blackout product services and permissions |
+| Messaging transport, encrypted Matrix rooms and protocol grants | Blackout services; Blackmask supplies the consolidated private UX through explicit integrations | Existing Matrix/Synapse foundation; no second room/transport backend |
+| Private records, separately locked vault and organization protection | Blackmask | Bitwarden-derived vault service and individually scoped linked services; no universal ecosystem key store |
+| Commerce and entitlements | FBM | FBM's existing transaction/fulfillment authority |
+| Eligible transport operations | Blackstar | Existing transport authority; no private-record access implied |
+| Technical authoring, integrations, hosting, release and backup operations | Forge | Delegated interfaces to selected domain services; secrets remain with the owner |
+
+The [Blackmask software map](https://github.com/Blackmarket-coa/blackmask/blob/main/docs/black-mask/software-map.md) covers all 36 new proposed workflow IDs and six privacy sections. The [Forge software map](https://github.com/Blackmarket-coa/Forge/blob/master/SOFTWARE_MAP.md) covers technical configuration and per-app surfaces. Provide a persistent Forge hub near Settings/Privacy and contextual Blackmask/Forge links, with authorized resource context and return behavior. Ordinary privacy, access/recovery and live/commerce controls remain in the relevant everyday app.
+
+Implementation must verify Personal/organization isolation, real grants/revocation across services, exact encryption/key recovery, supported platforms and failed/partial results. No private payload/credential in URLs/project exports/logs and no default AI scanning of conversations/vaults. The OSS catalogue is an evaluation screen, not adopted software. Core privacy and recovery remain independent of rewards/purchases; no production changes are made here.
