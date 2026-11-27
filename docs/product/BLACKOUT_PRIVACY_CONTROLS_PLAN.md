@@ -119,3 +119,10 @@ Never label tests proposed here as already passed. This is a documentation chang
 - [Apple: screenshot notification arrives after capture](https://developer.apple.com/documentation/uikit/uiapplication/userdidtakescreenshotnotification)
 - [ProTegO implementation and MIT license](https://github.com/Ruby-He/ProTegO)
 - [Legibility vs. Extractability research](https://openrepository.aut.ac.nz/items/88371f0d-0b46-492f-86e9-c297836e1135)
+
+
+## 9. Broader OSS evaluation catalogue (2026-11-27)
+
+The [shared privacy/security OSS catalogue](BLACKOUT_PRIVACY_SECURITY_OSS_CATALOG.md) screens 136 candidate GitHub repositories across 13 categories, including 84 additions beyond the prior Blackmask inventories, plus four non-GitHub project families. It maps proposed tools to the existing Privacy sections, distinguishes embedded candidates from native companions, infrastructure and CI, records current maintenance/license cautions, and gives an evaluation order. The [screening snapshot](PRIVACY_SECURITY_OSS_SCREENING_2026-11-27.json) preserves primary repository evidence.
+
+Prioritize existing Matrix/vault/native privacy foundations, safe rendering, actual release integrity, local sharing review, supported-format metadata cleanup and selected public-edge protections. No blanket WAF/challenge over Matrix, no silent scanning of encrypted content, no parallel vault/chat/map/identity platform, and no infrastructure migration is implied. Core safety remains independent of purchases/rewards. ProTegO and other anti-AI transforms remain research; archived/restricted candidates are explicitly held. This is documentation and evaluation only.
