@@ -104,3 +104,9 @@ Do not claim the entire loop is wired until the production payload and content/o
 -   Validate the path on iOS/Android, including storage permissions, interrupted upload, login return, and keyboard/screen-reader use.
 
 Measure prompt-to-draft starts, drafts resumed, valid completed products, review acceptance, actual delivery, repeat purchasers, creator net earnings, useful contributions, and abandoned steps. Completion and economic benefit matter more than prompt impressions or raw upload volume.
+
+## Live support and perk fulfillment — November 27, 2026
+
+The [live participation feature map](../features/BLACKOUT_LIVE_PARTICIPATION_FEATURE_MAP.md) connects gift/tip code and channel-points redemption to the proposed room Perks board, gift goals and participant effects. Existing source does not establish a complete gift-picker-to-live-effect or settled-payout journey. Keep one-time support, finite purchases, game effects and contributions to another beneficiary distinct; do not infer recurring fan membership approval.
+
+Publish the recipient, full price or eligible points, purpose, limits, effect and unavailable/expiry terms before confirmation. FBM payment capture and refund/settlement records remain authoritative; Blackout applies only permitted session effects once per valid event and reports failures/resolution. Creator-owned ordinary community support and gift receipts are separate from platform revenue, contribution rank, contest votes and evidence quality. Reuse separate existing balances; no new universal wallet is implied. Advanced widget/overlay authoring belongs in Forge, with a contextual link from the live room or creator tools and the persistent Forge hub entry. Current viewers and replay viewers see appropriately scoped support opportunities without triggering expired game actions.

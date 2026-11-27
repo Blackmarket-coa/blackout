@@ -39,6 +39,83 @@ Users should feel able to affect what happens. Provide decisive roles for people
 
 Booing and rivalry belong to the contest. Community protections against threats, doxxing, and targeted harassment still apply. Publish anti-duplication and coordinated-abuse controls without making purchases, rank, or reward points buy additional votes.
 
+### TikTok style Coliseum layout
+
+Coliseum uses a full screen vertical video feed with one live room, replay or clip in focus. Swiping moves between items; it never casts a vote or expresses disagreement. Distinguish Live, Replay and Clip clearly and keep a clip linked to its full session, exact timestamp and relevant topic.
+
+| Area | Required experience |
+| --- | --- |
+| Top | Current live style, topic or question, host, active round and time remaining. Compact filters remain reachable. |
+| Main stage | Active speaker, side by side contestants, an organized panel or shared material according to the live format. Reflow the stage for a phone and a wider screen. |
+| Action rail | Support, disagree, disapprove or boo, comments, save and share. Group secondary controls so video remains readable. |
+| Bottom controls | Armory, raise hand or request a role, audience participation and the current contest or session action. |
+| Detail sheet | Sources, team information, speaker queue, rules and topic history open without losing session context. |
+| Crowd view | An optional audience camera mosaic beside or over the stage, with clear personal camera controls. |
+| Closing state | For contests, show the crowd selected winner and contributor credits. For other lives, show the session outcome and next action. |
+
+Offer visible button equivalents, captions, transcripts, readable contrast, reduced motion and low bandwidth or audio only participation. Opening a source and returning should preserve playback and draft contribution state. Moving through the feed never silently enables a camera or microphone. Leave or deliberately keep a live in a mini player so multiple rooms do not produce unexpected overlapping audio.
+
+### Armory for live resources
+
+The **Armory** is the place for resources during combative engagement: cited sources, claim cards, datasets, clips with timestamps, prepared rebuttals, notes and the game theory strategy bench. It stays reachable during a live without forcing participants to leave the stage.
+
+Separate public session resources, team workspace and personal drafts. A participant can prepare a source card privately, submit it to the appropriate queue, and let the host feature it with its original context and review status visible. Uploading or featuring a source is not verification. Link publicly used resources to the relevant claim and permanent topic record after the session; private notes stay private.
+
+Connect interactive lessons on cooperation, defection, bargaining, coordination, coalition formation and repeated games to actual strategic choices. Show turnout, alliance and vote share scenarios with assumptions; present measured odds only when a predictive model has been validated for that use.
+
+### Research sources and evidence ranking
+
+Connect scholarly search, university repositories, experiment records, datasets and primary documents to the Armory. Front the strongest evidence for the active claim, with visible reasons. The [Coliseum strategy](https://chatgpt.com/space/page_ab37aa2a56508191b7a24f6711da994f) contains the full 20 resource catalog, source card fields, ranking criteria, review workflow and delivery acceptance.
+
+Start with OpenAlex, CORE, Europe PMC, Crossref with Retraction Watch, Unpaywall and manual submissions. Expand to Semantic Scholar, MIT Open Scholarship and Harvard DASH as university repository examples, Cochrane, Campbell Collaboration, ERIC and arXiv. Connect OSF, Zenodo and ClinicalTrials.gov for study plans, experiments, data and results. Add Census, BLS, GovInfo, Congress.gov and NOAA Climate Data Online for original statistics and records.
+
+Label student essays, dissertations, working papers, preprints, peer reviewed studies, reviews, datasets and primary documents distinctly. Assess direct relevance, appropriate methods, inspectable support, independent corroboration, uncertainty, integrity and provenance. University prestige, citation count, likes, boos, spending, followers and contest wins must not determine evidence quality automatically.
+
+Use four live groupings: Best overview, Best direct evidence, Strongest challenge and New or unreviewed. Source cards show the precise claim relationship, exact passage or timestamp, type, scope, methods, limitations, original locator, available data, review and access states, and why the source surfaced. Preserve strong counterevidence and distinguish a host's pin from an evidence assessment.
+
+The live workflow is select claim, discover and inspect material, submit cited support, examine or challenge it, feature it if useful, and preserve its use on the permanent Blackout topic. Keep source versions and session timestamps; attach later corrections without erasing historical context. Private research remains permission scoped. AI can assist discovery and summaries linked to originals; it is not independent evidence or an automatic ruling.
+
+Show unavailable checks and abstract only access explicitly. No missing retraction match guarantees validity. Verify each provider's access, capacity and reuse requirements before implementation. Acceptance includes accurate claim support, visible correction status, ranking explanations, preserved counterevidence and safe reopening from a replay.
+
+### Crowd view and audience control
+
+Audience members can opt in to a camera preview, then explicitly join the crowd view. Let them turn their camera off, leave the mosaic or remain an audio only spectator at any time. Explain whether the camera is visible to the room, the broadcast and any recording before joining. Provide visible recording state and controls for host and moderator removal.
+
+The host can show a paginated or adaptive crowd mosaic and spotlight a willing audience member. Camera participation and promotion to a speaking role are separate permissions; an audience camera does not grant a live microphone. Show audience size separately from the number of visible camera tiles. Adapt the number and quality of streams to device and connection capacity.
+
+A viewer can **mute one speaker for themselves** without muting the whole room or changing what other listeners hear. Show a speaker's aggregate current mute count with the active listener count and a clear definition; deduplicate listeners and update counts when they unmute or leave. Keep individual muters private. This is audience feedback, separate from a vote, an evidence assessment and a moderator's room wide mute. Preserve access to the source record and session transcript.
+
+### Finding contestants members and subject matter experts
+
+Provide searchable people and a visible speaker request queue from the current room. Search by topic, relevant skills or voluntary credentials, language, availability and participation role. Let members opt in to discovery as contestants, mentors, researchers, organizers or subject matter experts.
+
+Allow hand raising, an application with a short relevant contribution, host invitations and temporary guest or expert seats. Hosts can review a person's consented contribution history and relevant experience, see request state and offer a specific role. An invitation or spotlight requires acceptance and does not silently enable devices. Credentials, popularity and rank do not make a factual claim automatically correct.
+
+Preserve the host's ability to surface newcomers alongside established contributors. Provide a way to find teammates and negotiate contest alliances, distinct from joining a Coalition community.
+
+### Moderator controls and live formats
+
+Support organized panels, timed turns and freeform discussion. The host can choose a preset, assign cohosts or moderators, arrange seats, organize teams, open or close the queue, pin a question or source, and move willing participants between audience and stage.
+
+**Give the mic for a chosen duration.** Offer useful presets such as 30 seconds, 60 seconds and 2 minutes plus a custom duration. Show the timer to speaker and audience, warn before expiry and release the floor at expiry according to the announced format. Hosts can pause, extend, skip or revoke a turn and see an action history. Reconnection must not create a second speaking grant or reset the turn silently.
+
+Allow topic and round management, polls or votes, source queues, chat slow mode, speaker or chat moderation, removal, recording and clip controls. Distinguish moderator room wide mute from a viewer's personal mute. Changes from organized to freeform operation and changes affecting scoring are visible to participants; a completed contest retains its original rules and result.
+
+| Live style | Format and outcome |
+| --- | --- |
+| Debates | Claims, evidence, rebuttals, timed rounds and crowd selected results under published rules. |
+| Roast sessions | Clear opt in participation, an agreed premise and optional crowd judged rounds. |
+| Freestyling | Performer turns, collaborative or competitive rounds, and optional judging. |
+| Advice | Host or guest guidance, contextual questions and clear separation of experience from professional expertise. |
+| Questions | Open questions, hand raising, expert seats and useful answer summaries. |
+| Research | Shared reading, source checks, hypotheses, data walkthroughs and next investigations. |
+| Raising funds | A named purpose, beneficiary, transparent progress and follow up on use and outcomes. |
+| Mutual aid requests | A manageable request, available help, permission appropriate sharing and fulfillment updates. |
+| Video game streaming | Gameplay or screen share, commentary, audience interaction and optional competitions. |
+| Panels and community sessions | Organized or freeform conversation, learning sessions, project updates and community events. |
+
+Offer configurable new formats rather than limiting lives to this list. A session does not need a winner unless it is explicitly a contest. Entertainment and performance remain valid uses of Coliseum; their audience response does not become factual evidence. Research and claim based segments link to canonical questions and sources. Other lives keep an appropriate session, creator or project record.
+
 ### Learn game theory by using it
 
 Build an optional strategy bench for team members. Start with small interactive exercises: cooperation versus defection, coalition formation, coordination, bargaining, repeated interaction, and contribution incentives. Users choose an action, see a payoff table or visual consequence, and receive a short explanation.
@@ -46,6 +123,22 @@ Build an optional strategy bench for team members. Start with small interactive 
 For a real contest, show vote-share scenarios and the support needed to reach a threshold. Let teams change assumptions about turnout, alliance support, and opponent participation. Without a validated predictive model, label the result as a scenario rather than a probability of winning. Later probability estimates must disclose their assumptions, data coverage, and uncertainty.
 
 Proposed example: a team can compare standing alone with an alliance under several turnout assumptions, then see which assumptions change the likely ranking. Participation teaches strategic thinking through concrete decisions rather than requiring a textbook first.
+
+### Creator income and equivalent recorded participation
+
+The [Livestream Creator Income and Recorded Video Opportunities research](https://chatgpt.com/space/page_c8926e34293c8191bc87788eebecb290) compares gifts, paid interaction, subscriptions, advertising, product and affiliate sales, contracted hosting and other work across regional examples. Its distinction is between platform design, creator and viewer goals, observed practices and improvements to test. Selected success stories do not establish typical income.
+
+Blackout should give replays and standalone recorded videos comparable useful participation: timestamped Armory sources, later questions, text or video replies, response rounds, voluntary support, current product offers, original lessons and defined service or creative requests. Keep all formats connected to the permanent topic, creator, contribution record and valid offers.
+
+Label live, replay, recorded video and premiere clearly. A genuine premiere may have current audience interaction around prerecorded content; do not simulate a creator being present. Separate historical crowd footage and chat from current responses. Preserve a closed contest result; later support and a new round have their own context and outcomes. Retain media permissions and offer per speaker replay audio controls only where separate permitted tracks exist.
+
+Prioritize one time support, original digital goods, workshop or series purchases, service bookings, commissioned responses or performances, defined research or production bounties and supported FBM sales. Do not silently introduce recurring subscriptions from competitor comparisons. Hosts, moderators, researchers, editors, captioners, translators and artists can share paid work under clear terms agreed before delivery.
+
+Show the full viewer cost, recipient, deductions, agreed collaborator shares and final available receipt. Distinguish a gift, purchase, service and contribution to another beneficiary. Verify supported payout routes, currency and timing; do not assume that earning a balance guarantees accessible cashout. Preserve FBM's established applicable 3% coalition fee without claiming a universal Blackout net payout rate.
+
+Keep payments separate from eligible crowd votes, source ranking, factual findings and moderation authority. Give creators control over session length, availability and request scope. Optional patronage and performance remain valid uses; a comedy or music session does not need to become an educational exercise.
+
+Pilot a performance battle and replay, a maker demonstration with an original guide or booking, and a local producer demonstration with valid FBM offers. Compare net earnings per hour of total work, successful payouts, paid request fulfillment, replay participation, audience satisfaction and moderation effort. Preserve the source based research and live versus recorded feature map in the Coliseum strategy.
 
 ## 3. Coalition: community, discovery, and useful scrolling
 
@@ -152,3 +245,7 @@ This addition extends the existing Blackout direction: Blackout owns Coliseum, C
 Coordinate character presentation and reward acquisition with the FBM character/equipment plan, while keeping service-owned records, permissions, balances, and entitlements authoritative. Do not assume cross-service XP or ownership is already interchangeable. Ranks and rewards do not alter FBM's fixed commission policy.
 
 Use the [FBM unified portal integration contract](../coalitions/FBM_UNIFIED_PORTAL_INTEGRATION.md) for shared map and portal responsibilities. The [whole-product MVP](../BLACKOUT_WHOLE_PRODUCT_MVP.md) and [operations guide](../AGGRESSIVE_OPERATIONS_GUIDE.md) retain their release gates. Earlier implementation findings require fresh source verification before coding. New or incomplete surfaces should stay hidden until their working slice is verified.
+
+## Live participation feature map — November 27, 2026
+
+The [live participation feature map](../features/BLACKOUT_LIVE_PARTICIPATION_FEATURE_MAP.md) records host/panel controls, timed turns, speaker priority, chat, gifts, configurable perks, drop/revive seats, gift goals, watch missions, joining, recognition, live counters and recorded participation. Its status ledger separates partial code from proposed mechanics and unverified integration. Blackout owns runtime room actions, Forge advanced setup/authoring and FBM payment fulfillment; apply the map's execution and acceptance requirements before exposing any effect.
