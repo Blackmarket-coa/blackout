@@ -260,3 +260,14 @@ This is a focused product/source review, not an exhaustive audit of every plugin
 Measure time to a useful action, unnecessary navigation/backtracking, task and contest completion, filter success, newcomer discovery, meaningful contribution, reward delivery, and creator/community outcomes. Check whether users understand where they are and what happens next. Scrolling duration and total tab reduction alone do not demonstrate success.
 
 Preserve the existing whole-product MVP priorities and security/operations gates. Ship verified slices, maintain compatible deep links and records, and retain an operational rollback path. Future formats and advanced integrations can be staged without reopening the global navigation design.
+
+
+## 14. Privacy consolidation and visual privacy (2026-11-27)
+
+The [privacy controls plan](BLACKOUT_PRIVACY_CONTROLS_PLAN.md) consolidates privacy under the **existing You → Settings → Privacy tab**. Use six expandable sections: Screen & notifications; People & activity; Sharing & metadata; Location & identity; Devices & connected tools; My data & cleanup. Contextual shortcuts and old settings routes open the same editors and preserve permission gates and saved settings. No additional primary tab or duplicate settings store.
+
+Add optional Privacy View with hold-to-reveal, concealed identifying context, immediate Cover screen, private notifications, app-switcher cover and supported native capture protections. Keep Cover screen distinct from stopping a live broadcast, vault locking, session revocation and destructive cleanup. Android FLAG_SECURE and iOS capture-state redaction have different capabilities; external cameras and compromised endpoints remain limits. Experimental anti-OCR rendering is research-only, off by default and never a promise that readable content cannot be extracted.
+
+The plan inventories current source for blocking/DM choices, separate display/sending receipt and typing controls, location consent, supported-format metadata removal, tracking-link cleanup, Shield detection, transparency/export and selected local cleanup. It also specifies private interests/audiences, remote-content consent, connected-tool access and identity separation. Current avatar perturbation is not proven face-recognition protection; Panic Wipe retains Matrix IndexedDB message history and decryption keys. Source presence does not establish production enforcement.
+
+Blackmask reuses appropriate UX and host-level controls while retaining its independent Bitwarden-derived vault lock and Blackout-owned Matrix communication. Verify both mobile WebViews and all transitions. Core privacy, recovery and accessibility remain independent of purchases or rewards. The companion plan supplies inventory evidence, platform boundaries, delivery order and acceptance checks; this update changes documentation only.
