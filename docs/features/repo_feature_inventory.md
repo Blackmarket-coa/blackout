@@ -128,3 +128,7 @@ A feature is “preset-complete and UI-usable” only if all conditions are true
 
 - `_port/` contains the primary legacy implementation that is currently treated as read-only while migration into `packages/` and `apps/` progresses.
 - The feature set above reflects what is documented and implemented in-repo, not necessarily what is fully migrated into the new monorepo app shells yet.
+
+## Live participation coverage — November 27, 2026
+
+The [live participation feature map](BLACKOUT_LIVE_PARTICIPATION_FEATURE_MAP.md) tracks thirteen composed capabilities from the multi-panel live-room review, including host controls, gifts, perks, goal counters, watch missions, community joining and recorded participation. It distinguishes partial source foundations from planned work and integration gaps; it does not promote them to implemented or verified-live status. Keep this planning map separate from operational feature/preset gates until implementation and acceptance evidence exists.
