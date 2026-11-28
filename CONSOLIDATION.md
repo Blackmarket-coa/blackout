@@ -1,5 +1,7 @@
 # Consolidation Status — Blackout
 
+> **Forge product-map alignment (2026-11-27):** [Blackout–Forge integration](docs/product/FORGE_INTEGRATION.md) assigns advanced technical authoring, self-hosting, streaming setup and diagnostics to Forge with permanent/contextual entry surfaces. Blackout retains social/community/Matrix authority and normal live participation; Blackmask retains privacy/security use. The historical audit below remains source evidence rather than proof of the new migrations.
+
 > **2026-11-12 reconciliation:** [Implementation status](docs/IMPLEMENTATION_STATUS_2026-11-12.md) records current source/CI evidence and unresolved deployment/operational gaps. Enhancement features are one-time purchases with **no subscription**; historical subscription references below describe existing code or earlier design, not the approved enhancement offering. No runtime or billing migration is performed by this documentation update.
 
 Part of the 2026-08-28 seven-repo BMC consolidation review. The canonical review — audit
@@ -108,3 +110,4 @@ verdicts, decisions, and the ordered roadmap — is `docs/REPO_CONSOLIDATION_REV
     priority. The suppressed-log counters now have a consumer; the underlying defect is still open.
     Consolidation work must not displace it.
 -   The legal/compliance launch gates tracked in `MARKETPLACE_AUDIT.md` §9 are unchanged.
+
