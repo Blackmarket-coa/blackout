@@ -294,3 +294,12 @@ The 136-repository privacy/security catalogue remains research, including archiv
 Use the [live participation feature map](../features/BLACKOUT_LIVE_PARTICIPATION_FEATURE_MAP.md) for thirteen capabilities, current gaps, source anchors and acceptance. Coliseum keeps one focused stage with panel seats, timer, chat, a compact support/perks entry, a speaker queue and contextual host controls; no extra primary tabs. Keep Armory access and room context intact. Free speaker requests, moderation and device consent remain distinct from optional entertainment perks.
 
 Host-configured perk cards can propose extra time, speak-next priority and opt-in temporary drop/revive game seats under published terms. Goal counters, reliable watch missions, fan/community joining, supporter badges and accurate live counters require the completion work listed in that map. Blackout executes room actions; Forge authors/configures advanced overlays, streaming and reusable visual templates through contextual handoffs; FBM fulfills supported payments. A paid effect cannot bypass a ban, activate devices, buy votes or alter evidence findings. Replays preserve historical states and disable expired live effects.
+
+## Forge technical/creative session consolidation (2026-11-27)
+
+The [Blackout–Forge integration map](FORGE_INTEGRATION.md) extends the existing privacy/security handoff sections without replacing them. It covers server/federation operations, Owncast/OBS and simulcast setup, external player/chat embeds, broadcast kits, clean recordings, advanced artifact/community/game authoring, and automation setup.
+
+Keep normal go-live, participant/moderator actions, prepared-profile selection, simple uploads, basic clipping, earnings and applying enhancements native. Add contextual Forge links and a permanent hub near Settings/Privacy; every supported tool must be discoverable in the app it serves.
+
+Durable creator drafts and the actual payload-to-FBM-signing/entitlement/install handoff are priority gaps before editor expansion. Forty researched patterns are mapped in [Forge's product map](https://github.com/Blackmarket-coa/Forge/blob/master/PRODUCT_MAP.md); this is planning and integration scope, not a claim of shipped parity. Preserve the subsequent live participation, privacy and domain authority decisions elsewhere in this plan.
+
