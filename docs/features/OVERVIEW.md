@@ -192,3 +192,22 @@ First-party bridge routes in `packages/api/src/routes/`:
 ## Live participation coverage — November 27, 2026
 
 The [live participation feature map](BLACKOUT_LIVE_PARTICIPATION_FEATURE_MAP.md) tracks thirteen composed capabilities from the multi-panel live-room review, including host controls, gifts, perks, goal counters, watch missions, community joining and recorded participation. It distinguishes partial source foundations from planned work and integration gaps; it does not promote them to implemented or verified-live status. Keep this planning map separate from operational feature/preset gates until implementation and acceptance evidence exists.
+
+## Ecosystem business and organization gaps — November 28, 2026
+
+The [shared ten-gap register](../product/BMC_ECOSYSTEM_GAPS_AND_APP_OWNERSHIP.md) records source-backed foundations, proposed scope and completion criteria. This section maps Blackout's responsibilities; it does not claim the gaps are implemented or verified in production.
+
+**Primary ownership:** [G09](../product/BMC_ECOSYSTEM_GAPS_AND_APP_OWNERSHIP.md#g09)
+
+| Gap | Capability | Blackout responsibility |
+| --- | --- | --- |
+| [G03](../product/BMC_ECOSYSTEM_GAPS_AND_APP_OWNERSHIP.md#g03) | Customer relationships and support | Support: permissioned campaign/community context for FBM contacts; no automatic marketing consent from group membership. |
+| [G04](../product/BMC_ECOSYSTEM_GAPS_AND_APP_OWNERSHIP.md#g04) | Collaborative office workspace | Support: public/community events and publication; private office collaboration belongs in Blackmask. |
+| [G07](../product/BMC_ECOSYSTEM_GAPS_AND_APP_OWNERSHIP.md#g07) | Country-specific business administration | Support: localize discovery, events and community interactions against actual supported geography. |
+| [G08](../product/BMC_ECOSYSTEM_GAPS_AND_APP_OWNERSHIP.md#g08) | Donor, grant, and nonprofit administration | Support: outreach, Coalition projects and volunteer discovery; FBM owns donor/fund administration and financial records. |
+| [G09](../product/BMC_ECOSYSTEM_GAPS_AND_APP_OWNERSHIP.md#g09) | Offline forms and field data collection | Primary inside Coalition: reusable project/task forms, assignments, offline capture, review and controlled synchronization; this is not the onboarding quiz. |
+| [G10](../product/BMC_ECOSYSTEM_GAPS_AND_APP_OWNERSHIP.md#g10) | Existing-software migration and external connectors | Support: own permitted imported public/community records; Forge owns connection setup and migration diagnostics. |
+
+Use the existing Coalition project/task model and preserve consent, coarse/public geography boundaries and private membership. Form submissions must not automatically become public map markers.
+
+Retain one-time enhancement ownership, the established applicable 3% coalition sale-fee direction after processing fees, and the intended self-hosted architecture. Keep existing hosted-storage exceptions and transaction-kind policies explicit; this planning update introduces no new fee or subscription. Close a gap only with an end-to-end workflow and recorded country/device/provider/configuration evidence, not a module name or successful connector request.

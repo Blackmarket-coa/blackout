@@ -38,3 +38,10 @@ See `docs/blackout-reuse-completion-tracker.md` for the detailed evidence and ex
 - `composer_rich_feature_ui_guide.md`: UI/UX guidance for scaling rich composer capabilities with a progressive-disclosure `[+]` pattern, active feature chips, and phased rollout strategy.
 
 - `../blackout-rollout-runbook.md`: rollout hardening checklist for operations, localization readiness, and policy tuning.
+
+## Ecosystem gap register — November 28, 2026
+
+- [BMC ecosystem gaps and app ownership](../product/BMC_ECOSYSTEM_GAPS_AND_APP_OWNERSHIP.md) — all ten gaps, existing foundations, primary/supporting apps, proposed entry points, completion criteria and delivery order.
+- [Blackout responsibility map](OVERVIEW.md#ecosystem-business-and-organization-gaps--november-28-2026) — primary ownership of G09 plus explicit cross-app boundaries.
+
+The register is a planning snapshot. It does not promote partial or proposed capabilities to deployed or verified status.
